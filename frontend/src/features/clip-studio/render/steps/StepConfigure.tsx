@@ -382,6 +382,25 @@ function StepConfigureBase({
           </div>
         </div>
 
+        {/* A. Focus / reframe */}
+        <div className="cfg-section">
+          <div className="cfg-sec-hd">
+            <span>FOCUS</span>
+            <span className="cfg-sec-api">reframe_mode</span>
+          </div>
+          <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
+            {([
+              { v: 'auto'   as ConfigState['focusMode'], l: 'Auto'   },
+              { v: 'face'   as ConfigState['focusMode'], l: 'Face'   },
+              { v: 'object' as ConfigState['focusMode'], l: 'Object' },
+              { v: 'center' as ConfigState['focusMode'], l: 'Center' },
+            ]).map(({ v, l }) => (
+              <div key={v} className={`seg-b${cfg.focusMode === v ? ' on' : ''}`}
+                onClick={() => setCfgKey('focusMode', v)}>{l}</div>
+            ))}
+          </div>
+        </div>
+
         {/* A. Quality */}
         {adv && (
         <div className="cfg-section">
@@ -580,25 +599,6 @@ function StepConfigureBase({
             </div>
             )}
 
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>FOCUS</span>
-                <span className="cfg-sec-api">reframe_mode</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: 'auto'   as ConfigState['focusMode'], l: 'Auto'   },
-                  { v: 'face'   as ConfigState['focusMode'], l: 'Face'   },
-                  { v: 'object' as ConfigState['focusMode'], l: 'Object' },
-                  { v: 'center' as ConfigState['focusMode'], l: 'Center' },
-                ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.focusMode === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('focusMode', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-            )}
 
             {adv && (
             <div className="cfg-section">

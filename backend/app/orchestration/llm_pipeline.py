@@ -174,7 +174,12 @@ def run_llm_pre_render(
         import os as _os
         _model = (_os.getenv("LLM_WHISPER_MODEL", "base") or tuned["whisper_model"]).strip()
         _engine = getattr(payload, "subtitle_transcription_engine", "default")
-        _cache_key = f"{_engine}_{int(bool(getattr(payload, 'highlight_per_word', False)))}"
+        _llm_language_raw = (getattr(payload, "llm_language", None) or "").strip().lower()
+        _language = None if _llm_language_raw in ("", "auto") else _llm_language_raw
+        _cache_key = (
+            f"{_engine}_{int(bool(getattr(payload, 'highlight_per_word', False)))}"
+            f"_{_language or 'auto'}"
+        )
         _cached = _transcription_cache_get(str(source_path), _model, _cache_key)
         if _cached is not None:
             import shutil
@@ -246,6 +251,10 @@ def run_llm_pre_render(
                     model_name=_model,
                     retry_count=retry_count,
                     highlight_per_word=getattr(payload, "highlight_per_word", False),
+                    language=_language,
+                    beam_size=1,
+                    vad_filter=True,
+                    condition_on_previous_text=False,
                     logger=logger,
                 )
                 _ms = int((time.perf_counter() - _t0) * 1000)

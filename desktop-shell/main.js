@@ -238,6 +238,18 @@ async function ensureBackendBootstrap() {
 
 // ── Health + wait ─────────────────────────────────────────────────────────────
 
+function killPortProcess(port) {
+  return new Promise((resolve) => {
+    const { exec } = require('child_process');
+    exec(`netstat -ano | findstr :${port} | findstr LISTENING`, (err, stdout) => {
+      if (err || !stdout.trim()) return resolve();
+      const pid = stdout.trim().split(/\s+/).pop();
+      if (!pid || isNaN(Number(pid))) return resolve();
+      exec(`taskkill /F /PID ${pid}`, () => resolve());
+    });
+  });
+}
+
 function healthCheck(timeoutMs = 1000) {
   return new Promise((resolve) => {
     const req = http.get(HEALTH_URL, { timeout: timeoutMs }, (res) => {
@@ -292,6 +304,7 @@ function startBackendWithCommand(command, args) {
     fs.mkdirSync(pwDir, { recursive: true });
     const env = {
       ...process.env,
+      STATIC_UI_VERSION: 'v2',
       APP_DATA_DIR: DATA_DIR,
       DATABASE_PATH: path.join(DATA_DIR, 'app.db'),
       REPORTS_DIR: path.join(DATA_DIR, 'reports'),
@@ -351,13 +364,14 @@ async function startBackend() {
   }
   await ensureBackendBootstrap();
   sendSplash('Starting render engine...');
+  const uvicornArgs = ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000', '--reload'];
   const candidates = [
     ...(fs.existsSync(BACKEND_VENV_PY)
-      ? [{ cmd: BACKEND_VENV_PY, args: ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'] }]
+      ? [{ cmd: BACKEND_VENV_PY, args: uvicornArgs }]
       : []),
-    { cmd: 'py', args: ['-3', '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'] },
-    { cmd: 'python', args: ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'] },
-    { cmd: 'python3', args: ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'] },
+    { cmd: 'py',      args: ['-3', ...uvicornArgs] },
+    { cmd: 'python',  args: uvicornArgs },
+    { cmd: 'python3', args: uvicornArgs },
   ];
   let lastErr = null;
   for (const c of candidates) {
@@ -419,11 +433,10 @@ async function bootstrap() {
     if (isDev) {
       sendSplash('Dev mode — waiting for backend on :8000 ...');
     } else {
-      sendSplash('Checking render engine...');
-      const ready = await healthCheck();
-      if (!ready) {
-        await startBackend();
-      }
+      sendSplash('Restarting render engine...');
+      await killPortProcess(8000);
+      await wait(500);
+      await startBackend();
     }
     const maxWait = 120000;
     const ok = await waitBackendReady(maxWait, (elapsed) => {

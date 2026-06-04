@@ -25,6 +25,16 @@ class LLMSegment:
     clip_name: str    # natural name used as output filename stem
     title: str        # display title
     reason: str       # model's explanation
+    # RenderPlan extended fields — populated when LLM returns the full schema
+    hook_type: str = ""            # question|reveal|contrast|humor|emotion|statement
+    content_type: str = ""         # interview|vlog|tutorial|commentary|montage|gaming
+    subtitle_style: str = ""       # viral|clean|story|gaming
+    viral_score: float = 0.0       # 0.0–1.0 shareability
+    hook_score: float = 0.0        # 0.0–1.0 first-3s grab strength
+    retention_score: float = 0.0   # 0.0–1.0 predicted watch-through rate
+    speech_density: float = 0.0    # 1.0=dense dialogue, 0.0=silence/visuals
+    duration_fit: float = 0.0      # 1.0=ideal length for target short-form
+    cover_offset_ratio: float = 0.0  # thumbnail moment as fraction of clip (0=absent)
 
 
 # Backward-compat alias — existing consumers that reference GroqSegment still work.
@@ -75,6 +85,19 @@ def parse_segment_response(
                 segments.append(seg)
             else:
                 rejected += 1
+
+        # Second pass: LLM ignored duration constraints — accept any segment with
+        # positive duration rather than failing the entire render.
+        if not segments and rejected > 0:
+            logger.warning(
+                "llm_parser: 0 valid segments with strict bounds "
+                "(min_sec=%.0f max_sec=%.0f) — retrying without duration filter",
+                min_sec, max_sec,
+            )
+            for item in data:
+                seg = _parse_item(item, min_sec=1.0, max_sec=86400, video_duration=video_duration)
+                if seg is not None:
+                    segments.append(seg)
 
         if not segments:
             logger.warning(
@@ -145,7 +168,7 @@ def _parse_item(
     if not (min_sec <= duration <= max_sec):
         logger.debug("llm_parser: segment %.1f-%.1f rejected (dur=%.1fs)", start, end, duration)
         return None
-    if start < 0 or end > video_duration + 1.0:
+    if start < 0 or (video_duration > 0 and end > video_duration + 1.0):
         logger.debug("llm_parser: segment %.1f-%.1f out of bounds (video=%.1fs)", start, end, video_duration)
         return None
 
@@ -154,6 +177,25 @@ def _parse_item(
     score     = float(item.get("score", 0.5))
     score     = max(0.0, min(1.0, score))
 
+    # Defensive parse of RenderPlan extended fields — any bad value falls back to safe defaults
+    try:
+        _hook_type    = str(item.get("hook_type")    or "").strip()[:30]
+        _content_type = str(item.get("content_type") or "").strip()[:30]
+        _sub_style    = str(item.get("subtitle_style") or "").strip()[:20]
+        def _fs(key: str, fallback: float) -> float:
+            v = item.get(key)
+            return max(0.0, min(1.0, float(v))) if v is not None else fallback
+        _viral_score    = _fs("viral_score",       score)
+        _hook_score     = _fs("hook_score",        score)
+        _ret_score      = _fs("retention_score",   score)
+        _speech_density = _fs("speech_density",    0.0)
+        _dur_fit        = _fs("duration_fit",       score)
+        _cover_ratio    = _fs("cover_offset_ratio", 0.0)
+    except Exception:
+        _hook_type = _content_type = _sub_style = ""
+        _viral_score = _hook_score = _ret_score = _dur_fit = score
+        _speech_density = _cover_ratio = 0.0
+
     return LLMSegment(
         start=start,
         end=end,
@@ -161,4 +203,13 @@ def _parse_item(
         clip_name=sanitize_clip_name(raw_name),
         title=raw_title.strip()[:120],
         reason=str(item.get("reason", "")).strip()[:300],
+        hook_type=_hook_type,
+        content_type=_content_type,
+        subtitle_style=_sub_style,
+        viral_score=_viral_score,
+        hook_score=_hook_score,
+        retention_score=_ret_score,
+        speech_density=_speech_density,
+        duration_fit=_dur_fit,
+        cover_offset_ratio=_cover_ratio,
     )

@@ -218,12 +218,20 @@ def _run(
         )
         return None
 
-    # Apply min_quality_score filter
+    # Apply min_quality_score filter — prefer segments above threshold but never
+    # hard-fail when the LLM returned parseable segments.
     min_score = float(getattr(payload, "llm_min_quality", None) or 0.6)
-    segments = [s for s in segments if s.score >= min_score]
-    if not segments:
-        logger.info("llm_stage: all segments below min_quality_score=%.2f — fallback", min_score)
-        return None
+    _passing = [s for s in segments if s.score >= min_score]
+    if not _passing:
+        logger.warning(
+            "llm_stage: all %d segments scored below min_quality_score=%.2f "
+            "(best=%.2f) — proceeding with best available to avoid job failure",
+            len(segments), min_score,
+            max((s.score for s in segments), default=0.0),
+        )
+        # Use all returned segments (already sorted by score desc, count capped by parser).
+    else:
+        segments = _passing
 
     converted = [_to_scored_dict(seg) for seg in segments]
     logger.info("llm_stage: %d LLM segments will replace local scored", len(converted))
@@ -232,7 +240,11 @@ def _run(
 
 def _to_scored_dict(seg: "LLMSegment") -> dict:
     """Convert LLMSegment → dict compatible with pipeline scored[] format."""
-    viral_score = seg.score * 100.0
+    _base = seg.score * 100.0
+    # Use real AI sub-scores when Sprint A populated them; fall back to base score.
+    viral_score     = (seg.viral_score * 100.0)     if seg.viral_score     else _base
+    hook_score      = (seg.hook_score * 100.0)      if seg.hook_score      else _base
+    retention_score = (seg.retention_score * 100.0) if seg.retention_score else _base
     return {
         # Core timing — used by render loop for FFmpeg cut
         "start":    seg.start,
@@ -240,14 +252,21 @@ def _to_scored_dict(seg: "LLMSegment") -> dict:
         "duration": seg.end - seg.start,
         # Score fields — expected by downstream selection filters
         "viral_score":     viral_score,
-        "hook_score":      viral_score,
+        "hook_score":      hook_score,
         "motion_score":    50.0,   # neutral (LLM doesn't analyze motion)
         "diversity_score": 50.0,
-        "retention_score": viral_score,
+        "retention_score": retention_score,
         "audio_energy":    50.0,
         # LLM-specific metadata — additive, safe for existing consumers
-        "clip_name":   seg.clip_name,
-        "ai_title":  seg.title,
-        "ai_reason": seg.reason,
-        "source":      "llm",
+        "clip_name":          seg.clip_name,
+        "ai_title":           seg.title,
+        "ai_reason":          seg.reason,
+        "source":             "llm",
+        # RenderPlan routing fields (Sprint A → consumed by downstream stages)
+        "ai_subtitle_style":  seg.subtitle_style,              # → part_asset_planner:395
+        "content_type_hint":  seg.content_type,                # → part_render_setup:144 + 7 other sites
+        "hook_type":          seg.hook_type,                   # metadata
+        "cover_hint_ratio":   seg.cover_offset_ratio or None,  # → part_done:144 (Sprint E)
+        "speech_density":     seg.speech_density,              # metadata
+        "duration_fit_score": seg.duration_fit * 100.0,        # metadata
     }

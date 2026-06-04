@@ -56,6 +56,10 @@ class SubtitleTranscriptionAdapter(Protocol):
         model_name: str,
         retry_count: int,
         highlight_per_word: bool,
+        language: str | None = None,
+        beam_size: int | None = None,
+        vad_filter: bool = False,
+        condition_on_previous_text: bool = True,
     ) -> SubtitleTranscriptionResult:
         ...
 
@@ -194,6 +198,10 @@ class DefaultWhisperAdapter:
         model_name: str,
         retry_count: int,
         highlight_per_word: bool,
+        language: str | None = None,
+        beam_size: int | None = None,
+        vad_filter: bool = False,
+        condition_on_previous_text: bool = True,
     ) -> SubtitleTranscriptionResult:
         start = time.perf_counter()
         transcribe_to_srt(
@@ -234,6 +242,10 @@ class FasterWhisperAdapter:
         model_name: str,
         retry_count: int,
         highlight_per_word: bool,
+        language: str | None = None,
+        beam_size: int | None = None,
+        vad_filter: bool = False,
+        condition_on_previous_text: bool = True,
     ) -> SubtitleTranscriptionResult:
         start = time.perf_counter()
 
@@ -254,10 +266,16 @@ class FasterWhisperAdapter:
             _model_name = model_name or "large-v3"
             model = _get_fw_model(_model_name, device, compute_type)
 
-            segments_iter, _info = model.transcribe(
-                wav_path,
-                word_timestamps=highlight_per_word,
-            )
+            _fw_kwargs: dict = {
+                "word_timestamps": highlight_per_word,
+                "vad_filter": vad_filter,
+                "condition_on_previous_text": condition_on_previous_text,
+            }
+            if language is not None:
+                _fw_kwargs["language"] = language
+            if beam_size is not None:
+                _fw_kwargs["beam_size"] = beam_size
+            segments_iter, _info = model.transcribe(wav_path, **_fw_kwargs)
             _write_fw_srt(segments_iter, readable_srt_path, word_level=highlight_per_word)
 
             return SubtitleTranscriptionResult(
@@ -301,8 +319,13 @@ class WhisperXAdapter:
         model_name: str,
         retry_count: int,
         highlight_per_word: bool,
+        language: str | None = None,
+        beam_size: int | None = None,
+        vad_filter: bool = False,
+        condition_on_previous_text: bool = True,
     ) -> SubtitleTranscriptionResult:
         start = time.perf_counter()
+        _forced_language = language  # caller hint; None = auto-detect
         if not self.is_available():
             return SubtitleTranscriptionResult(
                 readable_srt_path=readable_srt_path,
@@ -326,7 +349,11 @@ class WhisperXAdapter:
                 compute_type=compute_type,
             )
             audio = whisperx.load_audio(video_path)
-            result = model.transcribe(audio, batch_size=batch_size)
+            result = model.transcribe(
+                audio,
+                batch_size=batch_size,
+                **({"language": _forced_language} if _forced_language else {}),
+            )
             language = str(result.get("language") or "en")
 
             if language not in SUPPORTED_ALIGNMENT_LANGUAGES:
@@ -387,6 +414,10 @@ def transcribe_with_adapter(
     model_name: str,
     retry_count: int,
     highlight_per_word: bool,
+    language: str | None = None,
+    beam_size: int | None = None,
+    vad_filter: bool = False,
+    condition_on_previous_text: bool = True,
     logger=None,
 ) -> SubtitleTranscriptionResult:
     """Route transcription to the appropriate adapter.
@@ -406,6 +437,12 @@ def transcribe_with_adapter(
     """
     requested = str(engine or "default").strip().lower()
     default_adapter = DefaultWhisperAdapter()
+    _adapt_kw = {
+        "language": language,
+        "beam_size": beam_size,
+        "vad_filter": vad_filter,
+        "condition_on_previous_text": condition_on_previous_text,
+    }
 
     # ------------------------------------------------------------------
     # engine="default" — transparent upgrade when faster-whisper present
@@ -418,6 +455,7 @@ def transcribe_with_adapter(
                 model_name=model_name,
                 retry_count=retry_count,
                 highlight_per_word=highlight_per_word,
+                **_adapt_kw,
             )
             if not result.warnings:
                 if logger is not None:
@@ -440,6 +478,7 @@ def transcribe_with_adapter(
             model_name=model_name,
             retry_count=retry_count,
             highlight_per_word=highlight_per_word,
+            **_adapt_kw,
         )
 
     # ------------------------------------------------------------------
@@ -452,6 +491,7 @@ def transcribe_with_adapter(
             model_name=model_name,
             retry_count=retry_count,
             highlight_per_word=highlight_per_word,
+            **_adapt_kw,
         )
         if not fw_result.warnings:
             if logger is not None:
@@ -476,6 +516,7 @@ def transcribe_with_adapter(
             model_name=model_name,
             retry_count=retry_count,
             highlight_per_word=highlight_per_word,
+            **_adapt_kw,
         )
         result.warnings.extend(fw_result.warnings)
         return result
@@ -490,6 +531,7 @@ def transcribe_with_adapter(
             model_name=model_name,
             retry_count=retry_count,
             highlight_per_word=highlight_per_word,
+            **_adapt_kw,
         )
         # Accept aligned=True (full alignment) OR aligned=False with only
         # language_not_supported warnings (SRT was written; alignment skipped by gate).
@@ -526,6 +568,7 @@ def transcribe_with_adapter(
                 model_name=model_name,
                 retry_count=retry_count,
                 highlight_per_word=highlight_per_word,
+                **_adapt_kw,
             )
             if not fw_result.warnings:
                 fw_result.warnings.extend(whisperx_result.warnings)
@@ -543,6 +586,7 @@ def transcribe_with_adapter(
             model_name=model_name,
             retry_count=retry_count,
             highlight_per_word=highlight_per_word,
+            **_adapt_kw,
         )
         result.warnings.extend(whisperx_result.warnings)
         return result
@@ -561,6 +605,7 @@ def transcribe_with_adapter(
         model_name=model_name,
         retry_count=retry_count,
         highlight_per_word=highlight_per_word,
+        **_adapt_kw,
     )
     result.warnings.append("unknown_subtitle_transcription_engine")
     return result

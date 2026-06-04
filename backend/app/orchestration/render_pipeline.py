@@ -33,6 +33,7 @@ from app.services.db import (
     close_thread_conn,
 )
 from app.services.subtitle_engine import has_audio_stream
+from app.services.render_engine import nvenc_available
 from app.services import cancel_registry
 from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.services.report_service import append_rows
@@ -166,10 +167,9 @@ _render_active_count: list[int] = [0]   # mutable int; guarded by _render_active
 
 
 def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
+    from app.services.text_overlay import normalize_text_layers
     try:
         raw_layers = [x.model_dump() if hasattr(x, "model_dump") else dict(x) for x in (payload.text_layers or [])]
-        if len(raw_layers) > MAX_TEXT_LAYERS:
-            raise ValueError(f"text_layers exceeds maximum {MAX_TEXT_LAYERS}")
         return normalize_text_layers(raw_layers)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid text_layers: {exc}") from exc

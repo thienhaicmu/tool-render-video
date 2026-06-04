@@ -22,16 +22,16 @@ logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)
 # auto-tracks the newest Flash release the account has access to —
 # important because raw "gemini-2.0-flash" returns quota-exceeded on many
 # accounts where "gemini-flash-latest" works.
-_DEFAULT_MODEL = "gemini-flash-latest"
+_DEFAULT_MODEL = "gemini-2.5-flash"
 
 # 60K chars ≈ 15K tokens — captures ~30 min of dense Vietnamese speech.
 _MAX_SRT_CHARS = int(os.getenv("GEMINI_MAX_SRT_CHARS", "60000"))
 
 # Hard upper bound on a single Gemini request — prevents the SDK from
 # blocking the render pipeline on its built-in ~10 min default timeout.
-_REQUEST_TIMEOUT_SEC = int(os.getenv("GEMINI_REQUEST_TIMEOUT", "30"))
+_REQUEST_TIMEOUT_SEC = int(os.getenv("GEMINI_REQUEST_TIMEOUT", "120"))
 
-_MAX_OUTPUT_TOKENS = 4096
+_MAX_OUTPUT_TOKENS = 16384
 _TEMPERATURE = 0.2
 
 try:
@@ -161,6 +161,7 @@ def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str)
                 "response_mime_type": "application/json",
                 "temperature": _TEMPERATURE,
                 "max_output_tokens": _MAX_OUTPUT_TOKENS,
+                "thinking_config": {"thinking_budget": 0},
             },
         )
         return resp.text
