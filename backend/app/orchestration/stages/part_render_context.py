@@ -48,7 +48,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
+
+from app.domain.render_plan import RenderPlan
 
 
 @dataclass
@@ -106,3 +108,9 @@ class PartRenderContext:
     sub_translate_clean: list = field(default_factory=list)
     sub_translate_failed_parts: list = field(default_factory=list)
     recovery_notes: list = field(default_factory=list)
+    # Sprint 2.3 — RenderPlan threaded from orchestration after the LLM stage.
+    # Optional + default None to honor Sacred Contract #2 (new field defaults
+    # to disabled equivalent — legacy contexts that don't set it work
+    # unchanged). part_renderer.py does NOT consume this field in Sprint 2.3;
+    # Sprint 4 will migrate decision logic to read it.
+    render_plan: Optional[RenderPlan] = None

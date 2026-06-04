@@ -91,6 +91,13 @@ from app.orchestration.pipeline_config import (
     _resolve_profile,
     _probe_video_duration,  # noqa: F401 (re-exported for routes/render.py)
 )
+# Sprint 2.3 — RenderPlan wire-up. Sprint 4 will move the decision logic
+# the shim captures here up into the AI layer; for now this is purely
+# additive — persisted alongside the existing scored list, threaded into
+# PartRenderContext, NOT yet consumed by part_renderer.
+from app.ai.llm.parser import LLMSegment
+from app.db.jobs_repo import update_render_plan
+from app.orchestration.render_plan_builder import build_render_plan
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
@@ -404,6 +411,64 @@ def run_render_pipeline(
         _seg_max_sec = _pre.seg_max_sec
         # full_srt and full_srt_available initialized before scene detection (Phase 45 hoist).
         # _early_transcription_done=True means Phase 45 already ran Whisper — subtitle block skips.
+
+        # Sprint 2.3 — RenderPlan persist (no-op consumer until Sprint 4).
+        # Reconstruct LLMSegment objects from the scored list using the
+        # reverse of llm_stage._to_scored_dict, hand to build_render_plan,
+        # and persist the JSON blob. The shim never raises; both the
+        # builder (returns None on internal error) and update_render_plan
+        # (logs + returns on DB error) are defensive. RenderPlan is then
+        # threaded into PartRenderContext below; part_renderer ignores it
+        # in Sprint 2.3 but Sprint 4 will read it.
+        _render_plan = None
+        try:
+            _reconstructed_segments: list[LLMSegment] = []
+            for _seg in scored:
+                try:
+                    _reconstructed_segments.append(
+                        LLMSegment(
+                            start=float(_seg.get("start", 0.0)),
+                            end=float(_seg.get("end", 0.0)),
+                            score=float(_seg.get("viral_score", 0.0)) / 100.0,
+                            clip_name=str(_seg.get("clip_name", "")),
+                            title=str(_seg.get("ai_title", "")),
+                            reason=str(_seg.get("ai_reason", "")),
+                            hook_type=str(_seg.get("hook_type", "")),
+                            content_type=str(_seg.get("content_type_hint", "")),
+                            subtitle_style=str(_seg.get("ai_subtitle_style", "")),
+                            viral_score=float(_seg.get("viral_score", 0.0)) / 100.0,
+                            hook_score=float(_seg.get("hook_score", 0.0)) / 100.0,
+                            retention_score=float(_seg.get("retention_score", 0.0)) / 100.0,
+                            speech_density=float(_seg.get("speech_density", 0.0)),
+                            duration_fit=float(_seg.get("duration_fit_score", 0.0)) / 100.0,
+                            cover_offset_ratio=float(_seg.get("cover_hint_ratio") or 0.0),
+                        )
+                    )
+                except (TypeError, ValueError):
+                    # Skip one bad scored entry; builder also skips internally.
+                    continue
+            _render_plan = build_render_plan(_reconstructed_segments, payload, creator_context_id="")
+            if _render_plan is not None:
+                update_render_plan(job_id, _render_plan.to_json())
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="render.plan.persisted",
+                    level="INFO",
+                    message="RenderPlan persisted",
+                    step="render.llm_pipeline",
+                    context={
+                        "clips_count": len(_render_plan.clips),
+                        "schema_version": _render_plan.schema_version,
+                    },
+                )
+        except Exception as _plan_exc:
+            # Defensive guard around the whole block. Builder + helpers
+            # already never raise, but a future refactor must not be able
+            # to take down a render via the wire-up itself.
+            logger.warning("render_plan wire-up failed (non-fatal): %s", _plan_exc)
+            _render_plan = None
+
         existing_parts = {int(x["part_no"]): x for x in list_job_parts(job_id)}
         _job_log(effective_channel, job_id, f"Segment building done: {total_parts} parts")
         # Diagnostic: per-segment selection summary (always at INFO for QA traceability)
@@ -741,6 +806,7 @@ def run_render_pipeline(
             sub_translate_clean=_sub_translate_clean,
             sub_translate_failed_parts=_sub_translate_failed_parts,
             recovery_notes=_recovery_notes,
+            render_plan=_render_plan,
         )
         # Phase A-7: render loop moved to pipeline_render_loop.run_render_loop().
         # part_ctx.ffmpeg_threads is finalized inside run_render_loop after contention throttle.
