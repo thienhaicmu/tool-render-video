@@ -30,6 +30,7 @@ from app.routes.editing import router as editing_router
 from app.features.downloader.router import router as platform_downloader_router
 from app.routes.feedback import router as feedback_router
 from app.routes.metrics import router as metrics_router
+from app.routes.settings import router as settings_router
 from app.services.job_manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
 from app.services.warmup import start_warmup, get_status as warmup_status
 from app.core.ui_gate import resolve_static_directory
@@ -136,6 +137,7 @@ app.include_router(editing_router)
 app.include_router(platform_downloader_router)
 app.include_router(feedback_router)
 app.include_router(metrics_router)  # Sprint 6.C: Prometheus /metrics endpoint
+app.include_router(settings_router)  # Sprint 3-FE: /api/settings/creator-context
 # v2 API routes — disabled by setting ENABLE_V2=0
 if os.getenv("ENABLE_V2", "1") != "0":
     try:
