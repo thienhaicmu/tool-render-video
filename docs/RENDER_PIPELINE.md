@@ -126,13 +126,19 @@ UI-visible terminal job statuses include `completed`, `completed_with_errors`, `
 
 **Stability marker: Stable contract**
 
-Source resolution has three paths:
+Source resolution has two paths:
 
 | Source path | Behavior |
 |---|---|
 | Editor session | `edit_session_id` resolves to a saved preview session created by `/api/render/prepare-source`. |
 | Local file | `source_video_path` is validated and used from disk. |
-| YouTube | `download_youtube()` downloads into the job work directory or preview session. |
+
+Remote sources (YouTube, TikTok, IG, …) are NOT downloaded inside the render
+pipeline. Users fetch them via the standalone Downloader feature
+(`features/downloader/`, `/api/downloader/*`) into a local file first, then
+submit the local file to render. Sprint 1.2 removed the YouTube branch from
+`/api/render/prepare-source` and `/api/render/quick-process`; the
+`download-health` endpoint was deleted entirely.
 
 Preview sessions live under `TEMP_DIR/preview/{session_id}` and store `session.json`, source path, preview path, export dir, duration, and optional preview transcript cache.
 
@@ -146,10 +152,9 @@ Validation happens before queueing and again after rendering.
 
 Pre-render validation protects:
 
-- source mode
+- source mode (must be `local`; any other value is rejected with a 400)
 - output directory
 - local file existence
-- YouTube URL presence
 - editor session presence
 - channel/manual output compatibility
 - schema constraints from `RenderRequest`
@@ -454,7 +459,6 @@ ai_ux
 
 Important fallback patterns:
 
-- Download tries multiple yt-dlp clients and dynamic format fallback.
 - Whisper transcription has heartbeat logging during long work.
 - FFmpeg can retry or fall back from NVENC to CPU encoders.
 - Motion crop falls back to standard render where possible.
