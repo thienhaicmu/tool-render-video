@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.models.schemas import RenderRequest
 from app.orchestration.render_events import _job_log, _safe_unlink
-from app.services.audio_cleanup_adapters import cleanup_audio_with_adapter
+from app.services.audio.cleanup_adapters import cleanup_audio_with_adapter
 
 logger = logging.getLogger("app.render")
 

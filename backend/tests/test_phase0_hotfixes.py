@@ -123,13 +123,13 @@ class TestMixNarrationAudioAtempo:
             return result
 
         with (
-            patch("app.services.audio_mix_service.subprocess.run", side_effect=fake_run),
+            patch("app.services.audio.mix.subprocess.run", side_effect=fake_run),
             patch(
-                "app.services.audio_mix_service._has_audio_stream",
+                "app.services.audio.mix._has_audio_stream",
                 return_value=fake_has_audio,
             ),
         ):
-            from app.services.audio_mix_service import mix_narration_audio
+            from app.services.audio.mix import mix_narration_audio
             mix_narration_audio(
                 video_path=video_path,
                 narration_audio_path=narration_path,

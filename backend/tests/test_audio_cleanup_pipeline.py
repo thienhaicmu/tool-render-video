@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.services.audio_cleanup_adapters import AudioCleanupResult
+from app.services.audio.cleanup_adapters import AudioCleanupResult
 
 
 def test_narration_cleanup_none_uses_original_path(tmp_path):

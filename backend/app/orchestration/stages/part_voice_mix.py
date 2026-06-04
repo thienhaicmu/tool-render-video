@@ -38,7 +38,7 @@ Returns:
   mutable lists, part_manifest field writes, and final_part replacement.
 
 Sacred Contracts honored:
-  - #3 AI return-None contract: TTS lives in app.services.tts_service
+  - #3 AI return-None contract: TTS lives in app.services.audio.tts
        (not under backend/app/ai/**, so #3 doesn't apply cardinally),
        but the spirit holds: failures are caught locally, voice_failed
        events emitted with error_code=VOICE001, render continues.
@@ -85,10 +85,10 @@ from app.orchestration.render_events import (
     _safe_unlink,
 )
 from app.orchestration.stages.part_render_context import PartRenderContext
-from app.services.audio_mix_service import mix_narration_audio
+from app.services.audio.mix import mix_narration_audio
 from app.services.manifest_writer import write_manifest
 from app.services.subtitle_engine import slice_srt_to_text
-from app.services.tts_service import generate_narration_audio
+from app.services.audio.tts import generate_narration_audio
 
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5d).
 logger = logging.getLogger("app.render")

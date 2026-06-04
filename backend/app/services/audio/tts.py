@@ -310,7 +310,7 @@ def generate_narration_audio(
     )
 
     try:
-        from app.services.tts_xtts_adapter import synthesize_xtts
+        from app.services.audio.tts_xtts import synthesize_xtts
         return synthesize_xtts(
             text=_humanized,
             language=language,
