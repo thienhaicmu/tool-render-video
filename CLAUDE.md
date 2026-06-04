@@ -276,8 +276,18 @@ backend/app/core/ui_gate.py                         # controls which UI is serve
 backend/app/main.py                                 # startup sequence + router mounts
 backend/app/orchestration/asset_pipeline.py         # asset injection stage
 backend/app/orchestration/render_events.py          # event error classification
-backend/app/orchestration/groq_only_pipeline.py     # Groq-only pre-render path
 backend/app/orchestration/parallel_analysis.py      # concurrent scene detect + Whisper threads
+backend/app/orchestration/llm_pipeline.py           # LLM pre-render flow (Sprint 4 surface)
+backend/app/orchestration/llm_stage.py              # LLM dispatcher + editorial_hint builder (Sprint 3 CreatorContext wire)
+backend/app/ai/llm/__init__.py                      # Provider dispatch (select_segments + select_render_plan)
+backend/app/ai/llm/prompts.py                       # Prompt templates — format-safety critical (pre-flight {end}/{start} bug class)
+backend/app/ai/llm/parser.py                        # parse_segment_response + parse_render_plan_response (Sprint 4.A)
+backend/app/ai/context/creator_context.py           # CreatorContextBuilder (Sprint 3)
+backend/app/db/jobs_repo.py                         # jobs + render_plan_json (Sprint 2.1) helpers — mixed connection model
+backend/app/db/creator_repo.py                      # creator_prefs.prefs_json.creator_context nested storage (Sprint 3)
+backend/app/orchestration/stages/part_asset_planner.py  # consumes RenderPlan.subtitle_policy (Sprint 4.E)
+backend/app/orchestration/stages/part_render_setup.py   # consumes RenderPlan.camera_strategy (Sprint 4.F)
+backend/app/orchestration/pipeline_ranking.py       # consumes RenderPlan ClipPlan.rank (Sprint 4.G) — env-flag gated
 ```
 
 > ⚠️ CORRECTION — `render_engine.py` is 53 lines and is a thin facade. It is NOT the real FFmpeg execution layer.
@@ -309,11 +319,18 @@ backend/app/services/segment_builder.py             # clip boundary builder
 backend/app/routes/voice.py
 backend/app/routes/channels.py
 backend/app/routes/feedback.py
+backend/app/routes/settings.py                      # Sprint 3-FE CreatorContext API
 backend/app/core/config.py                          # env vars and data paths only
 backend/knowledge/**                                # add only — never delete existing entries
+backend/app/domain/render_plan.py                   # pure dataclass — defensive (de)serialisation, no I/O
+backend/app/domain/creator_context.py               # pure dataclass — defensive, no I/O
 ```
 
-> Note: `routes/download.py` does NOT exist — downloader endpoints live at `backend/app/features/downloader/router.py`, loaded via shim `routes/platform_downloader.py`. Edits there are MEDIUM tier (preserve WS shape + job semantics).
+> Note: `routes/download.py` does NOT exist — downloader endpoints live at `backend/app/features/downloader/router.py` mounted directly in `main.py`. The `routes/platform_downloader.py` shim was deleted in Sprint 1.1.
+
+> Note: Sprint 4.H (commit `dbd758a`) deleted `orchestration/render_plan_builder.py` (Sprint 2.2 shim). Any documentation or code that lists `build_render_plan(...)` is referencing a deleted symbol.
+
+> Sprint 4 audit reference: see `docs/RENDERPLAN.md` for the RenderPlan dataclass contract and the AI-emission flow gate (`LLM_EMIT_RENDER_PLAN` env var). See `docs/CREATOR_CONTEXT.md` for the Sprint 3 CreatorContext persistence and prompt-hint integration. The full migration log is `docs/review/MIGRATION_COMPLETE_2026-06-04.md`.
 
 ---
 
