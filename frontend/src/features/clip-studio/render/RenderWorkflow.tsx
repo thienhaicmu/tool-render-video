@@ -225,17 +225,11 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       voice_gender:        cfg.narrEnabled ? cfg.voiceGender : undefined,
       tts_engine:          cfg.narrEnabled ? cfg.ttsEngine : undefined,
       voice_mix_mode:      cfg.narrEnabled ? cfg.voiceMixMode : undefined,
-      // LLM segment selection — API keys come from server .env, not UI.
-      // ai_provider selects which provider's key the server resolves.
-      // groq_* kept for backward compat; llm_* are the canonical names (Phase 2).
-      groq_only_mode:        cfg.llmEnabled || undefined,
-      groq_analysis_enabled: cfg.llmEnabled || undefined,
-      ai_provider:           cfg.llmEnabled ? cfg.aiProvider : undefined,
-      groq_model:            cfg.llmEnabled && cfg.llmModel ? cfg.llmModel : undefined,
-      groq_content_language: cfg.llmEnabled && cfg.llmLanguage !== 'auto' ? cfg.llmLanguage : undefined,
-      llm_enabled:           cfg.llmEnabled || undefined,
-      llm_model:             cfg.llmEnabled && cfg.llmModel ? cfg.llmModel : undefined,
-      llm_language:          cfg.llmEnabled && cfg.llmLanguage !== 'auto' ? cfg.llmLanguage : undefined,
+      // LLM segment selection — canonical llm_* fields. API keys from server .env.
+      llm_enabled:  cfg.llmEnabled || undefined,
+      ai_provider:  cfg.llmEnabled ? cfg.aiProvider : undefined,
+      llm_model:    cfg.llmEnabled && cfg.llmModel ? cfg.llmModel : undefined,
+      llm_language: cfg.llmEnabled && cfg.llmLanguage !== 'auto' ? cfg.llmLanguage : undefined,
       multi_variant:       cfg.multiVariant || undefined,
       cta_enabled:         cfg.ctaEnabled || undefined,
       cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,

@@ -163,25 +163,21 @@ export interface RenderRequest {
   ai_content_driven_selection?: boolean
 
   // Groq segment selection (single source of truth post-refactor A-G)
-  groq_only_mode?: boolean
-  groq_analysis_enabled?: boolean
-  groq_model?: string | null
-  groq_content_language?: string | null
-  // ai_provider selects which cloud LLM the backend uses to resolve the
-  // server-side API key. "groq" | "gemini" | "openai" | "claude".
-  // Audit 2026-06-02 P3 follow-up: type drift fix — field was in backend
-  // schemas.py:370 but missing from the frontend RenderRequest type, causing
-  // a long-standing TS error in RenderWorkflow.buildPayload.
-  ai_provider?: string | null
-  groq_min_quality_score?: number
-  groq_selection_strategy?: string | null
-
-  // LLM Alias Fields (Phase 2) — provider-neutral aliases for the groq_* fields above.
+  // LLM segment selection — canonical names (llm_*). groq_* kept for backward compat.
   llm_enabled?: boolean | null
   llm_model?: string | null
   llm_language?: string | null
   llm_min_quality?: number | null
   llm_mode?: string | null
+  // Legacy groq_* fields — accepted by backend but not sent by new UI code.
+  groq_only_mode?: boolean
+  groq_analysis_enabled?: boolean
+  groq_model?: string | null
+  groq_content_language?: string | null
+  ai_provider?: string | null
+  groq_min_quality_score?: number
+  groq_selection_strategy?: string | null
+
 
   // Pro Timeline Steering (UP26)
   clip_lock?: TimeRange[] | null

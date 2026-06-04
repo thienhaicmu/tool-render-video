@@ -179,7 +179,7 @@ class TestHardFailPreflight:
             result = run_groq_only_pre_render(**args)  # must NOT raise
 
         assert result.total_parts == 1
-        assert any("groq_analysis_enabled=False" in r.message for r in caplog.records)
+        assert any("llm_enabled=False" in r.message for r in caplog.records)
 
     def test_groq_only_warns_and_continues_when_multi_variant_enabled(self, tmp_path, monkeypatch, caplog):
         # multi_variant guard downgraded from hard-fail to graceful degradation.

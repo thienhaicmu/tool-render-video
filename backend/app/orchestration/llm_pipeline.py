@@ -88,12 +88,12 @@ def run_llm_pre_render(
         cancel_registry.JobCancelledError: job cancelled mid-flight.
     """
     # ── 1. Pre-flight validation ──────────────────────────────────────────
-    if not getattr(payload, "groq_analysis_enabled", False):
+    if not getattr(payload, "llm_enabled", False):
         # Phase F1: pipeline is now mandatory for all jobs. This guard was written
         # for the old optional-mode path. Old stored jobs and misconfigured clients
-        # can arrive with groq_analysis_enabled=False; failing them is wrong.
+        # can arrive with llm_enabled=False; failing them is wrong.
         logger.warning(
-            "llm_pipeline: groq_analysis_enabled=False — continuing anyway "
+            "llm_pipeline: llm_enabled=False — continuing anyway "
             "(pipeline is mandatory since Phase F1; check GROQ_ONLY_DEFAULT env var)"
         )
     if getattr(payload, "multi_variant", False):
@@ -319,7 +319,7 @@ def run_llm_pre_render(
         payload=payload,
         source=source,
     )
-    _min_score = float(getattr(payload, "groq_min_quality_score", 0.6))
+    _min_score = float(getattr(payload, "llm_min_quality", None) or 0.6)
     if scored is None:
         raise LLMPipelineError(
             f"groq_only_mode: LLM returned no usable segments "

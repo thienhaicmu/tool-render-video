@@ -196,10 +196,8 @@ def _run(
     min_sec      = float(getattr(payload, "min_part_sec", 15))
     max_sec      = float(getattr(payload, "max_part_sec", 60))
     video_duration = float(source.get("duration") or 0.0)
-    # groq_model field stays as the universal "selected model" for all providers
-    # (additive: Sacred Contract 2 — never rename existing fields).
-    model        = getattr(payload, "groq_model", None) or None
-    language     = getattr(payload, "groq_content_language", None) or "auto"
+    model        = getattr(payload, "llm_model", None) or None
+    language     = getattr(payload, "llm_language", None) or "auto"
     editorial_hint = _build_editorial_hint(payload)
 
     logger.info(
@@ -230,7 +228,7 @@ def _run(
         return None
 
     # Apply min_quality_score filter
-    min_score = float(getattr(payload, "groq_min_quality_score", 0.6))
+    min_score = float(getattr(payload, "llm_min_quality", None) or 0.6)
     segments = [s for s in segments if s.score >= min_score]
     if not segments:
         logger.info("llm_stage: all segments below min_quality_score=%.2f — fallback", min_score)
