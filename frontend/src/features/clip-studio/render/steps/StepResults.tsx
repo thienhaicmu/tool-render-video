@@ -441,7 +441,7 @@ function StepResultsBase({
                   <div className="clip-info2">
                     <div className="clip-info2-top">
                       <span className="clip-num-lbl2">
-                        {part.groq_title || (part.clip_name ? part.clip_name.replace(/\.mp4$/i, '') : `Clip ${String(part.part_no).padStart(2, '0')}`)}
+                        {(part.ai_title ) || (part.clip_name ? part.clip_name.replace(/\.mp4$/i, '') : `Clip ${String(part.part_no).padStart(2, '0')}`)}
                       </span>
                       {(part.source === 'llm' || part.source === 'groq') && (
                         <span style={{
@@ -469,9 +469,9 @@ function StepResultsBase({
                         <div className="clip-score-bar-fill" style={{ width: `${dispScore}%`, background: scoreCol }} />
                       </div>
                     )}
-                    {part.groq_reason && (
+                    {(part.ai_reason ) && (
                       <div style={{ fontSize: 9, color: 'rgba(168,85,247,.85)', marginTop: 2, lineHeight: 1.3, fontStyle: 'italic' }}>
-                        {part.groq_reason}
+                        {part.ai_reason}
                       </div>
                     )}
                     {rank?.ranking_reason && (

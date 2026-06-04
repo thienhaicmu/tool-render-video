@@ -392,7 +392,7 @@ def prepare_part_assets(
             "montage":    "gaming",
         }
         _raw_sub_style = (
-            str(seg.get("variant_subtitle_style") or "").strip()
+            str(seg.get("variant_subtitle_style") or seg.get("ai_subtitle_style") or "").strip()
             or (ctx.payload.subtitle_style or "").strip()
         )
         _platform_sub_bias = (

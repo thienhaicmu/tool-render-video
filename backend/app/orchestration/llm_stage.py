@@ -247,7 +247,7 @@ def _to_scored_dict(seg: "LLMSegment") -> dict:
         "audio_energy":    50.0,
         # LLM-specific metadata — additive, safe for existing consumers
         "clip_name":   seg.clip_name,
-        "groq_title":  seg.title,   # kept for backward compat with stored result_json
-        "groq_reason": seg.reason,  # kept for backward compat with stored result_json
+        "ai_title":  seg.title,
+        "ai_reason": seg.reason,
         "source":      "llm",
     }

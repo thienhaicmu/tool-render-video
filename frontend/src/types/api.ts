@@ -262,10 +262,10 @@ export interface JobPart {
   motion_score: number
   duration: number
   message?: string
-  // AI-selected clip metadata (groq_title/groq_reason kept for backward compat with stored jobs)
+  // AI-selected clip metadata
   clip_name?: string
-  groq_title?: string
-  groq_reason?: string
+  ai_title?: string
+  ai_reason?: string
   source?: string
 }
 

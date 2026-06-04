@@ -45,11 +45,11 @@ class PartContext:
 
     # ── Clip identity ────────────────────────────────────────────────────────
     clip_name: str = ""        # natural filename stem (spaces allowed, no FS-invalid chars)
-    source: str = "local"      # "local" | "groq" | "ai_director"
+    source: str = "local"      # "local" | "llm" | "ai_director"
 
-    # ── Groq metadata (populated when source == "groq") ─────────────────────
-    groq_title: str = ""
-    groq_reason: str = ""
+    # ── AI metadata (populated when source == "llm") ─────────────────────────
+    ai_title: str = ""
+    ai_reason: str = ""
 
     # ── Catch-all for any extra keys callers may write ───────────────────────
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -99,8 +99,8 @@ class PartContext:
     def is_high_motion(self, threshold: float = 60.0) -> bool:
         return self.motion_score >= threshold
 
-    def has_groq_data(self) -> bool:
-        return self.source == "groq" and bool(self.groq_title or self.groq_reason)
+    def has_ai_data(self) -> bool:
+        return self.source in ("llm", "groq") and bool(self.ai_title or self.ai_reason)
 
 
 def parts_from_dicts(dicts: List[Dict[str, Any]]) -> List[PartContext]:
