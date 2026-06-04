@@ -49,6 +49,7 @@ def select_segments(
     api_key: str = "",
     model: Optional[str] = None,
     language: str = "auto",
+    editorial_hint: str = "",
 ) -> Optional[list[GroqSegment]]:
     """Send SRT transcript to Groq and return selected segments.
 
@@ -64,6 +65,7 @@ def select_segments(
             api_key=api_key,
             model=model,
             language=language,
+            editorial_hint=editorial_hint,
         )
     except Exception as exc:
         logger.warning("groq_client: unexpected error — %s", exc, exc_info=True)
@@ -81,6 +83,7 @@ def _run(
     api_key: str,
     model: Optional[str],
     language: str,
+    editorial_hint: str = "",
 ) -> Optional[list[GroqSegment]]:
     if not (_GROQ_SDK or _OPENAI_COMPAT):
         logger.warning("groq_client: no SDK available (install 'groq' or 'openai')")
@@ -98,6 +101,7 @@ def _run(
         min_sec=min_sec,
         max_sec=max_sec,
         language=language,
+        editorial_hint=editorial_hint,
     )
 
     resolved_model = model or _DEFAULT_MODEL

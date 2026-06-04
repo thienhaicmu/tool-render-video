@@ -373,6 +373,15 @@ class RenderRequest(BaseModel):
     claude_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
 
+    # LLM Alias Fields (Phase 2) — provider-neutral aliases for the groq_* fields above.
+    # Backend coerces these to groq_* equivalents before the pipeline runs.
+    # All None defaults per Sacred Contract 2 — no behavior change for stored jobs.
+    llm_enabled: Optional[bool] = None           # alias for groq_analysis_enabled
+    llm_model: Optional[str] = None              # alias for groq_model
+    llm_language: Optional[str] = None           # alias for groq_content_language
+    llm_min_quality: Optional[float] = None      # alias for groq_min_quality_score
+    llm_mode: Optional[str] = None               # alias for groq_selection_strategy
+
     @field_validator("target_duration")
     @classmethod
     def _validate_target_duration(cls, v: int) -> int:

@@ -259,10 +259,10 @@ class TestGroqStageToDictShape:
         d = _to_scored_dict(self._make_segment())
         assert d["clip_name"] == "Khoảnh khắc viral"
 
-    def test_source_is_groq(self):
+    def test_source_is_llm(self):
         from app.orchestration.groq_stage import _to_scored_dict
         d = _to_scored_dict(self._make_segment())
-        assert d["source"] == "groq"
+        assert d["source"] == "llm"
 
     def test_groq_metadata_present(self):
         from app.orchestration.groq_stage import _to_scored_dict

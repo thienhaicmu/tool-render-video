@@ -1,5 +1,5 @@
 """
-parser.py — Parse Groq segment-selection response into GroqSegment list.
+parser.py — Parse LLM segment-selection response into GroqSegment/LLMSegment list.
 
 All parsing is defensive: never raises, returns None on any failure.
 Caller treats None as signal to use local fallback scorer.
@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-logger = logging.getLogger("app.render.groq_parser")
+logger = logging.getLogger("app.render.llm_parser")
 
 # Filesystem-invalid characters on Windows (superset covers Mac/Linux too).
 _INVALID_FS_CHARS = re.compile(r'[/\\:*?"<>|\t\n\r]')
@@ -26,6 +26,11 @@ class GroqSegment:
     clip_name: str    # natural name used as output filename stem
     title: str        # display title (may differ from clip_name)
     reason: str       # Groq's explanation
+
+
+# Provider-neutral alias — all LLM providers return the same dataclass shape.
+# GroqSegment kept for backward compatibility with existing consumers.
+LLMSegment = GroqSegment
 
 
 def sanitize_clip_name(raw: str) -> str:
@@ -60,7 +65,7 @@ def parse_segment_response(
                     break
         if not isinstance(data, list):
             logger.warning(
-                "groq_parser: expected list (or object with 'segments' key), "
+                "llm_parser: expected list (or object with 'segments' key), "
                 "got %s — raw preview: %r",
                 type(data).__name__, raw[:300],
             )
@@ -77,7 +82,7 @@ def parse_segment_response(
 
         if not segments:
             logger.warning(
-                "groq_parser: 0 valid segments out of %d returned by Groq "
+                "llm_parser: 0 valid segments out of %d returned by Groq "
                 "(min_sec=%.0f max_sec=%.0f video_dur=%.0f) — raw preview: %r",
                 len(data), min_sec, max_sec, video_duration, raw[:300],
             )
@@ -89,14 +94,14 @@ def parse_segment_response(
 
         if len(result) < output_count:
             logger.info(
-                "groq_parser: %d/%d valid segments (%d rejected) — proceeding with subset",
+                "llm_parser: %d/%d valid segments (%d rejected) — proceeding with subset",
                 len(result), output_count, rejected,
             )
 
         return result
 
     except Exception as exc:
-        logger.warning("groq_parser: unexpected error — %s", exc, exc_info=True)
+        logger.warning("llm_parser: unexpected error — %s", exc, exc_info=True)
         return None
 
 
@@ -158,12 +163,12 @@ def _parse_item(
 
     # Duration gate
     if not (min_sec <= duration <= max_sec):
-        logger.debug("groq_parser: segment %.1f-%.1f rejected (dur=%.1fs)", start, end, duration)
+        logger.debug("llm_parser: segment %.1f-%.1f rejected (dur=%.1fs)", start, end, duration)
         return None
 
     # Bounds gate
     if start < 0 or end > video_duration + 1.0:  # +1s tolerance for rounding
-        logger.debug("groq_parser: segment %.1f-%.1f out of bounds (video=%.1fs)", start, end, video_duration)
+        logger.debug("llm_parser: segment %.1f-%.1f out of bounds (video=%.1fs)", start, end, video_duration)
         return None
 
     raw_name  = str(item.get("clip_name") or item.get("title") or "clip")

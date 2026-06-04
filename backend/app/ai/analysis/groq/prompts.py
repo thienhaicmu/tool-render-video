@@ -62,17 +62,26 @@ def build_segment_prompt(
     max_sec: float,
     language: str = "auto",
     max_srt_chars: int | None = None,
+    editorial_hint: str = "",
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for LLM segment selection.
 
     max_srt_chars overrides the per-module MAX_SRT_CHARS cap. Used by
     high-context providers (e.g. Gemini 1M context) to skip truncation
     that's only needed for low-TPM providers like Groq free tier.
+
+    editorial_hint is appended to the system prompt only — the user prompt
+    (which defines the JSON contract) is NEVER modified. This keeps the
+    output format stable while allowing soft editorial preferences to bias
+    segment selection. An empty string means no change from the baseline.
     """
     cap = max_srt_chars if max_srt_chars is not None else MAX_SRT_CHARS
     truncated = srt_content[:cap]
     if len(srt_content) > cap:
         truncated += "\n... [transcript truncated]"
+
+    hint = editorial_hint.strip()
+    system = _SYSTEM + (f" {hint}" if hint else "")
 
     user = _USER_TEMPLATE.format(
         language=language,
@@ -81,4 +90,4 @@ def build_segment_prompt(
         min_sec=int(min_sec),
         max_sec=int(max_sec),
     )
-    return _SYSTEM, user
+    return system, user

@@ -79,8 +79,8 @@ from app.orchestration.pipeline_source_prep import prepare_render_source
 from app.orchestration.pipeline_narration import run_manual_voice_tts
 from app.orchestration.stages.part_renderer import PartRenderContext  # noqa: F401 (passed via PartRenderContext init in run_render_loop)
 from app.orchestration.pipeline_render_loop import run_render_loop
-# pipeline_pre_render removed in Phase F1 — all jobs now use groq_only_pipeline.
-from app.orchestration.groq_only_pipeline import run_groq_only_pre_render
+# pipeline_pre_render removed in Phase F1 — all jobs now use llm_pipeline.
+from app.orchestration.llm_pipeline import run_llm_pre_render
 from app.orchestration.pipeline_cache import (
     _transcription_cache_get,
     _transcription_cache_put,
@@ -382,7 +382,7 @@ def run_render_pipeline(
             message="Groq-only mode: Groq is sole segment authority",
             step="render.groq_only",
         )
-        _pre = run_groq_only_pre_render(
+        _pre = run_llm_pre_render(
             source_path=source_path,
             source=source,
             work_dir=work_dir,

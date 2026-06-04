@@ -72,9 +72,9 @@ GROQ_ONLY_DEFAULT    : bool = os.getenv("GROQ_ONLY_DEFAULT", "0") == "1"
 # Phase I — server-wide default LLM provider for NEW jobs.
 # Supported: "groq" | "gemini" | "openai" | "claude". Default "groq" to keep
 # stored jobs working. Override to "gemini" for the FREE 1M-token/day tier.
-AI_PROVIDER_DEFAULT  : str  = os.getenv("AI_PROVIDER_DEFAULT", "groq").strip().lower()
+AI_PROVIDER_DEFAULT  : str  = os.getenv("AI_PROVIDER_DEFAULT", "gemini").strip().lower()
 
-# Per-provider API keys (server env fallback). Resolved in groq_stage._resolve_api_key
+# Per-provider API keys (server env fallback). Resolved in llm_stage._resolve_api_key
 # AFTER payload-level keys. Empty = no fallback for that provider.
 GEMINI_API_KEY       : str  = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY       : str  = os.getenv("OPENAI_API_KEY", "")

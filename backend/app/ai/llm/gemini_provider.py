@@ -16,7 +16,7 @@ import logging
 import os
 from typing import Optional
 
-from app.ai.analysis.groq.parser import GroqSegment, parse_segment_response
+from app.ai.analysis.groq.parser import GroqSegment, LLMSegment, parse_segment_response
 from app.ai.analysis.groq.prompts import build_segment_prompt
 
 logger = logging.getLogger("app.render.gemini_client")
@@ -58,7 +58,8 @@ def select_segments(
     api_key: str = "",
     model: Optional[str] = None,
     language: str = "auto",
-) -> Optional[list[GroqSegment]]:
+    editorial_hint: str = "",
+) -> Optional[list[LLMSegment]]:
     """Send SRT to Gemini and return selected segments.
 
     Returns None on any failure — caller hard-fails the job in groq_only_mode.
@@ -73,6 +74,7 @@ def select_segments(
             api_key=api_key,
             model=model,
             language=language,
+            editorial_hint=editorial_hint,
         )
     except Exception as exc:
         logger.warning("gemini_client: unexpected error — %s", exc, exc_info=True)
@@ -88,7 +90,8 @@ def _run(
     api_key: str,
     model: Optional[str],
     language: str,
-) -> Optional[list[GroqSegment]]:
+    editorial_hint: str = "",
+) -> Optional[list[LLMSegment]]:
     if not _GENAI_SDK:
         logger.warning("gemini_client: google-genai SDK not installed")
         return None
@@ -106,6 +109,7 @@ def _run(
         max_sec=max_sec,
         language=language,
         max_srt_chars=_MAX_SRT_CHARS,  # bigger cap than Groq
+        editorial_hint=editorial_hint,
     )
 
     resolved_model = model or _DEFAULT_MODEL

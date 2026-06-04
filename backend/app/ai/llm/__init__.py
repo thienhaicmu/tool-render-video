@@ -15,7 +15,7 @@ import logging
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from app.ai.analysis.groq.parser import GroqSegment
+    from app.ai.analysis.groq.parser import GroqSegment, LLMSegment
 
 logger = logging.getLogger("app.render.llm")
 logger.info("llm: dispatcher loaded (build=2026-06-01.i1-multi-provider)")
@@ -35,10 +35,12 @@ def select_segments(
     api_key: str = "",
     model: Optional[str] = None,
     language: str = "auto",
-) -> Optional[list["GroqSegment"]]:
+    editorial_hint: str = "",
+) -> Optional[list["LLMSegment"]]:
     """Dispatch segment selection to the named LLM provider.
 
     Returns None on any failure — caller must hard-fail in groq_only_mode.
+    editorial_hint is passed through to the prompt builder — see prompts.py.
     """
     p = (provider or DEFAULT_PROVIDER).strip().lower()
     if p == "groq":
@@ -64,4 +66,5 @@ def select_segments(
         api_key=api_key,
         model=model,
         language=language,
+        editorial_hint=editorial_hint,
     )

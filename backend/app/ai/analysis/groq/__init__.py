@@ -8,7 +8,7 @@ GroqSegment objects — time ranges Groq judged as best for short clips.
 Public surface:
     from app.ai.analysis.groq import select_segments, GroqSegment
 """
-from app.ai.analysis.groq.parser import GroqSegment
+from app.ai.analysis.groq.parser import GroqSegment, LLMSegment
 from app.ai.analysis.groq.client import select_segments
 
-__all__ = ["select_segments", "GroqSegment"]
+__all__ = ["select_segments", "GroqSegment", "LLMSegment"]

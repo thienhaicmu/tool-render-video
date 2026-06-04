@@ -54,10 +54,10 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     aiCloudApiKey:    localStorage.getItem('rw_ai_cloud_api_key') ?? '',
     aiCloudModel:     '',
     aiContentDriven:  false,
-    groqEnabled:         true,
-    aiProvider:          (localStorage.getItem('rw_ai_provider') as 'groq' | 'gemini') ?? 'groq',
-    groqModel:           '',
-    groqContentLanguage: 'auto',
+    llmEnabled:   true,
+    aiProvider:   (localStorage.getItem('rw_ai_provider') as 'groq' | 'gemini') ?? 'gemini',
+    llmModel:     '',
+    llmLanguage:  'auto',
   }))
 
   const [jobId, setJobId]               = useState<string | null>(null)
@@ -227,11 +227,15 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       voice_mix_mode:      cfg.narrEnabled ? cfg.voiceMixMode : undefined,
       // LLM segment selection — API keys come from server .env, not UI.
       // ai_provider selects which provider's key the server resolves.
-      groq_only_mode:        cfg.groqEnabled || undefined,
-      groq_analysis_enabled: cfg.groqEnabled || undefined,
-      ai_provider:           cfg.groqEnabled ? cfg.aiProvider : undefined,
-      groq_model:            cfg.groqEnabled && cfg.groqModel ? cfg.groqModel : undefined,
-      groq_content_language: cfg.groqEnabled && cfg.groqContentLanguage !== 'auto' ? cfg.groqContentLanguage : undefined,
+      // groq_* kept for backward compat; llm_* are the canonical names (Phase 2).
+      groq_only_mode:        cfg.llmEnabled || undefined,
+      groq_analysis_enabled: cfg.llmEnabled || undefined,
+      ai_provider:           cfg.llmEnabled ? cfg.aiProvider : undefined,
+      groq_model:            cfg.llmEnabled && cfg.llmModel ? cfg.llmModel : undefined,
+      groq_content_language: cfg.llmEnabled && cfg.llmLanguage !== 'auto' ? cfg.llmLanguage : undefined,
+      llm_enabled:           cfg.llmEnabled || undefined,
+      llm_model:             cfg.llmEnabled && cfg.llmModel ? cfg.llmModel : undefined,
+      llm_language:          cfg.llmEnabled && cfg.llmLanguage !== 'auto' ? cfg.llmLanguage : undefined,
       multi_variant:       cfg.multiVariant || undefined,
       cta_enabled:         cfg.ctaEnabled || undefined,
       cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,

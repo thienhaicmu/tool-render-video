@@ -61,10 +61,10 @@ export interface ConfigState {
   aiCloudModel:      string
   aiContentDriven:   boolean
   // LLM segment selection (Phase I — multi-provider)
-  groqEnabled:          boolean
-  aiProvider:           'groq' | 'gemini'  // UI only exposes these two
-  groqModel:            string             // also used as gemini model when aiProvider=gemini
-  groqContentLanguage:  string
+  llmEnabled:          boolean
+  aiProvider:          'groq' | 'gemini'  // UI only exposes these two
+  llmModel:            string             // also used as gemini model when aiProvider=gemini
+  llmLanguage:         string
 }
 
 export type ClipSlot = {

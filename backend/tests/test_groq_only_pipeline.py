@@ -1,13 +1,13 @@
 """
-test_groq_only_pipeline.py — Phase B unit tests for groq_only_pipeline.
+test_groq_only_pipeline.py — Phase B unit tests for llm_pipeline (renamed from groq_only_pipeline).
 
 Covers all 9 hard-fail conditions plus happy-path return shape, clip
 exclude/lock behaviour, resume-skip-Whisper, and event sequencing.
 
 Mocking strategy:
-  - patch app.orchestration.groq_only_pipeline.transcribe_with_adapter
-  - patch app.orchestration.groq_only_pipeline.run_groq_segment_selection
-  - patch app.orchestration.groq_only_pipeline.has_audio_stream
+  - patch app.orchestration.llm_pipeline.transcribe_with_adapter
+  - patch app.orchestration.llm_pipeline.run_llm_segment_selection
+  - patch app.orchestration.llm_pipeline.has_audio_stream
   - monkeypatch app.core.config.GROQ_API_KEY
   - real RenderRequest (not Mock) so payload attributes behave correctly
   - tmp_path for work_dir/full_srt; stub set_stage_fn + cancel_registry
@@ -23,11 +23,16 @@ import pytest
 
 # conftest.py adds repo root to sys.path; this lets tests import backend.app.*
 from app.models.schemas import RenderRequest
-from app.orchestration.groq_only_pipeline import (
-    GroqOnlyPipelineError,
-    PreRenderScenesResult,
-    run_groq_only_pre_render,
+from app.orchestration.llm_pipeline import (
+    LLMPipelineError,
+    LLMPreRenderResult,
+    run_llm_pre_render,
 )
+
+# Backward-compat aliases so test assertions remain readable
+GroqOnlyPipelineError = LLMPipelineError
+PreRenderScenesResult = LLMPreRenderResult
+run_groq_only_pre_render = run_llm_pre_render
 
 
 # ── Test fixtures / helpers ──────────────────────────────────────────────────
@@ -124,9 +129,9 @@ class TestHappyPath:
             _write_srt(args["work_dir"])
             return None
 
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter", side_effect=_fake_transcribe), \
-             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection",
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter", side_effect=_fake_transcribe), \
+             patch("app.orchestration.llm_pipeline.run_llm_segment_selection",
                    return_value=[_groq_seg(10, 40), _groq_seg(60, 95)]):
             result = run_groq_only_pre_render(**args)
 
@@ -147,10 +152,13 @@ class TestHappyPath:
 class TestHardFailPreflight:
     def test_groq_only_hard_fails_when_no_api_key(self, tmp_path, monkeypatch):
         monkeypatch.setattr("app.core.config.GROQ_API_KEY", "")
+        monkeypatch.setattr("app.core.config.GEMINI_API_KEY", "")
+        monkeypatch.setattr("app.core.config.OPENAI_API_KEY", "")
+        monkeypatch.setattr("app.core.config.CLAUDE_API_KEY", "")
         payload = _make_payload()
         args = _make_args(tmp_path, payload)
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             pytest.raises(GroqOnlyPipelineError, match="GROQ_API_KEY"):
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             pytest.raises(GroqOnlyPipelineError, match="requires a valid API key"):
             run_groq_only_pre_render(**args)
 
     def test_groq_only_warns_and_continues_when_groq_analysis_not_enabled(self, tmp_path, monkeypatch, caplog):
@@ -163,11 +171,11 @@ class TestHardFailPreflight:
             _write_srt(args["work_dir"])
             return None
 
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter", side_effect=_fake_transcribe), \
-             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection",
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter", side_effect=_fake_transcribe), \
+             patch("app.orchestration.llm_pipeline.run_llm_segment_selection",
                    return_value=[_groq_seg(10, 40)]), \
-             caplog.at_level(logging.WARNING, logger="app.render.groq_only"):
+             caplog.at_level(logging.WARNING, logger="app.render.llm_pipeline"):
             result = run_groq_only_pre_render(**args)  # must NOT raise
 
         assert result.total_parts == 1
@@ -183,11 +191,11 @@ class TestHardFailPreflight:
             _write_srt(args["work_dir"])
             return None
 
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter", side_effect=_fake_transcribe), \
-             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection",
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter", side_effect=_fake_transcribe), \
+             patch("app.orchestration.llm_pipeline.run_llm_segment_selection",
                    return_value=[_groq_seg(10, 40)]), \
-             patch("app.orchestration.groq_only_pipeline._emit_render_event") as mock_emit:
+             patch("app.orchestration.llm_pipeline._emit_render_event") as mock_emit:
             result = run_groq_only_pre_render(**args)  # must NOT raise
 
         assert result.total_parts == 1
@@ -198,7 +206,7 @@ class TestHardFailPreflight:
         monkeypatch.setattr("app.core.config.GROQ_API_KEY", "test-key")
         payload = _make_payload()
         args = _make_args(tmp_path, payload)
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=False), \
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=False), \
              pytest.raises(GroqOnlyPipelineError, match="audio stream"):
             run_groq_only_pre_render(**args)
 
@@ -216,9 +224,9 @@ class TestHardFailWhisper:
         def _raise_oserror(*a, **kw):
             raise OSError("whisper disk failure")
 
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter", side_effect=_raise_oserror), \
-             patch("app.orchestration.groq_only_pipeline._transcription_cache_get", return_value=None):
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter", side_effect=_raise_oserror), \
+             patch("app.orchestration.llm_pipeline._transcription_cache_get", return_value=None):
             with pytest.raises(GroqOnlyPipelineError, match="Whisper transcription failed") as exc_info:
                 run_groq_only_pre_render(**args)
             # Confirm chained exception preserved
@@ -236,9 +244,9 @@ class TestHardFailWhisper:
             (args["work_dir"] / "video_full.srt").write_bytes(b"")  # 0-byte
             return None
 
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter", side_effect=_produce_empty), \
-             patch("app.orchestration.groq_only_pipeline._transcription_cache_get", return_value=None), \
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter", side_effect=_produce_empty), \
+             patch("app.orchestration.llm_pipeline._transcription_cache_get", return_value=None), \
              pytest.raises(GroqOnlyPipelineError, match="SRT empty"):
             run_groq_only_pre_render(**args)
 
@@ -254,10 +262,10 @@ class TestHardFailGroq:
         monkeypatch.setattr("app.core.config.GROQ_API_KEY", "test-key")
         payload = _make_payload()
         args = _make_args(tmp_path, payload)
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter",
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter",
                    side_effect=self._setup_transcribe(args)), \
-             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection", return_value=None), \
+             patch("app.orchestration.llm_pipeline.run_llm_segment_selection", return_value=None), \
              pytest.raises(GroqOnlyPipelineError, match="min_quality_score"):
             run_groq_only_pre_render(**args)
 
@@ -265,10 +273,10 @@ class TestHardFailGroq:
         monkeypatch.setattr("app.core.config.GROQ_API_KEY", "test-key")
         payload = _make_payload()
         args = _make_args(tmp_path, payload)
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter",
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter",
                    side_effect=self._setup_transcribe(args)), \
-             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection", return_value=[]), \
+             patch("app.orchestration.llm_pipeline.run_llm_segment_selection", return_value=[]), \
              pytest.raises(GroqOnlyPipelineError, match="empty"):
             run_groq_only_pre_render(**args)
 
@@ -287,10 +295,10 @@ class TestSegmentBoundsAndSteering:
         args["source"] = {"slug": "video", "duration": 120.0}
 
         bad_seg = _groq_seg(10, 999)  # end far past duration
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter",
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter",
                    side_effect=self._fake_transcribe(args)), \
-             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection", return_value=[bad_seg]), \
+             patch("app.orchestration.llm_pipeline.run_llm_segment_selection", return_value=[bad_seg]), \
              pytest.raises(GroqOnlyPipelineError, match="outside video duration"):
             run_groq_only_pre_render(**args)
 
@@ -300,10 +308,10 @@ class TestSegmentBoundsAndSteering:
         args = _make_args(tmp_path, payload)
 
         segs = [_groq_seg(10, 40), _groq_seg(60, 90)]
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter",
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter",
                    side_effect=self._fake_transcribe(args)), \
-             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection", return_value=segs), \
+             patch("app.orchestration.llm_pipeline.run_llm_segment_selection", return_value=segs), \
              pytest.raises(GroqOnlyPipelineError, match="clip_exclude removed all"):
             run_groq_only_pre_render(**args)
 
@@ -319,10 +327,10 @@ class TestSegmentBoundsAndSteering:
             _groq_seg(200, 230),  # locked target
             _groq_seg(250, 290),
         ]
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter",
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter",
                    side_effect=self._fake_transcribe(args)), \
-             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection", return_value=segs):
+             patch("app.orchestration.llm_pipeline.run_llm_segment_selection", return_value=segs):
             result = run_groq_only_pre_render(**args)
 
         assert len(result.scored) == 4, "clip_lock must not drop any segs"
@@ -338,9 +346,9 @@ class TestResume:
         # Pre-write a non-empty SRT so the resume branch fires.
         _write_srt(args["work_dir"])
 
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter") as mock_trans, \
-             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection",
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter") as mock_trans, \
+             patch("app.orchestration.llm_pipeline.run_llm_segment_selection",
                    return_value=[_groq_seg(10, 40)]):
             result = run_groq_only_pre_render(**args)
 
@@ -358,11 +366,11 @@ class TestEventSequence:
         args = _make_args(tmp_path, payload)
 
         segs = [_groq_seg(10, 40), _groq_seg(60, 90)]
-        with patch("app.orchestration.groq_only_pipeline.has_audio_stream", return_value=True), \
-             patch("app.orchestration.groq_only_pipeline.transcribe_with_adapter",
+        with patch("app.orchestration.llm_pipeline.has_audio_stream", return_value=True), \
+             patch("app.orchestration.llm_pipeline.transcribe_with_adapter",
                    side_effect=lambda *a, **kw: _write_srt(args["work_dir"]) and None), \
-             patch("app.orchestration.groq_only_pipeline.run_groq_segment_selection", return_value=segs), \
-             patch("app.orchestration.groq_only_pipeline._emit_render_event") as mock_emit:
+             patch("app.orchestration.llm_pipeline.run_llm_segment_selection", return_value=segs), \
+             patch("app.orchestration.llm_pipeline._emit_render_event") as mock_emit:
             run_groq_only_pre_render(**args)
 
         emitted_events = [kw["event"] for _a, kw in mock_emit.call_args_list]

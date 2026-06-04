@@ -220,13 +220,12 @@ function StepConfigureBase({
   const [testMsg, setTestMsg]       = React.useState('')
 
   async function handleTestConnection() {
-    if (!cfg.aiCloudApiKey) return
     setTestStatus('testing')
     setTestMsg('')
     try {
       const res = await testCloudAi(
-        cfg.aiCloudProvider,
-        cfg.aiCloudApiKey,
+        cfg.aiProvider as 'groq' | 'gemini' | 'openai',
+        '',  // server reads key from .env
         cfg.aiCloudModel || undefined,
       )
       if (res.ok) {
@@ -633,10 +632,10 @@ function StepConfigureBase({
                   <div className="tog-lbl">Auto-select clips with AI</div>
                   <div className="tog-desc">AI reads transcript and picks best segments. API keys configured in server .env.</div>
                 </div>
-                <Tog checked={cfg.groqEnabled} onChange={(v) => setCfgKey('groqEnabled', v)} />
+                <Tog checked={cfg.llmEnabled} onChange={(v) => setCfgKey('llmEnabled', v)} />
               </div>
 
-              {cfg.groqEnabled && (
+              {cfg.llmEnabled && (
                 <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {/* Provider selector — only Groq and Gemini */}
                   <div style={{ display: 'flex', gap: 4 }}>
@@ -664,7 +663,7 @@ function StepConfigureBase({
                   {/* Test button — uses server-side key from .env */}
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button
-                      onClick={() => { setCfgKey('aiCloudProvider', cfg.aiProvider as 'groq' | 'openai'); handleTestConnection() }}
+                      onClick={handleTestConnection}
                       disabled={testStatus === 'testing'}
                       style={{
                         flex: 1, padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
@@ -684,8 +683,8 @@ function StepConfigureBase({
                   {/* Model override (optional) */}
                   <input
                     type="text"
-                    value={cfg.groqModel}
-                    onChange={(e) => setCfgKey('groqModel', e.target.value)}
+                    value={cfg.llmModel}
+                    onChange={(e) => setCfgKey('llmModel', e.target.value)}
                     placeholder={cfg.aiProvider === 'groq' ? 'llama-3.3-70b-versatile (optional)' : 'gemini-flash-latest (optional)'}
                     style={{
                       width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
@@ -696,8 +695,8 @@ function StepConfigureBase({
 
                   {/* Language */}
                   <select
-                    value={cfg.groqContentLanguage}
-                    onChange={(e) => setCfgKey('groqContentLanguage', e.target.value)}
+                    value={cfg.llmLanguage}
+                    onChange={(e) => setCfgKey('llmLanguage', e.target.value)}
                     style={{
                       width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
                       border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',

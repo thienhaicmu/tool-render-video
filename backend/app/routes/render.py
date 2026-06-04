@@ -217,6 +217,27 @@ def _coerce_legacy_channel_payload(payload: RenderRequest) -> None:
         payload.output_mode = "manual"
 
 
+def _coerce_llm_aliases(payload: RenderRequest) -> None:
+    """Apply llm_* alias fields to their groq_* equivalents if explicitly set.
+
+    llm_* fields are the provider-neutral names introduced in Phase 2.
+    The pipeline still reads groq_* fields, so this one-way coercion keeps
+    the pipeline unchanged while new clients can use the canonical names.
+    groq_* values are only overwritten when the corresponding llm_* field
+    is not None (i.e. explicitly provided by the client).
+    """
+    if payload.llm_enabled is not None:
+        payload.groq_analysis_enabled = payload.llm_enabled
+    if payload.llm_model is not None:
+        payload.groq_model = payload.llm_model
+    if payload.llm_language is not None:
+        payload.groq_content_language = payload.llm_language
+    if payload.llm_min_quality is not None:
+        payload.groq_min_quality_score = payload.llm_min_quality
+    if payload.llm_mode is not None:
+        payload.groq_selection_strategy = payload.llm_mode
+
+
 def _validate_render_source(payload: RenderRequest):
     output_mode = (payload.output_mode or "manual").strip().lower()
     if output_mode not in ("channel", "manual"):
@@ -629,6 +650,7 @@ def _queue_render_job(job_id: str, effective_channel: str, payload: RenderReques
 @router.post("/process")
 def create_render_job(payload: RenderRequest):
     _coerce_legacy_channel_payload(payload)
+    _coerce_llm_aliases(payload)
     # Phase D — apply server-wide groq_only default to NEW jobs only when the
     # API request did not set the field explicitly. Resume/retry paths skip this.
     # When GROQ_ONLY_DEFAULT is the source of groq_only_mode=True, also auto-enable

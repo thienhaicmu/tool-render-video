@@ -19,7 +19,7 @@ import logging
 import os
 from typing import Optional
 
-from app.ai.analysis.groq.parser import GroqSegment, parse_segment_response
+from app.ai.analysis.groq.parser import GroqSegment, LLMSegment, parse_segment_response
 from app.ai.analysis.groq.prompts import build_segment_prompt
 
 logger = logging.getLogger("app.render.claude_client")
@@ -47,7 +47,7 @@ def select_segments(
     api_key: str = "",
     model: Optional[str] = None,
     language: str = "auto",
-) -> Optional[list[GroqSegment]]:
+) -> Optional[list[LLMSegment]]:
     """Send SRT to Claude and return selected segments."""
     try:
         return _run(
@@ -74,7 +74,7 @@ def _run(
     api_key: str,
     model: Optional[str],
     language: str,
-) -> Optional[list[GroqSegment]]:
+) -> Optional[list[LLMSegment]]:
     if not _ANTHROPIC_SDK:
         logger.warning("claude_client: anthropic SDK not installed")
         return None

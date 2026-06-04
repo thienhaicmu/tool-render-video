@@ -29,10 +29,14 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from app.models.schemas import RenderRequest
-from app.orchestration.groq_only_pipeline import (
-    PreRenderScenesResult,
-    run_groq_only_pre_render,
+from app.orchestration.llm_pipeline import (
+    LLMPreRenderResult,
+    run_llm_pre_render,
 )
+
+# Backward-compat aliases
+PreRenderScenesResult = LLMPreRenderResult
+run_groq_only_pre_render = run_llm_pre_render
 from app.orchestration.qa_pipeline import _validate_render_output
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
 from app.services.render.clip_ops import cut_video
@@ -302,13 +306,13 @@ class TestC1SegmentPreservation:
             return None
 
         with patch(
-            "app.orchestration.groq_only_pipeline.has_audio_stream",
+            "app.orchestration.llm_pipeline.has_audio_stream",
             return_value=True,
         ), patch(
-            "app.orchestration.groq_only_pipeline.transcribe_with_adapter",
+            "app.orchestration.llm_pipeline.transcribe_with_adapter",
             side_effect=_fake_transcribe,
         ), patch(
-            "app.orchestration.groq_only_pipeline.run_groq_segment_selection",
+            "app.orchestration.llm_pipeline.run_llm_segment_selection",
             return_value=groq_output,
         ):
             result = run_groq_only_pre_render(**args)
@@ -347,13 +351,13 @@ class TestC1SegmentPreservation:
         ]
 
         with patch(
-            "app.orchestration.groq_only_pipeline.has_audio_stream",
+            "app.orchestration.llm_pipeline.has_audio_stream",
             return_value=True,
         ), patch(
-            "app.orchestration.groq_only_pipeline.transcribe_with_adapter",
+            "app.orchestration.llm_pipeline.transcribe_with_adapter",
             side_effect=lambda *a, **kw: _write_srt(args["work_dir"]),
         ), patch(
-            "app.orchestration.groq_only_pipeline.run_groq_segment_selection",
+            "app.orchestration.llm_pipeline.run_llm_segment_selection",
             return_value=precise_segs,
         ):
             result = run_groq_only_pre_render(**args)
@@ -384,13 +388,13 @@ class TestC1SegmentPreservation:
         ]
 
         with patch(
-            "app.orchestration.groq_only_pipeline.has_audio_stream",
+            "app.orchestration.llm_pipeline.has_audio_stream",
             return_value=True,
         ), patch(
-            "app.orchestration.groq_only_pipeline.transcribe_with_adapter",
+            "app.orchestration.llm_pipeline.transcribe_with_adapter",
             side_effect=lambda *a, **kw: _write_srt(args["work_dir"]),
         ), patch(
-            "app.orchestration.groq_only_pipeline.run_groq_segment_selection",
+            "app.orchestration.llm_pipeline.run_llm_segment_selection",
             return_value=segs,
         ):
             result = run_groq_only_pre_render(**args)
@@ -423,13 +427,13 @@ class TestC1SegmentPreservation:
         segs = [_groq_seg(10.0, 40.0), _groq_seg(60.0, 95.0)]
 
         with patch(
-            "app.orchestration.groq_only_pipeline.has_audio_stream",
+            "app.orchestration.llm_pipeline.has_audio_stream",
             return_value=True,
         ), patch(
-            "app.orchestration.groq_only_pipeline.transcribe_with_adapter",
+            "app.orchestration.llm_pipeline.transcribe_with_adapter",
             side_effect=lambda *a, **kw: _write_srt(args["work_dir"]),
         ), patch(
-            "app.orchestration.groq_only_pipeline.run_groq_segment_selection",
+            "app.orchestration.llm_pipeline.run_llm_segment_selection",
             return_value=segs,
         ):
             result = run_groq_only_pre_render(**args)

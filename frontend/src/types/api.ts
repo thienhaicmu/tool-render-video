@@ -176,6 +176,13 @@ export interface RenderRequest {
   groq_min_quality_score?: number
   groq_selection_strategy?: string | null
 
+  // LLM Alias Fields (Phase 2) — provider-neutral aliases for the groq_* fields above.
+  llm_enabled?: boolean | null
+  llm_model?: string | null
+  llm_language?: string | null
+  llm_min_quality?: number | null
+  llm_mode?: string | null
+
   // Pro Timeline Steering (UP26)
   clip_lock?: TimeRange[] | null
   clip_exclude?: TimeRange[] | null
