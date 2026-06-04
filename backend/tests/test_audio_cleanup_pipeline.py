@@ -15,7 +15,7 @@ def test_narration_cleanup_none_uses_original_path(tmp_path):
     original.write_bytes(b"narration")
     payload = RenderRequest(audio_cleanup_engine="none")
 
-    with patch("app.orchestration.audio_pipeline.cleanup_audio_with_adapter") as cleanup:
+    with patch("app.orchestration.audio_cleanup.cleanup_audio_with_adapter") as cleanup:
         result = _maybe_cleanup_narration_audio(
             str(original),
             payload,
@@ -38,9 +38,9 @@ def test_narration_cleanup_placeholder_falls_back_to_original(tmp_path):
     original.write_bytes(b"narration")
     payload = RenderRequest(audio_cleanup_engine="deepfilternet")
 
-    with patch("app.orchestration.audio_pipeline._job_log") as job_log, \
+    with patch("app.orchestration.audio_cleanup._job_log") as job_log, \
          patch(
-             "app.orchestration.audio_pipeline.cleanup_audio_with_adapter",
+             "app.orchestration.audio_cleanup.cleanup_audio_with_adapter",
              return_value=AudioCleanupResult(
                  input_path=str(original),
                  output_path=str(original),
@@ -73,9 +73,9 @@ def test_narration_cleanup_success_uses_cleaned_path(tmp_path):
     cleaned.write_bytes(b"cleaned")
     payload = RenderRequest(audio_cleanup_engine="deepfilternet")
 
-    with patch("app.orchestration.audio_pipeline._job_log") as job_log, \
+    with patch("app.orchestration.audio_cleanup._job_log") as job_log, \
          patch(
-             "app.orchestration.audio_pipeline.cleanup_audio_with_adapter",
+             "app.orchestration.audio_cleanup.cleanup_audio_with_adapter",
              return_value=AudioCleanupResult(
                  input_path=str(original),
                  output_path=str(cleaned),
@@ -109,14 +109,14 @@ def test_narration_cleanup_invalid_output_falls_back_to_original(tmp_path):
     payload = RenderRequest(audio_cleanup_engine="deepfilternet")
 
     with patch(
-        "app.orchestration.audio_pipeline.cleanup_audio_with_adapter",
+        "app.orchestration.audio_cleanup.cleanup_audio_with_adapter",
         return_value=AudioCleanupResult(
             input_path=str(original),
             output_path=str(cleaned),
             engine="deepfilternet",
             applied=True,
         ),
-    ), patch("app.orchestration.audio_pipeline._job_log"):
+    ), patch("app.orchestration.audio_cleanup._job_log"):
         result = _maybe_cleanup_narration_audio(
             str(original),
             payload,
@@ -140,9 +140,9 @@ def test_narration_cleanup_exception_falls_back_to_original(tmp_path):
     payload = RenderRequest(audio_cleanup_engine="deepfilternet")
 
     with patch(
-        "app.orchestration.audio_pipeline.cleanup_audio_with_adapter",
+        "app.orchestration.audio_cleanup.cleanup_audio_with_adapter",
         side_effect=RuntimeError("cleanup failed"),
-    ), patch("app.orchestration.audio_pipeline._job_log") as job_log:
+    ), patch("app.orchestration.audio_cleanup._job_log") as job_log:
         result = _maybe_cleanup_narration_audio(
             str(original),
             payload,
@@ -166,9 +166,9 @@ def test_narration_cleanup_preserves_supported_voice_sources(source, tmp_path):
     original.write_bytes(b"narration")
     payload = RenderRequest(audio_cleanup_engine="deepfilternet")
 
-    with patch("app.orchestration.audio_pipeline._job_log") as job_log, \
+    with patch("app.orchestration.audio_cleanup._job_log") as job_log, \
          patch(
-             "app.orchestration.audio_pipeline.cleanup_audio_with_adapter",
+             "app.orchestration.audio_cleanup.cleanup_audio_with_adapter",
              return_value=AudioCleanupResult(
                  input_path=str(original),
                  output_path=str(original),

@@ -76,7 +76,7 @@ from pathlib import Path
 
 from app.core.config import TEMP_DIR
 from app.domain.manifests import BaseClipManifest
-from app.orchestration.audio_pipeline import _maybe_cleanup_narration_audio
+from app.orchestration.audio_cleanup import _maybe_cleanup_narration_audio
 from app.orchestration.pipeline_config import extract_text_from_srt
 from app.orchestration.pipeline_segment_selection import _get_effective_playback_speed
 from app.orchestration.render_events import (

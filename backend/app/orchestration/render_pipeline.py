@@ -62,7 +62,7 @@ from app.orchestration.asset_pipeline import (  # noqa: F401 (re-exported for te
     _maybe_prepend_asset_intro,
     _maybe_prepend_remotion_hook_intro,
 )
-from app.orchestration.audio_pipeline import (
+from app.orchestration.audio_cleanup import (
     _maybe_cleanup_narration_audio,  # noqa: F401 (re-exported for tests/test_audio_cleanup_pipeline.py + test_audio_pipeline.py)
 )
 from app.orchestration.qa_pipeline import (  # noqa: F401 (re-exported for tests/test_qa_pipeline.py::test_qa_functions_re_exported_from_render_pipeline asserts all 7)
@@ -146,7 +146,7 @@ logger = logging.getLogger("app.render")
 # _maybe_append_asset_outro, _maybe_apply_asset_logo
 # → moved to app.orchestration.asset_pipeline (Phase 4B)
 
-# _maybe_cleanup_narration_audio → moved to app.orchestration.audio_pipeline (Phase 4D)
+# _maybe_cleanup_narration_audio → moved to app.orchestration.audio_cleanup (Phase 4D)
 
 
 # _PROGRESS_TICK_SEC, _render_progress_timer → moved to app.orchestration.render_events (Phase 4D)
