@@ -8,7 +8,14 @@ import logging
 import threading
 from app.services.db import init_db
 from app.services.channel_service import ensure_channel
-from app.services.maintenance import prune_job_logs, prune_preview_dirs, prune_render_temp_dirs, prune_render_cache
+from app.services.maintenance import (
+    prune_job_logs,
+    prune_preview_dirs,
+    prune_render_cache,
+    prune_render_temp_dirs,
+    prune_text_overlay_dir,
+    prune_xtts_cache,
+)
 from app.core.config import APP_DATA_DIR, CACHE_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR
 from app.core.logging_setup import configure_logging as _configure_logging
 # Configure file-based logging before any other module emits a log event.
@@ -189,11 +196,18 @@ def _run_periodic_cleanup():
             evicted = evict_stale_preview_sessions()
             result_preview = prune_preview_dirs(TEMP_DIR, max_age_hours=6)
             result_render = prune_render_temp_dirs(TEMP_DIR)
+            # Sprint 6 P0: bound long-running caches that previously had no TTL.
+            result_xtts = prune_xtts_cache(TEMP_DIR, max_age_days=30)
+            from app.services.text_overlay import get_text_overlay_temp_dir
+            result_overlay = prune_text_overlay_dir(get_text_overlay_temp_dir(), max_age_days=7)
             _cleanup_logger.info(
-                "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d",
+                "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d "
+                "xtts_removed=%d overlay_removed=%d",
                 evicted,
                 result_preview.get("removed", 0),
                 result_render.get("removed", 0),
+                result_xtts.get("removed", 0),
+                result_overlay.get("removed", 0),
             )
         except Exception as exc:
             _cleanup_logger.warning("periodic cleanup error: %s", exc)
@@ -215,6 +229,13 @@ def startup():
     # Sprint 5.2: bound render-cache disk growth. TTL 72h matches
     # _RENDER_CACHE_TTL_SEC in pipeline_cache.py.
     prune_render_cache(CACHE_DIR, max_age_hours=72)
+    # Sprint 6 P0 (audit 2026-06-04 S-5 + S-7): two caches with no TTL
+    # previously — XTTS synthesis cache and text_overlay drawtext files.
+    # Same scheduler tick handles them periodically; startup prune
+    # catches anything that accumulated between restarts.
+    prune_xtts_cache(TEMP_DIR, max_age_days=30)
+    from app.services.text_overlay import get_text_overlay_temp_dir
+    prune_text_overlay_dir(get_text_overlay_temp_dir(), max_age_days=7)
     # Re-queue any render jobs that were interrupted by a previous server restart
     recover_pending_render_jobs()
     start_warmup()  # pre-download Whisper models + check deps in background

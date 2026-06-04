@@ -116,6 +116,91 @@ def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
     return {"removed": removed, "kept": kept}
 
 
+def prune_xtts_cache(temp_dir: Path, max_age_days: int = 30) -> dict:
+    """Remove stale XTTS synthesis cache MP3 files older than max_age_days.
+
+    Sprint 6 P0-1 (per docs/review/TEMP_FILE_AUDIT_2026-06-04.md S-5):
+    services/tts_xtts_adapter.py:161 maintains a hash-keyed MP3 cache at
+    `TEMP_DIR/xtts_cache/` with no eviction. Identical synthesis is
+    rare in practice (text + language + gender + content_type), so the
+    cache grows unbounded — ~40-50 MB per unique synthesis × cumulative
+    usage. This prune runs in the same scheduler tick as
+    prune_render_cache, on a longer TTL (30d default) since hits do save
+    real GPU time.
+
+    Per-file try/except so one bad file doesn't abort. Returns
+    {removed, kept} for startup-log visibility. Idempotent if the dir
+    doesn't exist yet.
+    """
+    cache_root = temp_dir / "xtts_cache"
+    if not cache_root.exists():
+        return {"removed": 0, "kept": 0}
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    removed = kept = 0
+    try:
+        for f in cache_root.iterdir():
+            if not f.is_file():
+                continue
+            try:
+                mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                if mtime < cutoff:
+                    f.unlink(missing_ok=True)
+                    removed += 1
+                else:
+                    kept += 1
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("maintenance: failed to scan xtts_cache: %s", exc)
+    if removed:
+        logger.info(
+            "maintenance: pruned %d stale xtts_cache files (>%dd old) from %s",
+            removed, max_age_days, cache_root,
+        )
+    return {"removed": removed, "kept": kept}
+
+
+def prune_text_overlay_dir(overlay_dir: Path, max_age_days: int = 7) -> dict:
+    """Remove stale text-overlay drawtext txt files older than max_age_days.
+
+    Sprint 6 P0-2 (per docs/review/TEMP_FILE_AUDIT_2026-06-04.md S-7):
+    services/text_overlay.py:_write_textfile_for_drawtext writes one
+    deterministic-named txt file per layer per render under
+    `data/temp/text_overlays/` (or fallback tmpdir) and never cleans up.
+    Hash-keyed names mean files repeat across renders of the same
+    overlay config — useful for FFmpeg drawtext but a leak otherwise.
+
+    7-day TTL keeps the cache useful for users who re-render the same
+    overlay config across a few days while preventing long-term
+    accumulation. Returns {removed, kept}.
+    """
+    if not overlay_dir.exists():
+        return {"removed": 0, "kept": 0}
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    removed = kept = 0
+    try:
+        for f in overlay_dir.iterdir():
+            if not f.is_file():
+                continue
+            try:
+                mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                if mtime < cutoff:
+                    f.unlink(missing_ok=True)
+                    removed += 1
+                else:
+                    kept += 1
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("maintenance: failed to scan text_overlay dir: %s", exc)
+    if removed:
+        logger.info(
+            "maintenance: pruned %d stale text_overlay files (>%dd old) from %s",
+            removed, max_age_days, overlay_dir,
+        )
+    return {"removed": removed, "kept": kept}
+
+
 def prune_job_logs(channels_dir: Path, keep_last: int = 30, older_than_days: int = 10):
     keep_last = max(1, int(keep_last or 30))
     older_than_days = max(1, int(older_than_days or 10))

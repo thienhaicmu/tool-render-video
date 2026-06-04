@@ -344,3 +344,20 @@ def run_part_voice_mix(
                 exception=mix_exc,
                 traceback_text=traceback.format_exc(),
             )
+
+    # Sprint 6 P0-3 (audit 2026-06-04 O-13): the raw per-part TTS MP3
+    # (and any *.cleaned.mp3 variant emitted by _maybe_cleanup_narration_
+    # audio) sit in TEMP_DIR/{job_id}/voice/ until the per-job prune.
+    # By this point mix_narration_audio has already merged the audio
+    # into final_part, so the intermediate files are dead weight. The
+    # glob targets only files written by this part (part_{idx:03d}*.mp3)
+    # — ctx.voice_audio_path (a manual user-supplied audio file) lives
+    # under a different name and is never matched. Best-effort cleanup;
+    # never raises.
+    try:
+        _voice_dir = TEMP_DIR / ctx.job_id / "voice"
+        if _voice_dir.exists():
+            for _artifact in _voice_dir.glob(f"part_{idx:03d}*.mp3"):
+                _safe_unlink(_artifact)
+    except Exception:
+        pass
