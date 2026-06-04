@@ -100,6 +100,71 @@ from app.services.translation_service import translate_srt_file
 logger = logging.getLogger("app.render")
 
 
+# ────────────────────────────────────────────────────────────────────
+# Sprint 4.E — RenderPlan.subtitle_policy consume helpers.
+#
+# When ctx.render_plan is None (flag OFF, no AI emission), both
+# resolvers fall through to the caller's fallback — Sacred Contract
+# #2 (default behaviour identical baseline). When ctx.render_plan is
+# set, per-field merge applies: empty fields stay at fallback (the
+# "empty = inherit" semantic documented at render_plan.py SubtitlePolicy);
+# set fields override. Invalid style values soft-fall back per Sacred
+# Contract #3.
+#
+# Scope of Sprint 4.E: style + market only. emphasis_pass and
+# line_break_rule are deferred — emphasis because SubtitlePolicy can't
+# disambiguate "default False" from "explicit False" without flipping
+# baseline behaviour, line_break_rule because consuming it requires
+# extending apply_market_line_break_to_srt's signature (cross-file).
+# ────────────────────────────────────────────────────────────────────
+
+# Allowed subtitle style strings the planner will accept from a
+# RenderPlan. Superset of the SubtitlePolicy vocabulary
+# (viral/clean/story/gaming) plus the registered preset_ids already
+# wired into subtitle_engine. Anything outside the set soft-falls
+# back to the legacy 5-tier resolution.
+_RENDER_PLAN_ALLOWED_SUBTITLE_STYLES: frozenset[str] = frozenset({
+    "viral", "clean", "story", "gaming",
+    "tiktok_bounce_v1", "viral_bold", "story_clean_01",
+    "clean_pro", "boxed_caption", "pro_karaoke",
+})
+
+
+def _resolve_subtitle_style_from_plan(
+    ctx: PartRenderContext, fallback_value: str
+) -> tuple[str, str]:
+    """Return ``(effective_subtitle_style, source_tag)``.
+
+    Source tag is one of ``"render_plan"``, ``"fallback"``, or
+    ``"fallback_invalid_style"`` — the planner emits it as
+    ``subtitle_style_source`` in the existing ``subtitle_style_applied``
+    event so downstream observers can attribute the choice without
+    re-reading the dataclass.
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return fallback_value, "fallback"
+    plan_style = (rp.subtitle_policy.style or "").strip()
+    if not plan_style:
+        return fallback_value, "fallback"
+    if plan_style not in _RENDER_PLAN_ALLOWED_SUBTITLE_STYLES:
+        return fallback_value, "fallback_invalid_style"
+    return plan_style, "render_plan"
+
+
+def _resolve_market_from_plan(ctx: PartRenderContext) -> str:
+    """Return the plan-supplied market override or empty string.
+
+    Caller ``or``s the result with the upstream-derived market value
+    (``ctx.mv_market``) so empty-from-plan means "inherit from the
+    upstream resolver" rather than "force empty".
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return ""
+    return (rp.subtitle_policy.market or "").strip()
+
+
 def prepare_part_assets(
     ctx: PartRenderContext,
     idx,
@@ -416,13 +481,19 @@ def prepare_part_assets(
                 f"dna_sub_suppressed: reason={_sub_suppress_reason} part={idx}",
                 kind="debug",
             )
-        _effective_subtitle_style = (
+        # Sprint 4.E — legacy 5-tier resolution remains the source of
+        # truth when ctx.render_plan is None. When the plan IS set we
+        # let the resolver override per F.1/F.2 decisions.
+        _legacy_subtitle_style = (
             _raw_sub_style
             or _platform_sub_bias
             or _dna_sub_bias_val
             or _CONTENT_TYPE_SUB_DEFAULTS.get(
                 seg.get("content_type_hint", "vlog"), "tiktok_bounce_v1"
             )
+        )
+        _effective_subtitle_style, _subtitle_style_source = _resolve_subtitle_style_from_plan(
+            ctx, _legacy_subtitle_style
         )
 
         if _srt_source_is_fresh and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
@@ -437,10 +508,15 @@ def prepare_part_assets(
                         )
                         else None
                     )
+                    # Sprint 4.E — RenderPlan.subtitle_policy.market
+                    # overrides ctx.mv_market at this functional call
+                    # site only. Log fields (L319/L335/L350) keep
+                    # ctx.mv_market so upstream identity is preserved.
+                    _market_for_emphasis = _resolve_market_from_plan(ctx) or ctx.mv_market
                     subtitle_emphasis_pass(
                         _emph_blocks,
                         preset_id=_effective_subtitle_style,
-                        market=ctx.mv_market,
+                        market=_market_for_emphasis,
                         language=_sub_target_lang,
                         emphasis_level_override=_ai_emph_override,
                     )
@@ -591,7 +667,17 @@ def prepare_part_assets(
                 context={
                     "part_no": idx,
                     "subtitle_style": _effective_subtitle_style,
-                    "subtitle_style_source": "auto" if not _raw_sub_style else "explicit",
+                    # Sprint 4.E — when a plan overrides the legacy
+                    # 5-tier value we surface `"render_plan"` (or the
+                    # `"fallback_invalid_style"` recovery tag) so
+                    # operators can attribute the decision. Pre-4.E
+                    # values "auto" / "explicit" stay valid when the
+                    # plan does not override.
+                    "subtitle_style_source": (
+                        _subtitle_style_source
+                        if _subtitle_style_source != "fallback"
+                        else ("auto" if not _raw_sub_style else "explicit")
+                    ),
                     "content_type_hint": seg.get("content_type_hint", ""),
                     "font_size": getattr(ctx.payload, "sub_font_size", 0),
                     "margin_v": _margin_v,
