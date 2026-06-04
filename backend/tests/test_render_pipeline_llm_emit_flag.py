@@ -94,8 +94,9 @@ class TestAiEmissionEventDeclarations:
         return src
 
     def test_render_plan_persisted_event_still_emitted(self):
-        """Sprint 2.3 contract — both paths (shim + AI) feed into the
-        shared persistence + emission tail."""
+        """Sprint 4.D — the AI emission path persists the plan; the
+        event survives the Sprint 4.H shim removal because it now
+        fires from the (single) AI branch directly."""
         src = self._read_source()
         assert 'event="render.plan.persisted"' in src
 
@@ -107,28 +108,37 @@ class TestAiEmissionEventDeclarations:
     def test_render_plan_ai_fallback_event_present(self):
         """Sprint 4.D — emitted when the AI path is taken but returns
         None or raises. Lets operators distinguish 'flag off' from
-        'flag on but AI failed' in production logs."""
+        'flag on but AI failed' in production logs. Sprint 4.H removed
+        the shim path so this event also marks the boundary where the
+        stage resolvers fall back to legacy payload logic."""
         src = self._read_source()
         assert 'event="render.plan.ai_fallback"' in src
 
-    def test_ai_path_runs_before_shim_path(self):
-        """Ordering pin — the AI branch must precede the shim
-        reconstruct in source order so that a successful AI emission
-        skips the shim entirely. The Planner brief Section C / Change
-        C4 made this the explicit gating contract."""
+    def test_shim_imports_removed(self):
+        """Sprint 4.H removal pin — the orchestrator must NOT re-import
+        the Sprint 2.2 builder shim. If a future refactor accidentally
+        brings them back the consume sites (Sprint 4.E/F/G) would see
+        an unexpected always-populated render_plan even when
+        LLM_EMIT_RENDER_PLAN is OFF."""
         src = self._read_source()
-        idx_ai = src.find('event="render.plan.ai_emitted"')
-        idx_shim = src.find("reconstructed_segments")
-        assert idx_ai >= 0 and idx_shim >= 0
-        assert idx_ai < idx_shim, (
-            "AI emission branch must precede the shim reconstruct block"
-        )
+        assert "from app.ai.llm.parser import LLMSegment" not in src
+        assert "from app.orchestration.render_plan_builder" not in src
 
-    def test_shim_path_gated_by_render_plan_is_none(self):
-        """When the AI emission succeeds (returns a non-None
-        RenderPlan), the shim reconstruct + builder call must be
-        skipped. Pinned by the `if _render_plan is None:` guard."""
+    def test_shim_reconstruct_loop_removed(self):
+        """Sprint 4.H — the `_reconstructed_segments` reconstruct loop
+        and the `build_render_plan(...)` shim call were both removed.
+        Pin their absence so a future regression doesn't quietly bring
+        back a fallback path the consume sites no longer expect."""
         src = self._read_source()
-        # The exact gating line — the literal string is stable across
-        # whitespace formatters because of the explicit None compare.
-        assert "if _render_plan is None:" in src
+        assert "_reconstructed_segments" not in src
+        assert "build_render_plan(" not in src
+
+    def test_persistence_still_guarded_by_render_plan_is_not_none(self):
+        """The persistence tail must still run only when an AI plan
+        was actually produced (or skip silently when not). Pinned by
+        the explicit `if _render_plan is not None:` guard. Sprint
+        4.H kept this guard verbatim — the difference is that flag-OFF
+        paths now always trip the "not None" check rather than first
+        going through a shim that always produced something."""
+        src = self._read_source()
+        assert "if _render_plan is not None:" in src

@@ -92,16 +92,14 @@ class TestPartRenderContextRenderPlanField:
 class TestRenderPipelineImports:
     """Pin that render_pipeline.py exposes the wiring helpers at module
     scope. These imports are how the orchestrator reaches the Sprint 2.1
-    DB helper and the Sprint 2.2 builder shim — losing them silently
+    DB helper and the Sprint 4.D AI dispatcher — losing them silently
     would unwire the RenderPlan persistence without any runtime error
-    until a real render happened."""
+    until a real render happened.
 
-    def test_render_pipeline_imports_build_render_plan(self):
-        import app.orchestration.render_pipeline as rp
-        assert hasattr(rp, "build_render_plan"), (
-            "render_pipeline.py must import build_render_plan from "
-            "app.orchestration.render_plan_builder"
-        )
+    Sprint 4.H removed the Sprint 2.2 builder shim
+    (`render_plan_builder.build_render_plan`); the corresponding import
+    pin was retired with it. The AI emission entry point
+    `_llm_select_render_plan` (Sprint 4.D) now stands alone."""
 
     def test_render_pipeline_imports_update_render_plan(self):
         import app.orchestration.render_pipeline as rp
@@ -110,10 +108,35 @@ class TestRenderPipelineImports:
             "app.db.jobs_repo"
         )
 
+    def test_render_pipeline_imports_select_render_plan_dispatcher(self):
+        """Sprint 4.D entry point — the AI emission branch needs the
+        dispatcher resolvable at module scope so a typo / circular
+        import would fail at import time rather than at first render."""
+        import app.orchestration.render_pipeline as rp
+        assert hasattr(rp, "_llm_select_render_plan"), (
+            "render_pipeline.py must import select_render_plan from "
+            "app.ai.llm as _llm_select_render_plan"
+        )
+
     def test_imports_resolve_to_real_callables(self):
         """Defensive: make sure the names aren't shadowed by something
         non-callable. A typo like `update_render_plan = None` would pass
         the hasattr check above but break the live call."""
         import app.orchestration.render_pipeline as rp
-        assert callable(rp.build_render_plan)
         assert callable(rp.update_render_plan)
+        assert callable(rp._llm_select_render_plan)
+
+    def test_shim_imports_retired(self):
+        """Sprint 4.H — the Sprint 2.2 builder shim symbols MUST be
+        gone. A future refactor that resurrects them would silently
+        bring back a fallback path the consume sites (Sprint 4.E/F/G)
+        no longer expect."""
+        import app.orchestration.render_pipeline as rp
+        assert not hasattr(rp, "build_render_plan"), (
+            "Sprint 4.H removed the shim — build_render_plan must not "
+            "be re-imported"
+        )
+        assert not hasattr(rp, "LLMSegment"), (
+            "Sprint 4.H removed the shim's reconstruct loop — LLMSegment "
+            "should no longer be imported here"
+        )

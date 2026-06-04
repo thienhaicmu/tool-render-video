@@ -94,13 +94,13 @@ from app.orchestration.pipeline_config import (
     _resolve_profile,
     _probe_video_duration,  # noqa: F401 (re-exported for routes/render.py)
 )
-# Sprint 2.3 — RenderPlan wire-up. Sprint 4.D adds the AI-emission path
-# next to this shim so the orchestrator can route the persisted plan
-# through the LLM directly when the LLM_EMIT_RENDER_PLAN flag is ON.
+# Sprint 4.D — RenderPlan AI-emission wire-up. Sprint 4.H removed the
+# Sprint 2.2 builder shim that previously ran as the fallback path; when
+# the LLM_EMIT_RENDER_PLAN flag is OFF (default) ctx.render_plan stays
+# None and the Sprint 4.E/F/G stage resolvers fall back to the legacy
+# payload-derived logic — Sacred Contract #2 baseline preservation.
 from app.ai.llm import select_render_plan as _llm_select_render_plan
-from app.ai.llm.parser import LLMSegment
 from app.db.jobs_repo import update_render_plan
-from app.orchestration.render_plan_builder import build_render_plan
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
@@ -424,21 +424,26 @@ def run_render_pipeline(
         # full_srt and full_srt_available initialized before scene detection (Phase 45 hoist).
         # _early_transcription_done=True means Phase 45 already ran Whisper — subtitle block skips.
 
-        # Sprint 2.3 + 4.D — RenderPlan acquisition.
-        # Two paths produce a RenderPlan and persist it:
-        #   (1) AI-emission path — Sprint 4.D — gated on LLM_EMIT_RENDER_PLAN.
-        #       Asks the LLM to emit a full RenderPlan directly via
-        #       ai.llm.select_render_plan. Runs FIRST when the flag is ON.
-        #   (2) Shim path — Sprint 2.2/2.3 — reconstructs LLMSegment objects
-        #       from the scored list and runs the Sprint 2.2 builder shim.
-        #       Runs whenever the AI path was skipped or returned None.
-        # Both paths share the persistence + render.plan.persisted event
-        # emission below so downstream observers see one stable contract.
-        # Outer try/except is the Sacred Contract #3 belt-and-braces — a
-        # future refactor must not be able to take down a render here.
+        # Sprint 4.D + 4.H — RenderPlan acquisition (AI-emission only).
+        # When LLM_EMIT_RENDER_PLAN=1 the orchestrator asks the LLM to
+        # emit a full RenderPlan directly via ai.llm.select_render_plan
+        # and persists it. When the flag is OFF (default) _render_plan
+        # stays None — the Sprint 4.E/F/G stage resolvers fall back to
+        # the legacy payload-derived logic, preserving Sacred Contract
+        # #2 baseline behaviour byte-identical.
+        #
+        # Sprint 4.H removed the Sprint 2.2 builder shim path. The
+        # shim previously reconstructed LLMSegment objects from the
+        # scored list and produced a RenderPlan via
+        # render_plan_builder.build_render_plan; every Sprint 4
+        # consume site already handled ctx.render_plan=None so the
+        # shim was redundant scaffolding once 4.E/F/G landed.
+        #
+        # Outer try/except is the Sacred Contract #3 belt-and-braces —
+        # a future refactor must not be able to take down a render
+        # via the wire-up itself.
         _render_plan = None
         try:
-            # ── (1) Sprint 4.D AI-emission path (gated) ──────────────
             if _FEATURE_LLM_EMIT_RENDER_PLAN:
                 try:
                     from app.core import config as _ai_cfg
@@ -505,12 +510,17 @@ def run_render_pipeline(
                             },
                         )
                     else:
+                        # Sprint 4.H — shim path retired. ctx.render_plan
+                        # stays None and the stage resolvers fall back
+                        # to the legacy payload-derived logic. Event
+                        # name kept for backward compat with operator
+                        # tooling that grepped for it during 4.D-4.G.
                         _emit_render_event(
                             channel_code=effective_channel,
                             job_id=job_id,
                             event="render.plan.ai_fallback",
                             level="WARNING",
-                            message="AI emission returned None — falling back to shim",
+                            message="AI emission returned None — render_plan left unset",
                             step="render.llm_pipeline",
                             context={"reason": "select_render_plan_returned_none"},
                         )
@@ -522,7 +532,7 @@ def run_render_pipeline(
                         job_id=job_id,
                         event="render.plan.ai_fallback",
                         level="WARNING",
-                        message=f"AI emission raised — falling back to shim: {_ai_exc}",
+                        message=f"AI emission raised — render_plan left unset: {_ai_exc}",
                         step="render.llm_pipeline",
                         context={
                             "reason": "exception",
@@ -530,36 +540,9 @@ def run_render_pipeline(
                         },
                     )
 
-            # ── (2) Sprint 2.2/2.3 shim path (default + AI fallback) ──
-            if _render_plan is None:
-                _reconstructed_segments: list[LLMSegment] = []
-                for _seg in scored:
-                    try:
-                        _reconstructed_segments.append(
-                            LLMSegment(
-                                start=float(_seg.get("start", 0.0)),
-                                end=float(_seg.get("end", 0.0)),
-                                score=float(_seg.get("viral_score", 0.0)) / 100.0,
-                                clip_name=str(_seg.get("clip_name", "")),
-                                title=str(_seg.get("ai_title", "")),
-                                reason=str(_seg.get("ai_reason", "")),
-                                hook_type=str(_seg.get("hook_type", "")),
-                                content_type=str(_seg.get("content_type_hint", "")),
-                                subtitle_style=str(_seg.get("ai_subtitle_style", "")),
-                                viral_score=float(_seg.get("viral_score", 0.0)) / 100.0,
-                                hook_score=float(_seg.get("hook_score", 0.0)) / 100.0,
-                                retention_score=float(_seg.get("retention_score", 0.0)) / 100.0,
-                                speech_density=float(_seg.get("speech_density", 0.0)),
-                                duration_fit=float(_seg.get("duration_fit_score", 0.0)) / 100.0,
-                                cover_offset_ratio=float(_seg.get("cover_hint_ratio") or 0.0),
-                            )
-                        )
-                    except (TypeError, ValueError):
-                        # Skip one bad scored entry; builder also skips internally.
-                        continue
-                _render_plan = build_render_plan(_reconstructed_segments, payload, creator_context_id="")
-
-            # ── Shared persistence + event ──────────────────────────
+            # Sprint 4.H — persistence runs only when AI emission
+            # succeeded. Flag-OFF / AI-failed jobs leave the
+            # render_plan_json column NULL (additive-schema safe).
             if _render_plan is not None:
                 update_render_plan(job_id, _render_plan.to_json())
                 _emit_render_event(
@@ -575,9 +558,10 @@ def run_render_pipeline(
                     },
                 )
         except Exception as _plan_exc:
-            # Defensive guard around the whole block. Builder + helpers
-            # already never raise, but a future refactor must not be able
-            # to take down a render via the wire-up itself.
+            # Defensive guard around the whole block. select_render_plan
+            # + update_render_plan are themselves never-raise, but a
+            # future refactor must not be able to take down a render
+            # via the wire-up itself.
             logger.warning("render_plan wire-up failed (non-fatal): %s", _plan_exc)
             _render_plan = None
 
