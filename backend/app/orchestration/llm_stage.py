@@ -66,6 +66,13 @@ def _build_editorial_hint(payload: Any) -> str:
     values so the prompt is byte-for-byte identical to the baseline.
     The hint is ADVISORY only — it never requests new JSON fields and does
     not affect the parser, validation gates, or output dataclass shape.
+
+    Sprint 3.3: also appends the active CreatorContext's prompt hint (if
+    any) so the AI Director sees channel persona signals before
+    selecting segments. The CreatorContext fetch is wrapped in try/except
+    so a transient failure in the AI-context layer cannot crash the LLM
+    stage — Sacred Contract #3 (AI modules return None on failure, never
+    raise) is preserved end-to-end.
     """
     parts: list[str] = []
 
@@ -78,6 +85,21 @@ def _build_editorial_hint(payload: Any) -> str:
     v = _VIDEO_TYPE_HINTS.get(vtype, "")
     if v:
         parts.append(v)
+
+    # Sprint 3.3 — append CreatorContext hint. Local import keeps this
+    # module decoupled from the DB at import time (matches the same
+    # pattern used by the builder itself). The builder already returns
+    # None on any internal error; we belt-and-braces here so even a
+    # raised import failure can't propagate.
+    try:
+        from app.ai.context.creator_context import build_creator_context
+        creator_ctx = build_creator_context()
+        if creator_ctx is not None:
+            creator_hint = creator_ctx.to_prompt_hint()
+            if creator_hint:
+                parts.append(creator_hint)
+    except Exception as exc:
+        logger.warning("llm_stage: creator context hint append failed: %s", exc)
 
     return " ".join(parts)
 
