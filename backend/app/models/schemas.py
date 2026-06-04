@@ -37,14 +37,13 @@ class ChannelInfo(BaseModel):
 # ── Render ───────────────────────────────────────────────────────────────
 
 class PrepareSourceRequest(BaseModel):
+    # extra="ignore" preserves backward compat with stored payloads that still
+    # carry deprecated fields (e.g. legacy youtube_url) from the pre-Sprint-1.2
+    # YouTube render path. Unknown fields are silently dropped instead of raising.
+    model_config = ConfigDict(extra="ignore")
     source_mode: Optional[str] = "local"
-    youtube_url: Optional[str] = ""
     source_video_path: Optional[str] = ""
     session_id: Optional[str] = None  # client-provided UUID; server generates one if absent
-
-
-class DownloadHealthRequest(BaseModel):
-    youtube_url: Optional[str] = ""
 
 
 class DownloadBatchRequest(BaseModel):
@@ -57,8 +56,11 @@ class DownloadRetryRequest(BaseModel):
 
 
 class QuickProcessRequest(BaseModel):
-    source: str = "youtube"
-    url: str = ""
+    # extra="ignore" preserves backward compat with legacy payloads that may
+    # still carry deprecated YouTube fields (url, etc.) from the pre-Sprint-1.2 path.
+    model_config = ConfigDict(extra="ignore")
+    source: str = "local"
+    url: str = ""  # deprecated, unused after Sprint 1.2 (kept for stored payload compat)
     path: str = ""
     output: str = ""
     resize_width: Optional[int] = None

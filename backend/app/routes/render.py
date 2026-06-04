@@ -9,7 +9,6 @@ import traceback
 import uuid
 import logging
 import subprocess
-from urllib.parse import urlparse
 
 # Guards concurrent preview-transcript requests for the same session.
 # Key = session_id, Value = threading.Lock held while Whisper is running.
@@ -19,11 +18,11 @@ from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse, StreamingResponse
-from app.models.schemas import RenderRequest, DownloadHealthRequest, PrepareSourceRequest, QuickProcessRequest
+from app.models.schemas import RenderRequest, PrepareSourceRequest, QuickProcessRequest
 from app.services.db import upsert_job, get_job, list_job_parts, update_job_progress
 from app.services.job_manager import submit_job, is_running
 from app.services.channel_service import ensure_channel
-from app.services.downloader import download_youtube, slugify, check_youtube_download_health
+from app.services.downloader import slugify
 from app.core import config as _cfg
 from app.core.config import TEMP_DIR, CHANNELS_DIR, REQUEST_LOG
 from app.core.stage import JobStage
@@ -175,7 +174,6 @@ def get_ai_diagnostics():
 #           NOT written to error.log
 # ─────────────────────────────────────────────────────────────────────────────
 
-_ACTIVE_DOWNLOADS: dict[str, threading.Event] = {}  # session_id -> cancel event for in-progress YouTube downloads
 _UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
 
 
@@ -232,16 +230,14 @@ def _validate_render_source(payload: RenderRequest):
     mode = (payload.source_mode or "local").lower().strip()
     local = (payload.source_video_path or "").strip()
 
-    # Render pipeline only accepts local files. YouTube/platform sources must be
-    # downloaded first via POST /api/render/prepare-source → then pass edit_session_id.
+    # Render pipeline only accepts local files. Use the standalone Downloader
+    # feature first to fetch a remote source as a local file, then submit here.
     if mode != "local":
         raise HTTPException(
             status_code=400,
             detail=(
                 f"source_mode='{mode}' is not supported by /api/render/process. "
-                "To render a YouTube or platform video, first call "
-                "POST /api/render/prepare-source to download it, "
-                "then pass the returned session_id as edit_session_id."
+                "Use the standalone Downloader to fetch remote sources as local files."
             ),
         )
 
@@ -267,8 +263,9 @@ def _validate_render_source(payload: RenderRequest):
 @router.post("/prepare-source")
 def prepare_source(payload: PrepareSourceRequest):
     """
-    Download YouTube video OR validate local file and return a session_id
-    so the frontend can open the editor with a live preview before rendering.
+    Validate a local video file and return a session_id so the frontend can
+    open the editor with a live preview before rendering. Local files only —
+    use the standalone Downloader feature to fetch remote sources first.
     """
     _client_sid = str(payload.session_id or "").strip()
     session_id = _client_sid if _UUID_RE.match(_client_sid) else str(uuid.uuid4())
@@ -301,96 +298,56 @@ def prepare_source(payload: PrepareSourceRequest):
             message="Validating source input",
             step="render.prepare_source.validate_input",
         )
-        if mode == "local":
-            src = Path(payload.source_video_path or "").expanduser().resolve()
-            if not src.exists() or not src.is_file():
-                raise HTTPException(status_code=400, detail=f"File not found: {src}")
-            _emit_render_event(
-                channel_code="preview",
-                job_id=session_id,
-                event="render.prepare_source.prepare_paths",
-                level="INFO",
-                message="Preparing source paths",
-                step="render.prepare_source.prepare_paths",
-                context={"source_path": str(src), "work_dir": str(work_dir)},
+        if mode != "local":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"source_mode='{mode}' is not supported. "
+                    "Use the standalone Downloader to fetch remote sources, "
+                    "then call /api/render/prepare-source with source_mode='local'."
+                ),
             )
-            _emit_render_event(
-                channel_code="preview",
-                job_id=session_id,
-                event="render.prepare_source.select_strategy",
-                level="INFO",
-                message="Selecting local source strategy",
-                step="render.prepare_source.select_strategy",
-                context={"strategy": "local_preview"},
-            )
-            duration = _probe_video_duration(src)
-            preview_path = _ensure_h264_preview(src, work_dir, duration_sec=duration)
-            _save_session(session_id, {
-                "video_path": str(src),           # original used for render
-                "preview_path": str(preview_path), # h264 used for browser preview
-                "duration": duration,
-                "title": src.stem,
-                "work_dir": str(work_dir),
-                "source_mode": "local",
-            })
-            _emit_render_event(
-                channel_code="preview",
-                job_id=session_id,
-                event="render.prepare_source.success",
-                level="INFO",
-                message="Source prepared successfully",
-                step="render.prepare_source.success",
-                context={"source_mode": "local", "duration": duration},
-            )
-            return {"session_id": session_id, "duration": duration, "title": src.stem, "export_dir": str(work_dir / "exports")}
-        else:
-            yt_url = (payload.youtube_url or "").strip()
-            if not yt_url:
-                raise HTTPException(status_code=400, detail="youtube_url is required")
-            _emit_render_event(
-                channel_code="preview",
-                job_id=session_id,
-                event="render.prepare_source.prepare_paths",
-                level="INFO",
-                message="Preparing source paths",
-                step="render.prepare_source.prepare_paths",
-                context={"work_dir": str(work_dir)},
-            )
-            _emit_render_event(
-                channel_code="preview",
-                job_id=session_id,
-                event="render.prepare_source.select_strategy",
-                level="INFO",
-                message="Selecting YouTube download strategy",
-                step="render.prepare_source.select_strategy",
-                context={"strategy": "youtube_download", "url": yt_url},
-            )
-            _cancel_ev = threading.Event()
-            _ACTIVE_DOWNLOADS[session_id] = _cancel_ev
-            try:
-                source = download_youtube(yt_url, work_dir, context="preview", cancel_event=_cancel_ev)
-            finally:
-                _ACTIVE_DOWNLOADS.pop(session_id, None)
-            src = Path(source["filepath"])
-            preview_path = _ensure_h264_preview(src, work_dir, duration_sec=int(source.get("duration") or 0))
-            _save_session(session_id, {
-                "video_path": source["filepath"],  # original used for render
-                "preview_path": str(preview_path), # h264 used for browser preview
-                "duration": source["duration"],
-                "title": source["title"],
-                "work_dir": str(work_dir),
-                "source_mode": "youtube",
-            })
-            _emit_render_event(
-                channel_code="preview",
-                job_id=session_id,
-                event="render.prepare_source.success",
-                level="INFO",
-                message="Source prepared successfully",
-                step="render.prepare_source.success",
-                context={"source_mode": "youtube", "duration": source.get("duration", 0), "title": source.get("title", "")},
-            )
-            return {"session_id": session_id, "duration": source["duration"], "title": source["title"], "export_dir": str(work_dir / "exports")}
+        src = Path(payload.source_video_path or "").expanduser().resolve()
+        if not src.exists() or not src.is_file():
+            raise HTTPException(status_code=400, detail=f"File not found: {src}")
+        _emit_render_event(
+            channel_code="preview",
+            job_id=session_id,
+            event="render.prepare_source.prepare_paths",
+            level="INFO",
+            message="Preparing source paths",
+            step="render.prepare_source.prepare_paths",
+            context={"source_path": str(src), "work_dir": str(work_dir)},
+        )
+        _emit_render_event(
+            channel_code="preview",
+            job_id=session_id,
+            event="render.prepare_source.select_strategy",
+            level="INFO",
+            message="Selecting local source strategy",
+            step="render.prepare_source.select_strategy",
+            context={"strategy": "local_preview"},
+        )
+        duration = _probe_video_duration(src)
+        preview_path = _ensure_h264_preview(src, work_dir, duration_sec=duration)
+        _save_session(session_id, {
+            "video_path": str(src),           # original used for render
+            "preview_path": str(preview_path), # h264 used for browser preview
+            "duration": duration,
+            "title": src.stem,
+            "work_dir": str(work_dir),
+            "source_mode": "local",
+        })
+        _emit_render_event(
+            channel_code="preview",
+            job_id=session_id,
+            event="render.prepare_source.success",
+            level="INFO",
+            message="Source prepared successfully",
+            step="render.prepare_source.success",
+            context={"source_mode": "local", "duration": duration},
+        )
+        return {"session_id": session_id, "duration": duration, "title": src.stem, "export_dir": str(work_dir / "exports")}
     except HTTPException as exc:
         _emit_render_event(
             channel_code="preview",
@@ -399,7 +356,7 @@ def prepare_source(payload: PrepareSourceRequest):
             level="ERROR",
             message=f"Source preparation failed: {exc.detail}",
             step="render.prepare_source.error",
-            context={"source_mode": (payload.source_mode or "local").lower().strip(), "url": (payload.youtube_url or "").strip(), "path": (payload.source_video_path or "").strip()},
+            context={"source_mode": (payload.source_mode or "local").lower().strip(), "path": (payload.source_video_path or "").strip()},
             exception=exc,
             traceback_text=traceback.format_exc(),
         )
@@ -413,7 +370,7 @@ def prepare_source(payload: PrepareSourceRequest):
             level="ERROR",
             message=f"Source preparation failed: {exc}",
             step="render.prepare_source.error",
-            context={"source_mode": (payload.source_mode or "local").lower().strip(), "url": (payload.youtube_url or "").strip(), "path": (payload.source_video_path or "").strip()},
+            context={"source_mode": (payload.source_mode or "local").lower().strip(), "path": (payload.source_video_path or "").strip()},
             exception=exc,
             traceback_text=traceback.format_exc(),
         )
@@ -422,10 +379,7 @@ def prepare_source(payload: PrepareSourceRequest):
 
 @router.delete("/prepare-source/{session_id}")
 def cancel_prepare_source(session_id: str):
-    """Signal an active YouTube download to stop and remove the preview work directory."""
-    ev = _ACTIVE_DOWNLOADS.get(session_id)
-    if ev:
-        ev.set()
+    """Remove the preview work directory for a prepare-source session."""
     _cleanup_preview_session(session_id)
     return {"cancelled": True, "session_id": session_id}
 
@@ -679,14 +633,6 @@ async def upload_local_video(
     return {"path": str(dest), "filename": dest.name, "size": dest.stat().st_size}
 
 
-@router.post("/download-health")
-def download_health(payload: DownloadHealthRequest):
-    url = (payload.youtube_url or "").strip()
-    if not url:
-        raise HTTPException(status_code=400, detail="youtube_url is required")
-    return check_youtube_download_health(url)
-
-
 @router.post("/test-cloud-ai")
 def test_cloud_ai(body: dict):
     """Validate cloud AI provider credentials.
@@ -790,13 +736,11 @@ def test_cloud_ai(body: dict):
 @router.post("/quick-process")
 def quick_process(payload: QuickProcessRequest):
     """
-    Simple one-shot flow:
-    - Download from YouTube URL
+    Simple one-shot flow over a local file:
     - Optionally apply resize/filter
     - Save to exact output file path
     """
-    source = (payload.source or "").strip().lower()
-    url = (payload.url or "").strip()
+    source = (payload.source or "local").strip().lower()
     local_path_raw = (payload.path or "").strip()
     output_raw = (payload.output or "").strip()
 
@@ -810,15 +754,16 @@ def quick_process(payload: QuickProcessRequest):
         step="render.start",
         context={"source": source},
     )
-    if source not in ("youtube", "local"):
-        raise HTTPException(status_code=400, detail="source must be 'youtube' or 'local'")
-    if source == "youtube" and not url:
-        raise HTTPException(status_code=400, detail="url is required when source='youtube'")
-    if source == "youtube":
-        parsed = urlparse(url)
-        if parsed.scheme not in ("http", "https") or not parsed.netloc:
-            raise HTTPException(status_code=400, detail="url must be a valid http(s) URL")
-    if source == "local" and not local_path_raw:
+    if source != "local":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"source='{source}' is not supported. "
+                "Use the standalone Downloader to fetch remote sources, "
+                "then call /api/render/quick-process with source='local'."
+            ),
+        )
+    if not local_path_raw:
         raise HTTPException(status_code=400, detail="path is required when source='local'")
     if not output_raw:
         raise HTTPException(status_code=400, detail="output is required")
@@ -861,50 +806,13 @@ def quick_process(payload: QuickProcessRequest):
             message="Validating quick render input",
             step="render.input.validate",
         )
-        if source == "youtube":
-            try:
-                _emit_render_event(
-                    channel_code="quick",
-                    job_id=quick_job_id,
-                    event="render.download.start",
-                    level="INFO",
-                    message="Downloading YouTube source",
-                    step="render.download",
-                    context={"url": url},
-                )
-                downloaded = download_youtube(url, work_dir)
-                _emit_render_event(
-                    channel_code="quick",
-                    job_id=quick_job_id,
-                    event="render.download.success",
-                    level="INFO",
-                    message="YouTube download success",
-                    step="render.download",
-                    context={"title": downloaded.get("title", ""), "duration": downloaded.get("duration", 0)},
-                )
-            except Exception as exc:
-                _emit_render_event(
-                    channel_code="quick",
-                    job_id=quick_job_id,
-                    event="render.download.error",
-                    level="ERROR",
-                    message=f"YouTube download failed: {exc}",
-                    step="render.download",
-                    exception=exc,
-                    traceback_text=traceback.format_exc(),
-                )
-                raise HTTPException(status_code=400, detail=f"Failed to download YouTube URL: {exc}") from exc
-            src_path = Path(downloaded["filepath"]).resolve()
-            downloaded_title = downloaded.get("title", "")
-            duration = int(downloaded.get("duration") or 0)
-        else:
-            src_path = Path(local_path_raw).expanduser()
-            if not src_path.is_absolute():
-                src_path = (Path.cwd() / src_path).resolve()
-            if not src_path.exists() or not src_path.is_file():
-                raise HTTPException(status_code=400, detail=f"Local file not found: {src_path}")
-            downloaded_title = src_path.stem
-            duration = _probe_video_duration(src_path)
+        src_path = Path(local_path_raw).expanduser()
+        if not src_path.is_absolute():
+            src_path = (Path.cwd() / src_path).resolve()
+        if not src_path.exists() or not src_path.is_file():
+            raise HTTPException(status_code=400, detail=f"Local file not found: {src_path}")
+        downloaded_title = src_path.stem
+        duration = _probe_video_duration(src_path)
 
         vf_parts: list[str] = []
         if payload.resize_width and payload.resize_height:
@@ -1038,8 +946,8 @@ def quick_process(payload: QuickProcessRequest):
         return {
             "status": "completed",
             "source": source,
-            "url": url if source == "youtube" else "",
-            "path": str(src_path) if source == "local" else "",
+            "url": "",
+            "path": str(src_path),
             "output": str(output_path),
             "downloaded_title": downloaded_title,
             "duration": duration,

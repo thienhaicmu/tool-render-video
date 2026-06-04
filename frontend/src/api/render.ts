@@ -54,8 +54,7 @@ export interface PrepareSourceResponse {
 
 export async function prepareSource(
   body: {
-    source_mode: 'youtube' | 'local'
-    youtube_url?: string
+    source_mode: 'local'
     source_video_path?: string
   },
   signal?: AbortSignal,

@@ -35,15 +35,11 @@ export const translations = {
     source_logo: 'AI Clip Studio',
     source_headline: 'Turn any video into viral clips',
     source_sub: 'AI-powered analysis · Professional output · Optimized for TikTok & Shorts',
-    source_tab_youtube: 'YouTube / URL',
-    source_tab_local: 'Local File',
-    source_url_placeholder: 'https://www.youtube.com/watch?v=...',
     source_btn_generate: 'Generate Clips',
     source_btn_preparing: 'Preparing…',
     source_btn_uploading: 'Uploading…',
     source_drop_hint: 'Click to select a video file',
     source_drop_hint_sub: 'MP4, MOV, MKV, AVI, WebM',
-    source_error_url: 'Could not prepare source — check the URL and try again.',
     source_error_local: 'Could not prepare source — try again.',
 
     // AnalyzeStep
@@ -219,15 +215,11 @@ export const translations = {
     source_logo: 'AI Clip Studio',
     source_headline: 'Biến video thành clip viral',
     source_sub: 'Phân tích AI · Đầu ra chuyên nghiệp · Tối ưu cho TikTok & Shorts',
-    source_tab_youtube: 'YouTube / URL',
-    source_tab_local: 'File cục bộ',
-    source_url_placeholder: 'https://www.youtube.com/watch?v=...',
     source_btn_generate: 'Tạo Clips',
     source_btn_preparing: 'Đang chuẩn bị…',
     source_btn_uploading: 'Đang tải lên…',
     source_drop_hint: 'Nhấn để chọn video',
     source_drop_hint_sub: 'MP4, MOV, MKV, AVI, WebM',
-    source_error_url: 'Không thể chuẩn bị nguồn — kiểm tra URL và thử lại.',
     source_error_local: 'Không thể chuẩn bị nguồn — thử lại.',
 
     // AnalyzeStep
