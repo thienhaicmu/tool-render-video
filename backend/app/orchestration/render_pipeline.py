@@ -91,10 +91,10 @@ from app.orchestration.pipeline_config import (
     _resolve_profile,
     _probe_video_duration,  # noqa: F401 (re-exported for routes/render.py)
 )
-# Sprint 2.3 — RenderPlan wire-up. Sprint 4 will move the decision logic
-# the shim captures here up into the AI layer; for now this is purely
-# additive — persisted alongside the existing scored list, threaded into
-# PartRenderContext, NOT yet consumed by part_renderer.
+# Sprint 2.3 — RenderPlan wire-up. Sprint 4.D adds the AI-emission path
+# next to this shim so the orchestrator can route the persisted plan
+# through the LLM directly when the LLM_EMIT_RENDER_PLAN flag is ON.
+from app.ai.llm import select_render_plan as _llm_select_render_plan
 from app.ai.llm.parser import LLMSegment
 from app.db.jobs_repo import update_render_plan
 from app.orchestration.render_plan_builder import build_render_plan
@@ -109,6 +109,15 @@ _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1
 # Requires FEATURE_BASE_CLIP_FIRST=1.  OFF by default.
 # When both flags are ON: overlay composite path → fallback render_part_smart() on failure.
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
+
+# Sprint 4.D — feature flag: when ON, ask the LLM to emit a full RenderPlan
+# (clips + subtitle_policy + camera_strategy + audio_plan + overlays) via
+# ai.llm.select_render_plan BEFORE the Sprint 2.2 builder shim runs. If the
+# AI returns a RenderPlan we use it directly; if it returns None or raises,
+# we fall back to the shim path — Sacred Contract #3 absolute. Default OFF
+# preserves baseline behaviour (Sacred Contract #2). Sprint 4.E-G will
+# migrate stage decision logic to read this AI-emitted plan.
+_FEATURE_LLM_EMIT_RENDER_PLAN: bool = os.getenv("LLM_EMIT_RENDER_PLAN", "0") == "1"
 
 logger = logging.getLogger("app.render")
 
@@ -412,42 +421,142 @@ def run_render_pipeline(
         # full_srt and full_srt_available initialized before scene detection (Phase 45 hoist).
         # _early_transcription_done=True means Phase 45 already ran Whisper — subtitle block skips.
 
-        # Sprint 2.3 — RenderPlan persist (no-op consumer until Sprint 4).
-        # Reconstruct LLMSegment objects from the scored list using the
-        # reverse of llm_stage._to_scored_dict, hand to build_render_plan,
-        # and persist the JSON blob. The shim never raises; both the
-        # builder (returns None on internal error) and update_render_plan
-        # (logs + returns on DB error) are defensive. RenderPlan is then
-        # threaded into PartRenderContext below; part_renderer ignores it
-        # in Sprint 2.3 but Sprint 4 will read it.
+        # Sprint 2.3 + 4.D — RenderPlan acquisition.
+        # Two paths produce a RenderPlan and persist it:
+        #   (1) AI-emission path — Sprint 4.D — gated on LLM_EMIT_RENDER_PLAN.
+        #       Asks the LLM to emit a full RenderPlan directly via
+        #       ai.llm.select_render_plan. Runs FIRST when the flag is ON.
+        #   (2) Shim path — Sprint 2.2/2.3 — reconstructs LLMSegment objects
+        #       from the scored list and runs the Sprint 2.2 builder shim.
+        #       Runs whenever the AI path was skipped or returned None.
+        # Both paths share the persistence + render.plan.persisted event
+        # emission below so downstream observers see one stable contract.
+        # Outer try/except is the Sacred Contract #3 belt-and-braces — a
+        # future refactor must not be able to take down a render here.
         _render_plan = None
         try:
-            _reconstructed_segments: list[LLMSegment] = []
-            for _seg in scored:
+            # ── (1) Sprint 4.D AI-emission path (gated) ──────────────
+            if _FEATURE_LLM_EMIT_RENDER_PLAN:
                 try:
-                    _reconstructed_segments.append(
-                        LLMSegment(
-                            start=float(_seg.get("start", 0.0)),
-                            end=float(_seg.get("end", 0.0)),
-                            score=float(_seg.get("viral_score", 0.0)) / 100.0,
-                            clip_name=str(_seg.get("clip_name", "")),
-                            title=str(_seg.get("ai_title", "")),
-                            reason=str(_seg.get("ai_reason", "")),
-                            hook_type=str(_seg.get("hook_type", "")),
-                            content_type=str(_seg.get("content_type_hint", "")),
-                            subtitle_style=str(_seg.get("ai_subtitle_style", "")),
-                            viral_score=float(_seg.get("viral_score", 0.0)) / 100.0,
-                            hook_score=float(_seg.get("hook_score", 0.0)) / 100.0,
-                            retention_score=float(_seg.get("retention_score", 0.0)) / 100.0,
-                            speech_density=float(_seg.get("speech_density", 0.0)),
-                            duration_fit=float(_seg.get("duration_fit_score", 0.0)) / 100.0,
-                            cover_offset_ratio=float(_seg.get("cover_hint_ratio") or 0.0),
-                        )
+                    from app.core import config as _ai_cfg
+                    _ai_provider = (getattr(payload, "ai_provider", "") or "").strip().lower() \
+                        or getattr(_ai_cfg, "AI_PROVIDER_DEFAULT", "gemini")
+                    _per_key_attr = {
+                        "gemini": "gemini_api_key",
+                        "openai": "openai_api_key",
+                        "claude": "claude_api_key",
+                    }
+                    _ai_payload_key = (
+                        (getattr(payload, _per_key_attr.get(_ai_provider, ""), "") or "").strip()
+                        or (getattr(payload, "ai_cloud_api_key", "") or "").strip()
                     )
-                except (TypeError, ValueError):
-                    # Skip one bad scored entry; builder also skips internally.
-                    continue
-            _render_plan = build_render_plan(_reconstructed_segments, payload, creator_context_id="")
+                    _ai_env_key = {
+                        "gemini": getattr(_ai_cfg, "GEMINI_API_KEY", ""),
+                        "openai": getattr(_ai_cfg, "OPENAI_API_KEY", ""),
+                        "claude": getattr(_ai_cfg, "CLAUDE_API_KEY", ""),
+                    }.get(_ai_provider, "")
+                    _ai_api_key = _ai_payload_key or _ai_env_key
+                    _ai_srt_content = ""
+                    if full_srt_available and full_srt and Path(full_srt).exists():
+                        try:
+                            _ai_srt_content = Path(full_srt).read_text(encoding="utf-8")
+                        except Exception:
+                            _ai_srt_content = ""
+                    _ai_video_duration = float(source.get("duration") or 0.0)
+                    # Reuse llm_stage's editorial-hint builder so Sprint 3
+                    # CreatorContext integration flows through identically
+                    # to the legacy select_segments path.
+                    try:
+                        from app.orchestration.llm_stage import _build_editorial_hint as _ai_hint_fn
+                        _ai_editorial_hint = _ai_hint_fn(payload)
+                    except Exception:
+                        _ai_editorial_hint = ""
+                    logger.info(
+                        "render_plan: LLM_EMIT_RENDER_PLAN=1 — attempting AI emission (provider=%s)",
+                        _ai_provider,
+                    )
+                    _render_plan = _llm_select_render_plan(
+                        provider=_ai_provider,
+                        srt_content=_ai_srt_content,
+                        output_count=int(getattr(payload, "output_count", 1) or 1),
+                        min_sec=float(_seg_min_sec),
+                        max_sec=float(_seg_max_sec),
+                        video_duration=_ai_video_duration,
+                        api_key=_ai_api_key,
+                        model=getattr(payload, "llm_model", None) or None,
+                        language=getattr(payload, "llm_language", "auto") or "auto",
+                        editorial_hint=_ai_editorial_hint,
+                    )
+                    if _render_plan is not None:
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="render.plan.ai_emitted",
+                            level="INFO",
+                            message="RenderPlan emitted by AI",
+                            step="render.llm_pipeline",
+                            context={
+                                "clips_count": len(_render_plan.clips),
+                                "schema_version": _render_plan.schema_version,
+                                "provider": _ai_provider,
+                            },
+                        )
+                    else:
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="render.plan.ai_fallback",
+                            level="WARNING",
+                            message="AI emission returned None — falling back to shim",
+                            step="render.llm_pipeline",
+                            context={"reason": "select_render_plan_returned_none"},
+                        )
+                except Exception as _ai_exc:
+                    logger.warning("render_plan AI emission failed (non-fatal): %s", _ai_exc)
+                    _render_plan = None
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="render.plan.ai_fallback",
+                        level="WARNING",
+                        message=f"AI emission raised — falling back to shim: {_ai_exc}",
+                        step="render.llm_pipeline",
+                        context={
+                            "reason": "exception",
+                            "error_type": type(_ai_exc).__name__,
+                        },
+                    )
+
+            # ── (2) Sprint 2.2/2.3 shim path (default + AI fallback) ──
+            if _render_plan is None:
+                _reconstructed_segments: list[LLMSegment] = []
+                for _seg in scored:
+                    try:
+                        _reconstructed_segments.append(
+                            LLMSegment(
+                                start=float(_seg.get("start", 0.0)),
+                                end=float(_seg.get("end", 0.0)),
+                                score=float(_seg.get("viral_score", 0.0)) / 100.0,
+                                clip_name=str(_seg.get("clip_name", "")),
+                                title=str(_seg.get("ai_title", "")),
+                                reason=str(_seg.get("ai_reason", "")),
+                                hook_type=str(_seg.get("hook_type", "")),
+                                content_type=str(_seg.get("content_type_hint", "")),
+                                subtitle_style=str(_seg.get("ai_subtitle_style", "")),
+                                viral_score=float(_seg.get("viral_score", 0.0)) / 100.0,
+                                hook_score=float(_seg.get("hook_score", 0.0)) / 100.0,
+                                retention_score=float(_seg.get("retention_score", 0.0)) / 100.0,
+                                speech_density=float(_seg.get("speech_density", 0.0)),
+                                duration_fit=float(_seg.get("duration_fit_score", 0.0)) / 100.0,
+                                cover_offset_ratio=float(_seg.get("cover_hint_ratio") or 0.0),
+                            )
+                        )
+                    except (TypeError, ValueError):
+                        # Skip one bad scored entry; builder also skips internally.
+                        continue
+                _render_plan = build_render_plan(_reconstructed_segments, payload, creator_context_id="")
+
+            # ── Shared persistence + event ──────────────────────────
             if _render_plan is not None:
                 update_render_plan(job_id, _render_plan.to_json())
                 _emit_render_event(
