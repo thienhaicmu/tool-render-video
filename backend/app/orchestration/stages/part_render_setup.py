@@ -76,7 +76,7 @@ from app.orchestration.camera_strategy import CameraStrategy
 from app.orchestration.part_plan import PartExecutionPlan
 from app.orchestration.pipeline_cache import _render_cache_key
 from app.orchestration.pipeline_segment_selection import _PLATFORM_PROFILES
-from app.orchestration.render_events import _render_progress_timer
+from app.orchestration.render_events import _emit_render_event, _render_progress_timer
 from app.orchestration.stages.part_render_context import PartRenderContext
 from app.services.render_engine import (
     content_type_crf_delta as _crf_delta_for_content_type,
@@ -90,6 +90,61 @@ logger = logging.getLogger("app.render")
 # vars deterministically at import; no drift possible.
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
+
+
+# ────────────────────────────────────────────────────────────────────
+# Sprint 4.F — RenderPlan.camera_strategy consume helper.
+#
+# When ctx.render_plan is None (LLM_EMIT_RENDER_PLAN OFF, no AI
+# emission), the resolver falls through to the caller's fallback —
+# Sacred Contract #2 (default behaviour identical baseline). When
+# ctx.render_plan is set, per-field merge applies: empty fields stay
+# at fallback ("empty == inherit" per render_plan.py CameraStrategy);
+# set fields override. Invalid reframe_mode values soft-fall back per
+# Sacred Contract #3.
+#
+# Scope of Sprint 4.F: reframe_mode only. motion_aware_crop and
+# tracker are DEFERRED:
+#   - motion_aware_crop is a plain bool that defaults to False, so the
+#     dataclass cannot disambiguate "AI never set it" from "AI
+#     explicitly disabled it". Honouring the plan value when present
+#     would flip baseline behaviour for jobs where
+#     payload.motion_aware_crop=True but the plan defaulted to False
+#     — same blocker the Sprint 4.E emphasis_pass deferral cited.
+#   - tracker has zero orchestration consumer today; the dispatch
+#     happens inside services/motion_crop.py via internal capability
+#     detection. Nothing to migrate yet.
+# ────────────────────────────────────────────────────────────────────
+
+# Vocabulary of reframe_mode values the planner will accept from a
+# RenderPlan. Matches the CameraStrategy dataclass docstring at
+# render_plan.py. Legacy fallback value "subject" stays valid via
+# the caller's fallback path — it is not in this set because that
+# token belongs to the payload schema, not the plan schema.
+_RENDER_PLAN_ALLOWED_REFRAME_MODES: frozenset[str] = frozenset({
+    "center", "track", "fixed",
+})
+
+
+def _resolve_reframe_mode_from_plan(
+    ctx: PartRenderContext, fallback_value: str
+) -> tuple[str, str]:
+    """Return ``(effective_reframe_mode, source_tag)``.
+
+    Source tag is one of ``"render_plan"``, ``"fallback"``, or
+    ``"fallback_invalid_reframe"`` — the planner surfaces it in the
+    Sprint 4.F ``camera_strategy_applied`` event so operators can
+    attribute the choice without re-reading the dataclass.
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return fallback_value, "fallback"
+    plan_reframe = (rp.camera_strategy.reframe_mode or "").strip()
+    if not plan_reframe:
+        return fallback_value, "fallback"
+    if plan_reframe not in _RENDER_PLAN_ALLOWED_REFRAME_MODES:
+        return fallback_value, "fallback_invalid_reframe"
+    return plan_reframe, "render_plan"
 
 
 @dataclass
@@ -172,6 +227,15 @@ def run_render_preflight(
     _encode_timer.start()
     _t_encode = time.perf_counter()
     _t_render = time.perf_counter()
+    # Sprint 4.F — resolve effective reframe_mode ONCE so the cache
+    # key (below), PartExecutionPlan, and CameraStrategy ctor all see
+    # the same value. Falls back to ctx.payload value when
+    # ctx.render_plan is None or its camera_strategy.reframe_mode is
+    # empty/invalid.
+    _legacy_reframe = str(getattr(ctx.payload, "reframe_mode", "subject"))
+    _effective_reframe, _reframe_source = _resolve_reframe_mode_from_plan(
+        ctx, _legacy_reframe
+    )
     _motion_ck = None
     _motion_crop_fallback: list = []
     if ctx.payload.motion_aware_crop and ctx.src_stat_for_motion is not None:
@@ -185,7 +249,7 @@ def run_render_preflight(
                 str(ctx.payload.aspect_ratio),
                 float(ctx.payload.frame_scale_x),
                 float(ctx.payload.frame_scale_y),
-                str(getattr(ctx.payload, "reframe_mode", "subject")),
+                _effective_reframe,
                 str(seg.get("content_type_hint", "vlog")),
             )
         except Exception:
@@ -200,7 +264,7 @@ def run_render_preflight(
         force_accurate_cut=_force_accurate_cut,
         subtitle_enabled=part_subtitle_enabled,
         motion_aware_crop=bool(ctx.payload.motion_aware_crop),
-        reframe_mode=str(getattr(ctx.payload, "reframe_mode", "subject")),
+        reframe_mode=_effective_reframe,
         frame_scale_x=int(ctx.payload.frame_scale_x),
         frame_scale_y=int(ctx.payload.frame_scale_y),
         content_type=_vf_ct,
@@ -226,7 +290,7 @@ def run_render_preflight(
         frame_scale_x=int(ctx.payload.frame_scale_x),
         frame_scale_y=int(ctx.payload.frame_scale_y),
         motion_aware_crop=bool(ctx.payload.motion_aware_crop),
-        reframe_mode=str(getattr(ctx.payload, "reframe_mode", "subject")),
+        reframe_mode=_effective_reframe,
         content_type=_vf_ct,
     )
     logger.info(
@@ -234,6 +298,28 @@ def run_render_preflight(
         idx, _camera_strategy.camera_mode, _camera_strategy.motion_aware_crop,
         _camera_strategy.reframe_mode, _camera_strategy.aspect_ratio,
         _camera_strategy.frame_scale_x, _camera_strategy.frame_scale_y,
+    )
+    # Sprint 4.F — additive event mirroring the Sprint 4.E
+    # `subtitle_style_applied` pattern. Lets operators attribute the
+    # reframe choice ("render_plan" override vs legacy "fallback")
+    # without grepping the logger output. The previous module-docstring
+    # assertion at L50-51 ("this block has NO _emit_render_event
+    # calls") was Sprint 6.D-era — Sprint 4.F adds one event per part.
+    _emit_render_event(
+        channel_code=ctx.effective_channel,
+        job_id=ctx.job_id,
+        event="camera_strategy_applied",
+        level="INFO",
+        message=f"Camera strategy applied for part {idx}: reframe={_effective_reframe}",
+        step="render.preflight",
+        context={
+            "part_no": idx,
+            "reframe_mode": _effective_reframe,
+            "reframe_mode_source": _reframe_source,
+            "motion_aware_crop": _camera_strategy.motion_aware_crop,
+            "camera_mode": _camera_strategy.camera_mode,
+            "aspect_ratio": _camera_strategy.aspect_ratio,
+        },
     )
     if _FEATURE_OVERLAY_AFTER_BASE_CLIP and not _FEATURE_BASE_CLIP_FIRST:
         logger.warning(
