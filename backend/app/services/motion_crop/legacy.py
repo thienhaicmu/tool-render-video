@@ -52,8 +52,8 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
-from app.services.motion_crop_config import MotionCropConfig
-from app.services.motion_crop_utils import clamp, ema
+from app.services.motion_crop.config import MotionCropConfig
+from app.services.motion_crop.utils import clamp, ema
 
 
 # ---------------------------------------------------------------------------

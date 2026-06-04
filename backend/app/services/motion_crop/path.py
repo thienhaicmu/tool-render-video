@@ -80,33 +80,33 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
-from app.services.motion_crop_config import MotionCropConfig, _apply_content_type_to_cfg
-from app.services.motion_crop_utils import (
+from app.services.motion_crop.config import MotionCropConfig, _apply_content_type_to_cfg
+from app.services.motion_crop.utils import (
     clamp,
     ema,
     _smoothstep,
     _load_cascade,
     _gaussian_smooth_1d,
 )
-from app.services.motion_crop_tracker import _ByteTrackSubject, _create_tracker
-from app.services.motion_crop_detection import (
+from app.services.motion_crop.tracker import _ByteTrackSubject, _create_tracker
+from app.services.motion_crop.detection import (
     prepare_detection_frame,
     _detect_subjects_in_frame,
     _get_eye_anchor_rel,
 )
-from app.services.motion_crop_scoring import (
+from app.services.motion_crop.scoring import (
     _filter_subject_candidates,
     _pick_best_subject,
     _same_subject,
     _score_subject_candidate,
 )
-from app.services.motion_crop_trackerless import (
+from app.services.motion_crop.trackerless import (
     _trackerless_detection_confidence,
     _trackerless_offcenter_ratio,
     _apply_trackerless_center_guard,
     _trackerless_hold_frames_for_confidence,
 )
-from app.services.motion_crop_legacy import _build_motion_path_legacy
+from app.services.motion_crop.legacy import _build_motion_path_legacy
 
 # Preserve original logger name so downstream filters / handlers still
 # match (same pattern as 6.D-3.4 / 6.D-3.5a).

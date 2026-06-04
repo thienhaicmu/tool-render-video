@@ -20,14 +20,14 @@ from typing import List, Optional, Tuple
 # markers acknowledge the re-export contract.
 
 # Sprint 6.D-3.1: motion-path cache helpers.
-from app.services.motion_crop_cache import (  # noqa: F401 (re-exported)
+from app.services.motion_crop.cache import (  # noqa: F401 (re-exported)
     _MOTION_CACHE_TTL_SEC,
     _motion_cache_key,
     _motion_path_cache_get,
     _motion_path_cache_put,
 )
 # Sprint 6.D-3.2: MotionCropConfig + content-type tracking overrides.
-from app.services.motion_crop_config import (
+from app.services.motion_crop.config import (
     _CONTENT_TYPE_TRACKING,  # noqa: F401 (re-exported)
     _apply_content_type_to_cfg,  # noqa: F401 (re-exported)
     MotionCropConfig,
@@ -36,7 +36,7 @@ from app.services.motion_crop_config import (
 # math primitives, OpenCV cascade/IoU). Many symbols here ARE used in
 # body — _safe_filter_path / _detect_windows_fontfile / fonts_dir
 # helpers are called by render_motion_aware_crop.
-from app.services.motion_crop_utils import (
+from app.services.motion_crop.utils import (
     _codec_flags,  # noqa: F401 (re-exported for tests)
     _safe_filter_path,
     _detect_windows_fontfile,
@@ -52,12 +52,12 @@ from app.services.motion_crop_utils import (
     _iou_xywh,  # noqa: F401 (re-exported)
 )
 # Sprint 6.D-3.4: _ByteTrackSubject + _create_tracker.
-from app.services.motion_crop_tracker import (  # noqa: F401 (re-exported)
+from app.services.motion_crop.tracker import (  # noqa: F401 (re-exported)
     _ByteTrackSubject,
     _create_tracker,
 )
 # Sprint 6.D-3.5a: MediaPipe lazy helpers + detection orchestration.
-from app.services.motion_crop_detection import (  # noqa: F401 (re-exported)
+from app.services.motion_crop.detection import (  # noqa: F401 (re-exported)
     _get_mp_detector,
     _detect_mediapipe_faces,
     _has_subject_in_sample,
@@ -67,7 +67,7 @@ from app.services.motion_crop_detection import (  # noqa: F401 (re-exported)
     _detect_subjects_in_frame,
 )
 # Sprint 6.D-3.5b: scoring helpers + best-subject pick.
-from app.services.motion_crop_scoring import (  # noqa: F401 (re-exported for tests/test_motion_crop_guards.py + the build_subject_path family)
+from app.services.motion_crop.scoring import (  # noqa: F401 (re-exported for tests/test_motion_crop_guards.py + the build_subject_path family)
     _subject_area_ratio,
     _subject_edge_overlap_ratio,
     _is_plausible_subject,
@@ -78,7 +78,7 @@ from app.services.motion_crop_scoring import (  # noqa: F401 (re-exported for te
     _same_subject,
 )
 # Sprint 6.D-3.5c: trackerless guard helpers.
-from app.services.motion_crop_trackerless import (  # noqa: F401 (re-exported)
+from app.services.motion_crop.trackerless import (  # noqa: F401 (re-exported)
     _trackerless_offcenter_ratio,
     _trackerless_detection_confidence,
     _trackerless_hold_frames_for_confidence,
@@ -86,7 +86,7 @@ from app.services.motion_crop_trackerless import (  # noqa: F401 (re-exported)
     _apply_trackerless_center_guard,
 )
 # Sprint 6.D-3.7: legacy motion-path implementation.
-from app.services.motion_crop_legacy import (  # noqa: F401 (re-exported)
+from app.services.motion_crop.legacy import (  # noqa: F401 (re-exported)
     detect_motion_center,
     _build_motion_path_legacy,
     _detect_scene_ranges_in_clip,
@@ -95,7 +95,7 @@ from app.services.motion_crop_legacy import (  # noqa: F401 (re-exported)
 # build_motion_path dispatcher (defined below) calls build_subject_path.
 # build_subject_path_scene is re-exported even though only used by
 # build_subject_path's multi-scene dispatch loop inside motion_crop_path.
-from app.services.motion_crop_path import (
+from app.services.motion_crop.path import (
     build_subject_path,
     build_subject_path_scene,  # noqa: F401 (re-exported)
 )
@@ -123,19 +123,19 @@ logger = logging.getLogger(__name__)
 # _detect_mediapipe_faces, _has_subject_in_sample) + MediaPipe pose block
 # (_get_mp_pose, _get_eye_anchor_rel) + per-process state flags
 # (_mp_face_detector*, _mp_pose_detector*, _POSE_LEFT_EYE/RIGHT_EYE,
-# _EYE_CROP_THIRDS) → moved to app.services.motion_crop_detection.
+# _EYE_CROP_THIRDS) → moved to app.services.motion_crop.detection.
 # Re-exported at the top of this file so existing internal call sites
 # keep their bare references unchanged.
 
 
 # `_CONTENT_TYPE_TRACKING`, `_apply_content_type_to_cfg`, and `MotionCropConfig`
-# → moved to app.services.motion_crop_config (Sprint 6.D-3.2). Re-exported
+# → moved to app.services.motion_crop.config (Sprint 6.D-3.2). Re-exported
 # at the top of this file so the rest of motion_crop.py and external consumers
 # keep using them via `app.services.motion_crop` import paths.
 
 
 # Sprint 6.D-3.3: 13 generic helpers (codec flags, fonts, ffprobe, math,
-# cascade/IoU) → moved to app.services.motion_crop_utils. Re-exported at
+# cascade/IoU) → moved to app.services.motion_crop.utils. Re-exported at
 # the top of this file so existing callers in this module + tests keep
 # their import paths.
 
@@ -145,7 +145,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # Sprint 6.D-3.4: `_ByteTrackSubject` + `_create_tracker` → moved to
-# app.services.motion_crop_tracker. Re-exported at the top of this file
+# app.services.motion_crop.tracker. Re-exported at the top of this file
 # so existing internal call sites (build_subject_path,
 # build_subject_path_scene) keep using them via bare references.
 
@@ -159,7 +159,7 @@ def _sanitize_speed(playback_speed: float | int | None) -> float:
 
 
 # `_subject_area_ratio` + `_subject_edge_overlap_ratio` → moved to
-# app.services.motion_crop_scoring (Sprint 6.D-3.5b).
+# app.services.motion_crop.scoring (Sprint 6.D-3.5b).
 
 
 def _required_lock_confirm_frames(
@@ -185,13 +185,13 @@ def _untracked_hold_frames(cfg: MotionCropConfig, detect_interval: int) -> int:
 
 
 # Sprint 6.D-3.5c: 5 trackerless guard helpers → moved to
-# app.services.motion_crop_trackerless. Re-exported at top of this file.
+# app.services.motion_crop.trackerless. Re-exported at top of this file.
 
 
 # Sprint 6.D-3.5b: _is_plausible_subject, _filter_subject_candidates,
 # _pick_best_subject (deferred from 3.5a), _subject_center,
 # _score_subject_candidate, _same_subject → moved to
-# app.services.motion_crop_scoring. Re-exported at top of this file.
+# app.services.motion_crop.scoring. Re-exported at top of this file.
 # `prepare_detection_frame` + `_detect_subjects_in_frame` were moved to
 # motion_crop_detection in Sprint 6.D-3.5a.
 
@@ -305,7 +305,7 @@ def _apply_velocity_limiter(
 
 
 # Sprint 6.D-3.6a + 3.6b: `build_subject_path` + `build_subject_path_scene`
-# → moved to app.services.motion_crop_path. Re-exported at top of this file.
+# → moved to app.services.motion_crop.path. Re-exported at top of this file.
 # The new module uses deferred imports for _subject_to_crop_center,
 # _apply_velocity_limiter, _required_lock_confirm_frames, and
 # _untracked_hold_frames — all of which still live in this module.
@@ -313,7 +313,7 @@ def _apply_velocity_limiter(
 
 
 # Sprint 6.D-3.7: detect_motion_center, _build_motion_path_legacy,
-# _detect_scene_ranges_in_clip → moved to app.services.motion_crop_legacy.
+# _detect_scene_ranges_in_clip → moved to app.services.motion_crop.legacy.
 # Re-exported at top of this file. build_motion_path dispatcher stays
 # here because it routes to build_subject_path (also here).
 

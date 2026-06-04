@@ -37,7 +37,7 @@ from typing import Tuple
 
 import cv2
 
-from app.services.motion_crop_utils import _iou_xywh
+from app.services.motion_crop.utils import _iou_xywh
 
 # Preserve original logger name so downstream log filters / handlers
 # targeting "app.services.motion_crop" still match (Sprint 6.D-3.4 note).

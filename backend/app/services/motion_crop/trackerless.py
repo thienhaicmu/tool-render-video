@@ -56,8 +56,8 @@ from __future__ import annotations
 import math
 from typing import Optional, Tuple
 
-from app.services.motion_crop_utils import clamp
-from app.services.motion_crop_scoring import (
+from app.services.motion_crop.utils import clamp
+from app.services.motion_crop.scoring import (
     _subject_center,
     _subject_area_ratio,
     _subject_edge_overlap_ratio,
