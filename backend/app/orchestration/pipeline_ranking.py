@@ -245,3 +245,110 @@ def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, pay
             f"duration_fit={components['duration_fit_score']}",
         ],
     }
+
+
+# ────────────────────────────────────────────────────────────────────
+# Sprint 4.G — RenderPlan rank consume helper.
+#
+# When the orchestrator is permitted to consume AI-emitted ranks
+# (LLM_EMIT_RENDER_PLAN env flag == "1") AND the plan carries a valid
+# permutation of ranks 1..N across the successful parts, the per-part
+# `output_rank` / `is_best_clip` / `is_best_output` flags are derived
+# from the plan instead of the legacy score-descending sort.
+#
+# When the env flag is OFF (the Sprint 4.D default), this helper
+# ALWAYS returns (None, "fallback") so the Sprint 2.2 builder shim's
+# rank values cannot leak into the live render path — Sacred Contract
+# #2 baseline behaviour preservation. The legacy score-descending sort
+# (render_pipeline.py L1037) stays the sole authority in that case.
+#
+# Mapping strategy: BY POSITION. render_plan.clips[i] is taken to
+# correspond to scored[i] — the Sprint 4.D shim guarantees this
+# alignment; AI providers wire their emission to the same ordering.
+# clip_name is NOT used as the join key (it may be empty, duplicated,
+# or sanitised).
+#
+# Invalid-plan branches return (None, "fallback_*") with a tag so the
+# orchestrator can surface the reason in the existing
+# `output_rank_computed` / `output_ranking_completed` events. The
+# Sacred Contract #1 keys (`output_rank_score`, `is_best_output`,
+# `is_best_clip`) are NEVER dropped by either path — only their
+# VALUES differ.
+# ────────────────────────────────────────────────────────────────────
+
+import os as _os  # noqa: E402 (kept local to helper section)
+from typing import Optional as _Optional  # noqa: E402
+
+
+_RENDER_PLAN_RANK_SOURCES: frozenset[str] = frozenset({
+    "render_plan",
+    "fallback",
+    "fallback_no_plan_rank",
+    "fallback_rank_collision",
+    "fallback_rank_invalid",
+})
+
+
+def _resolve_rank_from_plan(
+    render_plan,
+    scored: list,
+    failed_idx_set: set,
+) -> tuple[_Optional[dict], str]:
+    """Return ``(mapping_part_no_to_rank, source_tag)`` or ``(None, tag)``.
+
+    The mapping covers exactly the successful parts (the same set the
+    orchestrator builds `_rank_entries` for). When the helper returns
+    None the orchestrator falls back to the legacy score-descending
+    sort. See module-level comment block for the consume gate rules.
+
+    Never raises — any attribute lookup or comparison failure surfaces
+    as a fallback tag.
+    """
+    # F.5 Option C — consume only when the feature flag is explicitly ON.
+    # Reading the env var per call (rather than once at module load)
+    # lets tests monkeypatch the flag without reload gymnastics.
+    if _os.getenv("LLM_EMIT_RENDER_PLAN", "0") != "1":
+        return None, "fallback"
+    if render_plan is None:
+        return None, "fallback"
+    try:
+        clips = list(getattr(render_plan, "clips", None) or [])
+    except Exception:
+        return None, "fallback"
+    if not clips:
+        return None, "fallback_no_plan_rank"
+
+    # part_no values for the successful entries in the same order the
+    # orchestrator iterates `scored` (1-based, failed parts excluded).
+    success_part_nos: list[int] = []
+    for _idx in range(len(scored)):
+        _pn = _idx + 1
+        if _pn in failed_idx_set:
+            continue
+        success_part_nos.append(_pn)
+
+    if len(clips) < len(success_part_nos):
+        return None, "fallback_no_plan_rank"
+
+    mapping: dict[int, int] = {}
+    seen_ranks: set[int] = set()
+    for _pn, _clip in zip(success_part_nos, clips):
+        try:
+            _r = int(getattr(_clip, "rank", 0) or 0)
+        except (TypeError, ValueError):
+            return None, "fallback_rank_invalid"
+        if _r <= 0:
+            return None, "fallback_no_plan_rank"
+        if _r in seen_ranks:
+            return None, "fallback_rank_collision"
+        seen_ranks.add(_r)
+        mapping[_pn] = _r
+
+    # Validate the rank set is exactly {1, 2, ..., N}. Reject
+    # non-sequential AI emissions (e.g. [1, 3, 5]) rather than
+    # silently re-numbering them.
+    expected_set = set(range(1, len(mapping) + 1))
+    if seen_ranks != expected_set:
+        return None, "fallback_rank_invalid"
+
+    return mapping, "render_plan"

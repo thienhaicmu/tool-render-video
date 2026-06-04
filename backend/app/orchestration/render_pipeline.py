@@ -86,7 +86,10 @@ from app.orchestration.pipeline_cache import (
     _transcription_cache_get,
     _transcription_cache_put,
 )
-from app.orchestration.pipeline_ranking import _compute_output_ranking_entry
+from app.orchestration.pipeline_ranking import (
+    _compute_output_ranking_entry,
+    _resolve_rank_from_plan,
+)
 from app.orchestration.pipeline_config import (
     _resolve_profile,
     _probe_video_duration,  # noqa: F401 (re-exported for routes/render.py)
@@ -982,6 +985,14 @@ def run_render_pipeline(
 
         # ── P5-1 Output Ranking ───────────────────────────────────────────────
         _failed_idx_set = {int(f.get("part_no", 0)) for f in failed_parts}
+        # Sprint 4.G — resolve plan-derived rank mapping BEFORE the
+        # per-part loop so each output_rank_computed event carries the
+        # same `rank_source` tag. Resolver returns (None, "fallback")
+        # when LLM_EMIT_RENDER_PLAN env != "1" — Contract #2 baseline
+        # safe (Sprint 2.2 shim ranks cannot leak when flag is OFF).
+        _plan_rank_map, _rank_source_tag = _resolve_rank_from_plan(
+            _render_plan, scored, _failed_idx_set
+        )
         _rank_entries: list[dict] = []
         for _r_idx, _r_seg in enumerate(scored, start=1):
             if _r_idx in _failed_idx_set:
@@ -1032,9 +1043,30 @@ def run_render_pipeline(
                     "output_rank_score": _rank_entry["output_rank_score"],
                     "ranking_reason": _rank_entry["ranking_reason"],
                     "ranking_components": _rank_entry["ranking_components"],
+                    # Sprint 4.G — surface the rank-source tag so
+                    # downstream WS consumers can attribute the choice.
+                    "rank_source": _rank_source_tag,
                 },
             )
-        _rank_entries.sort(key=lambda x: x["output_score"], reverse=True)
+        # Sprint 4.G — rank assignment split into two branches.
+        # When the resolver returned a plan-derived mapping, ranks come
+        # from there and entries are sorted by output_rank ascending.
+        # Otherwise the legacy score-descending sort + enumerate path
+        # runs verbatim. Sacred Contract #1 keys (`output_rank_score`,
+        # `is_best_output`, `is_best_clip`) are set unconditionally in
+        # both branches.
+        if _plan_rank_map is not None:
+            for _re in _rank_entries:
+                _re["output_rank"]    = _plan_rank_map[_re["part_no"]]
+                _re["is_best_clip"]   = (_re["output_rank"] == 1)
+                _re["is_best_output"] = (_re["output_rank"] == 1)
+            _rank_entries.sort(key=lambda x: x["output_rank"])
+        else:
+            _rank_entries.sort(key=lambda x: x["output_score"], reverse=True)
+            for _ri, _re in enumerate(_rank_entries, start=1):
+                _re["output_rank"]    = _ri
+                _re["is_best_clip"]   = (_ri == 1)
+                _re["is_best_output"] = (_ri == 1)
         if len(_rank_entries) >= 2:
             _conf_margin = _rank_entries[0]["output_score"] - _rank_entries[1]["output_score"]
         else:
@@ -1048,15 +1080,14 @@ def run_render_pipeline(
             _rank_entries[0]["confidence_tier"] = _confidence_tier
             _rank_entries[0]["score_margin"] = round(_conf_margin, 1)
         logger.info(
-            "ranking_truth_audit job=%s confidence=%s margin=%.1f dominant=%s suppressed=%s",
+            "ranking_truth_audit job=%s confidence=%s margin=%.1f dominant=%s suppressed=%s rank_source=%s",
             job_id, _confidence_tier, _conf_margin,
             _rank_entries[0].get("dominant_signal", "") if _rank_entries else "",
             _rank_entries[0].get("suppressed_signals", []) if _rank_entries else [],
+            _rank_source_tag,
         )
-        for _ri, _re in enumerate(_rank_entries, start=1):
-            _re["output_rank"]    = _ri
-            _re["is_best_clip"]   = (_ri == 1)
-            _re["is_best_output"] = (_ri == 1)
+        # Mirror rank assignments back to `scored` seg dicts (both paths).
+        for _re in _rank_entries:
             _seg = scored[_re["part_no"] - 1]
             _seg["output_rank"] = _re["output_rank"]
             _seg["output_score"] = _re["output_score"]
@@ -1107,6 +1138,8 @@ def run_render_pipeline(
                     "best_part_no":    _best_rank_entry["part_no"],
                     "best_score":      _best_rank_entry["output_score"],
                     "best_reason":     _best_rank_entry["ranking_reason"],
+                    # Sprint 4.G — tag the rank provenance for operators.
+                    "rank_source":     _rank_source_tag,
                     "ranking_summary": [
                         {
                             "part_no": e["part_no"],
