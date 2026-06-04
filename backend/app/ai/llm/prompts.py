@@ -77,8 +77,8 @@ For each top-ranked hook:
      and the viewer feels satisfied. Usually 30–80 seconds AFTER the hook.
   4. Target clip duration: {min_sec}–{max_sec} seconds. This spans MANY transcript lines.
      A valid clip typically covers 15–60 [x - y] timestamp markers.
-  5. Check: if ({end} - {start}) < {min_sec} → you must extend further. Do not return it.
-  6. Check: if ({end} - {start}) > {max_sec} → trim to keep the core complete thought.
+  5. Check: if ({{end}} - {{start}}) < {min_sec} → you must extend further. Do not return it.
+  6. Check: if ({{end}} - {{start}}) > {max_sec} → trim to keep the core complete thought.
 
 ⛔ NEVER return a raw hook moment as a clip. A 2–10 second clip is ALWAYS invalid.
 ⛔ NEVER copy [x - y] transcript boundaries directly as start/end. Use arbitrary timestamps.
