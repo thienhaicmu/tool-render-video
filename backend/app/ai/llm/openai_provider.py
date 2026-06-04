@@ -13,8 +13,8 @@ import logging
 import os
 from typing import Optional
 
-from app.ai.analysis.groq.parser import GroqSegment, LLMSegment, parse_segment_response
-from app.ai.analysis.groq.prompts import build_segment_prompt
+from app.ai.llm.parser import LLMSegment, parse_segment_response
+from app.ai.llm.prompts import build_segment_prompt
 
 logger = logging.getLogger("app.render.openai_client")
 logger.info("openai_provider: module loaded (build=2026-06-01.i2-openai)")

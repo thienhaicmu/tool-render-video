@@ -2,11 +2,7 @@
 gemini_provider.py — Google Gemini implementation of segment selection.
 
 Uses the unified google-genai SDK (Gemini 2.0 Flash by default).
-Free tier: 1M tokens/day, 15 RPM. Context window: 1M tokens — large
-enough to skip the aggressive truncation Groq needs.
-
-Reuses the shared prompt template and parser from app.ai.analysis.groq.*
-so prompt evolution stays in one place.
+Free tier: 1M tokens/day, 15 RPM. Context window: 1M tokens.
 
 AI Safety (Contract 3): never raises — returns None on any error.
 """
@@ -16,8 +12,8 @@ import logging
 import os
 from typing import Optional
 
-from app.ai.analysis.groq.parser import GroqSegment, LLMSegment, parse_segment_response
-from app.ai.analysis.groq.prompts import build_segment_prompt
+from app.ai.llm.parser import LLMSegment, parse_segment_response
+from app.ai.llm.prompts import build_segment_prompt
 
 logger = logging.getLogger("app.render.gemini_client")
 logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)")
@@ -28,15 +24,11 @@ logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)
 # accounts where "gemini-flash-latest" works.
 _DEFAULT_MODEL = "gemini-flash-latest"
 
-# Gemini 1M context lets us send much more transcript than Groq.
-# 60K chars ≈ 15K tokens, still under any sane rate limit, captures
-# ~30 min of dense Vietnamese speech.
+# 60K chars ≈ 15K tokens — captures ~30 min of dense Vietnamese speech.
 _MAX_SRT_CHARS = int(os.getenv("GEMINI_MAX_SRT_CHARS", "60000"))
 
-# Hard upper bound on a single Gemini request. Default 30s mirrors
-# GROQ_REQUEST_TIMEOUT. Without this the SDK falls through to its built-in
-# default (~10 min in google-genai 0.x) which is too long to block a render
-# pipeline on. Audit 2026-06-02 P2-B2 follow-up.
+# Hard upper bound on a single Gemini request — prevents the SDK from
+# blocking the render pipeline on its built-in ~10 min default timeout.
 _REQUEST_TIMEOUT_SEC = int(os.getenv("GEMINI_REQUEST_TIMEOUT", "30"))
 
 _MAX_OUTPUT_TOKENS = 4096
@@ -46,6 +38,7 @@ try:
     from google import genai as _genai
     _GENAI_SDK = True
 except ImportError:
+    _genai = None  # type: ignore[assignment]
     _GENAI_SDK = False
 
 
@@ -62,7 +55,7 @@ def select_segments(
 ) -> Optional[list[LLMSegment]]:
     """Send SRT to Gemini and return selected segments.
 
-    Returns None on any failure — caller hard-fails the job in groq_only_mode.
+    Returns None on any failure — caller hard-fails the pipeline.
     """
     try:
         return _run(
@@ -108,7 +101,7 @@ def _run(
         min_sec=min_sec,
         max_sec=max_sec,
         language=language,
-        max_srt_chars=_MAX_SRT_CHARS,  # bigger cap than Groq
+        max_srt_chars=_MAX_SRT_CHARS,
         editorial_hint=editorial_hint,
     )
 
@@ -153,7 +146,7 @@ def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str)
     a plain dict for http_options (Client converts to HttpOptions internally
     — see client.py:448-449 in the installed SDK). Timeout value is in
     MILLISECONDS (client.py:178: `http_opts.timeout / 1000`). The 30s default
-    matches GROQ_REQUEST_TIMEOUT. Override via GEMINI_REQUEST_TIMEOUT env.
+    Override via GEMINI_REQUEST_TIMEOUT env.
     """
     try:
         client = _genai.Client(

@@ -74,16 +74,14 @@ class TestGeminiProvider:
 
 
 class TestLLMDispatcher:
-    def test_dispatches_to_groq_by_default(self):
+    def test_dispatches_to_gemini_by_default(self):
         from app.ai import llm
-        with patch.object(llm, "logger"):
-            with patch("app.ai.analysis.groq.select_segments", return_value=None) as mock_groq:
-                llm.select_segments(
-                    provider="groq",
-                    srt_content="x", output_count=1, min_sec=15, max_sec=60,
-                    video_duration=300, api_key="k",
-                )
-                assert mock_groq.called
+        with patch("app.ai.llm.gemini_provider.select_segments", return_value=None) as mock_gem:
+            llm.select_segments(
+                srt_content="x", output_count=1, min_sec=15, max_sec=60,
+                video_duration=300, api_key="k",
+            )
+            assert mock_gem.called
 
     def test_dispatches_to_gemini(self):
         from app.ai import llm

@@ -56,14 +56,14 @@ export interface ConfigState {
   subDensity:      'auto' | 'low' | 'medium' | 'high'
   subLanguage:     string
   aiAnalysisMode:    'local' | 'cloud' | 'hybrid'
-  aiCloudProvider:   'groq' | 'openai'
+  aiCloudProvider:   'gemini' | 'openai' | 'claude'
   aiCloudApiKey:     string
   aiCloudModel:      string
   aiContentDriven:   boolean
-  // LLM segment selection (Phase I — multi-provider)
+  // LLM segment selection — multi-provider
   llmEnabled:          boolean
-  aiProvider:          'groq' | 'gemini'  // UI only exposes these two
-  llmModel:            string             // also used as gemini model when aiProvider=gemini
+  aiProvider:          'gemini' | 'openai' | 'claude'
+  llmModel:            string
   llmLanguage:         string
 }
 

@@ -115,4 +115,4 @@ class TestDispatcherForAllProviders:
 
     def test_all_four_providers_supported(self):
         from app.ai.llm import SUPPORTED_PROVIDERS
-        assert set(SUPPORTED_PROVIDERS) == {"groq", "gemini", "openai", "claude"}
+        assert set(SUPPORTED_PROVIDERS) == {"gemini", "openai", "claude"}

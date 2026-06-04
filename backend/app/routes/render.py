@@ -630,17 +630,8 @@ def _queue_render_job(job_id: str, effective_channel: str, payload: RenderReques
 @router.post("/process")
 def create_render_job(payload: RenderRequest):
     _coerce_legacy_channel_payload(payload)
-    # Phase D — apply server-wide groq_only default to NEW jobs only when the
-    # API request did not set the field explicitly. Resume/retry paths skip this.
-    # When GROQ_ONLY_DEFAULT is the source of groq_only_mode=True, also auto-enable
-    # groq_analysis_enabled (the Groq-only path requires it; hard-failing here would
-    # surprise users who only set the env flag).
-    if "groq_only_mode" not in payload.model_fields_set and _cfg.GROQ_ONLY_DEFAULT:
-        payload.groq_only_mode = True
-        if "groq_analysis_enabled" not in payload.model_fields_set:
-            payload.groq_analysis_enabled = True
-    # Phase I — apply server-wide LLM provider default to NEW jobs only.
-    # Resume/retry: ai_provider stays as stored (None → groq fallback in dispatcher).
+    # Apply server-wide LLM provider default to NEW jobs only.
+    # Resume/retry: ai_provider stays as stored.
     if "ai_provider" not in payload.model_fields_set:
         payload.ai_provider = _cfg.AI_PROVIDER_DEFAULT
     try:
@@ -701,17 +692,16 @@ def test_cloud_ai(body: dict):
     """Validate cloud AI provider credentials.
 
     Sends a minimal prompt and returns latency. Never touches the render pipeline.
-    Body: { provider: "groq"|"openai", api_key: str, model?: str }
+    Body: { provider: "gemini"|"openai"|"claude", api_key: str, model?: str }
     """
     import time
-    provider = str(body.get("provider") or "groq").lower()
+    provider = str(body.get("provider") or "gemini").lower()
     api_key  = str(body.get("api_key") or "").strip()
     model    = body.get("model") or None
 
-    # If no API key in body, fall back to server env (Phase I: keys live in .env).
+    # If no API key in body, fall back to server env.
     if not api_key:
         _env_map = {
-            "groq":   _cfg.GROQ_API_KEY,
             "gemini": getattr(_cfg, "GEMINI_API_KEY", ""),
             "openai": getattr(_cfg, "OPENAI_API_KEY", ""),
             "claude": getattr(_cfg, "CLAUDE_API_KEY", ""),
@@ -724,7 +714,6 @@ def test_cloud_ai(body: dict):
                    f"{provider.upper()}_API_KEY env empty)",
         )
 
-    _GROQ_BASE_URL = "https://api.groq.com/openai/v1"
     _TEST_MESSAGES = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user",   "content": "Reply with the single word: ready"},
@@ -732,28 +721,7 @@ def test_cloud_ai(body: dict):
 
     t0 = time.monotonic()
     try:
-        if provider == "groq":
-            resolved_model = model or "llama-3.1-8b-instant"
-            try:
-                from groq import Groq as _GroqClient
-                client = _GroqClient(api_key=api_key)
-                resp = client.chat.completions.create(
-                    model=resolved_model,
-                    messages=_TEST_MESSAGES,
-                    max_tokens=8,
-                    temperature=0.0,
-                    timeout=10,
-                )
-            except ImportError:
-                import openai as _openai
-                client = _openai.OpenAI(api_key=api_key, base_url=_GROQ_BASE_URL, timeout=10)
-                resp = client.chat.completions.create(
-                    model=resolved_model,
-                    messages=_TEST_MESSAGES,
-                    max_tokens=8,
-                    temperature=0.0,
-                )
-        elif provider == "openai":
+        if provider == "openai":
             import openai as _openai
             resolved_model = model or "gpt-4o-mini"
             client = _openai.OpenAI(api_key=api_key, timeout=10)

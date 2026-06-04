@@ -162,21 +162,13 @@ export interface RenderRequest {
   ai_analysis_mode?: 'local' | 'cloud' | 'hybrid' | null
   ai_content_driven_selection?: boolean
 
-  // Groq segment selection (single source of truth post-refactor A-G)
-  // LLM segment selection — canonical names (llm_*). groq_* kept for backward compat.
+  // LLM segment selection — canonical names
   llm_enabled?: boolean | null
   llm_model?: string | null
   llm_language?: string | null
   llm_min_quality?: number | null
   llm_mode?: string | null
-  // Legacy groq_* fields — accepted by backend but not sent by new UI code.
-  groq_only_mode?: boolean
-  groq_analysis_enabled?: boolean
-  groq_model?: string | null
-  groq_content_language?: string | null
   ai_provider?: string | null
-  groq_min_quality_score?: number
-  groq_selection_strategy?: string | null
 
 
   // Pro Timeline Steering (UP26)
@@ -270,7 +262,7 @@ export interface JobPart {
   motion_score: number
   duration: number
   message?: string
-  // Groq-selected clip metadata
+  // AI-selected clip metadata (groq_title/groq_reason kept for backward compat with stored jobs)
   clip_name?: string
   groq_title?: string
   groq_reason?: string

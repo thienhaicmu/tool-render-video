@@ -199,28 +199,6 @@ def _run_periodic_cleanup():
             _cleanup_logger.warning("periodic cleanup error: %s", exc)
 
 
-def _groq_health_check_worker():
-    from app.core.config import AI_CLOUD_ENABLED, AI_CLOUD_API_KEY, AI_CLOUD_MODEL
-    _log = logging.getLogger("app.startup.groq")
-    if not AI_CLOUD_ENABLED or not AI_CLOUD_API_KEY:
-        return
-    try:
-        from app.ai.analysis.cloud.groq_provider import GroqProvider
-        provider = GroqProvider(api_key=AI_CLOUD_API_KEY, model=AI_CLOUD_MODEL or None)
-        result = provider._call_api("ping")
-        if result is not None:
-            _log.info("groq_health_check_ok model=%s", AI_CLOUD_MODEL or provider.DEFAULT_MODEL)
-        else:
-            _log.warning(
-                "groq_health_check_failed: API returned None — check AI_CLOUD_API_KEY and AI_CLOUD_MODEL"
-            )
-    except Exception as exc:
-        _log.warning("groq_health_check_error: %s — AI cloud features may not work", exc)
-
-
-def _start_groq_health_check():
-    threading.Thread(target=_groq_health_check_worker, daemon=True, name="groq-health").start()
-
 
 @app.on_event("startup")
 def startup():
@@ -240,7 +218,6 @@ def startup():
     # Re-queue any render jobs that were interrupted by a previous server restart
     recover_pending_render_jobs()
     start_warmup()  # pre-download Whisper models + check deps in background
-    _start_groq_health_check()  # non-blocking — logs warning if AI_CLOUD_API_KEY invalid
     # Pre-load Whisper model into RAM so first job doesn't pay the 5-15s load cost.
     # Uses WARMUP_WHISPER_MODEL env var (default "small" = balanced preset).
     def _whisper_model_warmup():

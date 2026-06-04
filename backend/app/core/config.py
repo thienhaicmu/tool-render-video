@@ -52,26 +52,12 @@ for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, COOKIES_D
 # AI Cloud Analyzer — server-side defaults read from environment / .env
 # These are fallbacks used when RenderRequest does not supply ai_cloud_api_key.
 AI_CLOUD_ENABLED  : bool = os.getenv("AI_CLOUD_ENABLED", "0") == "1"
-AI_CLOUD_PROVIDER : str  = os.getenv("AI_CLOUD_PROVIDER", "groq")
+AI_CLOUD_PROVIDER : str  = os.getenv("AI_CLOUD_PROVIDER", "gemini")
 AI_CLOUD_API_KEY  : str  = os.getenv("AI_CLOUD_API_KEY", "")
 AI_CLOUD_MODEL    : str  = os.getenv("AI_CLOUD_MODEL", "")
 
-# Groq Segment Analysis — SRT transcript → segment selection
-# GROQ_API_KEY falls back to AI_CLOUD_API_KEY so existing config keeps working.
-GROQ_API_KEY         : str = os.getenv("GROQ_API_KEY", AI_CLOUD_API_KEY)
-GROQ_DEFAULT_MODEL   : str = os.getenv("GROQ_DEFAULT_MODEL", "llama-3.1-8b-instant")
-GROQ_REQUEST_TIMEOUT : int = int(os.getenv("GROQ_REQUEST_TIMEOUT", "30"))
-GROQ_MAX_SRT_CHARS   : int = int(os.getenv("GROQ_MAX_SRT_CHARS", "12000"))
-
-# Phase D — server-wide default for groq_only_mode on NEW jobs.
-# Applied only when API request does not explicitly set groq_only_mode.
-# Resume/retry of stored jobs always keeps the original payload value
-# (preserves Sacred Contract 2 — stored records never silently flip).
-GROQ_ONLY_DEFAULT    : bool = os.getenv("GROQ_ONLY_DEFAULT", "0") == "1"
-
-# Phase I — server-wide default LLM provider for NEW jobs.
-# Supported: "groq" | "gemini" | "openai" | "claude". Default "groq" to keep
-# stored jobs working. Override to "gemini" for the FREE 1M-token/day tier.
+# Server-wide default LLM provider for NEW jobs.
+# Supported: "gemini" | "openai" | "claude".
 AI_PROVIDER_DEFAULT  : str  = os.getenv("AI_PROVIDER_DEFAULT", "gemini").strip().lower()
 
 # Per-provider API keys (server env fallback). Resolved in llm_stage._resolve_api_key

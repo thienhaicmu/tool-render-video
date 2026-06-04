@@ -224,7 +224,7 @@ function StepConfigureBase({
     setTestMsg('')
     try {
       const res = await testCloudAi(
-        cfg.aiProvider as 'groq' | 'gemini' | 'openai',
+        cfg.aiProvider as 'gemini' | 'openai' | 'claude',
         '',  // server reads key from .env
         cfg.aiCloudModel || undefined,
       )
@@ -637,9 +637,9 @@ function StepConfigureBase({
 
               {cfg.llmEnabled && (
                 <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {/* Provider selector — only Groq and Gemini */}
+                  {/* Provider selector — Gemini, OpenAI, Claude */}
                   <div style={{ display: 'flex', gap: 4 }}>
-                    {(['groq', 'gemini'] as const).map((p) => (
+                    {(['gemini', 'openai', 'claude'] as const).map((p) => (
                       <button
                         key={p}
                         onClick={() => { setCfgKey('aiProvider', p); setTestStatus('idle') }}
@@ -652,9 +652,9 @@ function StepConfigureBase({
                           transition: 'all .12s',
                         }}
                       >
-                        {p === 'groq' ? 'Groq' : 'Gemini'}
+                        {p === 'gemini' ? 'Gemini' : p === 'openai' ? 'OpenAI' : 'Claude'}
                         <span style={{ fontSize: 9, marginLeft: 6, opacity: 0.7 }}>
-                          {p === 'groq' ? '· 6K TPM' : '· 1M tokens/day'}
+                          {p === 'gemini' ? '· 1M/day' : p === 'openai' ? '· GPT-4o' : '· Sonnet'}
                         </span>
                       </button>
                     ))}
@@ -685,7 +685,7 @@ function StepConfigureBase({
                     type="text"
                     value={cfg.llmModel}
                     onChange={(e) => setCfgKey('llmModel', e.target.value)}
-                    placeholder={cfg.aiProvider === 'groq' ? 'llama-3.3-70b-versatile (optional)' : 'gemini-flash-latest (optional)'}
+                    placeholder={cfg.aiProvider === 'openai' ? 'gpt-4o (optional)' : cfg.aiProvider === 'claude' ? 'claude-sonnet-4-6 (optional)' : 'gemini-2.0-flash (optional)'}
                     style={{
                       width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
                       border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',

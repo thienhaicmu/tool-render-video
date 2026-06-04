@@ -1,15 +1,12 @@
 """
-llm_pipeline.py — LLM pre-render path (Phase B, renamed from groq_only_pipeline).
+llm_pipeline.py — LLM pre-render path.
 
-When payload.groq_only_mode=True, this module REPLACES run_pre_render_scenes().
-The configured LLM becomes the sole authority for segment selection — NO scene
-detection, NO CLIP scoring, NO heuristic viral scoring, NO AI Director override.
+The configured LLM (Gemini / OpenAI / Claude) is the sole authority for
+segment selection — NO scene detection, NO heuristic scoring.
 
 HARD-FAIL semantics (intentional — distinct from AI-module Contract 3):
 This is an ORCHESTRATION module, not an AI module. It MUST raise
-LLMPipelineError on any failure. There is no fallback path — the user
-explicitly opted into LLM-only mode and expects the job to fail loudly
-rather than silently fall back to heuristic selection.
+LLMPipelineError on any failure. There is no fallback path.
 
 Sacred Contracts honoured:
   - Contract 4: only existing JobStage values used (TRANSCRIBING_FULL,
@@ -60,11 +57,11 @@ class LLMPreRenderResult:
 
 
 class LLMPipelineError(RuntimeError):
-    """HARD-FAIL — no fallback in groq_only_mode.
+    """HARD-FAIL — no fallback path.
 
     Raised when any precondition fails or the LLM cannot produce a usable
     segment list. Caller (render_pipeline.py) must propagate this upward
-    to fail the job — there is no recovery path in groq_only_mode.
+    to fail the job.
     """
 
 
@@ -89,12 +86,9 @@ def run_llm_pre_render(
     """
     # ── 1. Pre-flight validation ──────────────────────────────────────────
     if not getattr(payload, "llm_enabled", False):
-        # Phase F1: pipeline is now mandatory for all jobs. This guard was written
-        # for the old optional-mode path. Old stored jobs and misconfigured clients
-        # can arrive with llm_enabled=False; failing them is wrong.
         logger.warning(
             "llm_pipeline: llm_enabled=False — continuing anyway "
-            "(pipeline is mandatory since Phase F1; check GROQ_ONLY_DEFAULT env var)"
+            "(pipeline is mandatory since Phase F1)"
         )
     if getattr(payload, "multi_variant", False):
         # multi_variant requires a separate rendering pass not implemented here.
@@ -108,23 +102,22 @@ def run_llm_pre_render(
         _emit_render_event(
             channel_code=effective_channel,
             job_id=job_id,
-            event="groq_only.multi_variant_degraded",
+            event="llm_pipeline.multi_variant_degraded",
             level="WARNING",
             message="multi_variant not supported in llm_pipeline path — using single variant",
-            step="render.groq_only.preflight",
+            step="render.llm_pipeline.preflight",
         )
     from app.core import config as _cfg
     _provider = (getattr(payload, "ai_provider", "") or "").strip().lower() \
                 or getattr(_cfg, "AI_PROVIDER_DEFAULT", "gemini")
-    # payload-level key: provider-specific field first, then legacy ai_cloud_api_key
+    # payload-level key: provider-specific field first, then generic ai_cloud_api_key
+    _per_key_attr = {"gemini": "gemini_api_key", "openai": "openai_api_key", "claude": "claude_api_key"}
     _payload_key = (
-        (getattr(payload, "gemini_api_key", "") or "") if _provider == "gemini"
-        else (getattr(payload, "groq_api_key", "") or "")
+        (getattr(payload, _per_key_attr.get(_provider, ""), "") or "")
     ).strip() or (getattr(payload, "ai_cloud_api_key", "") or "").strip()
     # env-level key: pick the correct config var for the selected provider
     _env_key = {
         "gemini": getattr(_cfg, "GEMINI_API_KEY", ""),
-        "groq":   getattr(_cfg, "GROQ_API_KEY", ""),
         "openai": getattr(_cfg, "OPENAI_API_KEY", ""),
         "claude": getattr(_cfg, "CLAUDE_API_KEY", ""),
     }.get(_provider, "")
@@ -135,7 +128,7 @@ def run_llm_pre_render(
         )
     if not has_audio_stream(str(source_path)):
         raise LLMPipelineError(
-            "groq_only_mode=True requires source video with an audio stream"
+            "LLM pipeline requires source video with an audio stream"
         )
     if cancel_registry.is_cancelled(job_id):
         raise cancel_registry.JobCancelledError()
@@ -149,10 +142,10 @@ def run_llm_pre_render(
     )
     _emit_render_event(
         channel_code=effective_channel, job_id=job_id,
-        event="groq_only.transcription_started",
+        event="llm_pipeline.transcription_started",
         level="INFO",
         message="LLM pipeline: starting Whisper transcription",
-        step="render.groq_only.transcribe",
+        step="render.llm_pipeline.transcribe",
     )
 
     # ── 3. Whisper full transcription (with heartbeat + cache + resume) ──
@@ -175,11 +168,11 @@ def run_llm_pre_render(
         #
         # Default `base`: sweet spot for Vietnamese — ~85% accuracy (vs ~70%
         # for tiny, ~90% for small) and ~3x faster than small on CPU. LLM
-        # segment selection tolerates the residual error well because Groq/
-        # Gemini infer meaning from context. Override via GROQ_ONLY_WHISPER_MODEL
+        # segment selection tolerates the residual error well because Gemini/
+        # GPT/Claude infer meaning from context. Override via LLM_WHISPER_MODEL
         # for slower-but-accurate (small) or faster-but-lossier (tiny).
         import os as _os
-        _model = (_os.getenv("GROQ_ONLY_WHISPER_MODEL", "base") or tuned["whisper_model"]).strip()
+        _model = (_os.getenv("LLM_WHISPER_MODEL", "base") or tuned["whisper_model"]).strip()
         _engine = getattr(payload, "subtitle_transcription_engine", "default")
         _cache_key = f"{_engine}_{int(bool(getattr(payload, 'highlight_per_word', False)))}"
         _cached = _transcription_cache_get(str(source_path), _model, _cache_key)
@@ -209,10 +202,10 @@ def run_llm_pre_render(
             )
             _emit_render_event(
                 channel_code=effective_channel, job_id=job_id,
-                event="groq_only.transcription.progress",
+                event="llm_pipeline.transcription.progress",
                 level="INFO",
                 message=f"Whisper started (model={_model}, eta≈{_eta_sec:.0f}s)",
-                step="render.groq_only.transcribe",
+                step="render.llm_pipeline.transcribe",
                 context={
                     "model": _model, "engine": _engine,
                     "video_duration_sec": _video_dur,
@@ -268,10 +261,10 @@ def run_llm_pre_render(
                 )
                 _emit_render_event(
                     channel_code=effective_channel, job_id=job_id,
-                    event="groq_only.transcription.done",
+                    event="llm_pipeline.transcription.done",
                     level="INFO",
                     message=f"Whisper done ({_elapsed_sec:.1f}s, {_srt_size_kb:.1f}KB SRT)",
-                    step="render.groq_only.transcribe",
+                    step="render.llm_pipeline.transcribe",
                     context={
                         "elapsed_ms": _ms,
                         "srt_size_bytes": full_srt.stat().st_size if full_srt.exists() else 0,
@@ -286,7 +279,7 @@ def run_llm_pre_render(
                     kind="error",
                 )
                 raise LLMPipelineError(
-                    f"groq_only_mode: Whisper transcription failed: {_exc}"
+                    f"LLM pipeline: Whisper transcription failed: {_exc}"
                 ) from _exc
             finally:
                 _hb_stop.set()
@@ -295,7 +288,7 @@ def run_llm_pre_render(
     # ── 4. Verify SRT not empty ──────────────────────────────────────────
     if not (full_srt.exists() and full_srt.stat().st_size > 0):
         raise LLMPipelineError(
-            "groq_only_mode: SRT empty or missing after transcription"
+            "LLM pipeline: SRT empty or missing after transcription"
         )
 
     # ── 5. Segment-selection stage event ─────────────────────────────────
@@ -305,10 +298,10 @@ def run_llm_pre_render(
     )
     _emit_render_event(
         channel_code=effective_channel, job_id=job_id,
-        event="groq_only.selection_started",
+        event="llm_pipeline.selection_started",
         level="INFO",
         message="LLM pipeline: requesting segment selection from LLM",
-        step="render.groq_only.select",
+        step="render.llm_pipeline.select",
     )
 
     # ── 6. Call LLM via existing wrapper ─────────────────────────────────
@@ -322,12 +315,12 @@ def run_llm_pre_render(
     _min_score = float(getattr(payload, "llm_min_quality", None) or 0.6)
     if scored is None:
         raise LLMPipelineError(
-            f"groq_only_mode: LLM returned no usable segments "
+            f"LLM pipeline: LLM returned no usable segments "
             f"(min_quality_score={_min_score})"
         )
     if not scored:
         raise LLMPipelineError(
-            f"groq_only_mode: LLM returned an empty segment list "
+            f"LLM pipeline: LLM returned an empty segment list "
             f"(min_quality_score={_min_score})"
         )
 
@@ -340,7 +333,7 @@ def run_llm_pre_render(
     ]
     if bad:
         raise LLMPipelineError(
-            f"groq_only_mode: {len(bad)} segments outside video duration "
+            f"LLM pipeline: {len(bad)} segments outside video duration "
             f"(video_duration={video_dur:.2f}s)"
         )
 
@@ -370,7 +363,7 @@ def run_llm_pre_render(
             channel_code=effective_channel, job_id=job_id,
             event="clip_excluded", level="INFO",
             message=f"LLM pipeline clip_exclude: {_before_ex - len(scored)} segments removed",
-            step="render.groq_only.steering",
+            step="render.llm_pipeline.steering",
             context={
                 "excluded_ranges": len(_clip_exclude),
                 "segments_removed": _before_ex - len(scored),
@@ -378,7 +371,7 @@ def run_llm_pre_render(
         )
         if not scored:
             raise LLMPipelineError(
-                "groq_only_mode: clip_exclude removed all LLM segments"
+                "LLM pipeline: clip_exclude removed all segments"
             )
 
     # ── 9. Apply clip_lock (mirror pipeline_pre_render.py 605-619) ───────
@@ -407,7 +400,7 @@ def run_llm_pre_render(
             channel_code=effective_channel, job_id=job_id,
             event="clip_locked", level="INFO",
             message=f"LLM pipeline clip_lock: {len(_locked)} segments promoted to front",
-            step="render.groq_only.steering",
+            step="render.llm_pipeline.steering",
             context={
                 "lock_ranges": len(_clip_lock),
                 "segments_promoted": len(_locked),
@@ -417,10 +410,10 @@ def run_llm_pre_render(
     # ── 10. Emit selection-complete event ────────────────────────────────
     _emit_render_event(
         channel_code=effective_channel, job_id=job_id,
-        event="groq_only.selection_complete",
+        event="llm_pipeline.selection_complete",
         level="INFO",
         message=f"LLM pipeline: {len(scored)} segments selected",
-        step="render.groq_only.select",
+        step="render.llm_pipeline.select",
         context={
             "segment_count": len(scored),
             "source": "llm",

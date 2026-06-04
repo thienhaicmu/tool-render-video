@@ -100,7 +100,7 @@ export interface CloudAiTestResult {
 }
 
 export async function testCloudAi(
-  provider: 'groq' | 'gemini' | 'openai',
+  provider: 'gemini' | 'openai' | 'claude',
   api_key: string,
   model?: string,
 ): Promise<CloudAiTestResult> {

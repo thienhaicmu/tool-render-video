@@ -373,14 +373,11 @@ def run_render_pipeline(
             recovery_notes=_recovery_notes,
         )
 
-        # Phase F1: legacy pipeline_pre_render path removed. All jobs use
-        # groq_only_pipeline. payload.groq_only_mode is ignored — Groq is the
-        # sole segment authority for every job (new + resume + retry).
         _emit_render_event(
             channel_code=effective_channel, job_id=job_id,
-            event="groq_only.mode_active", level="INFO",
-            message="Groq-only mode: Groq is sole segment authority",
-            step="render.groq_only",
+            event="llm_pipeline.mode_active", level="INFO",
+            message="LLM pipeline: AI is sole segment authority",
+            step="render.llm_pipeline",
         )
         _pre = run_llm_pre_render(
             source_path=source_path,

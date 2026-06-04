@@ -1,12 +1,13 @@
 """
-prompts.py — Prompt templates for Groq segment selection.
+prompts.py — Shared prompt template for LLM segment selection.
 
-Versioned here so prompts evolve independently of the API client.
-Groq is called in JSON mode, so the response is guaranteed to be a
-single JSON object. We ask for {"segments": [...]} and the parser
-unwraps the array.
+All providers (Gemini, OpenAI, Claude) use this same template.
+The LLM is called in JSON mode (or equivalent), so the response must be a
+single JSON object with a "segments" array.
 """
 from __future__ import annotations
+
+import os as _os
 
 _SYSTEM = (
     "You are a video editor AI that selects the best short-form clips "
@@ -47,12 +48,9 @@ Return EXACTLY this JSON shape (no other keys, no markdown, no comments):
 Return up to {output_count} segments. Returning fewer is fine if the transcript is short or low-quality — never invent moments that are not in the transcript.
 """
 
-# Hard cap on transcript size. Vietnamese text tokenizes at ~2 chars/token
-# (vs ~4 for English), so 6000 chars ≈ 3000 tokens — safe under the Groq
-# free tier 6000 TPM limit when combined with the ~1500-token prompt overhead.
-# Override via env GROQ_MAX_SRT_CHARS if you have a paid tier with higher TPM.
-import os as _os
-MAX_SRT_CHARS = int(_os.getenv("GROQ_MAX_SRT_CHARS", "6000"))
+# Default cap for providers with tight token limits. High-context providers
+# (Gemini 1M, Claude 200K) can override via max_srt_chars parameter.
+MAX_SRT_CHARS = int(_os.getenv("LLM_MAX_SRT_CHARS", "6000"))
 
 
 def build_segment_prompt(
@@ -66,14 +64,8 @@ def build_segment_prompt(
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for LLM segment selection.
 
-    max_srt_chars overrides the per-module MAX_SRT_CHARS cap. Used by
-    high-context providers (e.g. Gemini 1M context) to skip truncation
-    that's only needed for low-TPM providers like Groq free tier.
-
-    editorial_hint is appended to the system prompt only — the user prompt
-    (which defines the JSON contract) is NEVER modified. This keeps the
-    output format stable while allowing soft editorial preferences to bias
-    segment selection. An empty string means no change from the baseline.
+    max_srt_chars overrides MAX_SRT_CHARS — use for high-context providers.
+    editorial_hint is appended to the system prompt only. Empty = no change.
     """
     cap = max_srt_chars if max_srt_chars is not None else MAX_SRT_CHARS
     truncated = srt_content[:cap]

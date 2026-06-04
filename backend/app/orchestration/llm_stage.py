@@ -1,20 +1,18 @@
 """
 llm_stage.py — LLM SRT analysis stage for the render pipeline.
 
-Called by pipeline_pre_render.py after local segment scoring.
-When groq_analysis_enabled=True:
+Called by the render pipeline after source preparation.
   1. Reads the full SRT transcript
-  2. Calls the configured LLM to select the best segments (respects output_count + duration limits)
+  2. Calls the configured LLM (Gemini / OpenAI / Claude) to select segments
   3. Converts LLMSegment → scored-compatible dicts
-  4. Returns the new scored list, or None on failure (caller keeps local scored)
+  4. Returns the new scored list, or None on failure (caller hard-fails)
 
 AI Safety (Contract 3): never raises — returns None on any error.
 
 Editorial hint system:
   hook_strength and video_type from the payload are translated into a short
-  advisory phrase appended to the LLM system prompt. This biases selection
-  without changing the JSON output contract — the user prompt and parser are
-  untouched. Unknown or default values produce an empty hint (no-op).
+  advisory phrase appended to the LLM system prompt. Unknown or default
+  values produce an empty hint (no-op).
 """
 from __future__ import annotations
 
@@ -23,14 +21,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger("app.render.llm_stage")
-logger.info("llm_stage: module loaded (build=2026-06-04.phase1-rename)")
+logger.info("llm_stage: module loaded (build=2026-06-04.gemini-default)")
 
 try:
-    from app.ai.analysis.groq import GroqSegment, LLMSegment
     from app.ai.llm import select_segments as _llm_select, SUPPORTED_PROVIDERS
-    _GROQ_MODULE_AVAILABLE = True
+    _LLM_MODULE_AVAILABLE = True
 except ImportError as _import_exc:
-    _GROQ_MODULE_AVAILABLE = False
+    _LLM_MODULE_AVAILABLE = False
     logger.warning("llm_stage: llm dispatcher import FAILED — %s", _import_exc)
 
 
@@ -95,13 +92,11 @@ def _resolve_api_key(payload: Any, provider: str) -> tuple[str, str]:
     """
     from app.core import config as _cfg
     _per_provider_attr = {
-        "groq":   "groq_api_key",
         "gemini": "gemini_api_key",
         "openai": "openai_api_key",
         "claude": "claude_api_key",
     }.get(provider, "")
     _per_provider_env = {
-        "groq":   "GROQ_API_KEY",
         "gemini": "GEMINI_API_KEY",
         "openai": "OPENAI_API_KEY",
         "claude": "CLAUDE_API_KEY",
@@ -121,10 +116,6 @@ def _resolve_api_key(payload: Any, provider: str) -> tuple[str, str]:
         _env = (os.getenv(_per_provider_env) or "").strip()
         if _env:
             return _env, f"env.{_per_provider_env}"
-
-    # Legacy fallback for Groq path that already supports GROQ_API_KEY via _cfg
-    if provider == "groq" and getattr(_cfg, "GROQ_API_KEY", ""):
-        return _cfg.GROQ_API_KEY, "env.GROQ_API_KEY (cfg)"
 
     return "", "none"
 
@@ -159,7 +150,7 @@ def _run(
     payload: Any,
     source: dict,
 ) -> Optional[list]:
-    if not _GROQ_MODULE_AVAILABLE:
+    if not _LLM_MODULE_AVAILABLE:
         logger.warning("llm_stage: llm dispatcher not available")
         return None
 
@@ -167,11 +158,11 @@ def _run(
         logger.warning("llm_stage: SRT not available — skipping (path=%s)", full_srt)
         return None
 
-    # Resolve provider — env override applied in route handler, else default groq.
-    provider = (getattr(payload, "ai_provider", None) or "groq").strip().lower()
+    # Resolve provider — env override applied in route handler, else default gemini.
+    provider = (getattr(payload, "ai_provider", None) or "gemini").strip().lower()
     if provider not in SUPPORTED_PROVIDERS:
-        logger.warning("llm_stage: unsupported provider %r — falling back to groq", provider)
-        provider = "groq"
+        logger.warning("llm_stage: unsupported provider %r — falling back to gemini", provider)
+        provider = "gemini"
 
     api_key, _key_source = _resolve_api_key(payload, provider)
     if not api_key:
@@ -256,7 +247,7 @@ def _to_scored_dict(seg: "LLMSegment") -> dict:
         "audio_energy":    50.0,
         # LLM-specific metadata — additive, safe for existing consumers
         "clip_name":   seg.clip_name,
-        "groq_title":  seg.title,
-        "groq_reason": seg.reason,
+        "groq_title":  seg.title,   # kept for backward compat with stored result_json
+        "groq_reason": seg.reason,  # kept for backward compat with stored result_json
         "source":      "llm",
     }
