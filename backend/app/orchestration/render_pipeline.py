@@ -223,6 +223,54 @@ def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
         raise HTTPException(status_code=400, detail=f"Invalid text_layers: {exc}") from exc
 
 
+# Sprint 7.6 FULL (2026-06-05) — derive scored list from RenderPlan.clips
+# when AI emission succeeded. Field-shape MUST match _to_scored_dict at
+# llm_stage.py:263 key-for-key so downstream consumers (pipeline_segment_
+# selection, pipeline_ranking, every stages/part_*.py) see no contract
+# change. Intentional divergence: source="render_plan" vs legacy "llm" —
+# zero string-match consumers (grep audit). NEVER raises (Sacred Contract
+# #3 spirit): any unexpected error returns fallback_scored unchanged so
+# the render keeps moving.
+# See docs/review/SPRINT_7_6_FULL_PLAN_2026-06-05.md.
+def _scored_from_render_plan(render_plan, fallback_scored: list) -> list:
+    try:
+        if render_plan is None or not getattr(render_plan, "clips", None):
+            return fallback_scored
+        derived: list[dict] = []
+        for clip in render_plan.clips:
+            _base = float(getattr(clip, "score", 0.0) or 0.0) * 100.0
+            _viral = (float(getattr(clip, "viral_score", 0.0) or 0.0) * 100.0) or _base
+            _hook = (float(getattr(clip, "hook_score", 0.0) or 0.0) * 100.0) or _base
+            _ret = (float(getattr(clip, "retention_score", 0.0) or 0.0) * 100.0) or _base
+            _start = float(getattr(clip, "start", 0.0) or 0.0)
+            _end = float(getattr(clip, "end", 0.0) or 0.0)
+            _cover = float(getattr(clip, "cover_offset_ratio", 0.0) or 0.0)
+            derived.append({
+                "start":    _start,
+                "end":      _end,
+                "duration": _end - _start,
+                "viral_score":     _viral,
+                "hook_score":      _hook,
+                "motion_score":    50.0,
+                "diversity_score": 50.0,
+                "retention_score": _ret,
+                "audio_energy":    50.0,
+                "clip_name": str(getattr(clip, "clip_name", "") or ""),
+                "ai_title":  str(getattr(clip, "title", "") or ""),
+                "ai_reason": str(getattr(clip, "reason", "") or ""),
+                "source":    "render_plan",
+                "ai_subtitle_style":  str(getattr(clip, "subtitle_style", "") or ""),
+                "content_type_hint":  str(getattr(clip, "content_type", "") or ""),
+                "hook_type":          str(getattr(clip, "hook_type", "") or ""),
+                "cover_hint_ratio":   _cover if _cover > 0 else None,
+                "speech_density":     float(getattr(clip, "speech_density", 0.0) or 0.0),
+                "duration_fit_score": float(getattr(clip, "duration_fit", 0.0) or 0.0) * 100.0,
+            })
+        return derived
+    except Exception:
+        return fallback_scored
+
+
 # _resolve_profile, _probe_video_duration, extract_text_from_srt,
 # _reserve_source_path_in_dir, _reserve_source_path,
 # _sanitize_channel_subdir, _resolve_output_dir
@@ -593,6 +641,29 @@ def run_render_pipeline(
             # via the wire-up itself.
             logger.warning("render_plan wire-up failed (non-fatal): %s", _plan_exc)
             _render_plan = None
+
+        # Sprint 7.6 FULL — derive scored from RenderPlan when AI emit
+        # succeeded. NO-OP when _render_plan is None (legacy fallback
+        # path unchanged) — pinned by tests/test_render_pipeline_scored_
+        # from_render_plan.py.
+        if _render_plan is not None:
+            _scored_before = scored
+            scored = _scored_from_render_plan(_render_plan, fallback_scored=scored)
+            if scored is not _scored_before:
+                total_parts = len(scored)
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="render.plan.scored_derived",
+                    level="INFO",
+                    message=f"scored derived from RenderPlan: {len(scored)} clips",
+                    step="render.llm_pipeline",
+                    context={
+                        "clips_count": len(scored),
+                        "source": "render_plan",
+                        "fallback_count": len(_scored_before),
+                    },
+                )
 
         existing_parts = {int(x["part_no"]): x for x in list_job_parts(job_id)}
         _job_log(effective_channel, job_id, f"Segment building done: {total_parts} parts")
