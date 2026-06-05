@@ -52,6 +52,7 @@ Logger note (same pattern as 6.D-2.1 / 6.D-2.2):
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,6 +76,56 @@ from app.services.render_engine import (
 
 # Preserve original logger name (same pattern as 6.D-2.1 / 6.D-2.2).
 logger = logging.getLogger("app.render")
+
+# Sprint 6 O-4 Commit 1 — feature-flag mirror reads.
+# Same pattern as part_renderer.py / part_render_setup.py /
+# part_render_encode.py / render_pipeline.py (four-site read drift-
+# prevention). No drift possible — every site reads the same env vars
+# deterministically at import time.
+_FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
+_FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
+_FEATURE_BASE_CLIP_VALIDATION_ARTIFACT: bool = (
+    os.getenv("FEATURE_BASE_CLIP_VALIDATION_ARTIFACT", "0") == "1"
+)
+
+
+def _should_skip_raw_part_write(
+    *,
+    part_subtitle_enabled: bool,
+    feature_base_clip_first: bool,
+    feature_overlay_after_base_clip: bool,
+    feature_base_clip_validation_artifact: bool,
+) -> bool:
+    """Sprint 6 audit O-4 predicate — Commit 1 (telemetry-only).
+
+    Returns True when ``raw_part`` has zero downstream readers and
+    ``cut_video`` could be fused into the final render encode. Three
+    consumer sites today:
+
+      C1  per-part Whisper at part_asset_planner.py:209
+      C2  render_base_clip at part_render_encode.py (post Sprint 6 P0 HIGH gate)
+      C3  render_part_smart at part_render_encode.py
+
+    C1 is gated by ``part_subtitle_enabled``. C2 is gated by the same
+    boolean ``_base_clip_consumer_active`` introduced in Sprint 6 P0
+    HIGH. C3 is the only consumer the fuse would replace — its argv
+    would change from ``-i raw_part`` to ``-ss start -t duration -i source``.
+
+    The predicate is pure (no I/O, no side effects) so the truth-table
+    test in tests/test_raw_part_skip_predicate.py can exercise it
+    without constructing a PartRenderContext.
+
+    Sprint 6 audit O-4 Commit 1 ships this predicate AS TELEMETRY ONLY.
+    No skip is wired yet — ``run_cut_stage`` still calls ``cut_video``
+    on every part. A future sprint commit will gate the actual skip on
+    a feature flag (``FEATURE_RAW_PART_SKIP=0`` default) after manual
+    visual review on 3-5 sample renders per SPRINT_PLAN risk register
+    line 302.
+    """
+    base_clip_will_render = feature_base_clip_first and (
+        feature_overlay_after_base_clip or feature_base_clip_validation_artifact
+    )
+    return (not part_subtitle_enabled) and (not base_clip_will_render)
 
 
 @dataclass
@@ -251,6 +302,27 @@ def run_cut_stage(
     write_manifest(ctx.work_dir, _part_manifest)
 
     upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
+
+    # Sprint 6 audit O-4 Commit 1 — telemetry-only predicate evaluation.
+    # Logs which parts WOULD be eligible to skip the raw_part write if the
+    # actual fuse were enabled. No behavior change today. The data shows
+    # up at debug level so production logs stay quiet by default; turn on
+    # render debug logging to see the per-part predicate state.
+    _part_subtitle_enabled = ctx.subtitle_enabled_by_idx.get(idx, False)
+    if _should_skip_raw_part_write(
+        part_subtitle_enabled=_part_subtitle_enabled,
+        feature_base_clip_first=_FEATURE_BASE_CLIP_FIRST,
+        feature_overlay_after_base_clip=_FEATURE_OVERLAY_AFTER_BASE_CLIP,
+        feature_base_clip_validation_artifact=_FEATURE_BASE_CLIP_VALIDATION_ARTIFACT,
+    ):
+        _job_log(
+            ctx.effective_channel,
+            ctx.job_id,
+            f"raw_part_skip_eligible part={idx} predicate=true "
+            f"subtitle_enabled=False base_clip_consumer=False",
+            kind="debug",
+        )
+
     if not (ctx.payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
         _t_cut = time.perf_counter()
         cut_video(str(ctx.source_path), str(raw_part), _effective_start, _effective_end,
