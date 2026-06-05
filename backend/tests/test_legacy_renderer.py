@@ -28,7 +28,11 @@ import inspect
 import pytest
 from unittest.mock import patch, MagicMock
 
-import app.services.render.legacy_renderer as lr_mod
+# Sprint 5.2: render_part / render_part_smart moved to base_clip_renderer.
+# The alias name "lr_mod" stays for stylistic continuity with the existing test
+# code; patches via patch.object(lr_mod, ...) must target the module that owns
+# the function lookups, which is now base_clip_renderer.
+import app.services.render.base_clip_renderer as lr_mod
 
 
 # ---------------------------------------------------------------------------

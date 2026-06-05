@@ -170,7 +170,8 @@ def _argv_uses_nvenc(args: list[str]) -> bool:
     """Return True if any argv token names an NVENC codec.
 
     Sprint 4.2 (audit 2026-06-02 P2-B1): the NVENC_SEMAPHORE is only
-    acquired at a few call sites (base_clip_renderer, legacy_renderer,
+    acquired at a few call sites (base_clip_renderer for render_base_clip,
+    render_part, and render_part_smart after Sprint 5.2 merge; plus
     overlay_compositor). Any other FFmpeg invocation that happens to use
     an NVENC codec would silently exceed the GPU session limit. This
     helper enables _run_ffmpeg_with_retry to detect and protect those
@@ -192,9 +193,10 @@ def _run_ffmpeg_with_retry(
     """Run an FFmpeg subprocess with retry, cancel, and timeout protection.
 
     nvenc_externally_held=True: caller already holds NVENC_SEMAPHORE
-    (e.g. base_clip_renderer at :92, legacy_renderer at :266,
-    overlay_compositor at :133). Skip the internal acquire to avoid
-    double-counting against the GPU session limit.
+    (e.g. base_clip_renderer for render_base_clip, render_part, and
+    render_part_smart after Sprint 5.2; plus overlay_compositor).
+    Skip the internal acquire to avoid double-counting against the
+    GPU session limit.
 
     nvenc_externally_held=False (default): if the argv uses an NVENC
     codec, acquire the semaphore here and release after the subprocess

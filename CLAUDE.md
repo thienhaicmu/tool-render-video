@@ -268,7 +268,8 @@ data/app.db                                         # sole job state — never t
 backend/app/models/schemas.py                       # Pydantic API contracts — additive only, never rename
 backend/app/services/job_manager.py                 # in-process queue — thread safety and queue semantics
 backend/app/services/render/ffmpeg_helpers.py       # 564 lines — real FFmpeg execution layer + NVENC_SEMAPHORE
-backend/app/services/render/legacy_renderer.py      # 491 lines — render_part() core + render_part_smart() wrapper
+backend/app/services/render/base_clip_renderer.py   # ~720 lines (post Sprint 5.2 merge) — render_base_clip + render_part + render_part_smart; owns NVENC semaphore acquire sites
+backend/app/services/render/legacy_renderer.py      # ~10-line shim (post Sprint 5.2) — re-exports render_part / render_part_smart from base_clip_renderer
 backend/app/services/render/clip_ops.py             # 401 lines — clip assembly operations
 backend/app/services/subtitle_engine.py             # 46-line facade — real impl in services/subtitles/
 backend/app/services/db.py                          # DB connection + WAL mode setup
@@ -291,7 +292,7 @@ backend/app/orchestration/pipeline_ranking.py       # consumes RenderPlan ClipPl
 ```
 
 > ⚠️ CORRECTION — `render_engine.py` is 53 lines and is a thin facade. It is NOT the real FFmpeg execution layer.
-> The genuinely dangerous files are `services/render/ffmpeg_helpers.py` (564 lines), `legacy_renderer.py` (491 lines), and `clip_ops.py` (401 lines).
+> Post Sprint 5.2 (2026-06-05): the genuinely dangerous files are `services/render/ffmpeg_helpers.py` (564 lines), `base_clip_renderer.py` (~720 lines, now owns render_base_clip + render_part + render_part_smart), and `clip_ops.py` (401 lines). `legacy_renderer.py` is a 10-line shim re-exporting from `base_clip_renderer`.
 > The NVENC semaphore lives at `services/render/ffmpeg_helpers.py:27-28` — NOT in `render_engine.py`.
 > Any documentation or agent definition that lists `render_engine.py` as the primary FFmpeg risk file is protecting the wrong file.
 
@@ -388,7 +389,7 @@ These constants and code paths protect hardware resources. They are not performa
 
 ### NVENC_MAX_SESSIONS
 
-**Location:** Semaphore defined at `backend/app/services/render/ffmpeg_helpers.py:27-28` (`NVENC_SEMAPHORE = threading.Semaphore(_NVENC_SEM_VALUE)`, default value 3, env override `NVENC_MAX_SESSIONS`). Acquired around every NVENC encode in `services/render/legacy_renderer.py:266`, `base_clip_renderer.py:92,224`, `overlay_compositor.py:133`. `services/render_engine.py` only re-exports the symbol — it is a 53-line facade and does NOT own the semaphore.
+**Location:** Semaphore defined at `backend/app/services/render/ffmpeg_helpers.py:27-28` (`NVENC_SEMAPHORE = threading.Semaphore(_NVENC_SEM_VALUE)`, default value 3, env override `NVENC_MAX_SESSIONS`). Acquired around every NVENC encode in `services/render/base_clip_renderer.py` (render_base_clip @ ~92,224; render_part NVENC `with`-block; render_part_smart motion-crop branch — all merged from legacy_renderer in Sprint 5.2) and `services/render/overlay_compositor.py:133`. `services/render_engine.py` only re-exports the symbol — it is a 53-line facade and does NOT own the semaphore.
 
 **What it does:** Limits the number of simultaneous NVENC GPU hardware encoder sessions.
 
@@ -396,7 +397,7 @@ These constants and code paths protect hardware resources. They are not performa
 
 **What breaks if raised beyond hardware limit:** All concurrent renders fail simultaneously with opaque FFmpeg errors. No warning before failure. Recovery requires restarting all affected jobs. The failure mode is non-obvious and hard to diagnose.
 
-**Known gap (audit 2026-06-02):** The semaphore is acquired only at `base_clip_renderer.py:92` and `legacy_renderer.py:266`. Other FFmpeg call sites (`clip_ops.py`, `motion_crop.py`, `audio_mix_service.py`, `preview/ffmpeg_probers.py`) call FFmpeg without acquiring `NVENC_SEMAPHORE` — if any of those paths happen to invoke an NVENC codec, the limit can be silently exceeded. Future fix: centralize acquire/release inside `_run_ffmpeg_with_retry`, conditioned on argv containing `*_nvenc`.
+**Known gap (audit 2026-06-02):** The semaphore is acquired only at three call sites in `services/render/base_clip_renderer.py` (one each in render_base_clip, render_part, render_part_smart — post Sprint 5.2 merge). Other FFmpeg call sites (`clip_ops.py`, `motion_crop.py`, `audio_mix_service.py`, `preview/ffmpeg_probers.py`) call FFmpeg without acquiring `NVENC_SEMAPHORE` — if any of those paths happen to invoke an NVENC codec, the limit can be silently exceeded. Future fix: centralize acquire/release inside `_run_ffmpeg_with_retry`, conditioned on argv containing `*_nvenc`.
 
 **Rule:** Never change `NVENC_MAX_SESSIONS` without an explicit user request that includes documented reasoning and knowledge of the target hardware class.
 

@@ -19,8 +19,8 @@ import pytest
 from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 
-import app.services.render.legacy_renderer as lr_mod
-from app.services.render.legacy_renderer import render_part, render_part_smart
+import app.services.render.base_clip_renderer as lr_mod
+from app.services.render.base_clip_renderer import render_part, render_part_smart
 
 
 # ---------------------------------------------------------------------------
@@ -51,15 +51,15 @@ def _call_render_part(
     def _mock_ffmpeg(cmd, retry_count=2):
         captured.extend(cmd)
 
-    with patch("app.services.render.legacy_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
-         patch("app.services.render.legacy_renderer._has_audio_stream", return_value=input_has_audio), \
-         patch("app.services.render.legacy_renderer._resolve_fps", return_value=(60, "fps_policy=auto")), \
-         patch("app.services.render.legacy_renderer._run_ffmpeg_with_retry", side_effect=_mock_ffmpeg), \
-         patch("app.services.render.legacy_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
-         patch("app.services.render.legacy_renderer._resolve_codec", return_value="libx264"), \
-         patch("app.services.render.legacy_renderer._map_preset_for_encoder", return_value="slow"), \
-         patch("app.services.render.legacy_renderer._codec_extra_flags", return_value=[]), \
-         patch("app.services.render.legacy_renderer.resolve_ffmpeg_threads", return_value=2):
+    with patch("app.services.render.base_clip_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
+         patch("app.services.render.base_clip_renderer._has_audio_stream", return_value=input_has_audio), \
+         patch("app.services.render.base_clip_renderer._resolve_fps", return_value=(60, "fps_policy=auto")), \
+         patch("app.services.render.base_clip_renderer._run_ffmpeg_with_retry", side_effect=_mock_ffmpeg), \
+         patch("app.services.render.base_clip_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
+         patch("app.services.render.base_clip_renderer._resolve_codec", return_value="libx264"), \
+         patch("app.services.render.base_clip_renderer._map_preset_for_encoder", return_value="slow"), \
+         patch("app.services.render.base_clip_renderer._codec_extra_flags", return_value=[]), \
+         patch("app.services.render.base_clip_renderer.resolve_ffmpeg_threads", return_value=2):
         render_part(
             input_path="/fake/input.mp4",
             output_path="/fake/output.mp4",
@@ -125,17 +125,17 @@ class TestNoneHintPreservesExistingBehavior:
             resolved_preset.append(result)
             return result
 
-        with patch("app.services.render.legacy_renderer.resolve_effect_preset_with_intensity",
+        with patch("app.services.render.base_clip_renderer.resolve_effect_preset_with_intensity",
                    side_effect=_capture_resolve), \
-             patch("app.services.render.legacy_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
-             patch("app.services.render.legacy_renderer._has_audio_stream", return_value=True), \
-             patch("app.services.render.legacy_renderer._resolve_fps", return_value=(60, "fps")), \
-             patch("app.services.render.legacy_renderer._run_ffmpeg_with_retry"), \
-             patch("app.services.render.legacy_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
-             patch("app.services.render.legacy_renderer._resolve_codec", return_value="libx264"), \
-             patch("app.services.render.legacy_renderer._map_preset_for_encoder", return_value="slow"), \
-             patch("app.services.render.legacy_renderer._codec_extra_flags", return_value=[]), \
-             patch("app.services.render.legacy_renderer.resolve_ffmpeg_threads", return_value=2):
+             patch("app.services.render.base_clip_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
+             patch("app.services.render.base_clip_renderer._has_audio_stream", return_value=True), \
+             patch("app.services.render.base_clip_renderer._resolve_fps", return_value=(60, "fps")), \
+             patch("app.services.render.base_clip_renderer._run_ffmpeg_with_retry"), \
+             patch("app.services.render.base_clip_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
+             patch("app.services.render.base_clip_renderer._resolve_codec", return_value="libx264"), \
+             patch("app.services.render.base_clip_renderer._map_preset_for_encoder", return_value="slow"), \
+             patch("app.services.render.base_clip_renderer._codec_extra_flags", return_value=[]), \
+             patch("app.services.render.base_clip_renderer.resolve_ffmpeg_threads", return_value=2):
             render_part(
                 input_path="/fake/input.mp4",
                 output_path="/fake/output.mp4",
@@ -186,16 +186,16 @@ class TestValidHintsMappedToKnownPresets:
             filter_preset_used.append(preset)
             return orig_effect_filter(preset)
 
-        with patch("app.services.render.legacy_renderer._effect_filter", side_effect=_capture), \
-             patch("app.services.render.legacy_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
-             patch("app.services.render.legacy_renderer._has_audio_stream", return_value=True), \
-             patch("app.services.render.legacy_renderer._resolve_fps", return_value=(60, "fps")), \
-             patch("app.services.render.legacy_renderer._run_ffmpeg_with_retry"), \
-             patch("app.services.render.legacy_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
-             patch("app.services.render.legacy_renderer._resolve_codec", return_value="libx264"), \
-             patch("app.services.render.legacy_renderer._map_preset_for_encoder", return_value="slow"), \
-             patch("app.services.render.legacy_renderer._codec_extra_flags", return_value=[]), \
-             patch("app.services.render.legacy_renderer.resolve_ffmpeg_threads", return_value=2):
+        with patch("app.services.render.base_clip_renderer._effect_filter", side_effect=_capture), \
+             patch("app.services.render.base_clip_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
+             patch("app.services.render.base_clip_renderer._has_audio_stream", return_value=True), \
+             patch("app.services.render.base_clip_renderer._resolve_fps", return_value=(60, "fps")), \
+             patch("app.services.render.base_clip_renderer._run_ffmpeg_with_retry"), \
+             patch("app.services.render.base_clip_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
+             patch("app.services.render.base_clip_renderer._resolve_codec", return_value="libx264"), \
+             patch("app.services.render.base_clip_renderer._map_preset_for_encoder", return_value="slow"), \
+             patch("app.services.render.base_clip_renderer._codec_extra_flags", return_value=[]), \
+             patch("app.services.render.base_clip_renderer.resolve_ffmpeg_threads", return_value=2):
             render_part(
                 input_path="/fake/input.mp4",
                 output_path="/fake/output.mp4",
@@ -225,16 +225,16 @@ class TestValidHintsMappedToKnownPresets:
             filter_preset_used.append(preset)
             return orig_effect_filter(preset)
 
-        with patch("app.services.render.legacy_renderer._effect_filter", side_effect=_capture), \
-             patch("app.services.render.legacy_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
-             patch("app.services.render.legacy_renderer._has_audio_stream", return_value=True), \
-             patch("app.services.render.legacy_renderer._resolve_fps", return_value=(60, "fps")), \
-             patch("app.services.render.legacy_renderer._run_ffmpeg_with_retry"), \
-             patch("app.services.render.legacy_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
-             patch("app.services.render.legacy_renderer._resolve_codec", return_value="libx264"), \
-             patch("app.services.render.legacy_renderer._map_preset_for_encoder", return_value="slow"), \
-             patch("app.services.render.legacy_renderer._codec_extra_flags", return_value=[]), \
-             patch("app.services.render.legacy_renderer.resolve_ffmpeg_threads", return_value=2):
+        with patch("app.services.render.base_clip_renderer._effect_filter", side_effect=_capture), \
+             patch("app.services.render.base_clip_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
+             patch("app.services.render.base_clip_renderer._has_audio_stream", return_value=True), \
+             patch("app.services.render.base_clip_renderer._resolve_fps", return_value=(60, "fps")), \
+             patch("app.services.render.base_clip_renderer._run_ffmpeg_with_retry"), \
+             patch("app.services.render.base_clip_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
+             patch("app.services.render.base_clip_renderer._resolve_codec", return_value="libx264"), \
+             patch("app.services.render.base_clip_renderer._map_preset_for_encoder", return_value="slow"), \
+             patch("app.services.render.base_clip_renderer._codec_extra_flags", return_value=[]), \
+             patch("app.services.render.base_clip_renderer.resolve_ffmpeg_threads", return_value=2):
             render_part(
                 input_path="/fake/input.mp4",
                 output_path="/fake/output.mp4",
@@ -267,16 +267,16 @@ class TestInvalidHintIgnored:
             filter_preset_used.append(preset)
             return orig_effect_filter(preset)
 
-        with patch("app.services.render.legacy_renderer._effect_filter", side_effect=_capture), \
-             patch("app.services.render.legacy_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
-             patch("app.services.render.legacy_renderer._has_audio_stream", return_value=True), \
-             patch("app.services.render.legacy_renderer._resolve_fps", return_value=(60, "fps")), \
-             patch("app.services.render.legacy_renderer._run_ffmpeg_with_retry"), \
-             patch("app.services.render.legacy_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
-             patch("app.services.render.legacy_renderer._resolve_codec", return_value="libx264"), \
-             patch("app.services.render.legacy_renderer._map_preset_for_encoder", return_value="slow"), \
-             patch("app.services.render.legacy_renderer._codec_extra_flags", return_value=[]), \
-             patch("app.services.render.legacy_renderer.resolve_ffmpeg_threads", return_value=2):
+        with patch("app.services.render.base_clip_renderer._effect_filter", side_effect=_capture), \
+             patch("app.services.render.base_clip_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
+             patch("app.services.render.base_clip_renderer._has_audio_stream", return_value=True), \
+             patch("app.services.render.base_clip_renderer._resolve_fps", return_value=(60, "fps")), \
+             patch("app.services.render.base_clip_renderer._run_ffmpeg_with_retry"), \
+             patch("app.services.render.base_clip_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
+             patch("app.services.render.base_clip_renderer._resolve_codec", return_value="libx264"), \
+             patch("app.services.render.base_clip_renderer._map_preset_for_encoder", return_value="slow"), \
+             patch("app.services.render.base_clip_renderer._codec_extra_flags", return_value=[]), \
+             patch("app.services.render.base_clip_renderer.resolve_ffmpeg_threads", return_value=2):
             render_part(
                 input_path="/fake/input.mp4",
                 output_path="/fake/output.mp4",
@@ -309,16 +309,16 @@ class TestUserExplicitPresetWins:
             filter_preset_used.append(preset)
             return orig_effect_filter(preset)
 
-        with patch("app.services.render.legacy_renderer._effect_filter", side_effect=_capture), \
-             patch("app.services.render.legacy_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
-             patch("app.services.render.legacy_renderer._has_audio_stream", return_value=True), \
-             patch("app.services.render.legacy_renderer._resolve_fps", return_value=(60, "fps")), \
-             patch("app.services.render.legacy_renderer._run_ffmpeg_with_retry"), \
-             patch("app.services.render.legacy_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
-             patch("app.services.render.legacy_renderer._resolve_codec", return_value="libx264"), \
-             patch("app.services.render.legacy_renderer._map_preset_for_encoder", return_value="slow"), \
-             patch("app.services.render.legacy_renderer._codec_extra_flags", return_value=[]), \
-             patch("app.services.render.legacy_renderer.resolve_ffmpeg_threads", return_value=2):
+        with patch("app.services.render.base_clip_renderer._effect_filter", side_effect=_capture), \
+             patch("app.services.render.base_clip_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
+             patch("app.services.render.base_clip_renderer._has_audio_stream", return_value=True), \
+             patch("app.services.render.base_clip_renderer._resolve_fps", return_value=(60, "fps")), \
+             patch("app.services.render.base_clip_renderer._run_ffmpeg_with_retry"), \
+             patch("app.services.render.base_clip_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
+             patch("app.services.render.base_clip_renderer._resolve_codec", return_value="libx264"), \
+             patch("app.services.render.base_clip_renderer._map_preset_for_encoder", return_value="slow"), \
+             patch("app.services.render.base_clip_renderer._codec_extra_flags", return_value=[]), \
+             patch("app.services.render.base_clip_renderer.resolve_ffmpeg_threads", return_value=2):
             render_part(
                 input_path="/fake/input.mp4",
                 output_path="/fake/output.mp4",
@@ -346,17 +346,17 @@ class TestUserExplicitPresetWins:
             captured_effect_preset_arg.append(effect_preset)
             return orig_resolve(effect_preset, visual_intensity_hint, user_effect_is_explicit)
 
-        with patch("app.services.render.legacy_renderer.resolve_effect_preset_with_intensity",
+        with patch("app.services.render.base_clip_renderer.resolve_effect_preset_with_intensity",
                    side_effect=_track), \
-             patch("app.services.render.legacy_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
-             patch("app.services.render.legacy_renderer._has_audio_stream", return_value=True), \
-             patch("app.services.render.legacy_renderer._resolve_fps", return_value=(60, "fps")), \
-             patch("app.services.render.legacy_renderer._run_ffmpeg_with_retry"), \
-             patch("app.services.render.legacy_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
-             patch("app.services.render.legacy_renderer._resolve_codec", return_value="libx264"), \
-             patch("app.services.render.legacy_renderer._map_preset_for_encoder", return_value="slow"), \
-             patch("app.services.render.legacy_renderer._codec_extra_flags", return_value=[]), \
-             patch("app.services.render.legacy_renderer.resolve_ffmpeg_threads", return_value=2):
+             patch("app.services.render.base_clip_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
+             patch("app.services.render.base_clip_renderer._has_audio_stream", return_value=True), \
+             patch("app.services.render.base_clip_renderer._resolve_fps", return_value=(60, "fps")), \
+             patch("app.services.render.base_clip_renderer._run_ffmpeg_with_retry"), \
+             patch("app.services.render.base_clip_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
+             patch("app.services.render.base_clip_renderer._resolve_codec", return_value="libx264"), \
+             patch("app.services.render.base_clip_renderer._map_preset_for_encoder", return_value="slow"), \
+             patch("app.services.render.base_clip_renderer._codec_extra_flags", return_value=[]), \
+             patch("app.services.render.base_clip_renderer.resolve_ffmpeg_threads", return_value=2):
             render_part(
                 input_path="/fake/input.mp4",
                 output_path="/fake/output.mp4",
@@ -391,16 +391,16 @@ class TestNoFFmpegFilterFromAI:
 
         for hint in ("low", "medium", "high"):
             filter_preset_used.clear()
-            with patch("app.services.render.legacy_renderer._effect_filter", side_effect=_capture), \
-                 patch("app.services.render.legacy_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
-                 patch("app.services.render.legacy_renderer._has_audio_stream", return_value=True), \
-                 patch("app.services.render.legacy_renderer._resolve_fps", return_value=(60, "fps")), \
-                 patch("app.services.render.legacy_renderer._run_ffmpeg_with_retry"), \
-                 patch("app.services.render.legacy_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
-                 patch("app.services.render.legacy_renderer._resolve_codec", return_value="libx264"), \
-                 patch("app.services.render.legacy_renderer._map_preset_for_encoder", return_value="slow"), \
-                 patch("app.services.render.legacy_renderer._codec_extra_flags", return_value=[]), \
-                 patch("app.services.render.legacy_renderer.resolve_ffmpeg_threads", return_value=2):
+            with patch("app.services.render.base_clip_renderer._effect_filter", side_effect=_capture), \
+                 patch("app.services.render.base_clip_renderer.probe_video_metadata", return_value=_FAKE_SRC_META), \
+                 patch("app.services.render.base_clip_renderer._has_audio_stream", return_value=True), \
+                 patch("app.services.render.base_clip_renderer._resolve_fps", return_value=(60, "fps")), \
+                 patch("app.services.render.base_clip_renderer._run_ffmpeg_with_retry"), \
+                 patch("app.services.render.base_clip_renderer.get_ffmpeg_bin", return_value="ffmpeg"), \
+                 patch("app.services.render.base_clip_renderer._resolve_codec", return_value="libx264"), \
+                 patch("app.services.render.base_clip_renderer._map_preset_for_encoder", return_value="slow"), \
+                 patch("app.services.render.base_clip_renderer._codec_extra_flags", return_value=[]), \
+                 patch("app.services.render.base_clip_renderer.resolve_ffmpeg_threads", return_value=2):
                 render_part(
                     input_path="/fake/input.mp4",
                     output_path="/fake/output.mp4",
@@ -430,13 +430,13 @@ class TestRenderEngineShimValid:
     def test_render_part_smart_importable_from_render_engine(self):
         """render_part_smart is re-exported from render_engine."""
         from app.services.render_engine import render_part_smart as rps_shim
-        from app.services.render.legacy_renderer import render_part_smart as rps_direct
+        from app.services.render.base_clip_renderer import render_part_smart as rps_direct
         assert rps_shim is rps_direct, "render_engine re-export must be same object"
 
     def test_render_part_importable_from_render_engine(self):
         """render_part is re-exported from render_engine."""
         from app.services.render_engine import render_part as rp_shim
-        from app.services.render.legacy_renderer import render_part as rp_direct
+        from app.services.render.base_clip_renderer import render_part as rp_direct
         assert rp_shim is rp_direct, "render_engine re-export must be same object"
 
     def test_render_engine_shim_render_part_smart_accepts_hint(self):
