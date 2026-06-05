@@ -51,8 +51,9 @@ class LLMSegment:
     cover_offset_ratio: float = 0.0  # thumbnail moment as fraction of clip (0=absent)
 
 
-# Backward-compat alias — existing consumers that reference GroqSegment still work.
-GroqSegment = LLMSegment
+# Sprint 7.6 LITE (2026-06-05): GroqSegment = LLMSegment backward-compat
+# alias deleted. Zero callers verified across backend/ + tests/ + frontend/
+# at audit time. See docs/review/SPRINT_7_6_LITE_GROQSEGMENT_ALIAS_2026-06-05.md.
 
 
 def sanitize_clip_name(raw: str) -> str:
