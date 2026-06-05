@@ -109,6 +109,13 @@ class TextLayerConfig(BaseModel):
 
 
 class RenderRequest(BaseModel):
+    # Sprint 5.3: pin extra="ignore" explicitly. Stored job records in
+    # data/app.db may carry deprecated/renamed keys (e.g. groq_* aliases
+    # pending DB migration in Sprint 5.4). Silent-drop is the contract
+    # the replay path relies on. Pydantic v2 already defaults to ignore,
+    # but pinning makes Sacred Contract #2 readable at the class header.
+    model_config = ConfigDict(extra="ignore")
+
     # Source
     source_mode: Optional[str] = "local"
     source_quality_mode: str = "standard_1080"
