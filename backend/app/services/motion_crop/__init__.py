@@ -85,8 +85,10 @@ from app.services.motion_crop.trackerless import (  # noqa: F401 (re-exported)
     _trackerless_crop_side_fill_ratio,
     _apply_trackerless_center_guard,
 )
-# Sprint 6.D-3.7: legacy motion-path implementation.
-from app.services.motion_crop.legacy import (  # noqa: F401 (re-exported)
+# Sprint 6.D-3.7: pixel-diff motion-path implementation.
+# Sprint 7.1 (2026-06-05): module renamed legacy.py → motion_pixel_diff.py
+# to stop misleading auditors. Symbols + behaviour unchanged.
+from app.services.motion_crop.motion_pixel_diff import (  # noqa: F401 (re-exported)
     detect_motion_center,
     _build_motion_path_legacy,
     _detect_scene_ranges_in_clip,
@@ -318,7 +320,8 @@ def _apply_velocity_limiter(
 
 
 # Sprint 6.D-3.7: detect_motion_center, _build_motion_path_legacy,
-# _detect_scene_ranges_in_clip → moved to app.services.motion_crop.legacy.
+# _detect_scene_ranges_in_clip → moved to app.services.motion_crop.motion_pixel_diff
+# (file renamed from legacy.py in Sprint 7.1).
 # Re-exported at top of this file. build_motion_path dispatcher stays
 # here because it routes to build_subject_path (also here).
 
