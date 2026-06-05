@@ -113,16 +113,15 @@ _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1
 # When both flags are ON: overlay composite path → fallback render_part_smart() on failure.
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
 
-# Sprint 6 P0 HIGH — feature flag: keep writing base_clip.mp4 as a parallel A/B
-# validation artifact when FEATURE_BASE_CLIP_FIRST=1 but the overlay-composite
-# consumer (FEATURE_OVERLAY_AFTER_BASE_CLIP) is OFF. Default OFF — base_clip is
-# only rendered when a downstream consumer will actually read it. Opt-in flag
-# preserves backwards compatibility for users who relied on the validation
-# artifact for A/B forensics. SCHEDULED FOR REMOVAL 2026-07-05 after a 30-day
-# settling period — see docs/review/SPRINT_6_BASE_CLIP_GATE_2026-06-05.md.
-_FEATURE_BASE_CLIP_VALIDATION_ARTIFACT: bool = (
-    os.getenv("FEATURE_BASE_CLIP_VALIDATION_ARTIFACT", "0") == "1"
-)
+# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed.
+# The validation-artifact opt-in (Sprint 6 P0 HIGH) was a 30-day settling
+# escape hatch for users who relied on writing base_clip.mp4 as an A/B
+# forensics artifact when FEATURE_BASE_CLIP_FIRST=1 but the overlay
+# composite consumer was off. Zero usage observed during the settling
+# period → flag removed. The gate at part_render_encode.py:172 now reads
+# `if FEATURE_BASE_CLIP_FIRST and FEATURE_OVERLAY_AFTER_BASE_CLIP:` —
+# base_clip.mp4 is only rendered when the overlay-composite consumer is
+# actually downstream. See docs/review/SPRINT_7_2_VALIDATION_FLAG_REMOVAL_2026-06-05.md.
 
 # Sprint 4.D — feature flag: when ON, ask the LLM to emit a full RenderPlan
 # (clips + subtitle_policy + camera_strategy + audio_plan + overlays) via

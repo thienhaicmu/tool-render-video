@@ -84,9 +84,8 @@ logger = logging.getLogger("app.render")
 # deterministically at import time.
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
-_FEATURE_BASE_CLIP_VALIDATION_ARTIFACT: bool = (
-    os.getenv("FEATURE_BASE_CLIP_VALIDATION_ARTIFACT", "0") == "1"
-)
+# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
+# see render_pipeline.py for the closure rationale.
 
 
 def _should_skip_raw_part_write(
@@ -94,7 +93,6 @@ def _should_skip_raw_part_write(
     part_subtitle_enabled: bool,
     feature_base_clip_first: bool,
     feature_overlay_after_base_clip: bool,
-    feature_base_clip_validation_artifact: bool,
 ) -> bool:
     """Sprint 6 audit O-4 predicate — Commit 1 (telemetry-only).
 
@@ -122,9 +120,7 @@ def _should_skip_raw_part_write(
     visual review on 3-5 sample renders per SPRINT_PLAN risk register
     line 302.
     """
-    base_clip_will_render = feature_base_clip_first and (
-        feature_overlay_after_base_clip or feature_base_clip_validation_artifact
-    )
+    base_clip_will_render = feature_base_clip_first and feature_overlay_after_base_clip
     return (not part_subtitle_enabled) and (not base_clip_will_render)
 
 
@@ -313,7 +309,6 @@ def run_cut_stage(
         part_subtitle_enabled=_part_subtitle_enabled,
         feature_base_clip_first=_FEATURE_BASE_CLIP_FIRST,
         feature_overlay_after_base_clip=_FEATURE_OVERLAY_AFTER_BASE_CLIP,
-        feature_base_clip_validation_artifact=_FEATURE_BASE_CLIP_VALIDATION_ARTIFACT,
     ):
         _job_log(
             ctx.effective_channel,

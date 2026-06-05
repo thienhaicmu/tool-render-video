@@ -25,10 +25,8 @@ logger = logging.getLogger("app.render")
 
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
-# Sprint 6 P0 HIGH — see render_pipeline.py for full rationale.
-_FEATURE_BASE_CLIP_VALIDATION_ARTIFACT: bool = (
-    os.getenv("FEATURE_BASE_CLIP_VALIDATION_ARTIFACT", "0") == "1"
-)
+# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
+# see render_pipeline.py for the closure rationale.
 
 
 # Sprint 6.D-2.1: PartRenderContext dataclass extracted to a dedicated
