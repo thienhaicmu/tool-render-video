@@ -791,13 +791,19 @@ Running `npm run build` updates the live served UI correctly.
 
 Caveat: `emptyOutDir: true` will wipe `backend/static-v2/` on every build — do not place hand-authored assets there.
 
-### Issue 2 — Mixed DB Connection Model (PARTIALLY RESOLVED 2026-06-05 Sprint 5.4)
+### Issue 2 — Mixed DB Connection Model (RESOLVED-WITH-DEFER 2026-06-05 via Sprint 7.7 prep)
 
 After Sprint 5.4 the surface is two patterns, not three:
 - `db_conn()` ctxmgr for HTTP path / bounded ops (`jobs_repo` `upsert_job`/`get_job`/etc., `creator_repo`, `feedback_repo`, `download_repo` after Sprint 5.4 commit `9347613`).
 - `_thread_conn()` for render hot path only (`update_job_progress` + `upsert_job_part` in `db/jobs_repo.py`).
 
-Full `_thread_conn → db_conn` unification stays DEFERRED until per-frame progress-write benchmarking confirms no perf regression. Sprint 5.4 audit: `docs/review/DB_CONNECTION_AUDIT_2026-06-05.md`.
+Full `_thread_conn → db_conn` unification (Sprint 7.7 actual) is **DEFERRED INDEFINITELY** per empirical benchmark in `docs/review/SPRINT_7_7_BENCHMARK_PREP_2026-06-05.md`: `db_conn` is ~165x slower per call than `_thread_conn` (3,152 μs vs 18.8 μs median on dev hardware, WAL mode). The 1:1 helper swap fails the wall-time-delta-under-1% criterion by ~12,000% — the connection-open + WAL-init + close cycle dominates. The two-pattern surface stays as steady state.
+
+**Re-open triggers (any one):** connection-pool dependency added (e.g. `sqlalchemy`); SQLite migrated to a server-mode database; write rate drops 100x at source (Sprint 7.7 Path C: rate-limit + unify); render thread pool migration breaks `_thread_conn` reuse semantics.
+
+Sprint 5.4 audit (original 3 preconditions): `docs/review/DB_CONNECTION_AUDIT_2026-06-05.md`.
+Sprint 7.7 prep audit (empirical justification for indefinite defer): `docs/review/SPRINT_7_7_BENCHMARK_PREP_2026-06-05.md`.
+Sprint 7.x execution runbook (Phase 5 defer record): `docs/review/SPRINT_7_EXECUTION_PLAN_2026-06-05.md`.
 
 ### Issue 3 — Cache Location (RESOLVED 2026-06-05 via Sprint 6 P1)
 
