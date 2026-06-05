@@ -19,11 +19,11 @@ from app.domain.render_plan import RenderPlan
 logger = logging.getLogger("app.render.gemini_client")
 logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)")
 
-# Gemini Flash (latest): fast, free tier, 1M context. The "latest" alias
-# auto-tracks the newest Flash release the account has access to —
-# important because raw "gemini-2.0-flash" returns quota-exceeded on many
-# accounts where "gemini-flash-latest" works.
-_DEFAULT_MODEL = "gemini-2.5-flash"
+# Gemini Pro (latest): powerful, free tier, 1M context. The "latest" alias
+# auto-tracks the newest Pro release the account has access to —
+# important because raw "gemini-2.5-pro" returns quota-exceeded on many
+# accounts where "gemini-2.5-pro" works.
+_DEFAULT_MODEL = "gemini-2.5-pro"
 
 # 60K chars ≈ 15K tokens — captures ~30 min of dense Vietnamese speech.
 _MAX_SRT_CHARS = int(os.getenv("GEMINI_MAX_SRT_CHARS", "60000"))
