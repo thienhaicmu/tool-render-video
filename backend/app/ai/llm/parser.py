@@ -389,6 +389,7 @@ def _segment_to_clip_dict(seg: dict) -> dict:
         "reason": seg.get("reason", ""),
         "hook_type": seg.get("hook_type", ""),
         "content_type": seg.get("content_type", ""),
+        "subtitle_style": seg.get("subtitle_style", ""),
         "viral_score": seg.get("viral_score", 0.0),
         "hook_score": seg.get("hook_score", 0.0),
         "retention_score": seg.get("retention_score", 0.0),

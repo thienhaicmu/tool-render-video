@@ -58,6 +58,7 @@ class ClipPlan:
     # Extended segment metadata mirrored from LLMSegment for forward-compat.
     hook_type: str = ""           # question|reveal|contrast|humor|emotion|statement
     content_type: str = ""        # interview|vlog|tutorial|commentary|montage|gaming
+    subtitle_style: str = ""      # viral|clean|story|gaming|"" = inherit (Sprint 7.6 FULL)
     viral_score: float = 0.0
     hook_score: float = 0.0
     retention_score: float = 0.0
