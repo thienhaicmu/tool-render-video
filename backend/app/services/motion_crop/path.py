@@ -61,7 +61,7 @@ from app.services.motion_crop.trackerless import (
     _trackerless_offcenter_ratio,
     _apply_trackerless_center_guard,
 )
-from app.services.motion_crop.legacy import _build_motion_path_legacy
+from app.services.motion_crop.motion_pixel_diff import _build_motion_path_legacy
 
 logger = logging.getLogger("app.services.motion_crop")
 
