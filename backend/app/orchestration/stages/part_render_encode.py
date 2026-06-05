@@ -115,6 +115,8 @@ _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_C
 # see render_pipeline.py for the closure rationale.
 # Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
+# Sprint 7.8 (2026-06-05): motion-aware extension flag — see render_pipeline.py.
+_FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
 
 
 @dataclass
@@ -310,13 +312,24 @@ def run_render_encode(
     )
     try:
         if not _overlay_composite_succeeded:
-            if _raw_part_absent and not ctx.payload.motion_aware_crop:
+            if _raw_part_absent:
                 # Sprint 7.4 — fused cut+render: read source with input-side
                 # -ss/-t instead of from a pre-cut raw_part.mp4.
+                # Sprint 7.8 — extended to motion-aware case. Motion-aware
+                # branch is selected by motion_aware_crop kwarg INSIDE
+                # render_part_from_source. Windowed motion cache key
+                # prevents stale hits across different windows of the
+                # same source.
                 _source_duration = float(part_timeline.source_end - part_timeline.source_start)
+                _windowed_motion_ck = (
+                    f"{_motion_ck}-w{part_timeline.source_start:.3f}-{_source_duration:.3f}"
+                    if (_motion_ck and ctx.payload.motion_aware_crop)
+                    else _motion_ck
+                )
                 logger.info(
-                    "render_part_from_source_invoked part=%d source_start=%.3f duration=%.3f",
+                    "render_part_from_source_invoked part=%d source_start=%.3f duration=%.3f motion_aware=%s",
                     idx, part_timeline.source_start, _source_duration,
+                    ctx.payload.motion_aware_crop,
                 )
                 render_part_from_source(
                     str(ctx.source_path),
@@ -351,6 +364,10 @@ def run_render_encode(
                     ffmpeg_threads=ctx.ffmpeg_threads,
                     content_type=seg.get("content_type_hint", "vlog"),
                     visual_intensity_hint=ctx.vis_intensity_hint,
+                    motion_aware_crop=ctx.payload.motion_aware_crop,
+                    reframe_mode=getattr(ctx.payload, "reframe_mode", "subject"),
+                    _motion_cache_key=_windowed_motion_ck,
+                    _fallback_flag=_motion_crop_fallback,
                 )
             else:
                 render_part_smart(

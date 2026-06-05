@@ -88,6 +88,8 @@ _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_C
 # see render_pipeline.py for the closure rationale.
 # Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
+# Sprint 7.8 (2026-06-05): motion-aware extension flag — see render_pipeline.py.
+_FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
 
 
 def _should_skip_raw_part_write(
@@ -317,8 +319,17 @@ def run_cut_stage(
         feature_overlay_after_base_clip=_FEATURE_OVERLAY_AFTER_BASE_CLIP,
     )
     _payload_motion_aware = bool(getattr(ctx.payload, "motion_aware_crop", False))
+    # Sprint 7.8 — motion-aware extension. Both FEATURE_RAW_PART_SKIP=1 AND
+    # FEATURE_RAW_PART_SKIP_MOTION_AWARE=1 are required to engage the
+    # motion-aware-crop fuse path. Sprint 7.4 case (motion_aware=False)
+    # gate-state preserved when 7.8 flag is OFF.
+    _motion_aware_fuse_enabled = (
+        _FEATURE_RAW_PART_SKIP_MOTION_AWARE and _payload_motion_aware
+    )
     _skip_active = (
-        _skip_predicate_fires and _FEATURE_RAW_PART_SKIP and not _payload_motion_aware
+        _skip_predicate_fires
+        and _FEATURE_RAW_PART_SKIP
+        and (not _payload_motion_aware or _motion_aware_fuse_enabled)
     )
     if _skip_predicate_fires:
         _job_log(
@@ -327,6 +338,8 @@ def run_cut_stage(
             f"raw_part_skip_eligible part={idx} predicate=true "
             f"subtitle_enabled=False base_clip_consumer=False "
             f"motion_aware={_payload_motion_aware} flag={_FEATURE_RAW_PART_SKIP} "
+            f"motion_aware_flag={_FEATURE_RAW_PART_SKIP_MOTION_AWARE} "
+            f"motion_aware_fuse_enabled={_motion_aware_fuse_enabled} "
             f"active={_skip_active}",
             kind="debug",
         )

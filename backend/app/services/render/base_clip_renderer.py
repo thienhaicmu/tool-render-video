@@ -782,6 +782,14 @@ def render_part_from_source(
     content_type: str = "vlog",
     visual_intensity_hint: str | None = None,
     force_accurate_cut: bool = False,
+    # Sprint 7.8 (2026-06-05) — motion-aware fused cut+render branch.
+    # When motion_aware_crop=True, delegates to render_motion_aware_crop
+    # with source_start_sec/source_duration_sec window kwargs instead of
+    # passing through render_part. Defaults preserve Sprint 7.4 behaviour.
+    motion_aware_crop: bool = False,
+    reframe_mode: str = "subject",
+    _motion_cache_key: str | None = None,
+    _fallback_flag: list | None = None,
 ) -> None:
     """Sprint 7.4 (2026-06-05) — fused cut+render for the raw_part skip path.
 
@@ -790,19 +798,74 @@ def render_part_from_source(
     through to render_part's new ``_source_seek_*`` kwargs (input-side seek
     by default, output-side when ``force_accurate_cut=True``).
 
-    Eliminates the raw_part.mp4 intermediate when ALL of:
+    Sprint 7.8 (2026-06-05) added the motion-aware-crop branch. When
+    ``motion_aware_crop=True``, delegates to ``render_motion_aware_crop``
+    with ``source_start_sec``/``source_duration_sec`` so the OpenCV read
+    loop pulls only the window. Force-OFF fallback: leave the kwarg False.
+
+    Eliminates the raw_part.mp4 intermediate when:
       - part_subtitle_enabled = False           (no per-part Whisper consumer)
       - base_clip will not render                (Sprint 6 P0 HIGH gate inactive)
-      - motion_aware_crop = False                (Sprint 7.8 will add the motion-aware branch)
+      - motion_aware_crop = False (Sprint 7.4) OR True (Sprint 7.8)
 
-    Sprint 7.4 SCOPE = Option E only. Motion-aware branch raises
-    NotImplementedError — Sprint 7.8 will plumb -ss/-t through
-    render_motion_aware_crop.
-
-    See docs/review/SPRINT_7_4_RAW_PART_FUSE_2026-06-05.md.
+    See docs/review/SPRINT_7_4_RAW_PART_FUSE_2026-06-05.md and
+    docs/review/SPRINT_7_8_MOTION_AWARE_FUSE_PLAN_2026-06-05.md.
     """
-    # Sprint 7.4 ships Option E only. The motion_aware path stays on the
-    # cut→render_part_smart code path for now.
+    if motion_aware_crop:
+        # Sprint 7.8 — fused cut + motion-aware-crop. NVENC semaphore
+        # acquired here (same pattern as render_part_smart lines 633-640)
+        # so total acquires per part stays at 1.
+        from app.services.motion_crop import render_motion_aware_crop
+        _crop_codec = _resolve_codec(video_codec, encoder_mode=encoder_mode)
+        _crop_ctx = NVENC_SEMAPHORE if _crop_codec in ("h264_nvenc", "hevc_nvenc") else None
+        if _crop_ctx is not None:
+            _crop_ctx.acquire()
+        try:
+            try:
+                return render_motion_aware_crop(
+                    input_path=source_path,
+                    output_path=output_path,
+                    aspect_ratio=aspect_ratio,
+                    scale_x_percent=float(scale_x),
+                    scale_y_percent=float(scale_y),
+                    subtitle_file=subtitle_ass if add_subtitle and subtitle_ass and Path(subtitle_ass).exists() else None,
+                    title_text=title_text if add_title_overlay else None,
+                    effect_preset=effect_preset,
+                    transition_sec=transition_sec,
+                    video_codec=video_codec,
+                    video_crf=video_crf,
+                    video_preset=video_preset,
+                    audio_bitrate=audio_bitrate,
+                    retry_count=retry_count,
+                    encoder_mode=encoder_mode,
+                    output_fps=output_fps,
+                    reup_mode=reup_mode,
+                    reup_overlay_enable=reup_overlay_enable,
+                    reup_overlay_opacity=reup_overlay_opacity,
+                    reup_bgm_enable=reup_bgm_enable,
+                    reup_bgm_path=reup_bgm_path,
+                    reup_bgm_gain=reup_bgm_gain,
+                    playback_speed=playback_speed,
+                    text_layers=text_layers,
+                    loudnorm_enabled=loudnorm_enabled,
+                    ffmpeg_threads=ffmpeg_threads,
+                    content_type=content_type,
+                    _cache_key=_motion_cache_key,
+                    source_start_sec=float(source_start),
+                    source_duration_sec=float(source_duration),
+                    source_seek_force_accurate=force_accurate_cut,
+                )
+            except Exception as exc:
+                logger.warning("Motion-aware fused crop failed, fallback to render_part: %s", exc)
+                if _fallback_flag is not None:
+                    _fallback_flag.append(str(exc))
+                # Fall through to the standard render_part path below (no
+                # motion crop, but window-cut + final encode still fused).
+        finally:
+            if _crop_ctx is not None:
+                _crop_ctx.release()
+
+    # Sprint 7.4 path (non-motion-aware) or Sprint 7.8 motion-crop fallback.
     return render_part(
         input_path=source_path,
         output_path=output_path,

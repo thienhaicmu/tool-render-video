@@ -122,6 +122,15 @@ _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_C
 # settling window. See docs/review/SPRINT_7_4_RAW_PART_FUSE_2026-06-05.md.
 _FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
 
+# Sprint 7.8 (2026-06-05) — feature flag: when ON in combination with
+# FEATURE_RAW_PART_SKIP=1, extends the fused cut+render path to the
+# motion-aware-crop case (payload.motion_aware_crop=True). Requires
+# FEATURE_RAW_PART_SKIP=1 to engage — Sacred Contract #2 spirit
+# preserved (operators already on 7.4 see zero behaviour change on
+# 7.8 deploy until they explicitly opt in via this second flag).
+# Default OFF. See docs/review/SPRINT_7_8_MOTION_AWARE_FUSE_PLAN_2026-06-05.md.
+_FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
+
 # Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed.
 # The validation-artifact opt-in (Sprint 6 P0 HIGH) was a 30-day settling
 # escape hatch for users who relied on writing base_clip.mp4 as an A/B

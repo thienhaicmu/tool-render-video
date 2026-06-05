@@ -387,6 +387,15 @@ def render_motion_aware_crop(
     subtitle_safe_bottom_ratio: float | None = None,
     content_type: str = "vlog",
     _cache_key: str | None = None,
+    # Sprint 7.8 (2026-06-05) — fused-source-window mode. When both kwargs
+    # are set, input_path is the FULL source file and the encode processes
+    # ONLY the [source_start_sec, source_start_sec + duration] window via
+    # `cv2.VideoCapture.set(CAP_PROP_POS_FRAMES)` + FFmpeg `-ss/-t`. When
+    # None (default), pre-7.8 behaviour byte-identical: whole file processed.
+    # See docs/review/SPRINT_7_8_MOTION_AWARE_FUSE_PLAN_2026-06-05.md.
+    source_start_sec: float | None = None,
+    source_duration_sec: float | None = None,
+    source_seek_force_accurate: bool = False,
 ) -> str:
     layer_count = len(text_layers or [])
     if layer_count:
@@ -407,6 +416,24 @@ def render_motion_aware_crop(
         cfg.temporal_smooth_window,
         cfg.reframe_mode,
     )
+
+    # Sprint 7.8 — fused-source-window mode flag. When True, the OpenCV
+    # cap is seeked to the window start and the encode loop is bounded.
+    # When False, pre-7.8 whole-file processing path runs unchanged.
+    _fuse_window_mode = (
+        source_start_sec is not None and source_duration_sec is not None
+    )
+    if _fuse_window_mode:
+        # Sub-functions (build_motion_path / _has_subject_in_sample /
+        # _build_motion_path_legacy / _detect_scene_ranges_in_clip) still
+        # scan the whole source; the OpenCV main loop here is what limits
+        # output to the window. Centers list covers full source — indexed
+        # below with start_frame offset. Per-window subject-path optim is
+        # deferred to Sprint 7.9 per audit plan.
+        logger.info(
+            "motion_crop_fuse_window start=%.3fs duration=%.3fs accurate=%s",
+            source_start_sec, source_duration_sec, source_seek_force_accurate,
+        )
 
     src_w, src_h, probe_fps = ffprobe_video_info(input_path)
 
@@ -442,7 +469,12 @@ def render_motion_aware_crop(
 
     # Build crop path (subject-tracking or legacy motion)
     scene_ranges = None
-    if cfg.scene_aware_tracking:
+    # Sprint 7.8 — scene-aware tracking forced OFF in fused window mode.
+    # Scene boundaries are in source-coords; the windowed encode would
+    # mis-map them. Single-scene tracking still runs. Scene-aware-in-fuse
+    # is Sprint 7.9+ if measured to matter.
+    _scene_aware = cfg.scene_aware_tracking and not _fuse_window_mode
+    if _scene_aware:
         scene_ranges = _detect_scene_ranges_in_clip(input_path, cfg)
         if not scene_ranges or len(scene_ranges) <= 1:
             scene_ranges = None
@@ -563,6 +595,19 @@ def render_motion_aware_crop(
     bgm_ok = reup_bgm_enable and bgm_path and Path(bgm_path).is_file()
     input_has_audio = has_audio_stream(input_path)
 
+    # Sprint 7.8 — fused-source-window: the stdin (input 0, rawvideo) is
+    # already pre-windowed by the OpenCV loop below (seek + bound). The
+    # file input (input 1) must also be windowed so audio aligns: `-ss N
+    # -t M` BEFORE `-i input_path` for input-side fast seek (default), or
+    # AFTER for output-side accurate seek when `source_seek_force_accurate`.
+    _input1_pre: list[str] = []
+    _input1_post: list[str] = []
+    if _fuse_window_mode:
+        if source_seek_force_accurate:
+            _input1_post = ["-ss", str(float(source_start_sec)), "-t", str(float(source_duration_sec))]
+        else:
+            _input1_pre = ["-ss", str(float(source_start_sec)), "-t", str(float(source_duration_sec))]
+
     ffmpeg_cmd = [
         get_ffmpeg_bin(),
         "-hide_banner", "-loglevel", "error", "-nostats", "-y",
@@ -570,7 +615,9 @@ def render_motion_aware_crop(
         "-s", f"{out_w}x{out_h}",
         "-r", str(src_fps),
         "-i", "-",
+        *_input1_pre,
         "-i", input_path,
+        *_input1_post,
     ]
     if bgm_ok:
         ffmpeg_cmd += ["-stream_loop", "-1", "-i", bgm_path]
@@ -634,12 +681,29 @@ def render_motion_aware_crop(
                 ffmpeg_cmd += ["-af", ",".join(af_parts)]
     ffmpeg_cmd += [*codec_flags, "-c:a", "aac", "-b:a", audio_bitrate, "-shortest", output_path]
 
+    # Sprint 7.8 — pre-compute window seek frame + budget. centers list
+    # (from build_motion_path or _build_motion_path_legacy) covers the
+    # FULL source — we index into it with start_frame offset so window
+    # frame_idx=0 reads centers[start_frame]. This trades subject-path
+    # build speed for correctness; window-only build deferred to 7.9.
+    _window_start_frame = 0
+    _window_frame_budget: int | None = None
+    if _fuse_window_mode:
+        _window_start_frame = max(0, int(round(float(source_start_sec) * src_fps)))
+        _window_frame_budget = max(1, int(round(float(source_duration_sec) * src_fps)))
+
     attempt = 0
     while True:
         attempt += 1
         cap = cv2.VideoCapture(input_path)
         if not cap.isOpened():
             raise RuntimeError(f"Cannot open input video: {input_path}")
+        # Sprint 7.8 — seek cap to window start. Forward-skim alignment
+        # for VBR/keyframe-edge sources is bounded inside the loop below
+        # (180 frames ≈ 3s at 60fps). force_accurate_cut on the FFmpeg
+        # side is the operator escape if frame-precise alignment matters.
+        if _fuse_window_mode and _window_start_frame > 0:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, float(_window_start_frame))
         proc = None
         try:
             proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -648,8 +712,14 @@ def render_motion_aware_crop(
                 ok, frame = cap.read()
                 if not ok or frame is None:
                     break
+                # Sprint 7.8 — bound the encode loop to the window budget.
+                if _window_frame_budget is not None and frame_idx >= _window_frame_budget:
+                    break
 
-                x, y = centers[frame_idx] if frame_idx < len(centers) else centers[-1]
+                # Sprint 7.8 — centers covers FULL source; offset by start_frame
+                # so window frame_idx=0 maps to source frame=start_frame.
+                _center_idx = frame_idx + _window_start_frame if _fuse_window_mode else frame_idx
+                x, y = centers[_center_idx] if _center_idx < len(centers) else centers[-1]
                 crop = frame[y:y + crop_h_src, x:x + crop_w_src]
                 if crop.size == 0:
                     crop = frame
