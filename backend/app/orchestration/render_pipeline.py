@@ -113,6 +113,17 @@ _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1
 # When both flags are ON: overlay composite path → fallback render_part_smart() on failure.
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
 
+# Sprint 6 P0 HIGH — feature flag: keep writing base_clip.mp4 as a parallel A/B
+# validation artifact when FEATURE_BASE_CLIP_FIRST=1 but the overlay-composite
+# consumer (FEATURE_OVERLAY_AFTER_BASE_CLIP) is OFF. Default OFF — base_clip is
+# only rendered when a downstream consumer will actually read it. Opt-in flag
+# preserves backwards compatibility for users who relied on the validation
+# artifact for A/B forensics. SCHEDULED FOR REMOVAL 2026-07-05 after a 30-day
+# settling period — see docs/review/SPRINT_6_BASE_CLIP_GATE_2026-06-05.md.
+_FEATURE_BASE_CLIP_VALIDATION_ARTIFACT: bool = (
+    os.getenv("FEATURE_BASE_CLIP_VALIDATION_ARTIFACT", "0") == "1"
+)
+
 # Sprint 4.D — feature flag: when ON, ask the LLM to emit a full RenderPlan
 # (clips + subtitle_policy + camera_strategy + audio_plan + overlays) via
 # ai.llm.select_render_plan BEFORE the Sprint 2.2 builder shim runs. If the
