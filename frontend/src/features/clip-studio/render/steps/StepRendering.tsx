@@ -376,7 +376,7 @@ function StepRenderingBase({
               {aiAnalysisMode === 'hybrid' ? '⚡ Hybrid' : aiAnalysisMode === 'cloud' ? '☁ Cloud' : '💻 Local'}
             </span>
             {aiAnalysisMode !== 'local' && aiCloudProvider && (
-              <span className="rd-ai-provider">{aiCloudProvider === 'groq' ? 'Groq' : 'OpenAI'}</span>
+              <span className="rd-ai-provider">{aiCloudProvider === 'openai' ? 'OpenAI' : aiCloudProvider === 'claude' ? 'Claude' : 'Gemini'}</span>
             )}
           </div>
           <div className="rd-ai-body">

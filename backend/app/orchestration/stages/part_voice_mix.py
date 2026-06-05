@@ -38,7 +38,7 @@ Returns:
   mutable lists, part_manifest field writes, and final_part replacement.
 
 Sacred Contracts honored:
-  - #3 AI return-None contract: TTS lives in app.services.tts_service
+  - #3 AI return-None contract: TTS lives in app.services.audio.tts
        (not under backend/app/ai/**, so #3 doesn't apply cardinally),
        but the spirit holds: failures are caught locally, voice_failed
        events emitted with error_code=VOICE001, render continues.
@@ -76,7 +76,7 @@ from pathlib import Path
 
 from app.core.config import TEMP_DIR
 from app.domain.manifests import BaseClipManifest
-from app.orchestration.audio_pipeline import _maybe_cleanup_narration_audio
+from app.orchestration.audio_cleanup import _maybe_cleanup_narration_audio
 from app.orchestration.pipeline_config import extract_text_from_srt
 from app.orchestration.pipeline_segment_selection import _get_effective_playback_speed
 from app.orchestration.render_events import (
@@ -85,10 +85,10 @@ from app.orchestration.render_events import (
     _safe_unlink,
 )
 from app.orchestration.stages.part_render_context import PartRenderContext
-from app.services.audio_mix_service import mix_narration_audio
+from app.services.audio.mix import mix_narration_audio
 from app.services.manifest_writer import write_manifest
 from app.services.subtitle_engine import slice_srt_to_text
-from app.services.tts_service import generate_narration_audio
+from app.services.audio.tts import generate_narration_audio
 
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5d).
 logger = logging.getLogger("app.render")
@@ -344,3 +344,20 @@ def run_part_voice_mix(
                 exception=mix_exc,
                 traceback_text=traceback.format_exc(),
             )
+
+    # Sprint 6 P0-3 (audit 2026-06-04 O-13): the raw per-part TTS MP3
+    # (and any *.cleaned.mp3 variant emitted by _maybe_cleanup_narration_
+    # audio) sit in TEMP_DIR/{job_id}/voice/ until the per-job prune.
+    # By this point mix_narration_audio has already merged the audio
+    # into final_part, so the intermediate files are dead weight. The
+    # glob targets only files written by this part (part_{idx:03d}*.mp3)
+    # — ctx.voice_audio_path (a manual user-supplied audio file) lives
+    # under a different name and is never matched. Best-effort cleanup;
+    # never raises.
+    try:
+        _voice_dir = TEMP_DIR / ctx.job_id / "voice"
+        if _voice_dir.exists():
+            for _artifact in _voice_dir.glob(f"part_{idx:03d}*.mp3"):
+                _safe_unlink(_artifact)
+    except Exception:
+        pass

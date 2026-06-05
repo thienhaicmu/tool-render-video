@@ -33,6 +33,7 @@ from app.services.db import (
     close_thread_conn,
 )
 from app.services.subtitle_engine import has_audio_stream
+from app.services.render_engine import nvenc_available
 from app.services import cancel_registry
 from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.services.report_service import append_rows
@@ -61,7 +62,7 @@ from app.orchestration.asset_pipeline import (  # noqa: F401 (re-exported for te
     _maybe_prepend_asset_intro,
     _maybe_prepend_remotion_hook_intro,
 )
-from app.orchestration.audio_pipeline import (
+from app.orchestration.audio_cleanup import (
     _maybe_cleanup_narration_audio,  # noqa: F401 (re-exported for tests/test_audio_cleanup_pipeline.py + test_audio_pipeline.py)
 )
 from app.orchestration.qa_pipeline import (  # noqa: F401 (re-exported for tests/test_qa_pipeline.py::test_qa_functions_re_exported_from_render_pipeline asserts all 7)
@@ -79,17 +80,27 @@ from app.orchestration.pipeline_source_prep import prepare_render_source
 from app.orchestration.pipeline_narration import run_manual_voice_tts
 from app.orchestration.stages.part_renderer import PartRenderContext  # noqa: F401 (passed via PartRenderContext init in run_render_loop)
 from app.orchestration.pipeline_render_loop import run_render_loop
-# pipeline_pre_render removed in Phase F1 — all jobs now use groq_only_pipeline.
-from app.orchestration.groq_only_pipeline import run_groq_only_pre_render
+# pipeline_pre_render removed in Phase F1 — all jobs now use llm_pipeline.
+from app.orchestration.llm_pipeline import run_llm_pre_render
 from app.orchestration.pipeline_cache import (
     _transcription_cache_get,
     _transcription_cache_put,
 )
-from app.orchestration.pipeline_ranking import _compute_output_ranking_entry
+from app.orchestration.pipeline_ranking import (
+    _compute_output_ranking_entry,
+    _resolve_rank_from_plan,
+)
 from app.orchestration.pipeline_config import (
     _resolve_profile,
     _probe_video_duration,  # noqa: F401 (re-exported for routes/render.py)
 )
+# Sprint 4.D — RenderPlan AI-emission wire-up. Sprint 4.H removed the
+# Sprint 2.2 builder shim that previously ran as the fallback path; when
+# the LLM_EMIT_RENDER_PLAN flag is OFF (default) ctx.render_plan stays
+# None and the Sprint 4.E/F/G stage resolvers fall back to the legacy
+# payload-derived logic — Sacred Contract #2 baseline preservation.
+from app.ai.llm import select_render_plan as _llm_select_render_plan
+from app.db.jobs_repo import update_render_plan
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
 # final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
@@ -101,6 +112,26 @@ _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1
 # Requires FEATURE_BASE_CLIP_FIRST=1.  OFF by default.
 # When both flags are ON: overlay composite path → fallback render_part_smart() on failure.
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
+
+# Sprint 6 P0 HIGH — feature flag: keep writing base_clip.mp4 as a parallel A/B
+# validation artifact when FEATURE_BASE_CLIP_FIRST=1 but the overlay-composite
+# consumer (FEATURE_OVERLAY_AFTER_BASE_CLIP) is OFF. Default OFF — base_clip is
+# only rendered when a downstream consumer will actually read it. Opt-in flag
+# preserves backwards compatibility for users who relied on the validation
+# artifact for A/B forensics. SCHEDULED FOR REMOVAL 2026-07-05 after a 30-day
+# settling period — see docs/review/SPRINT_6_BASE_CLIP_GATE_2026-06-05.md.
+_FEATURE_BASE_CLIP_VALIDATION_ARTIFACT: bool = (
+    os.getenv("FEATURE_BASE_CLIP_VALIDATION_ARTIFACT", "0") == "1"
+)
+
+# Sprint 4.D — feature flag: when ON, ask the LLM to emit a full RenderPlan
+# (clips + subtitle_policy + camera_strategy + audio_plan + overlays) via
+# ai.llm.select_render_plan BEFORE the Sprint 2.2 builder shim runs. If the
+# AI returns a RenderPlan we use it directly; if it returns None or raises,
+# we fall back to the shim path — Sacred Contract #3 absolute. Default OFF
+# preserves baseline behaviour (Sacred Contract #2). Sprint 4.E-G will
+# migrate stage decision logic to read this AI-emitted plan.
+_FEATURE_LLM_EMIT_RENDER_PLAN: bool = os.getenv("LLM_EMIT_RENDER_PLAN", "0") == "1"
 
 logger = logging.getLogger("app.render")
 
@@ -126,7 +157,7 @@ logger = logging.getLogger("app.render")
 # _maybe_append_asset_outro, _maybe_apply_asset_logo
 # → moved to app.orchestration.asset_pipeline (Phase 4B)
 
-# _maybe_cleanup_narration_audio → moved to app.orchestration.audio_pipeline (Phase 4D)
+# _maybe_cleanup_narration_audio → moved to app.orchestration.audio_cleanup (Phase 4D)
 
 
 # _PROGRESS_TICK_SEC, _render_progress_timer → moved to app.orchestration.render_events (Phase 4D)
@@ -166,10 +197,9 @@ _render_active_count: list[int] = [0]   # mutable int; guarded by _render_active
 
 
 def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
+    from app.services.text_overlay import normalize_text_layers
     try:
         raw_layers = [x.model_dump() if hasattr(x, "model_dump") else dict(x) for x in (payload.text_layers or [])]
-        if len(raw_layers) > MAX_TEXT_LAYERS:
-            raise ValueError(f"text_layers exceeds maximum {MAX_TEXT_LAYERS}")
         return normalize_text_layers(raw_layers)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid text_layers: {exc}") from exc
@@ -373,16 +403,13 @@ def run_render_pipeline(
             recovery_notes=_recovery_notes,
         )
 
-        # Phase F1: legacy pipeline_pre_render path removed. All jobs use
-        # groq_only_pipeline. payload.groq_only_mode is ignored — Groq is the
-        # sole segment authority for every job (new + resume + retry).
         _emit_render_event(
             channel_code=effective_channel, job_id=job_id,
-            event="groq_only.mode_active", level="INFO",
-            message="Groq-only mode: Groq is sole segment authority",
-            step="render.groq_only",
+            event="llm_pipeline.mode_active", level="INFO",
+            message="LLM pipeline: AI is sole segment authority",
+            step="render.llm_pipeline",
         )
-        _pre = run_groq_only_pre_render(
+        _pre = run_llm_pre_render(
             source_path=source_path,
             source=source,
             work_dir=work_dir,
@@ -407,6 +434,148 @@ def run_render_pipeline(
         _seg_max_sec = _pre.seg_max_sec
         # full_srt and full_srt_available initialized before scene detection (Phase 45 hoist).
         # _early_transcription_done=True means Phase 45 already ran Whisper — subtitle block skips.
+
+        # Sprint 4.D + 4.H — RenderPlan acquisition (AI-emission only).
+        # When LLM_EMIT_RENDER_PLAN=1 the orchestrator asks the LLM to
+        # emit a full RenderPlan directly via ai.llm.select_render_plan
+        # and persists it. When the flag is OFF (default) _render_plan
+        # stays None — the Sprint 4.E/F/G stage resolvers fall back to
+        # the legacy payload-derived logic, preserving Sacred Contract
+        # #2 baseline behaviour byte-identical.
+        #
+        # Sprint 4.H removed the Sprint 2.2 builder shim path. The
+        # shim previously reconstructed LLMSegment objects from the
+        # scored list and produced a RenderPlan via
+        # render_plan_builder.build_render_plan; every Sprint 4
+        # consume site already handled ctx.render_plan=None so the
+        # shim was redundant scaffolding once 4.E/F/G landed.
+        #
+        # Outer try/except is the Sacred Contract #3 belt-and-braces —
+        # a future refactor must not be able to take down a render
+        # via the wire-up itself.
+        _render_plan = None
+        try:
+            if _FEATURE_LLM_EMIT_RENDER_PLAN:
+                try:
+                    from app.core import config as _ai_cfg
+                    _ai_provider = (getattr(payload, "ai_provider", "") or "").strip().lower() \
+                        or getattr(_ai_cfg, "AI_PROVIDER_DEFAULT", "gemini")
+                    _per_key_attr = {
+                        "gemini": "gemini_api_key",
+                        "openai": "openai_api_key",
+                        "claude": "claude_api_key",
+                    }
+                    _ai_payload_key = (
+                        (getattr(payload, _per_key_attr.get(_ai_provider, ""), "") or "").strip()
+                        or (getattr(payload, "ai_cloud_api_key", "") or "").strip()
+                    )
+                    _ai_env_key = {
+                        "gemini": getattr(_ai_cfg, "GEMINI_API_KEY", ""),
+                        "openai": getattr(_ai_cfg, "OPENAI_API_KEY", ""),
+                        "claude": getattr(_ai_cfg, "CLAUDE_API_KEY", ""),
+                    }.get(_ai_provider, "")
+                    _ai_api_key = _ai_payload_key or _ai_env_key
+                    _ai_srt_content = ""
+                    if full_srt_available and full_srt and Path(full_srt).exists():
+                        try:
+                            _ai_srt_content = Path(full_srt).read_text(encoding="utf-8")
+                        except Exception:
+                            _ai_srt_content = ""
+                    _ai_video_duration = float(source.get("duration") or 0.0)
+                    # Reuse llm_stage's editorial-hint builder so Sprint 3
+                    # CreatorContext integration flows through identically
+                    # to the legacy select_segments path.
+                    try:
+                        from app.orchestration.llm_stage import _build_editorial_hint as _ai_hint_fn
+                        _ai_editorial_hint = _ai_hint_fn(payload)
+                    except Exception:
+                        _ai_editorial_hint = ""
+                    logger.info(
+                        "render_plan: LLM_EMIT_RENDER_PLAN=1 — attempting AI emission (provider=%s)",
+                        _ai_provider,
+                    )
+                    _render_plan = _llm_select_render_plan(
+                        provider=_ai_provider,
+                        srt_content=_ai_srt_content,
+                        output_count=int(getattr(payload, "output_count", 1) or 1),
+                        min_sec=float(_seg_min_sec),
+                        max_sec=float(_seg_max_sec),
+                        video_duration=_ai_video_duration,
+                        api_key=_ai_api_key,
+                        model=getattr(payload, "llm_model", None) or None,
+                        language=getattr(payload, "llm_language", "auto") or "auto",
+                        editorial_hint=_ai_editorial_hint,
+                    )
+                    if _render_plan is not None:
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="render.plan.ai_emitted",
+                            level="INFO",
+                            message="RenderPlan emitted by AI",
+                            step="render.llm_pipeline",
+                            context={
+                                "clips_count": len(_render_plan.clips),
+                                "schema_version": _render_plan.schema_version,
+                                "provider": _ai_provider,
+                            },
+                        )
+                    else:
+                        # Sprint 4.H — shim path retired. ctx.render_plan
+                        # stays None and the stage resolvers fall back
+                        # to the legacy payload-derived logic. Event
+                        # name kept for backward compat with operator
+                        # tooling that grepped for it during 4.D-4.G.
+                        _emit_render_event(
+                            channel_code=effective_channel,
+                            job_id=job_id,
+                            event="render.plan.ai_fallback",
+                            level="WARNING",
+                            message="AI emission returned None — render_plan left unset",
+                            step="render.llm_pipeline",
+                            context={"reason": "select_render_plan_returned_none"},
+                        )
+                except Exception as _ai_exc:
+                    logger.warning("render_plan AI emission failed (non-fatal): %s", _ai_exc)
+                    _render_plan = None
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="render.plan.ai_fallback",
+                        level="WARNING",
+                        message=f"AI emission raised — render_plan left unset: {_ai_exc}",
+                        step="render.llm_pipeline",
+                        context={
+                            "reason": "exception",
+                            "error_type": type(_ai_exc).__name__,
+                        },
+                    )
+
+            # Sprint 4.H — persistence runs only when AI emission
+            # succeeded. Flag-OFF / AI-failed jobs leave the
+            # render_plan_json column NULL (additive-schema safe).
+            if _render_plan is not None:
+                update_render_plan(job_id, _render_plan.to_json())
+                _emit_render_event(
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                    event="render.plan.persisted",
+                    level="INFO",
+                    message="RenderPlan persisted",
+                    step="render.llm_pipeline",
+                    context={
+                        "clips_count": len(_render_plan.clips),
+                        "schema_version": _render_plan.schema_version,
+                    },
+                )
+        except Exception as _plan_exc:
+            # Defensive guard around the whole block. select_render_plan
+            # + update_render_plan are themselves never-raise, but a
+            # future refactor must not be able to take down a render
+            # via the wire-up itself.
+            logger.warning("render_plan wire-up failed (non-fatal): %s", _plan_exc)
+            _render_plan = None
+
         existing_parts = {int(x["part_no"]): x for x in list_job_parts(job_id)}
         _job_log(effective_channel, job_id, f"Segment building done: {total_parts} parts")
         # Diagnostic: per-segment selection summary (always at INFO for QA traceability)
@@ -744,6 +913,7 @@ def run_render_pipeline(
             sub_translate_clean=_sub_translate_clean,
             sub_translate_failed_parts=_sub_translate_failed_parts,
             recovery_notes=_recovery_notes,
+            render_plan=_render_plan,
         )
         # Phase A-7: render loop moved to pipeline_render_loop.run_render_loop().
         # part_ctx.ffmpeg_threads is finalized inside run_render_loop after contention throttle.
@@ -810,6 +980,14 @@ def run_render_pipeline(
 
         # ── P5-1 Output Ranking ───────────────────────────────────────────────
         _failed_idx_set = {int(f.get("part_no", 0)) for f in failed_parts}
+        # Sprint 4.G — resolve plan-derived rank mapping BEFORE the
+        # per-part loop so each output_rank_computed event carries the
+        # same `rank_source` tag. Resolver returns (None, "fallback")
+        # when LLM_EMIT_RENDER_PLAN env != "1" — Contract #2 baseline
+        # safe (Sprint 2.2 shim ranks cannot leak when flag is OFF).
+        _plan_rank_map, _rank_source_tag = _resolve_rank_from_plan(
+            _render_plan, scored, _failed_idx_set
+        )
         _rank_entries: list[dict] = []
         for _r_idx, _r_seg in enumerate(scored, start=1):
             if _r_idx in _failed_idx_set:
@@ -860,9 +1038,30 @@ def run_render_pipeline(
                     "output_rank_score": _rank_entry["output_rank_score"],
                     "ranking_reason": _rank_entry["ranking_reason"],
                     "ranking_components": _rank_entry["ranking_components"],
+                    # Sprint 4.G — surface the rank-source tag so
+                    # downstream WS consumers can attribute the choice.
+                    "rank_source": _rank_source_tag,
                 },
             )
-        _rank_entries.sort(key=lambda x: x["output_score"], reverse=True)
+        # Sprint 4.G — rank assignment split into two branches.
+        # When the resolver returned a plan-derived mapping, ranks come
+        # from there and entries are sorted by output_rank ascending.
+        # Otherwise the legacy score-descending sort + enumerate path
+        # runs verbatim. Sacred Contract #1 keys (`output_rank_score`,
+        # `is_best_output`, `is_best_clip`) are set unconditionally in
+        # both branches.
+        if _plan_rank_map is not None:
+            for _re in _rank_entries:
+                _re["output_rank"]    = _plan_rank_map[_re["part_no"]]
+                _re["is_best_clip"]   = (_re["output_rank"] == 1)
+                _re["is_best_output"] = (_re["output_rank"] == 1)
+            _rank_entries.sort(key=lambda x: x["output_rank"])
+        else:
+            _rank_entries.sort(key=lambda x: x["output_score"], reverse=True)
+            for _ri, _re in enumerate(_rank_entries, start=1):
+                _re["output_rank"]    = _ri
+                _re["is_best_clip"]   = (_ri == 1)
+                _re["is_best_output"] = (_ri == 1)
         if len(_rank_entries) >= 2:
             _conf_margin = _rank_entries[0]["output_score"] - _rank_entries[1]["output_score"]
         else:
@@ -876,15 +1075,14 @@ def run_render_pipeline(
             _rank_entries[0]["confidence_tier"] = _confidence_tier
             _rank_entries[0]["score_margin"] = round(_conf_margin, 1)
         logger.info(
-            "ranking_truth_audit job=%s confidence=%s margin=%.1f dominant=%s suppressed=%s",
+            "ranking_truth_audit job=%s confidence=%s margin=%.1f dominant=%s suppressed=%s rank_source=%s",
             job_id, _confidence_tier, _conf_margin,
             _rank_entries[0].get("dominant_signal", "") if _rank_entries else "",
             _rank_entries[0].get("suppressed_signals", []) if _rank_entries else [],
+            _rank_source_tag,
         )
-        for _ri, _re in enumerate(_rank_entries, start=1):
-            _re["output_rank"]    = _ri
-            _re["is_best_clip"]   = (_ri == 1)
-            _re["is_best_output"] = (_ri == 1)
+        # Mirror rank assignments back to `scored` seg dicts (both paths).
+        for _re in _rank_entries:
             _seg = scored[_re["part_no"] - 1]
             _seg["output_rank"] = _re["output_rank"]
             _seg["output_score"] = _re["output_score"]
@@ -935,6 +1133,8 @@ def run_render_pipeline(
                     "best_part_no":    _best_rank_entry["part_no"],
                     "best_score":      _best_rank_entry["output_score"],
                     "best_reason":     _best_rank_entry["ranking_reason"],
+                    # Sprint 4.G — tag the rank provenance for operators.
+                    "rank_source":     _rank_source_tag,
                     "ranking_summary": [
                         {
                             "part_no": e["part_no"],

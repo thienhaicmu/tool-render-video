@@ -37,14 +37,13 @@ class ChannelInfo(BaseModel):
 # ── Render ───────────────────────────────────────────────────────────────
 
 class PrepareSourceRequest(BaseModel):
+    # extra="ignore" preserves backward compat with stored payloads that still
+    # carry deprecated fields (e.g. legacy youtube_url) from the pre-Sprint-1.2
+    # YouTube render path. Unknown fields are silently dropped instead of raising.
+    model_config = ConfigDict(extra="ignore")
     source_mode: Optional[str] = "local"
-    youtube_url: Optional[str] = ""
     source_video_path: Optional[str] = ""
     session_id: Optional[str] = None  # client-provided UUID; server generates one if absent
-
-
-class DownloadHealthRequest(BaseModel):
-    youtube_url: Optional[str] = ""
 
 
 class DownloadBatchRequest(BaseModel):
@@ -57,8 +56,11 @@ class DownloadRetryRequest(BaseModel):
 
 
 class QuickProcessRequest(BaseModel):
-    source: str = "youtube"
-    url: str = ""
+    # extra="ignore" preserves backward compat with legacy payloads that may
+    # still carry deprecated YouTube fields (url, etc.) from the pre-Sprint-1.2 path.
+    model_config = ConfigDict(extra="ignore")
+    source: str = "local"
+    url: str = ""  # deprecated, unused after Sprint 1.2 (kept for stored payload compat)
     path: str = ""
     output: str = ""
     resize_width: Optional[int] = None
@@ -107,6 +109,13 @@ class TextLayerConfig(BaseModel):
 
 
 class RenderRequest(BaseModel):
+    # Sprint 5.3: pin extra="ignore" explicitly. Stored job records in
+    # data/app.db may carry deprecated/renamed keys (e.g. groq_* aliases
+    # pending DB migration in Sprint 5.4). Silent-drop is the contract
+    # the replay path relies on. Pydantic v2 already defaults to ignore,
+    # but pinning makes Sacred Contract #2 readable at the class header.
+    model_config = ConfigDict(extra="ignore")
+
     # Source
     source_mode: Optional[str] = "local"
     source_quality_mode: str = "standard_1080"
@@ -346,27 +355,30 @@ class RenderRequest(BaseModel):
     # Narration (AI-directed)
     narration_style: str = "auto"     # auto|energetic|calm|emotional
 
-    # Groq Segment Analysis — SRT transcript → segment selection
-    # groq_analysis_enabled=False (default) → pipeline unchanged, backward compat.
-    # groq_analysis_enabled=True  → Groq reads SRT, picks segments, replaces local scorer.
-    groq_analysis_enabled: bool = False
-    groq_model: Optional[str] = None              # None = server GROQ_DEFAULT_MODEL
-    groq_content_language: Optional[str] = None   # None = auto-detect from transcript
-    groq_min_quality_score: float = 0.6           # drop Groq segments below this score
-    groq_selection_strategy: str = "top_n"        # "top_n" | "threshold"
+    # ── LLM Segment Selection (canonical names) ──────────────────────────────
+    # llm_enabled=True  → LLM reads SRT, picks segments, is sole authority.
+    # llm_enabled=False → fallback to local heuristic scorer.
+    llm_enabled: Optional[bool] = None            # None = inherit from groq_analysis_enabled (backward compat)
+    llm_model: Optional[str] = None               # None = server default for selected provider
+    llm_language: Optional[str] = None            # None = auto-detect from transcript
+    llm_min_quality: Optional[float] = None       # None = inherit from groq_min_quality_score (default 0.6)
+    llm_mode: Optional[str] = None                # None = inherit from groq_selection_strategy (default "top_n")
 
-    # Groq-Only Mode (refactor Phase A) — when True, pipeline uses ONLY Groq output
-    # for segment selection. NO heuristic re-scoring, NO Phase 44 mapping,
-    # NO S4.1/S4.5 boundary nudging, NO AI Director override. Groq becomes the
-    # single source of truth. If Groq fails → job hard-fails (no fallback).
-    # Default False to preserve backward compat (Sacred Contract 2 — additive only).
+    # ── Legacy groq_* fields — kept for backward compat with stored jobs ─────
+    # New code should use llm_* above. groq_* values are copied to llm_* at
+    # deserialization time (see model_validator below) so the pipeline only
+    # reads llm_* fields.
+    groq_analysis_enabled: bool = False
+    groq_model: Optional[str] = None
+    groq_content_language: Optional[str] = None
+    groq_min_quality_score: float = 0.6
+    groq_selection_strategy: str = "top_n"
     groq_only_mode: bool = False
 
     # Multi-provider LLM (Phase I) — which LLM provider drives segment selection.
     # Supported: "groq" | "gemini" | "openai" | "claude". Default None means
-    # "use server default" (AI_PROVIDER_DEFAULT env, falls back to "groq").
-    # Per-provider API keys; ai_cloud_api_key remains the legacy generic field
-    # (UI may send the active provider's key there for backward compat).
+    # "use server default" (AI_PROVIDER_DEFAULT env, falls back to "gemini").
+    # Per-provider API keys; ai_cloud_api_key remains the legacy generic field.
     ai_provider: Optional[str] = None
     gemini_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
@@ -448,6 +460,25 @@ class RenderRequest(BaseModel):
             raise ValueError("voice_gender must be 'female' or 'male'")
         if self.voice_mix_mode not in {"replace_original", "keep_original_low"}:
             raise ValueError("voice_mix_mode must be 'replace_original' or 'keep_original_low'")
+        return self
+
+    @model_validator(mode="after")
+    def _coerce_groq_to_llm(self):
+        """Copy groq_* legacy fields into llm_* canonical fields when llm_* is not set.
+
+        Runs at deserialization time so stored jobs that predate llm_* fields
+        work transparently — the pipeline only reads llm_* fields.
+        """
+        if self.llm_enabled is None:
+            self.llm_enabled = self.groq_analysis_enabled
+        if self.llm_model is None:
+            self.llm_model = self.groq_model
+        if self.llm_language is None:
+            self.llm_language = self.groq_content_language
+        if self.llm_min_quality is None:
+            self.llm_min_quality = self.groq_min_quality_score
+        if self.llm_mode is None:
+            self.llm_mode = self.groq_selection_strategy
         return self
 
 

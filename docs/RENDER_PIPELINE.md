@@ -126,13 +126,19 @@ UI-visible terminal job statuses include `completed`, `completed_with_errors`, `
 
 **Stability marker: Stable contract**
 
-Source resolution has three paths:
+Source resolution has two paths:
 
 | Source path | Behavior |
 |---|---|
 | Editor session | `edit_session_id` resolves to a saved preview session created by `/api/render/prepare-source`. |
 | Local file | `source_video_path` is validated and used from disk. |
-| YouTube | `download_youtube()` downloads into the job work directory or preview session. |
+
+Remote sources (YouTube, TikTok, IG, …) are NOT downloaded inside the render
+pipeline. Users fetch them via the standalone Downloader feature
+(`features/downloader/`, `/api/downloader/*`) into a local file first, then
+submit the local file to render. Sprint 1.2 removed the YouTube branch from
+`/api/render/prepare-source` and `/api/render/quick-process`; the
+`download-health` endpoint was deleted entirely.
 
 Preview sessions live under `TEMP_DIR/preview/{session_id}` and store `session.json`, source path, preview path, export dir, duration, and optional preview transcript cache.
 
@@ -146,10 +152,9 @@ Validation happens before queueing and again after rendering.
 
 Pre-render validation protects:
 
-- source mode
+- source mode (must be `local`; any other value is rejected with a 400)
 - output directory
 - local file existence
-- YouTube URL presence
 - editor session presence
 - channel/manual output compatibility
 - schema constraints from `RenderRequest`
@@ -193,44 +198,66 @@ Market-aware rendering is not just decoration. It affects subtitle policies, hoo
 
 ## AI Director Integration
 
-**Stability marker: Experimental / needs verification**
+**Stability marker: Stable contract (post Sprint 4)**
 
-AI Director is called when `ai_director_enabled=true`.
+The legacy monolithic `backend/app/ai/director/ai_director.py` was
+retired in Phase G. The AI Director surface is now distributed across
+`backend/app/ai/`:
 
-Primary file:
+| Layer | Module | Responsibility |
+|---|---|---|
+| LLM providers | `ai/llm/{gemini,claude,openai}_provider.py` | Per-provider HTTP/SDK calls. Each provides `select_segments` (legacy) and `select_render_plan` (Sprint 4.C). |
+| LLM dispatcher | `ai/llm/__init__.py` | `select_segments(*, provider=…)` and `select_render_plan(*, provider=…)` route to the right provider by name. Falls back to gemini for unknown providers. |
+| Prompt builder | `ai/llm/prompts.py` | `build_segment_prompt` (legacy) and `build_render_plan_prompt` (Sprint 4.B). Format-safe — every literal `{`/`}` doubled so `.format()` substitution can't KeyError on user-supplied text. |
+| Parser | `ai/llm/parser.py` | `parse_segment_response → list[LLMSegment]` (legacy) and `parse_render_plan_response → RenderPlan` (Sprint 4.A). Both are defensive — return `None` on any unparseable input, never raise. |
+| Hybrid analyzer | `ai/analysis/` | Local + optional cloud signals merged into editorial hints. |
+| AI context | `ai/context/creator_context.py` | `CreatorContextBuilder` reads the persisted CreatorContext (Sprint 3 — see `docs/CREATOR_CONTEXT.md`) and surfaces a deterministic prompt hint. |
 
-- `backend/app/ai/director/ai_director.py`
+### Two emission paths
 
-The AI Director creates an `AIEditPlan` from transcript, scene, duration, source, market, memory, pacing, subtitle, camera, creator, and quality signals.
+The orchestrator runs one of two emission paths per render job, gated
+on the `LLM_EMIT_RENDER_PLAN` env var:
 
-### Hybrid Analysis bootstrap (Phase HY)
+- **`LLM_EMIT_RENDER_PLAN=1`** (Sprint 4.D AI-emission path):
+  `render_pipeline.py` calls `ai.llm.select_render_plan(...)` and gets
+  an `Optional[RenderPlan]`. Success persists via
+  `jobs_repo.update_render_plan(job_id, plan.to_json())` and threads
+  the plan into `PartRenderContext.render_plan`. Failure (None /
+  raise) emits `render.plan.ai_fallback` and leaves `_render_plan =
+  None` — the stage resolvers (Sprint 4.E/F/G) then fall back to the
+  legacy payload-derived logic.
+- **OFF (default)**: `ctx.render_plan` stays `None`. The legacy
+  per-stage decisions run unchanged.
 
-Before clip selection, `_build_plan()` calls `_bootstrap_hybrid_analyzer()` which runs the Hybrid Analysis layer (`backend/app/ai/analysis/`). This produces an `AnalysisSignals` object that enriches downstream decisions:
+The Sprint 2.2 builder shim that previously synthesised a RenderPlan
+from the scored list was retired in Sprint 4.H — when the flag is
+OFF, no RenderPlan is constructed at all. See `docs/RENDERPLAN.md`
+for the full Schema + flow.
 
-```text
-_build_plan() entry
-  -> chunks resolved from ContentAnalysisResult or SRT
-  -> _bootstrap_hybrid_analyzer(request, chunks, context)
-       -> LocalAnalyzer  (always runs)
-       -> CloudAnalyzer  (runs if ai_cloud_enabled=True)
-       -> MergeStrategy  (cloud 70% / local 30%)
-       -> AnalysisSignals
-  -> select_ai_segments(..., enrichment=signals)
-       -> _apply_cloud_enrichment() blends cloud scores into candidates
-  -> pacing_ctx enriched with cloud emotion + subtitle/camera hints
-  -> camera_planner + subtitle_planner receive enriched pacing_ctx
-```
+### Stage consume sites (Sprint 4.E/F/G)
 
-If `_bootstrap_hybrid_analyzer()` fails for any reason, it returns `None` and all downstream code treats `_analysis_signals=None` as a no-op — no behavior change from the pre-hybrid path.
+| Stage | Consumes | Fallback when `ctx.render_plan is None` |
+|---|---|---|
+| `part_asset_planner.py` | `subtitle_policy.style`, `subtitle_policy.market` | Legacy 5-tier resolution (`variant > creator > platform > DNA > content-type default`). |
+| `part_render_setup.py` | `camera_strategy.reframe_mode` | `payload.reframe_mode` (legacy `"subject"` default). |
+| `render_pipeline.py` P5-1 | `ClipPlan.rank` (1..N permutation) | Score-descending sort over `_compute_output_ranking_entry.output_score`. The resolver gates further on `LLM_EMIT_RENDER_PLAN=1` so shim-produced ranks cannot leak. |
 
-Important safety contract:
+Each consume site emits a source-tag in its existing event so
+operators can attribute the decision (`subtitle_style_source`,
+`reframe_mode_source`, `rank_source`).
 
-- If AI Director fails, render continues.
-- AI plan metadata is optional.
-- AI phases must not assume internet/cloud/GPU.
-- Most AI phases are advisory or metadata-only.
-- Cloud analysis requires explicit `ai_cloud_enabled=True` — never activates by default.
-- Cloud API failures fall back to local-only analysis transparently.
+### Safety contract
+
+- AI emission failure NEVER kills a render. The stage resolvers fall
+  back to legacy payload-derived logic and emit a `*_source` tag of
+  `"fallback"`.
+- Every public AI entry point (`select_render_plan`, the parsers, the
+  CreatorContext builder, every `_resolve_*_from_plan`) catches all
+  exceptions and surfaces `None` — Sacred Contract #3.
+- The orchestrator wraps the whole RenderPlan acquisition block in
+  its own try/except as a belt-and-braces guard.
+- Cloud analysis still requires explicit `ai_cloud_enabled=True` —
+  never activates by default; cloud failures fall back to local-only.
 
 ## Advisory Metadata vs Bounded Render Influence
 
@@ -454,7 +481,6 @@ ai_ux
 
 Important fallback patterns:
 
-- Download tries multiple yt-dlp clients and dynamic format fallback.
 - Whisper transcription has heartbeat logging during long work.
 - FFmpeg can retry or fall back from NVENC to CPU encoders.
 - Motion crop falls back to standard render where possible.

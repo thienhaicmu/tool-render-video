@@ -29,22 +29,27 @@ For stability markers (Stable / Semi-stable / Experimental) see `docs/ARCHITECTU
 | Scene detection | `backend/app/services/scene_detector.py` | MEDIUM | Yes |
 | TTS / narration | `backend/app/services/tts_service.py` | MEDIUM | Yes |
 | Audio mixing | `backend/app/services/audio_mix_service.py` | MEDIUM | Yes |
-| YouTube download | `backend/app/services/downloader.py` | MEDIUM | Yes |
+| Standalone Downloader (yt-dlp) | `backend/app/services/downloader.py` | MEDIUM | Yes — feature lives outside the render pipeline |
 | Cancel propagation | `backend/app/services/cancel_registry.py` | HIGH | Protected |
 | FFmpeg binary paths | `backend/app/services/bin_paths.py` | HIGH | Protected |
 | Preview sessions | `backend/app/services/preview/session_service.py` | MEDIUM | Yes |
 
 ## AI System
 
+Phase G retired the legacy monolithic `ai/director/ai_director.py` and the
+sibling `ai/orchestrator/`, `ai/analyzers/`, `ai/rag/` packages. The current
+AI surface is distributed across the modules below. Every public entry point
+in any `backend/app/ai/**` module MUST catch all exceptions and return
+`None` on failure — see Sacred Contract #3 in CLAUDE.md.
+
 | System | File | Risk | Touch? |
 |--------|------|------|--------|
-| **AI Director** | `backend/app/ai/director/ai_director.py` | CRITICAL | Protected — must return None on failure, never raise |
-| AI data contracts | `backend/app/ai/contracts.py` | HIGH | Add only, never remove |
-| AI result schema | `backend/app/ai/director/edit_plan_schema.py` | HIGH | Add with defaults, no field removals |
-| Render influence | `backend/app/ai/director/render_influence.py` | HIGH | Carefully |
-| AI orchestrator | `backend/app/ai/orchestrator/` | MEDIUM | Yes |
-| Analyzers (9 modules) | `backend/app/ai/analyzers/` | MEDIUM | Yes — one module at a time |
-| RAG / knowledge | `backend/app/ai/rag/` | MEDIUM | Yes |
+| LLM providers (Gemini, Claude, OpenAI) | `backend/app/ai/llm/` | HIGH | Add new provider behind the same dispatcher, never raise |
+| LLM shared prompt + parser | `backend/app/ai/llm/prompts.py`, `parser.py` | HIGH | Schema is additive; backward-compat aliases stay until stored jobs migrate |
+| Analysis (hybrid + local) | `backend/app/ai/analysis/` | MEDIUM | Yes — must return None on failure |
+| Cloud analyzer providers | `backend/app/ai/analysis/cloud/` | MEDIUM | Yes |
+| Visibility / tracing / diagnostics | `backend/app/ai/visibility/`, `ai/tracing.py`, `ai/diagnostics.py` | MEDIUM | Yes |
+| LLM stage orchestration | `backend/app/orchestration/llm_stage.py`, `llm_pipeline.py` | HIGH | Sacred Contract #3 applies through the orchestration entry too |
 | Knowledge packs | `backend/knowledge/` | LOW | Yes — add only |
 
 ## API Routes
@@ -54,7 +59,7 @@ For stability markers (Stable / Semi-stable / Experimental) see `docs/ARCHITECTU
 | Render | `backend/app/routes/render.py` | POST /api/render/process, resume, retry, cancel | CRITICAL |
 | Jobs | `backend/app/routes/jobs.py` | GET /api/jobs/history, WebSocket /api/jobs/{id}/ws | CRITICAL |
 | Editing | `backend/app/routes/editing.py` | POST trim, rerender, export | MEDIUM |
-| Download | `backend/app/routes/download.py` | YouTube batch | MEDIUM |
+| Downloader | `backend/app/features/downloader/router.py` | `/api/downloader/*` standalone batch — independent of render | MEDIUM |
 | Voice | `backend/app/routes/voice.py` | TTS endpoints | MEDIUM |
 | Channels | `backend/app/routes/channels.py` | Channel management | LOW |
 | DevTools | `backend/app/routes/devtools.py` | Shell exec — **DISABLED** (requires ENABLE_DEVTOOLS=1) | DANGER |

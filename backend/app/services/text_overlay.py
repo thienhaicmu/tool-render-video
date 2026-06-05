@@ -71,7 +71,15 @@ def _safe_text(text: str) -> str:
     )
 
 
-def _text_overlay_temp_dir() -> Path:
+def get_text_overlay_temp_dir() -> Path:
+    """Return the project's text-overlay temp dir (creates it on demand).
+
+    Sprint 6 P0: promoted from private `_text_overlay_temp_dir` so the
+    maintenance scheduler can target the same path for its TTL prune.
+    The fallback to `tempfile.gettempdir()/tool-render-video/text_overlays`
+    is reached only when the project `data/temp/text_overlays/` is not
+    writable (read-only deployments).
+    """
     here = Path(__file__).resolve()
     project_temp = here.parents[3] / "data" / "temp" / "text_overlays"
     try:
@@ -81,6 +89,12 @@ def _text_overlay_temp_dir() -> Path:
         fallback = Path(tempfile.gettempdir()) / "tool-render-video" / "text_overlays"
         fallback.mkdir(parents=True, exist_ok=True)
         return fallback
+
+
+# Backward-compat alias — keep the old private name in case any external
+# caller references it. Internal callers below already moved to the
+# public name.
+_text_overlay_temp_dir = get_text_overlay_temp_dir
 
 
 def _write_textfile_for_drawtext(layer: dict[str, Any], wrapped_text: str) -> Path:
@@ -94,7 +108,7 @@ def _write_textfile_for_drawtext(layer: dict[str, Any], wrapped_text: str) -> Pa
         ]
     )
     digest = hashlib.sha1(digest_src.encode("utf-8", errors="replace")).hexdigest()[:16]
-    path = _text_overlay_temp_dir() / f"{layer_id}_{digest}.txt"
+    path = get_text_overlay_temp_dir() / f"{layer_id}_{digest}.txt"
     path.write_text(wrapped_text, encoding="utf-8", newline="\n")
     return path
 

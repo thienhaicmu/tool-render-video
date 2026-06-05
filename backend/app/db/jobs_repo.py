@@ -58,6 +58,49 @@ def save_error_kind(job_id: str, kind: str) -> None:
         conn.commit()
 
 
+def update_render_plan(job_id: str, plan_json: str | None) -> None:
+    """Persist the RenderPlan JSON blob for a job (Sprint 2.1).
+
+    `plan_json` is expected to be the output of `RenderPlan.to_json()` or
+    None when the plan should be cleared. The column is nullable —
+    passing None is a valid 'no plan present' state and is preserved
+    verbatim. Never raises; logs a warning and returns on DB error so
+    a failure to persist does not crash a live render.
+    """
+    try:
+        with db_conn() as conn:
+            conn.execute(
+                "UPDATE jobs SET render_plan_json = ?, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?",
+                (plan_json, job_id),
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.warning("update_render_plan failed for job_id=%s: %s", job_id, exc)
+
+
+def get_render_plan(job_id: str) -> str | None:
+    """Return the raw RenderPlan JSON blob for a job, or None when the row
+    has no plan (NULL column) or the job doesn't exist.
+
+    The caller is expected to feed the result to
+    `RenderPlan.from_json(...)` which is itself defensive — so any
+    malformed payload becomes None there, not here. Never raises.
+    """
+    try:
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT render_plan_json FROM jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            value = row[0] if isinstance(row, tuple) else row["render_plan_json"]
+            return value if isinstance(value, str) and value else None
+    except Exception as exc:
+        logger.warning("get_render_plan failed for job_id=%s: %s", job_id, exc)
+        return None
+
+
 def delete_job(job_id: str) -> None:
     """Permanently delete a job and all its parts from the database."""
     with db_conn() as conn:

@@ -36,8 +36,8 @@ from typing import Optional, Tuple
 from app.models.schemas import RenderRequest
 from app.services import cancel_registry
 from app.services.db import update_job_progress
-from app.services.tts_service import generate_narration_audio
-from app.orchestration.audio_pipeline import _maybe_cleanup_narration_audio
+from app.services.audio.tts import generate_narration_audio
+from app.orchestration.audio_cleanup import _maybe_cleanup_narration_audio
 from app.orchestration.render_events import _emit_render_event, _job_log
 
 

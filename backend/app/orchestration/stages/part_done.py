@@ -148,6 +148,10 @@ def run_part_done(
                 _raw_ratio = _plan_hint.get("preferred_offset_ratio")
                 if _raw_ratio is not None:
                     _cover_hint_ratio = float(_raw_ratio)
+            if _cover_hint_ratio is None:
+                _raw_ratio = seg.get("cover_hint_ratio")
+                if _raw_ratio is not None:
+                    _cover_hint_ratio = float(_raw_ratio)
         except Exception:
             pass
         _cover_offset, _cover_reason = _select_cover_frame_time(
@@ -207,7 +211,7 @@ def run_part_done(
     except Exception as _cov_exc:
         logger.warning("cover_frame_extraction_failed part=%d: %s", idx, _cov_exc)
     upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Completed")
-    row = [ctx.job_id, ctx.effective_channel, ctx.source["title"], idx, seg["start"], seg["end"], seg["duration"], seg["viral_score"], seg["priority_rank"], str(final_part)]
+    row = [ctx.job_id, ctx.effective_channel, ctx.source["title"], idx, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("priority_rank", idx), str(final_part)]
     if ctx.payload.cleanup_temp_files:
         _safe_unlink(raw_part)
         _safe_unlink(srt_part)

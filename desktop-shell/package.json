@@ -5,6 +5,7 @@
   "author": "Render Studio Team",
   "main": "main.js",
   "scripts": {
+    "prestart": "npm run build --prefix ../frontend",
     "start": "electron .",
     "build": "electron-builder --dir",
     "dist": "electron-builder --win nsis portable",

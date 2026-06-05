@@ -19,8 +19,9 @@ import logging
 import os
 from typing import Optional
 
-from app.ai.analysis.groq.parser import GroqSegment, parse_segment_response
-from app.ai.analysis.groq.prompts import build_segment_prompt
+from app.ai.llm.parser import LLMSegment, parse_render_plan_response, parse_segment_response
+from app.ai.llm.prompts import build_render_plan_prompt, build_segment_prompt
+from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.claude_client")
 logger.info("claude_provider: module loaded (build=2026-06-01.i3-claude)")
@@ -47,7 +48,7 @@ def select_segments(
     api_key: str = "",
     model: Optional[str] = None,
     language: str = "auto",
-) -> Optional[list[GroqSegment]]:
+) -> Optional[list[LLMSegment]]:
     """Send SRT to Claude and return selected segments."""
     try:
         return _run(
@@ -74,7 +75,7 @@ def _run(
     api_key: str,
     model: Optional[str],
     language: str,
-) -> Optional[list[GroqSegment]]:
+) -> Optional[list[LLMSegment]]:
     if not _ANTHROPIC_SDK:
         logger.warning("claude_client: anthropic SDK not installed")
         return None
@@ -126,6 +127,110 @@ def _run(
             len(segments), output_count, resolved_model,
         )
     return segments
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Sprint 4.C — RenderPlan path (dual-mode alongside select_segments)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def select_render_plan(
+    srt_content: str,
+    output_count: int,
+    min_sec: float,
+    max_sec: float,
+    video_duration: float,
+    api_key: str = "",
+    model: Optional[str] = None,
+    language: str = "auto",
+    editorial_hint: str = "",
+) -> Optional[RenderPlan]:
+    """Send SRT to Claude and return a RenderPlan emitted in one pass.
+
+    Sprint 4.C — additive partner of select_segments. Same Anthropic
+    API call helper underneath; only the prompt builder and parser
+    swap out. The editorial_hint parameter mirrors the Gemini provider
+    so the Sprint 4.D dispatcher can forward it uniformly.
+    """
+    try:
+        return _run_render_plan(
+            srt_content=srt_content,
+            output_count=output_count,
+            min_sec=min_sec,
+            max_sec=max_sec,
+            video_duration=video_duration,
+            api_key=api_key,
+            model=model,
+            language=language,
+            editorial_hint=editorial_hint,
+        )
+    except Exception as exc:
+        logger.warning("claude_client: select_render_plan unexpected error — %s", exc, exc_info=True)
+        return None
+
+
+def _run_render_plan(
+    srt_content: str,
+    output_count: int,
+    min_sec: float,
+    max_sec: float,
+    video_duration: float,
+    api_key: str,
+    model: Optional[str],
+    language: str,
+    editorial_hint: str,
+) -> Optional[RenderPlan]:
+    if not _ANTHROPIC_SDK:
+        logger.warning("claude_client: anthropic SDK not installed (render_plan path)")
+        return None
+    if not api_key:
+        logger.warning("claude_client: no api_key supplied (render_plan path)")
+        return None
+    if not srt_content or not srt_content.strip():
+        logger.warning("claude_client: empty transcript (render_plan path)")
+        return None
+
+    system_prompt, user_prompt = build_render_plan_prompt(
+        srt_content=srt_content,
+        output_count=output_count,
+        min_sec=min_sec,
+        max_sec=max_sec,
+        language=language,
+        max_srt_chars=_MAX_SRT_CHARS,
+        editorial_hint=editorial_hint,
+    )
+
+    resolved_model = model or _DEFAULT_MODEL
+    _prompt_chars = len(system_prompt) + len(user_prompt)
+    _est_tokens = _prompt_chars // 4
+    logger.info(
+        "claude_client: calling render_plan model=%s output_count=%d min_sec=%.0f max_sec=%.0f "
+        "video_dur=%.0f srt_chars=%d prompt_chars=%d est_tokens=%d",
+        resolved_model, output_count, min_sec, max_sec, video_duration,
+        len(srt_content), _prompt_chars, _est_tokens,
+    )
+
+    raw = _call_claude(api_key, resolved_model, system_prompt, user_prompt)
+    if not raw:
+        logger.warning("claude_client: empty render_plan API response (model=%s)", resolved_model)
+        return None
+
+    _preview = raw if len(raw) <= 2000 else raw[:2000] + f"... [{len(raw) - 2000} more chars]"
+    logger.info("claude_client: raw render_plan response (model=%s):\n%s", resolved_model, _preview)
+
+    plan = parse_render_plan_response(
+        raw=raw,
+        output_count=output_count,
+        min_sec=min_sec,
+        max_sec=max_sec,
+        video_duration=video_duration,
+    )
+    if plan is not None:
+        logger.info(
+            "claude_client: parsed render_plan with %d/%d clips (model=%s)",
+            len(plan.clips), output_count, resolved_model,
+        )
+    return plan
 
 
 def _call_claude(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:

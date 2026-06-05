@@ -35,11 +35,11 @@ def test_importing_audio_cleanup_adapters_does_not_import_ml_packages():
         "deepfilternet",
         "torch",
         "torchaudio",
-        "app.services.audio_cleanup_adapters",
+        "app.services.audio.cleanup_adapters",
     ):
         sys.modules.pop(name, None)
 
-    importlib.import_module("app.services.audio_cleanup_adapters")
+    importlib.import_module("app.services.audio.cleanup_adapters")
 
     assert "deepfilternet" not in sys.modules
     assert "torch" not in sys.modules
@@ -47,7 +47,7 @@ def test_importing_audio_cleanup_adapters_does_not_import_ml_packages():
 
 
 def test_cleanup_audio_none_returns_noop_result(tmp_path):
-    from app.services.audio_cleanup_adapters import cleanup_audio_with_adapter
+    from app.services.audio.cleanup_adapters import cleanup_audio_with_adapter
 
     input_path = tmp_path / "input.wav"
     output_path = tmp_path / "clean.wav"
@@ -69,7 +69,7 @@ def test_cleanup_audio_none_returns_noop_result(tmp_path):
 
 
 def test_cleanup_audio_deepfilternet_unavailable_falls_back_to_noop(monkeypatch, tmp_path):
-    import app.services.audio_cleanup_adapters as adapters
+    import app.services.audio.cleanup_adapters as adapters
 
     monkeypatch.setattr(adapters, "has_deepfilternet", lambda: False)
     input_path = tmp_path / "input.wav"
@@ -92,7 +92,7 @@ def test_cleanup_audio_deepfilternet_unavailable_falls_back_to_noop(monkeypatch,
 
 
 def test_cleanup_audio_deepfilternet_import_failure_falls_back_to_noop(monkeypatch, tmp_path):
-    import app.services.audio_cleanup_adapters as adapters
+    import app.services.audio.cleanup_adapters as adapters
 
     monkeypatch.setattr(adapters, "has_deepfilternet", lambda: True)
     monkeypatch.setattr(adapters, "_load_deepfilternet_api", lambda: (_ for _ in ()).throw(ImportError("boom")))
@@ -114,7 +114,7 @@ def test_cleanup_audio_deepfilternet_import_failure_falls_back_to_noop(monkeypat
 
 
 def test_cleanup_audio_deepfilternet_runtime_failure_falls_back_to_noop(monkeypatch, tmp_path):
-    import app.services.audio_cleanup_adapters as adapters
+    import app.services.audio.cleanup_adapters as adapters
 
     monkeypatch.setattr(adapters, "has_deepfilternet", lambda: True)
     monkeypatch.setattr(adapters, "_load_deepfilternet_api", lambda: {"init_df": lambda: ("model", object(), None)})
@@ -139,7 +139,7 @@ def test_cleanup_audio_deepfilternet_runtime_failure_falls_back_to_noop(monkeypa
 
 
 def test_cleanup_audio_deepfilternet_success_returns_cleaned_wav(monkeypatch, tmp_path):
-    import app.services.audio_cleanup_adapters as adapters
+    import app.services.audio.cleanup_adapters as adapters
 
     class FakeState:
         def sr(self):
@@ -190,7 +190,7 @@ def test_cleanup_audio_deepfilternet_success_returns_cleaned_wav(monkeypatch, tm
 
 
 def test_cleanup_audio_deepfilternet_missing_output_falls_back(monkeypatch, tmp_path):
-    import app.services.audio_cleanup_adapters as adapters
+    import app.services.audio.cleanup_adapters as adapters
 
     input_path = tmp_path / "input.mp3"
     output_path = tmp_path / "clean.mp3"
@@ -222,7 +222,7 @@ def test_cleanup_audio_deepfilternet_missing_output_falls_back(monkeypatch, tmp_
 
 
 def test_cleanup_audio_deepfilternet_duration_mismatch_falls_back(monkeypatch, tmp_path):
-    import app.services.audio_cleanup_adapters as adapters
+    import app.services.audio.cleanup_adapters as adapters
 
     input_path = tmp_path / "input.mp3"
     output_path = tmp_path / "clean.mp3"
@@ -257,7 +257,7 @@ def test_cleanup_audio_deepfilternet_duration_mismatch_falls_back(monkeypatch, t
 
 
 def test_duration_within_tolerance():
-    from app.services.audio_cleanup_adapters import _duration_within_tolerance
+    from app.services.audio.cleanup_adapters import _duration_within_tolerance
 
     assert _duration_within_tolerance(10.0, 10.15) is True
     assert _duration_within_tolerance(10.0, 10.25) is False

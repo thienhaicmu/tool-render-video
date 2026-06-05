@@ -18,8 +18,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
-import app.services.audio_mix_service as audio_mix_mod
-from app.services.audio_mix_service import mix_narration_audio
+import app.services.audio.mix as audio_mix_mod
+from app.services.audio.mix import mix_narration_audio
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ def _call_mix_narration(
     _stat_result.st_size = 1024
 
     with (
-        patch("app.services.audio_mix_service.subprocess.run", side_effect=_fake_subprocess_run),
+        patch("app.services.audio.mix.subprocess.run", side_effect=_fake_subprocess_run),
         patch.object(audio_mix_mod, "_has_audio_stream", return_value=True),
         patch.object(audio_mix_mod, "_probe_duration_s", return_value=60.0),
         patch("pathlib.Path.exists", return_value=True),

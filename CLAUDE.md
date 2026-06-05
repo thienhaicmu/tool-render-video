@@ -268,7 +268,8 @@ data/app.db                                         # sole job state — never t
 backend/app/models/schemas.py                       # Pydantic API contracts — additive only, never rename
 backend/app/services/job_manager.py                 # in-process queue — thread safety and queue semantics
 backend/app/services/render/ffmpeg_helpers.py       # 564 lines — real FFmpeg execution layer + NVENC_SEMAPHORE
-backend/app/services/render/legacy_renderer.py      # 491 lines — render_part() core + render_part_smart() wrapper
+backend/app/services/render/base_clip_renderer.py   # ~720 lines (post Sprint 5.2 merge) — render_base_clip + render_part + render_part_smart; owns NVENC semaphore acquire sites
+backend/app/services/render/legacy_renderer.py      # ~10-line shim (post Sprint 5.2) — re-exports render_part / render_part_smart from base_clip_renderer
 backend/app/services/render/clip_ops.py             # 401 lines — clip assembly operations
 backend/app/services/subtitle_engine.py             # 46-line facade — real impl in services/subtitles/
 backend/app/services/db.py                          # DB connection + WAL mode setup
@@ -276,12 +277,22 @@ backend/app/core/ui_gate.py                         # controls which UI is serve
 backend/app/main.py                                 # startup sequence + router mounts
 backend/app/orchestration/asset_pipeline.py         # asset injection stage
 backend/app/orchestration/render_events.py          # event error classification
-backend/app/orchestration/groq_only_pipeline.py     # Groq-only pre-render path
 backend/app/orchestration/parallel_analysis.py      # concurrent scene detect + Whisper threads
+backend/app/orchestration/llm_pipeline.py           # LLM pre-render flow (Sprint 4 surface)
+backend/app/orchestration/llm_stage.py              # LLM dispatcher + editorial_hint builder (Sprint 3 CreatorContext wire)
+backend/app/ai/llm/__init__.py                      # Provider dispatch (select_segments + select_render_plan)
+backend/app/ai/llm/prompts.py                       # Prompt templates — format-safety critical (pre-flight {end}/{start} bug class)
+backend/app/ai/llm/parser.py                        # parse_segment_response + parse_render_plan_response (Sprint 4.A)
+backend/app/ai/context/creator_context.py           # CreatorContextBuilder (Sprint 3)
+backend/app/db/jobs_repo.py                         # jobs + render_plan_json (Sprint 2.1) helpers — mixed connection model
+backend/app/db/creator_repo.py                      # creator_prefs.prefs_json.creator_context nested storage (Sprint 3)
+backend/app/orchestration/stages/part_asset_planner.py  # consumes RenderPlan.subtitle_policy (Sprint 4.E)
+backend/app/orchestration/stages/part_render_setup.py   # consumes RenderPlan.camera_strategy (Sprint 4.F)
+backend/app/orchestration/pipeline_ranking.py       # consumes RenderPlan ClipPlan.rank (Sprint 4.G) — env-flag gated
 ```
 
 > ⚠️ CORRECTION — `render_engine.py` is 53 lines and is a thin facade. It is NOT the real FFmpeg execution layer.
-> The genuinely dangerous files are `services/render/ffmpeg_helpers.py` (564 lines), `legacy_renderer.py` (491 lines), and `clip_ops.py` (401 lines).
+> Post Sprint 5.2 (2026-06-05): the genuinely dangerous files are `services/render/ffmpeg_helpers.py` (564 lines), `base_clip_renderer.py` (~720 lines, now owns render_base_clip + render_part + render_part_smart), and `clip_ops.py` (401 lines). `legacy_renderer.py` is a 10-line shim re-exporting from `base_clip_renderer`.
 > The NVENC semaphore lives at `services/render/ffmpeg_helpers.py:27-28` — NOT in `render_engine.py`.
 > Any documentation or agent definition that lists `render_engine.py` as the primary FFmpeg risk file is protecting the wrong file.
 
@@ -309,11 +320,18 @@ backend/app/services/segment_builder.py             # clip boundary builder
 backend/app/routes/voice.py
 backend/app/routes/channels.py
 backend/app/routes/feedback.py
+backend/app/routes/settings.py                      # Sprint 3-FE CreatorContext API
 backend/app/core/config.py                          # env vars and data paths only
 backend/knowledge/**                                # add only — never delete existing entries
+backend/app/domain/render_plan.py                   # pure dataclass — defensive (de)serialisation, no I/O
+backend/app/domain/creator_context.py               # pure dataclass — defensive, no I/O
 ```
 
-> Note: `routes/download.py` does NOT exist — downloader endpoints live at `backend/app/features/downloader/router.py`, loaded via shim `routes/platform_downloader.py`. Edits there are MEDIUM tier (preserve WS shape + job semantics).
+> Note: `routes/download.py` does NOT exist — downloader endpoints live at `backend/app/features/downloader/router.py` mounted directly in `main.py`. The `routes/platform_downloader.py` shim was deleted in Sprint 1.1.
+
+> Note: Sprint 4.H (commit `dbd758a`) deleted `orchestration/render_plan_builder.py` (Sprint 2.2 shim). Any documentation or code that lists `build_render_plan(...)` is referencing a deleted symbol.
+
+> Sprint 4 audit reference: see `docs/RENDERPLAN.md` for the RenderPlan dataclass contract and the AI-emission flow gate (`LLM_EMIT_RENDER_PLAN` env var). See `docs/CREATOR_CONTEXT.md` for the Sprint 3 CreatorContext persistence and prompt-hint integration. The full migration log is `docs/review/MIGRATION_COMPLETE_2026-06-04.md`.
 
 ---
 
@@ -371,7 +389,7 @@ These constants and code paths protect hardware resources. They are not performa
 
 ### NVENC_MAX_SESSIONS
 
-**Location:** Semaphore defined at `backend/app/services/render/ffmpeg_helpers.py:27-28` (`NVENC_SEMAPHORE = threading.Semaphore(_NVENC_SEM_VALUE)`, default value 3, env override `NVENC_MAX_SESSIONS`). Acquired around every NVENC encode in `services/render/legacy_renderer.py:266`, `base_clip_renderer.py:92,224`, `overlay_compositor.py:133`. `services/render_engine.py` only re-exports the symbol — it is a 53-line facade and does NOT own the semaphore.
+**Location:** Semaphore defined at `backend/app/services/render/ffmpeg_helpers.py:27-28` (`NVENC_SEMAPHORE = threading.Semaphore(_NVENC_SEM_VALUE)`, default value 3, env override `NVENC_MAX_SESSIONS`). Acquired around every NVENC encode in `services/render/base_clip_renderer.py` (render_base_clip @ ~92,224; render_part NVENC `with`-block; render_part_smart motion-crop branch — all merged from legacy_renderer in Sprint 5.2) and `services/render/overlay_compositor.py:133`. `services/render_engine.py` only re-exports the symbol — it is a 53-line facade and does NOT own the semaphore.
 
 **What it does:** Limits the number of simultaneous NVENC GPU hardware encoder sessions.
 
@@ -379,7 +397,7 @@ These constants and code paths protect hardware resources. They are not performa
 
 **What breaks if raised beyond hardware limit:** All concurrent renders fail simultaneously with opaque FFmpeg errors. No warning before failure. Recovery requires restarting all affected jobs. The failure mode is non-obvious and hard to diagnose.
 
-**Known gap (audit 2026-06-02):** The semaphore is acquired only at `base_clip_renderer.py:92` and `legacy_renderer.py:266`. Other FFmpeg call sites (`clip_ops.py`, `motion_crop.py`, `audio_mix_service.py`, `preview/ffmpeg_probers.py`) call FFmpeg without acquiring `NVENC_SEMAPHORE` — if any of those paths happen to invoke an NVENC codec, the limit can be silently exceeded. Future fix: centralize acquire/release inside `_run_ffmpeg_with_retry`, conditioned on argv containing `*_nvenc`.
+**Known gap (audit 2026-06-02):** The semaphore is acquired only at three call sites in `services/render/base_clip_renderer.py` (one each in render_base_clip, render_part, render_part_smart — post Sprint 5.2 merge). Other FFmpeg call sites (`clip_ops.py`, `motion_crop.py`, `audio_mix_service.py`, `preview/ffmpeg_probers.py`) call FFmpeg without acquiring `NVENC_SEMAPHORE` — if any of those paths happen to invoke an NVENC codec, the limit can be silently exceeded. Future fix: centralize acquire/release inside `_run_ffmpeg_with_retry`, conditioned on argv containing `*_nvenc`.
 
 **Rule:** Never change `NVENC_MAX_SESSIONS` without an explicit user request that includes documented reasoning and knowledge of the target hardware class.
 
@@ -530,12 +548,16 @@ When a render fails at any stage, the cleanup path (deleting downloaded source f
 
 **Why:** The connection module sets WAL mode, registers row factories, and manages thread-local connection state for the render thread. Bypassing it creates connections without WAL mode, without row factories, and in incompatible isolation levels — all of which corrupt the consistency guarantees the pipeline depends on.
 
-### Known Issue — Mixed Connection Model (Do Not Worsen)
+### Known Issue — Mixed Connection Model (Sprint 5.4 partial closure)
 
-`upsert_job()` uses `get_conn()` — a new connection per call, manually closed.
-`update_job_progress()` uses `_thread_conn()` — a thread-local persistent connection.
+Helpers live in `backend/app/db/connection.py` (not `services/db.py`, which is a 50-line re-export facade):
 
-Both models coexist in `backend/app/services/db.py` and `backend/app/db/jobs_repo.py`. This is an inconsistency. Do not add new callers that introduce a third model. Do not silently switch one model to the other without a full audit of all callers and their transaction semantics. Unifying this is future architecture work requiring a dedicated plan.
+- `db_conn()` ctxmgr — HTTP path / bounded ops. Auto-commit on normal exit, rollback on exception. Used by `jobs_repo.py`, `creator_repo.py`, `feedback_repo.py`, `download_repo.py` (`download_repo` migrated to `db_conn()` in Sprint 5.4, commit `9347613`).
+- `_thread_conn()` — render hot path only. Thread-local persistent connection used by `update_job_progress()` and `upsert_job_part()` in `db/jobs_repo.py`. Released via `close_thread_conn()` at end of `render_pipeline.py`.
+
+Sprint 5.4 ruling: the `_thread_conn` → `db_conn` unification stays DEFERRED. The per-frame progress write opening a new connection on every call would block readers under the polling fallback (CLAUDE.md WAL+polling concern below). Unification is gated on per-frame benchmarking. Full audit + Sprint-5.4 decision in `docs/review/DB_CONNECTION_AUDIT_2026-06-05.md`.
+
+Do not add callers that introduce a third model (raw `sqlite3.connect()` outside the sanctioned sites in `connection.py`, `services/db_backup.py`, and `services/cookie_extractor.py`). Enforced by `tests/test_contract_db_sole_authority.py`.
 
 ---
 
@@ -769,18 +791,24 @@ Running `npm run build` updates the live served UI correctly.
 
 Caveat: `emptyOutDir: true` will wipe `backend/static-v2/` on every build — do not place hand-authored assets there.
 
-### Issue 2 — Mixed DB Connection Model
+### Issue 2 — Mixed DB Connection Model (PARTIALLY RESOLVED 2026-06-05 Sprint 5.4)
 
-`upsert_job()` calls `get_conn()` (new connection + manual close per call).
-`update_job_progress()` calls `_thread_conn()` (thread-local persistent connection).
-Both exist in the same module. Do not add callers of a third model.
-Unifying these is future architectural work — requires a dedicated plan and full caller audit.
+After Sprint 5.4 the surface is two patterns, not three:
+- `db_conn()` ctxmgr for HTTP path / bounded ops (`jobs_repo` `upsert_job`/`get_job`/etc., `creator_repo`, `feedback_repo`, `download_repo` after Sprint 5.4 commit `9347613`).
+- `_thread_conn()` for render hot path only (`update_job_progress` + `upsert_job_part` in `db/jobs_repo.py`).
 
-### Issue 3 — Cache Location (PARTIALLY RESOLVED 2026-06-02)
+Full `_thread_conn → db_conn` unification stays DEFERRED until per-frame progress-write benchmarking confirms no perf regression. Sprint 5.4 audit: `docs/review/DB_CONNECTION_AUDIT_2026-06-05.md`.
 
-Cache root has been moved to `APP_DATA_DIR/cache` (see `pipeline_cache.py:29,45,59,77,86,99` and `services/motion_crop.py:26,41`). The `POST /api/render/cache/clear` endpoint targets the new path.
+### Issue 3 — Cache Location (RESOLVED 2026-06-05 via Sprint 6 P1)
 
-**Remaining gap:** `services/maintenance.py` still does NOT prune `APP_DATA_DIR/cache`. TTL (`_RENDER_CACHE_TTL_SEC = 72h`) is only enforced lazily on `_cache_get` reads — caches for sources never re-accessed accumulate forever. Fix: add a `prune_render_cache(cache_dir, max_age_hours=72)` call into the existing maintenance scheduler.
+Cache root lives at `APP_DATA_DIR/cache` (see `pipeline_cache.py:29,45,59,77,86,99` and `services/motion_crop/cache.py:31,46`). The `POST /api/render/cache/clear` endpoint targets the new path.
+
+`prune_render_cache(cache_dir, max_age_hours=72)` at `services/maintenance.py:76-122` walks every subdir of the cache root (`scene_detect`, `transcription`, `segment_scores`, `motion_path`, plus any future addition — pinned subdir-agnostic by `test_walks_unknown_subdirs`). Returns `{removed, kept, freed_bytes}`. Two scheduler entry points:
+
+- **Startup:** `main.py:233` (since Sprint 5.2)
+- **Periodic 30-min loop:** `main.py:210` inside `_run_periodic_cleanup` (since Sprint 6 P1 commit `d1162d8`)
+
+Source-pinned by `tests/test_maintenance_cache_prune.py::test_periodic_cleanup_source_pins_render_cache_call`. Closure ledger: `docs/review/SPRINT_6_P1_CACHE_PRUNE_2026-06-05.md`.
 
 ### Issue 4 — Remaining God Files (CLOSED 2026-06-03 via Sprint 6.D)
 

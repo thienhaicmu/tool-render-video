@@ -56,15 +56,15 @@ export interface ConfigState {
   subDensity:      'auto' | 'low' | 'medium' | 'high'
   subLanguage:     string
   aiAnalysisMode:    'local' | 'cloud' | 'hybrid'
-  aiCloudProvider:   'groq' | 'openai'
+  aiCloudProvider:   'gemini' | 'openai' | 'claude'
   aiCloudApiKey:     string
   aiCloudModel:      string
   aiContentDriven:   boolean
-  // LLM segment selection (Phase I — multi-provider)
-  groqEnabled:          boolean
-  aiProvider:           'groq' | 'gemini'  // UI only exposes these two
-  groqModel:            string             // also used as gemini model when aiProvider=gemini
-  groqContentLanguage:  string
+  // LLM segment selection — multi-provider
+  llmEnabled:          boolean
+  aiProvider:          'gemini' | 'openai' | 'claude'
+  llmModel:            string
+  llmLanguage:         string
 }
 
 export type ClipSlot = {

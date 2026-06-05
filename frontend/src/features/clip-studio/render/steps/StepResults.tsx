@@ -441,15 +441,15 @@ function StepResultsBase({
                   <div className="clip-info2">
                     <div className="clip-info2-top">
                       <span className="clip-num-lbl2">
-                        {part.groq_title || (part.clip_name ? part.clip_name.replace(/\.mp4$/i, '') : `Clip ${String(part.part_no).padStart(2, '0')}`)}
+                        {(part.ai_title ) || (part.clip_name ? part.clip_name.replace(/\.mp4$/i, '') : `Clip ${String(part.part_no).padStart(2, '0')}`)}
                       </span>
-                      {part.source === 'groq' && (
+                      {(part.source === 'llm' || part.source === 'groq') && (
                         <span style={{
                           fontSize: 7, fontWeight: 700, padding: '1px 6px', borderRadius: 99, flexShrink: 0,
-                          background: 'rgba(251,191,36,.15)', color: '#f59e0b',
-                          letterSpacing: '.05em', textTransform: 'uppercase', border: '1px solid rgba(251,191,36,.3)',
+                          background: 'rgba(168,85,247,.15)', color: '#a855f7',
+                          letterSpacing: '.05em', textTransform: 'uppercase', border: '1px solid rgba(168,85,247,.3)',
                         }}>
-                          Groq AI
+                          AI
                         </span>
                       )}
                       {tier && <span className={`clip-ai-badge ${tier.cls}`}>{tier.label}</span>}
@@ -469,9 +469,9 @@ function StepResultsBase({
                         <div className="clip-score-bar-fill" style={{ width: `${dispScore}%`, background: scoreCol }} />
                       </div>
                     )}
-                    {part.groq_reason && (
-                      <div style={{ fontSize: 9, color: '#f59e0b', marginTop: 2, lineHeight: 1.3, fontStyle: 'italic' }}>
-                        {part.groq_reason}
+                    {(part.ai_reason ) && (
+                      <div style={{ fontSize: 9, color: 'rgba(168,85,247,.85)', marginTop: 2, lineHeight: 1.3, fontStyle: 'italic' }}>
+                        {part.ai_reason}
                       </div>
                     )}
                     {rank?.ranking_reason && (

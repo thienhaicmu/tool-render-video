@@ -2,11 +2,7 @@
 gemini_provider.py — Google Gemini implementation of segment selection.
 
 Uses the unified google-genai SDK (Gemini 2.0 Flash by default).
-Free tier: 1M tokens/day, 15 RPM. Context window: 1M tokens — large
-enough to skip the aggressive truncation Groq needs.
-
-Reuses the shared prompt template and parser from app.ai.analysis.groq.*
-so prompt evolution stays in one place.
+Free tier: 1M tokens/day, 15 RPM. Context window: 1M tokens.
 
 AI Safety (Contract 3): never raises — returns None on any error.
 """
@@ -16,36 +12,34 @@ import logging
 import os
 from typing import Optional
 
-from app.ai.analysis.groq.parser import GroqSegment, parse_segment_response
-from app.ai.analysis.groq.prompts import build_segment_prompt
+from app.ai.llm.parser import LLMSegment, parse_render_plan_response, parse_segment_response
+from app.ai.llm.prompts import build_render_plan_prompt, build_segment_prompt
+from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.gemini_client")
 logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)")
 
-# Gemini Flash (latest): fast, free tier, 1M context. The "latest" alias
-# auto-tracks the newest Flash release the account has access to —
-# important because raw "gemini-2.0-flash" returns quota-exceeded on many
-# accounts where "gemini-flash-latest" works.
-_DEFAULT_MODEL = "gemini-flash-latest"
+# Gemini Pro (latest): powerful, free tier, 1M context. The "latest" alias
+# auto-tracks the newest Pro release the account has access to —
+# important because raw "gemini-2.5-pro" returns quota-exceeded on many
+# accounts where "gemini-2.5-pro" works.
+_DEFAULT_MODEL = "gemini-2.5-pro"
 
-# Gemini 1M context lets us send much more transcript than Groq.
-# 60K chars ≈ 15K tokens, still under any sane rate limit, captures
-# ~30 min of dense Vietnamese speech.
+# 60K chars ≈ 15K tokens — captures ~30 min of dense Vietnamese speech.
 _MAX_SRT_CHARS = int(os.getenv("GEMINI_MAX_SRT_CHARS", "60000"))
 
-# Hard upper bound on a single Gemini request. Default 30s mirrors
-# GROQ_REQUEST_TIMEOUT. Without this the SDK falls through to its built-in
-# default (~10 min in google-genai 0.x) which is too long to block a render
-# pipeline on. Audit 2026-06-02 P2-B2 follow-up.
-_REQUEST_TIMEOUT_SEC = int(os.getenv("GEMINI_REQUEST_TIMEOUT", "30"))
+# Hard upper bound on a single Gemini request — prevents the SDK from
+# blocking the render pipeline on its built-in ~10 min default timeout.
+_REQUEST_TIMEOUT_SEC = int(os.getenv("GEMINI_REQUEST_TIMEOUT", "120"))
 
-_MAX_OUTPUT_TOKENS = 4096
+_MAX_OUTPUT_TOKENS = 16384
 _TEMPERATURE = 0.2
 
 try:
     from google import genai as _genai
     _GENAI_SDK = True
 except ImportError:
+    _genai = None  # type: ignore[assignment]
     _GENAI_SDK = False
 
 
@@ -58,10 +52,11 @@ def select_segments(
     api_key: str = "",
     model: Optional[str] = None,
     language: str = "auto",
-) -> Optional[list[GroqSegment]]:
+    editorial_hint: str = "",
+) -> Optional[list[LLMSegment]]:
     """Send SRT to Gemini and return selected segments.
 
-    Returns None on any failure — caller hard-fails the job in groq_only_mode.
+    Returns None on any failure — caller hard-fails the pipeline.
     """
     try:
         return _run(
@@ -73,6 +68,7 @@ def select_segments(
             api_key=api_key,
             model=model,
             language=language,
+            editorial_hint=editorial_hint,
         )
     except Exception as exc:
         logger.warning("gemini_client: unexpected error — %s", exc, exc_info=True)
@@ -88,7 +84,8 @@ def _run(
     api_key: str,
     model: Optional[str],
     language: str,
-) -> Optional[list[GroqSegment]]:
+    editorial_hint: str = "",
+) -> Optional[list[LLMSegment]]:
     if not _GENAI_SDK:
         logger.warning("gemini_client: google-genai SDK not installed")
         return None
@@ -105,7 +102,8 @@ def _run(
         min_sec=min_sec,
         max_sec=max_sec,
         language=language,
-        max_srt_chars=_MAX_SRT_CHARS,  # bigger cap than Groq
+        max_srt_chars=_MAX_SRT_CHARS,
+        editorial_hint=editorial_hint,
     )
 
     resolved_model = model or _DEFAULT_MODEL
@@ -142,6 +140,113 @@ def _run(
     return segments
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Sprint 4.C — RenderPlan path (dual-mode alongside select_segments)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def select_render_plan(
+    srt_content: str,
+    output_count: int,
+    min_sec: float,
+    max_sec: float,
+    video_duration: float,
+    api_key: str = "",
+    model: Optional[str] = None,
+    language: str = "auto",
+    editorial_hint: str = "",
+) -> Optional[RenderPlan]:
+    """Send SRT to Gemini and return a RenderPlan emitted in one pass.
+
+    Sprint 4.C — additive partner of select_segments. Uses the same
+    Gemini API call helper; only the prompt builder and the parser
+    differ. Sprint 4.D will gate which entry point the orchestrator
+    invokes behind a feature flag.
+
+    Returns None on any failure — caller falls back to the segment-only
+    path (Sprint 2.2 builder shim).
+    """
+    try:
+        return _run_render_plan(
+            srt_content=srt_content,
+            output_count=output_count,
+            min_sec=min_sec,
+            max_sec=max_sec,
+            video_duration=video_duration,
+            api_key=api_key,
+            model=model,
+            language=language,
+            editorial_hint=editorial_hint,
+        )
+    except Exception as exc:
+        logger.warning("gemini_client: select_render_plan unexpected error — %s", exc, exc_info=True)
+        return None
+
+
+def _run_render_plan(
+    srt_content: str,
+    output_count: int,
+    min_sec: float,
+    max_sec: float,
+    video_duration: float,
+    api_key: str,
+    model: Optional[str],
+    language: str,
+    editorial_hint: str,
+) -> Optional[RenderPlan]:
+    if not _GENAI_SDK:
+        logger.warning("gemini_client: google-genai SDK not installed (render_plan path)")
+        return None
+    if not api_key:
+        logger.warning("gemini_client: no api_key supplied (render_plan path)")
+        return None
+    if not srt_content or not srt_content.strip():
+        logger.warning("gemini_client: empty transcript (render_plan path)")
+        return None
+
+    system_prompt, user_prompt = build_render_plan_prompt(
+        srt_content=srt_content,
+        output_count=output_count,
+        min_sec=min_sec,
+        max_sec=max_sec,
+        language=language,
+        max_srt_chars=_MAX_SRT_CHARS,
+        editorial_hint=editorial_hint,
+    )
+
+    resolved_model = model or _DEFAULT_MODEL
+    _prompt_chars = len(system_prompt) + len(user_prompt)
+    _est_tokens = _prompt_chars // 4
+    logger.info(
+        "gemini_client: calling render_plan model=%s output_count=%d min_sec=%.0f max_sec=%.0f "
+        "video_dur=%.0f srt_chars=%d prompt_chars=%d est_tokens=%d",
+        resolved_model, output_count, min_sec, max_sec, video_duration,
+        len(srt_content), _prompt_chars, _est_tokens,
+    )
+
+    raw = _call_gemini(api_key, resolved_model, system_prompt, user_prompt)
+    if not raw:
+        logger.warning("gemini_client: empty render_plan API response (model=%s)", resolved_model)
+        return None
+
+    _preview = raw if len(raw) <= 2000 else raw[:2000] + f"... [{len(raw) - 2000} more chars]"
+    logger.info("gemini_client: raw render_plan response (model=%s):\n%s", resolved_model, _preview)
+
+    plan = parse_render_plan_response(
+        raw=raw,
+        output_count=output_count,
+        min_sec=min_sec,
+        max_sec=max_sec,
+        video_duration=video_duration,
+    )
+    if plan is not None:
+        logger.info(
+            "gemini_client: parsed render_plan with %d/%d clips (model=%s)",
+            len(plan.clips), output_count, resolved_model,
+        )
+    return plan
+
+
 def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
     """Call Gemini Chat with JSON-object output mode.
 
@@ -149,7 +254,7 @@ def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str)
     a plain dict for http_options (Client converts to HttpOptions internally
     — see client.py:448-449 in the installed SDK). Timeout value is in
     MILLISECONDS (client.py:178: `http_opts.timeout / 1000`). The 30s default
-    matches GROQ_REQUEST_TIMEOUT. Override via GEMINI_REQUEST_TIMEOUT env.
+    Override via GEMINI_REQUEST_TIMEOUT env.
     """
     try:
         client = _genai.Client(
@@ -164,6 +269,7 @@ def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str)
                 "response_mime_type": "application/json",
                 "temperature": _TEMPERATURE,
                 "max_output_tokens": _MAX_OUTPUT_TOKENS,
+                "thinking_config": {"thinking_budget": 0},
             },
         )
         return resp.text

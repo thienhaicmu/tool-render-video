@@ -84,12 +84,18 @@ def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
 
     Per-file try/except so one bad file doesn't abort the whole prune. Per-
     subdir try/except so an unreadable subdir doesn't kill the loop. Returns
-    {removed, kept} for visibility in the startup log.
+    {removed, kept, freed_bytes} for visibility in the startup + periodic log.
+
+    Sprint 6 P1 (this commit): added freed_bytes to the return dict + log
+    line. Size is read before unlink so the metric reflects what was
+    actually freed rather than relying on a post-hoc stat (which would
+    fail after unlink).
     """
     if not cache_dir.exists():
-        return {"removed": 0, "kept": 0}
+        return {"removed": 0, "kept": 0, "freed_bytes": 0}
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
     removed = kept = 0
+    freed_bytes = 0
     for subdir in cache_dir.iterdir():
         if not subdir.is_dir():
             continue
@@ -98,10 +104,15 @@ def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
                 if not f.is_file():
                     continue
                 try:
-                    mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                    st = f.stat()
+                    mtime = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
                     if mtime < cutoff:
+                        # Capture size BEFORE unlink — once the file is gone
+                        # we can't stat() it any more.
+                        size = st.st_size
                         f.unlink(missing_ok=True)
                         removed += 1
+                        freed_bytes += size
                     else:
                         kept += 1
                 except Exception:
@@ -110,8 +121,93 @@ def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
             pass
     if removed:
         logger.info(
-            "maintenance: pruned %d stale render cache files (>%dh old) from %s",
-            removed, max_age_hours, cache_dir,
+            "maintenance: pruned %d stale render cache files (>%dh old, freed=%.1f MB) from %s",
+            removed, max_age_hours, freed_bytes / (1024 * 1024), cache_dir,
+        )
+    return {"removed": removed, "kept": kept, "freed_bytes": freed_bytes}
+
+
+def prune_xtts_cache(temp_dir: Path, max_age_days: int = 30) -> dict:
+    """Remove stale XTTS synthesis cache MP3 files older than max_age_days.
+
+    Sprint 6 P0-1 (per docs/review/TEMP_FILE_AUDIT_2026-06-04.md S-5):
+    services/tts_xtts_adapter.py:161 maintains a hash-keyed MP3 cache at
+    `TEMP_DIR/xtts_cache/` with no eviction. Identical synthesis is
+    rare in practice (text + language + gender + content_type), so the
+    cache grows unbounded — ~40-50 MB per unique synthesis × cumulative
+    usage. This prune runs in the same scheduler tick as
+    prune_render_cache, on a longer TTL (30d default) since hits do save
+    real GPU time.
+
+    Per-file try/except so one bad file doesn't abort. Returns
+    {removed, kept} for startup-log visibility. Idempotent if the dir
+    doesn't exist yet.
+    """
+    cache_root = temp_dir / "xtts_cache"
+    if not cache_root.exists():
+        return {"removed": 0, "kept": 0}
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    removed = kept = 0
+    try:
+        for f in cache_root.iterdir():
+            if not f.is_file():
+                continue
+            try:
+                mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                if mtime < cutoff:
+                    f.unlink(missing_ok=True)
+                    removed += 1
+                else:
+                    kept += 1
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("maintenance: failed to scan xtts_cache: %s", exc)
+    if removed:
+        logger.info(
+            "maintenance: pruned %d stale xtts_cache files (>%dd old) from %s",
+            removed, max_age_days, cache_root,
+        )
+    return {"removed": removed, "kept": kept}
+
+
+def prune_text_overlay_dir(overlay_dir: Path, max_age_days: int = 7) -> dict:
+    """Remove stale text-overlay drawtext txt files older than max_age_days.
+
+    Sprint 6 P0-2 (per docs/review/TEMP_FILE_AUDIT_2026-06-04.md S-7):
+    services/text_overlay.py:_write_textfile_for_drawtext writes one
+    deterministic-named txt file per layer per render under
+    `data/temp/text_overlays/` (or fallback tmpdir) and never cleans up.
+    Hash-keyed names mean files repeat across renders of the same
+    overlay config — useful for FFmpeg drawtext but a leak otherwise.
+
+    7-day TTL keeps the cache useful for users who re-render the same
+    overlay config across a few days while preventing long-term
+    accumulation. Returns {removed, kept}.
+    """
+    if not overlay_dir.exists():
+        return {"removed": 0, "kept": 0}
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    removed = kept = 0
+    try:
+        for f in overlay_dir.iterdir():
+            if not f.is_file():
+                continue
+            try:
+                mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                if mtime < cutoff:
+                    f.unlink(missing_ok=True)
+                    removed += 1
+                else:
+                    kept += 1
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("maintenance: failed to scan text_overlay dir: %s", exc)
+    if removed:
+        logger.info(
+            "maintenance: pruned %d stale text_overlay files (>%dd old) from %s",
+            removed, max_age_days, overlay_dir,
         )
     return {"removed": removed, "kept": kept}
 

@@ -220,13 +220,12 @@ function StepConfigureBase({
   const [testMsg, setTestMsg]       = React.useState('')
 
   async function handleTestConnection() {
-    if (!cfg.aiCloudApiKey) return
     setTestStatus('testing')
     setTestMsg('')
     try {
       const res = await testCloudAi(
-        cfg.aiCloudProvider,
-        cfg.aiCloudApiKey,
+        cfg.aiProvider as 'gemini' | 'openai' | 'claude',
+        '',  // server reads key from .env
         cfg.aiCloudModel || undefined,
       )
       if (res.ok) {
@@ -379,6 +378,25 @@ function StepConfigureBase({
             {(['r916', 'r34', 'r45', 'r11', 'r169'] as Ratio[]).map(r => (
               <div key={r} className={`seg-b${cfg.ratio === r ? ' on' : ''}`}
                 onClick={() => setCfgKey('ratio', r)}>{RATIO_INFO[r].label}</div>
+            ))}
+          </div>
+        </div>
+
+        {/* A. Focus / reframe */}
+        <div className="cfg-section">
+          <div className="cfg-sec-hd">
+            <span>FOCUS</span>
+            <span className="cfg-sec-api">reframe_mode</span>
+          </div>
+          <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
+            {([
+              { v: 'auto'   as ConfigState['focusMode'], l: 'Auto'   },
+              { v: 'face'   as ConfigState['focusMode'], l: 'Face'   },
+              { v: 'object' as ConfigState['focusMode'], l: 'Object' },
+              { v: 'center' as ConfigState['focusMode'], l: 'Center' },
+            ]).map(({ v, l }) => (
+              <div key={v} className={`seg-b${cfg.focusMode === v ? ' on' : ''}`}
+                onClick={() => setCfgKey('focusMode', v)}>{l}</div>
             ))}
           </div>
         </div>
@@ -581,25 +599,6 @@ function StepConfigureBase({
             </div>
             )}
 
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>FOCUS</span>
-                <span className="cfg-sec-api">reframe_mode</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: 'auto'   as ConfigState['focusMode'], l: 'Auto'   },
-                  { v: 'face'   as ConfigState['focusMode'], l: 'Face'   },
-                  { v: 'object' as ConfigState['focusMode'], l: 'Object' },
-                  { v: 'center' as ConfigState['focusMode'], l: 'Center' },
-                ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.focusMode === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('focusMode', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-            )}
 
             {adv && (
             <div className="cfg-section">
@@ -633,14 +632,14 @@ function StepConfigureBase({
                   <div className="tog-lbl">Auto-select clips with AI</div>
                   <div className="tog-desc">AI reads transcript and picks best segments. API keys configured in server .env.</div>
                 </div>
-                <Tog checked={cfg.groqEnabled} onChange={(v) => setCfgKey('groqEnabled', v)} />
+                <Tog checked={cfg.llmEnabled} onChange={(v) => setCfgKey('llmEnabled', v)} />
               </div>
 
-              {cfg.groqEnabled && (
+              {cfg.llmEnabled && (
                 <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {/* Provider selector — only Groq and Gemini */}
+                  {/* Provider selector — Gemini, OpenAI, Claude */}
                   <div style={{ display: 'flex', gap: 4 }}>
-                    {(['groq', 'gemini'] as const).map((p) => (
+                    {(['gemini', 'openai', 'claude'] as const).map((p) => (
                       <button
                         key={p}
                         onClick={() => { setCfgKey('aiProvider', p); setTestStatus('idle') }}
@@ -653,9 +652,9 @@ function StepConfigureBase({
                           transition: 'all .12s',
                         }}
                       >
-                        {p === 'groq' ? 'Groq' : 'Gemini'}
+                        {p === 'gemini' ? 'Gemini' : p === 'openai' ? 'OpenAI' : 'Claude'}
                         <span style={{ fontSize: 9, marginLeft: 6, opacity: 0.7 }}>
-                          {p === 'groq' ? '· 6K TPM' : '· 1M tokens/day'}
+                          {p === 'gemini' ? '· 1M/day' : p === 'openai' ? '· GPT-4o' : '· Sonnet'}
                         </span>
                       </button>
                     ))}
@@ -664,7 +663,7 @@ function StepConfigureBase({
                   {/* Test button — uses server-side key from .env */}
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button
-                      onClick={() => { setCfgKey('aiCloudProvider', cfg.aiProvider as 'groq' | 'openai'); handleTestConnection() }}
+                      onClick={handleTestConnection}
                       disabled={testStatus === 'testing'}
                       style={{
                         flex: 1, padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
@@ -684,9 +683,9 @@ function StepConfigureBase({
                   {/* Model override (optional) */}
                   <input
                     type="text"
-                    value={cfg.groqModel}
-                    onChange={(e) => setCfgKey('groqModel', e.target.value)}
-                    placeholder={cfg.aiProvider === 'groq' ? 'llama-3.3-70b-versatile (optional)' : 'gemini-flash-latest (optional)'}
+                    value={cfg.llmModel}
+                    onChange={(e) => setCfgKey('llmModel', e.target.value)}
+                    placeholder={cfg.aiProvider === 'openai' ? 'gpt-4o (optional)' : cfg.aiProvider === 'claude' ? 'claude-sonnet-4-6 (optional)' : 'gemini-2.0-flash (optional)'}
                     style={{
                       width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
                       border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',
@@ -696,8 +695,8 @@ function StepConfigureBase({
 
                   {/* Language */}
                   <select
-                    value={cfg.groqContentLanguage}
-                    onChange={(e) => setCfgKey('groqContentLanguage', e.target.value)}
+                    value={cfg.llmLanguage}
+                    onChange={(e) => setCfgKey('llmLanguage', e.target.value)}
                     style={{
                       width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
                       border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',

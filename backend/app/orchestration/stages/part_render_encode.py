@@ -9,10 +9,12 @@ the voice/audio-mix phase (Sprint 6.D-2.5b target).
 
 Block responsibilities (in order):
   1. Optional base-clip rendering via render_base_clip() when
-     FEATURE_BASE_CLIP_FIRST=1. Writes base_clip manifest fields
-     (base_clip_path, duration, fps, width, height, has_audio,
-     created_at, bgm_applied). Failure is caught locally — falls
-     through to render_part_smart.
+     FEATURE_BASE_CLIP_FIRST=1 AND a consumer is active (either
+     FEATURE_OVERLAY_AFTER_BASE_CLIP=1 OR
+     FEATURE_BASE_CLIP_VALIDATION_ARTIFACT=1 — Sprint 6 P0 HIGH).
+     Writes base_clip manifest fields (base_clip_path, duration, fps,
+     width, height, has_audio, created_at, bgm_applied). Failure is
+     caught locally — falls through to render_part_smart.
   2. Optional overlay composite via composite_overlays_on_base_clip()
      when FEATURE_BASE_CLIP_FIRST=1 AND FEATURE_OVERLAY_AFTER_BASE_CLIP=1
      AND base_clip_path was produced. Slices output-timeline SRT and
@@ -106,6 +108,10 @@ logger = logging.getLogger("app.render")
 # part_renderer.py and part_render_setup.py reads; no drift possible).
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
+# Sprint 6 P0 HIGH — see render_pipeline.py for full rationale.
+_FEATURE_BASE_CLIP_VALIDATION_ARTIFACT: bool = (
+    os.getenv("FEATURE_BASE_CLIP_VALIDATION_ARTIFACT", "0") == "1"
+)
 
 
 @dataclass
@@ -150,7 +156,22 @@ def run_render_encode(
     _motion_ck = preflight.motion_ck
     _motion_crop_fallback = preflight.motion_crop_fallback
 
-    if _FEATURE_BASE_CLIP_FIRST:
+    # Sprint 6 P0 HIGH — gate the base_clip render on the presence of a
+    # downstream consumer. Before this change, FEATURE_BASE_CLIP_FIRST=1
+    # always wrote base_clip.mp4 (50-150 MB per part + a full motion-crop
+    # FFmpeg encode) even when no consumer would read it; render_part_smart
+    # then ran a second encode to produce the actual output. Now we render
+    # the base clip only when:
+    #   - FEATURE_OVERLAY_AFTER_BASE_CLIP=1 (the composite consumer below
+    #     actually reads base_clip.mp4 to layer subtitles + overlays); OR
+    #   - FEATURE_BASE_CLIP_VALIDATION_ARTIFACT=1 (legacy A/B forensics
+    #     opt-in; scheduled for removal 2026-07-05).
+    # When FEATURE_BASE_CLIP_FIRST is OFF the whole block is skipped as
+    # before — Sacred Contract #2 default-behaviour preservation.
+    _base_clip_consumer_active = (
+        _FEATURE_OVERLAY_AFTER_BASE_CLIP or _FEATURE_BASE_CLIP_VALIDATION_ARTIFACT
+    )
+    if _FEATURE_BASE_CLIP_FIRST and _base_clip_consumer_active:
         _base_clip_out = ctx.work_dir / f"part_{idx}" / "base_clip.mp4"
         try:
             _base_clip_out.parent.mkdir(parents=True, exist_ok=True)

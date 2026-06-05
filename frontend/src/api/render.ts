@@ -54,8 +54,7 @@ export interface PrepareSourceResponse {
 
 export async function prepareSource(
   body: {
-    source_mode: 'youtube' | 'local'
-    youtube_url?: string
+    source_mode: 'local'
     source_video_path?: string
   },
   signal?: AbortSignal,
@@ -100,7 +99,7 @@ export interface CloudAiTestResult {
 }
 
 export async function testCloudAi(
-  provider: 'groq' | 'openai',
+  provider: 'gemini' | 'openai' | 'claude',
   api_key: string,
   model?: string,
 ): Promise<CloudAiTestResult> {

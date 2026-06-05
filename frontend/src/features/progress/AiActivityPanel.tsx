@@ -24,7 +24,7 @@ const MODE_SUBSTEP: Record<string, string> = {
 
 const AI_KEYWORDS = [
   'ai', 'director', 'analyz', 'scor', 'rank', 'cloud', 'hybrid',
-  'model', 'infer', 'llm', 'groq', 'openai',
+  'model', 'infer', 'llm', 'gemini', 'openai', 'claude',
 ]
 
 function isAiMessage(text: string): boolean {

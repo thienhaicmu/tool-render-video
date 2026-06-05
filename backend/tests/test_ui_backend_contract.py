@@ -71,9 +71,11 @@ class TestRenderEndpoints:
         resp = client.post("/api/render/prepare-source", json={"source_mode": "youtube", "youtube_url": ""})
         assert resp.status_code in (400, 422, 500)
 
-    def test_download_health_endpoint_exists(self):
+    def test_download_health_endpoint_removed(self):
+        """POST /api/render/download-health was removed in Sprint 1.2 (YouTube
+        from render path) — must return 404/405, not 400/422."""
         resp = client.post("/api/render/download-health", json={"youtube_url": ""})
-        assert resp.status_code in (400, 422)
+        assert resp.status_code in (404, 405)
 
     def test_quick_process_endpoint_exists(self):
         resp = client.post("/api/render/quick-process", json={})

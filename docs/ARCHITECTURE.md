@@ -37,7 +37,9 @@ SQLite job state + in-process job queue
         v
 Render pipeline: backend/app/orchestration/render_pipeline.py
         |
-        +--> Source prep / yt-dlp / local validation / preview session
+        +--> Source prep / local file validation / preview session
+        |    (Remote/YouTube sources are fetched via the standalone Downloader
+        |     feature in features/downloader/, NOT inside the render pipeline.)
         +--> Scene detection / segment generation
         |
         +--> [Layer 4.5] ContentAnalyzer (Pass 1 — single-pass content understanding)
@@ -56,20 +58,44 @@ Render pipeline: backend/app/orchestration/render_pipeline.py
         |       +--> write ai_blend_bonus (0-15 pts) onto matched segments
         |       --> blended score flows through hook-first + story-arc sequencing
         |
-        +--> AI Director metadata planning (reads ContentAnalysisResult — no re-analysis)
-        |       +--> [Phase 2] Cloud reranker (Groq): clip_type, thumbnail_sec, drop signal
-        |       +--> [Phase 5] Audio energy analyzer: exclamation density, ALL-CAPS,
+        +--> LLM segment selection (Gemini / Claude / OpenAI behind a unified dispatcher)
+        |       +--> Hybrid analyzer (local + optional cloud signals)
+        |       +--> Audio energy analyzer: exclamation density, ALL-CAPS,
         |       |     energy keywords, speech acceleration (0-20 pts, transcript-only)
-        |       +--> [Phase 6] Feedback bias: channel rating history -> hook_type/clip_type bonus
+        |       +--> Feedback bias: channel rating history -> hook_type/clip_type bonus
         |
-        +--> Subtitle / translation / ASS styling
-        +--> Motion crop / reframe
+        +--> [Sprint 3] CreatorContext → editorial_hint (channel persona bias)
+        |       +--> Read singleton creator_prefs.prefs_json.creator_context
+        |       +--> CreatorContextBuilder.build() → CreatorContext | None
+        |       --> Appended to legacy hook_strength + video_type hint string
+        |
+        +--> [Sprint 4] AI Director full RenderPlan (gated on LLM_EMIT_RENDER_PLAN=1)
+        |       +--> ai.llm.select_render_plan(provider, srt, ...) → RenderPlan | None
+        |       +--> Persist via jobs_repo.update_render_plan(job_id, plan.to_json())
+        |       +--> Thread into PartRenderContext.render_plan
+        |       --> Stage consume sites (4.E subtitle / 4.F camera / 4.G ranks)
+        |           read with per-field merge — empty/None falls back to legacy.
+        |
+        |  Vision (per docs/RENDERPLAN.md):
+        |    AI Director decides clips + subtitle policy + camera strategy +
+        |    audio plan + overlays + ranks. Render Engine executes them.
+        |    See SubtitlePolicy, CameraStrategy, AudioPlan, OutputConfig in
+        |    backend/app/domain/render_plan.py for the contract.
+        |
+        |  (Phase G retired the monolithic ai/director/ai_director.py. Groq was
+        |   removed in commit e350824 — see ai/llm/ + ai/analysis/ for current
+        |   provider surface. Sacred Contract #3: AI modules must return None on
+        |   failure, never raise.)
+        |
+        +--> Subtitle / translation / ASS styling (consumes RenderPlan.subtitle_policy)
+        +--> Motion crop / reframe (consumes RenderPlan.camera_strategy)
         +--> Voice narration / audio mix
         +--> FFmpeg encode
         +--> Output validation / quality evaluation / ranking
+        |       --> RenderPlan.ClipPlan.rank consumed (Sprint 4.G; env-flag gated)
         |
         v
-Output clips, reports, result_json, logs
+Output clips, reports, result_json (with persisted render_plan_json), logs
 ```
 
 ## Runtime Layers
@@ -85,12 +111,14 @@ Output clips, reports, result_json, logs
 | Job system | `backend/app/services/job_manager.py`, `backend/app/services/db.py` | SQLite job/part rows, in-process priority queue (O(1) duplicate check via mirror set), startup recovery. |
 | Render pipeline | `backend/app/orchestration/render_pipeline.py` | End-to-end render orchestration, pre-render setup, render loop, and result JSON assembly. Reduced from 5,816 → 2,959 lines in Phase A (A-1..A-4). |
 | Render pipeline helpers | `backend/app/orchestration/pipeline_helpers.py` | Subtitle slicing, SRT/ASS utilities, CTA blocks, platform profiles, playback speed helpers. Extracted in Phase A-1. |
-| Render pipeline AI phases | `backend/app/orchestration/pipeline_ai_phases.py` | AI Director invocation, timing mutations, emphasis config, visual intensity, cover hint resolution. Extracted in Phase A-2. |
+| Render pipeline AI phases | `backend/app/orchestration/llm_pipeline.py`, `llm_stage.py` | LLM segment selection, timing mutations, emphasis config, visual intensity, cover hint resolution. (The legacy `pipeline_ai_phases.py` was superseded after Phase G removed the AI Director monolith.) |
 | Part renderer | `backend/app/orchestration/stages/part_renderer.py` | `PartRenderContext` dataclass + `prepare_part_assets()` + `process_one_part()`. Carries all per-part render logic (cut, transcribe, subtitle, voice, FFmpeg, QA, scoring). Extracted in Phase A-3. |
 | Pre-render scenes | `backend/app/orchestration/pipeline_pre_render.py` | Scene detection, segment building, viral scoring, early transcription, visual analysis, content analysis, unified AI score blend (Phase 1). `run_pre_render_scenes()` → `PreRenderScenesResult`. Extracted in Phase A-6. |
 | Render loop | `backend/app/orchestration/pipeline_render_loop.py` | JOB_SEMAPHORE acquire/release, worker throttle, sequential/parallel FFmpeg encode loop, per-part failure handling. `run_render_loop()` → `RenderLoopResult`. Extracted in Phase A-7. |
 | Render services | `backend/app/services/*.py` | FFmpeg, subtitles, motion crop, TTS, translation, scoring, downloader, reports. |
-| AI intelligence | `backend/app/ai/**` | AI Director, scoring, planning, creator/market/subtitle/camera/quality metadata. |
+| AI intelligence | `backend/app/ai/**` | LLM providers (Gemini/Claude/OpenAI), hybrid analyzer, visibility/tracing. Distributed after Phase G retired the AI Director monolith. |
+| Domain dataclasses | `backend/app/domain/render_plan.py`, `creator_context.py`, `manifests.py`, `timeline.py` | Pure dataclasses with deterministic JSON (de)serialisation. `RenderPlan` is the AI-Director-to-Render-Engine handoff contract (Sprint 2.1 + 4); `CreatorContext` is the channel persona signal (Sprint 3). |
+| AI context | `backend/app/ai/context/creator_context.py` | `CreatorContextBuilder` — reads persisted CreatorContext, exposes `build()` for the LLM stage. Sprint 4 enrichment seam. |
 
 ## Backend Architecture
 
@@ -104,7 +132,7 @@ Important routes:
 |---|---|---|
 | `/api/render` | `backend/app/routes/render.py` | Prepare source, preview sessions, render submission, batch render, quick process, resume/retry. |
 | `/api/jobs` | `backend/app/routes/jobs.py` | Job/part state, logs, history, WebSocket progress, media streaming. |
-| `/api/download` | `backend/app/routes/download.py` | Standalone batch downloader. |
+| `/api/downloader` | `backend/app/features/downloader/router.py` | Standalone batch downloader (yt-dlp + platform adapters). Lives outside the render pipeline. |
 | `/api/voice` | `backend/app/routes/voice.py` | Voice profile list APIs. |
 | `/api/channels` | `backend/app/routes/channels.py` | Channel and output-folder management. |
 | `/api/feedback` | `backend/app/routes/feedback.py` | Per-clip user ratings (thumbs up/down), channel feedback summary, hook_type scores. |

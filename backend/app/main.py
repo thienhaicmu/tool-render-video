@@ -8,7 +8,14 @@ import logging
 import threading
 from app.services.db import init_db
 from app.services.channel_service import ensure_channel
-from app.services.maintenance import prune_job_logs, prune_preview_dirs, prune_render_temp_dirs, prune_render_cache
+from app.services.maintenance import (
+    prune_job_logs,
+    prune_preview_dirs,
+    prune_render_cache,
+    prune_render_temp_dirs,
+    prune_text_overlay_dir,
+    prune_xtts_cache,
+)
 from app.core.config import APP_DATA_DIR, CACHE_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR
 from app.core.logging_setup import configure_logging as _configure_logging
 # Configure file-based logging before any other module emits a log event.
@@ -23,6 +30,7 @@ from app.routes.editing import router as editing_router
 from app.features.downloader.router import router as platform_downloader_router
 from app.routes.feedback import router as feedback_router
 from app.routes.metrics import router as metrics_router
+from app.routes.settings import router as settings_router
 from app.services.job_manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
 from app.services.warmup import start_warmup, get_status as warmup_status
 from app.core.ui_gate import resolve_static_directory
@@ -129,6 +137,7 @@ app.include_router(editing_router)
 app.include_router(platform_downloader_router)
 app.include_router(feedback_router)
 app.include_router(metrics_router)  # Sprint 6.C: Prometheus /metrics endpoint
+app.include_router(settings_router)  # Sprint 3-FE: /api/settings/creator-context
 # v2 API routes — disabled by setting ENABLE_V2=0
 if os.getenv("ENABLE_V2", "1") != "0":
     try:
@@ -189,37 +198,30 @@ def _run_periodic_cleanup():
             evicted = evict_stale_preview_sessions()
             result_preview = prune_preview_dirs(TEMP_DIR, max_age_hours=6)
             result_render = prune_render_temp_dirs(TEMP_DIR)
+            # Sprint 6 P0: bound long-running caches that previously had no TTL.
+            result_xtts = prune_xtts_cache(TEMP_DIR, max_age_days=30)
+            from app.services.text_overlay import get_text_overlay_temp_dir
+            result_overlay = prune_text_overlay_dir(get_text_overlay_temp_dir(), max_age_days=7)
+            # Sprint 6 P1 (closure of CLAUDE.md Issue 3): render cache prune
+            # was startup-only since Sprint 5.2 — long-running servers never
+            # tripped the 72h TTL on sources that are never re-accessed.
+            # Now runs on every periodic tick as well. 72h TTL matches
+            # _RENDER_CACHE_TTL_SEC in pipeline_cache.py.
+            result_cache = prune_render_cache(CACHE_DIR, max_age_hours=72)
             _cleanup_logger.info(
-                "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d",
+                "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d "
+                "xtts_removed=%d overlay_removed=%d cache_removed=%d cache_freed_mb=%.1f",
                 evicted,
                 result_preview.get("removed", 0),
                 result_render.get("removed", 0),
+                result_xtts.get("removed", 0),
+                result_overlay.get("removed", 0),
+                result_cache.get("removed", 0),
+                result_cache.get("freed_bytes", 0) / (1024 * 1024),
             )
         except Exception as exc:
             _cleanup_logger.warning("periodic cleanup error: %s", exc)
 
-
-def _groq_health_check_worker():
-    from app.core.config import AI_CLOUD_ENABLED, AI_CLOUD_API_KEY, AI_CLOUD_MODEL
-    _log = logging.getLogger("app.startup.groq")
-    if not AI_CLOUD_ENABLED or not AI_CLOUD_API_KEY:
-        return
-    try:
-        from app.ai.analysis.cloud.groq_provider import GroqProvider
-        provider = GroqProvider(api_key=AI_CLOUD_API_KEY, model=AI_CLOUD_MODEL or None)
-        result = provider._call_api("ping")
-        if result is not None:
-            _log.info("groq_health_check_ok model=%s", AI_CLOUD_MODEL or provider.DEFAULT_MODEL)
-        else:
-            _log.warning(
-                "groq_health_check_failed: API returned None — check AI_CLOUD_API_KEY and AI_CLOUD_MODEL"
-            )
-    except Exception as exc:
-        _log.warning("groq_health_check_error: %s — AI cloud features may not work", exc)
-
-
-def _start_groq_health_check():
-    threading.Thread(target=_groq_health_check_worker, daemon=True, name="groq-health").start()
 
 
 @app.on_event("startup")
@@ -237,10 +239,16 @@ def startup():
     # Sprint 5.2: bound render-cache disk growth. TTL 72h matches
     # _RENDER_CACHE_TTL_SEC in pipeline_cache.py.
     prune_render_cache(CACHE_DIR, max_age_hours=72)
+    # Sprint 6 P0 (audit 2026-06-04 S-5 + S-7): two caches with no TTL
+    # previously — XTTS synthesis cache and text_overlay drawtext files.
+    # Same scheduler tick handles them periodically; startup prune
+    # catches anything that accumulated between restarts.
+    prune_xtts_cache(TEMP_DIR, max_age_days=30)
+    from app.services.text_overlay import get_text_overlay_temp_dir
+    prune_text_overlay_dir(get_text_overlay_temp_dir(), max_age_days=7)
     # Re-queue any render jobs that were interrupted by a previous server restart
     recover_pending_render_jobs()
     start_warmup()  # pre-download Whisper models + check deps in background
-    _start_groq_health_check()  # non-blocking — logs warning if AI_CLOUD_API_KEY invalid
     # Pre-load Whisper model into RAM so first job doesn't pay the 5-15s load cost.
     # Uses WARMUP_WHISPER_MODEL env var (default "small" = balanced preset).
     def _whisper_model_warmup():
