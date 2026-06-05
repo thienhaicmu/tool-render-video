@@ -202,14 +202,22 @@ def _run_periodic_cleanup():
             result_xtts = prune_xtts_cache(TEMP_DIR, max_age_days=30)
             from app.services.text_overlay import get_text_overlay_temp_dir
             result_overlay = prune_text_overlay_dir(get_text_overlay_temp_dir(), max_age_days=7)
+            # Sprint 6 P1 (closure of CLAUDE.md Issue 3): render cache prune
+            # was startup-only since Sprint 5.2 — long-running servers never
+            # tripped the 72h TTL on sources that are never re-accessed.
+            # Now runs on every periodic tick as well. 72h TTL matches
+            # _RENDER_CACHE_TTL_SEC in pipeline_cache.py.
+            result_cache = prune_render_cache(CACHE_DIR, max_age_hours=72)
             _cleanup_logger.info(
                 "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d "
-                "xtts_removed=%d overlay_removed=%d",
+                "xtts_removed=%d overlay_removed=%d cache_removed=%d cache_freed_mb=%.1f",
                 evicted,
                 result_preview.get("removed", 0),
                 result_render.get("removed", 0),
                 result_xtts.get("removed", 0),
                 result_overlay.get("removed", 0),
+                result_cache.get("removed", 0),
+                result_cache.get("freed_bytes", 0) / (1024 * 1024),
             )
         except Exception as exc:
             _cleanup_logger.warning("periodic cleanup error: %s", exc)

@@ -84,12 +84,18 @@ def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
 
     Per-file try/except so one bad file doesn't abort the whole prune. Per-
     subdir try/except so an unreadable subdir doesn't kill the loop. Returns
-    {removed, kept} for visibility in the startup log.
+    {removed, kept, freed_bytes} for visibility in the startup + periodic log.
+
+    Sprint 6 P1 (this commit): added freed_bytes to the return dict + log
+    line. Size is read before unlink so the metric reflects what was
+    actually freed rather than relying on a post-hoc stat (which would
+    fail after unlink).
     """
     if not cache_dir.exists():
-        return {"removed": 0, "kept": 0}
+        return {"removed": 0, "kept": 0, "freed_bytes": 0}
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
     removed = kept = 0
+    freed_bytes = 0
     for subdir in cache_dir.iterdir():
         if not subdir.is_dir():
             continue
@@ -98,10 +104,15 @@ def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
                 if not f.is_file():
                     continue
                 try:
-                    mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                    st = f.stat()
+                    mtime = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
                     if mtime < cutoff:
+                        # Capture size BEFORE unlink — once the file is gone
+                        # we can't stat() it any more.
+                        size = st.st_size
                         f.unlink(missing_ok=True)
                         removed += 1
+                        freed_bytes += size
                     else:
                         kept += 1
                 except Exception:
@@ -110,10 +121,10 @@ def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
             pass
     if removed:
         logger.info(
-            "maintenance: pruned %d stale render cache files (>%dh old) from %s",
-            removed, max_age_hours, cache_dir,
+            "maintenance: pruned %d stale render cache files (>%dh old, freed=%.1f MB) from %s",
+            removed, max_age_hours, freed_bytes / (1024 * 1024), cache_dir,
         )
-    return {"removed": removed, "kept": kept}
+    return {"removed": removed, "kept": kept, "freed_bytes": freed_bytes}
 
 
 def prune_xtts_cache(temp_dir: Path, max_age_days: int = 30) -> dict:
