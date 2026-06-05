@@ -203,7 +203,19 @@ def prepare_part_assets(
         if needs_srt:
             _t_part_transcribe = time.perf_counter()
             _part_trans_engine = getattr(ctx.payload, "subtitle_transcription_engine", "default")
-            _part_trans_model = os.getenv("SUBTITLE_PER_PART_MODEL", "small")
+            # Sprint 6 P1 N.2 (H3 quality fix from Whisper defer audit):
+            # default the per-part Whisper model to whatever the source-level
+            # Whisper resolved to (ctx.tuned["whisper_model"]), so users on
+            # quality/best profiles don't silently get per-part subtitles
+            # capped at "small" while their source-level SRT is "large-v3".
+            # Explicit SUBTITLE_PER_PART_MODEL env var still wins so anyone
+            # who relied on the old "small" default can pin it back. Final
+            # defensive fallback to "small" if the tuned dict is missing
+            # the key for any reason.
+            _part_trans_model = os.getenv(
+                "SUBTITLE_PER_PART_MODEL",
+                ctx.tuned.get("whisper_model", "small"),
+            )
             try:
                 transcribe_with_adapter(
                     str(raw_part),
