@@ -358,21 +358,26 @@ class RenderRequest(BaseModel):
     # ── LLM Segment Selection (canonical names) ──────────────────────────────
     # llm_enabled=True  → LLM reads SRT, picks segments, is sole authority.
     # llm_enabled=False → fallback to local heuristic scorer.
-    llm_enabled: Optional[bool] = None            # None = inherit from groq_analysis_enabled (backward compat)
+    #
+    # Sprint 7.5 (2026-06-05): the 5 legacy `groq_*` alias fields
+    # (groq_analysis_enabled / groq_model / groq_content_language /
+    # groq_min_quality_score / groq_selection_strategy) and their
+    # _coerce_groq_to_llm validator were deleted. Migration 0002
+    # rewrote every stored job's payload_json to use llm_* keys; with
+    # model_config = ConfigDict(extra="ignore") (pinned in Sprint 5.3),
+    # any payload still carrying legacy groq_* keys is silently dropped
+    # and the llm_* fields default to None (which the pipeline treats
+    # as "use server defaults"). See
+    # docs/review/SPRINT_7_5_GROQ_DELETION_2026-06-05.md.
+    llm_enabled: Optional[bool] = None            # None = use server default
     llm_model: Optional[str] = None               # None = server default for selected provider
     llm_language: Optional[str] = None            # None = auto-detect from transcript
-    llm_min_quality: Optional[float] = None       # None = inherit from groq_min_quality_score (default 0.6)
-    llm_mode: Optional[str] = None                # None = inherit from groq_selection_strategy (default "top_n")
+    llm_min_quality: Optional[float] = None       # None = use server default (≈ 0.6)
+    llm_mode: Optional[str] = None                # None = use server default (≈ "top_n")
 
-    # ── Legacy groq_* fields — kept for backward compat with stored jobs ─────
-    # New code should use llm_* above. groq_* values are copied to llm_* at
-    # deserialization time (see model_validator below) so the pipeline only
-    # reads llm_* fields.
-    groq_analysis_enabled: bool = False
-    groq_model: Optional[str] = None
-    groq_content_language: Optional[str] = None
-    groq_min_quality_score: float = 0.6
-    groq_selection_strategy: str = "top_n"
+    # ── Preserved groq_* keys (no llm_* equivalent — Migration 0002 design) ──
+    # groq_only_mode + groq_api_key remain valid input keys; the migration
+    # 0002 deliberately preserved them because they have no llm_* counterpart.
     groq_only_mode: bool = False
 
     # Multi-provider LLM (Phase I) — which LLM provider drives segment selection.
@@ -462,24 +467,11 @@ class RenderRequest(BaseModel):
             raise ValueError("voice_mix_mode must be 'replace_original' or 'keep_original_low'")
         return self
 
-    @model_validator(mode="after")
-    def _coerce_groq_to_llm(self):
-        """Copy groq_* legacy fields into llm_* canonical fields when llm_* is not set.
-
-        Runs at deserialization time so stored jobs that predate llm_* fields
-        work transparently — the pipeline only reads llm_* fields.
-        """
-        if self.llm_enabled is None:
-            self.llm_enabled = self.groq_analysis_enabled
-        if self.llm_model is None:
-            self.llm_model = self.groq_model
-        if self.llm_language is None:
-            self.llm_language = self.groq_content_language
-        if self.llm_min_quality is None:
-            self.llm_min_quality = self.groq_min_quality_score
-        if self.llm_mode is None:
-            self.llm_mode = self.groq_selection_strategy
-        return self
+    # Sprint 7.5 (2026-06-05): _coerce_groq_to_llm validator deleted.
+    # Migration 0002 already rewrote every stored job's payload_json to use
+    # llm_* keys. Any payload still carrying legacy groq_* keys is silently
+    # dropped by extra="ignore" (Sprint 5.3 pin). See
+    # docs/review/SPRINT_7_5_GROQ_DELETION_2026-06-05.md.
 
 
 # ── Upload ───────────────────────────────────────────────────────────────
