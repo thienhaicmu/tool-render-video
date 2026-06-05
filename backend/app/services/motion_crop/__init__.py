@@ -91,12 +91,17 @@ from app.services.motion_crop.legacy import (  # noqa: F401 (re-exported)
     _build_motion_path_legacy,
     _detect_scene_ranges_in_clip,
 )
-# Sprint 6.D-3.6a + 3.6b: build_subject_path + build_subject_path_scene.
+# Sprint 6.D-3.6a + 3.6b + Sprint 5.2 split:
+#   build_subject_path lives in path.py (multi-scene dispatcher + single-
+#   scene fast path). build_subject_path_scene was split out into
+#   path_scene.py (per-scene state machine, ~530 LOC).
 # build_motion_path dispatcher (defined below) calls build_subject_path.
-# build_subject_path_scene is re-exported even though only used by
-# build_subject_path's multi-scene dispatch loop inside motion_crop_path.
-from app.services.motion_crop.path import (
-    build_subject_path,
+# build_subject_path_scene is re-exported even though it is only used by
+# build_subject_path's multi-scene dispatch loop — the re-export contract
+# is what keeps the deferred-import in path.py resolving cleanly across
+# the split.
+from app.services.motion_crop.path import build_subject_path
+from app.services.motion_crop.path_scene import (
     build_subject_path_scene,  # noqa: F401 (re-exported)
 )
 
