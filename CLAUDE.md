@@ -799,11 +799,16 @@ After Sprint 5.4 the surface is two patterns, not three:
 
 Full `_thread_conn → db_conn` unification stays DEFERRED until per-frame progress-write benchmarking confirms no perf regression. Sprint 5.4 audit: `docs/review/DB_CONNECTION_AUDIT_2026-06-05.md`.
 
-### Issue 3 — Cache Location (PARTIALLY RESOLVED 2026-06-02)
+### Issue 3 — Cache Location (RESOLVED 2026-06-05 via Sprint 6 P1)
 
-Cache root has been moved to `APP_DATA_DIR/cache` (see `pipeline_cache.py:29,45,59,77,86,99` and `services/motion_crop.py:26,41`). The `POST /api/render/cache/clear` endpoint targets the new path.
+Cache root lives at `APP_DATA_DIR/cache` (see `pipeline_cache.py:29,45,59,77,86,99` and `services/motion_crop/cache.py:31,46`). The `POST /api/render/cache/clear` endpoint targets the new path.
 
-**Remaining gap:** `services/maintenance.py` still does NOT prune `APP_DATA_DIR/cache`. TTL (`_RENDER_CACHE_TTL_SEC = 72h`) is only enforced lazily on `_cache_get` reads — caches for sources never re-accessed accumulate forever. Fix: add a `prune_render_cache(cache_dir, max_age_hours=72)` call into the existing maintenance scheduler.
+`prune_render_cache(cache_dir, max_age_hours=72)` at `services/maintenance.py:76-122` walks every subdir of the cache root (`scene_detect`, `transcription`, `segment_scores`, `motion_path`, plus any future addition — pinned subdir-agnostic by `test_walks_unknown_subdirs`). Returns `{removed, kept, freed_bytes}`. Two scheduler entry points:
+
+- **Startup:** `main.py:233` (since Sprint 5.2)
+- **Periodic 30-min loop:** `main.py:210` inside `_run_periodic_cleanup` (since Sprint 6 P1 commit `d1162d8`)
+
+Source-pinned by `tests/test_maintenance_cache_prune.py::test_periodic_cleanup_source_pins_render_cache_call`. Closure ledger: `docs/review/SPRINT_6_P1_CACHE_PRUNE_2026-06-05.md`.
 
 ### Issue 4 — Remaining God Files (CLOSED 2026-06-03 via Sprint 6.D)
 
