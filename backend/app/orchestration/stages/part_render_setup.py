@@ -94,6 +94,8 @@ _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_C
 # see render_pipeline.py for the closure rationale.
 # Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
+# Sprint 7.8 (2026-06-05): motion-aware extension flag — see render_pipeline.py.
+_FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
 
 
 # ────────────────────────────────────────────────────────────────────
