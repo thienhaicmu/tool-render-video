@@ -92,6 +92,8 @@ _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
 # Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
 # see render_pipeline.py for the closure rationale.
+# Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
+_FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
 
 
 # ────────────────────────────────────────────────────────────────────

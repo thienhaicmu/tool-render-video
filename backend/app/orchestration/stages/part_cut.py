@@ -86,6 +86,8 @@ _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
 # Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
 # see render_pipeline.py for the closure rationale.
+# Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
+_FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
 
 
 def _should_skip_raw_part_write(
@@ -300,25 +302,51 @@ def run_cut_stage(
     upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
 
     # Sprint 6 audit O-4 Commit 1 — telemetry-only predicate evaluation.
-    # Logs which parts WOULD be eligible to skip the raw_part write if the
-    # actual fuse were enabled. No behavior change today. The data shows
-    # up at debug level so production logs stay quiet by default; turn on
-    # render debug logging to see the per-part predicate state.
+    # Sprint 7.4 (this commit) — actually skip cut_video when:
+    #   1. The predicate fires (subtitle off + no base_clip consumer); AND
+    #   2. FEATURE_RAW_PART_SKIP=1 (30-day settling opt-in); AND
+    #   3. payload.motion_aware_crop=False (Option E scope — Sprint 7.8
+    #      will add the motion-aware branch).
+    # The fused render runs in run_render_encode via render_part_from_source
+    # when raw_part.exists() is False (this skip leaves the file absent
+    # which is the cross-stage signal).
     _part_subtitle_enabled = ctx.subtitle_enabled_by_idx.get(idx, False)
-    if _should_skip_raw_part_write(
+    _skip_predicate_fires = _should_skip_raw_part_write(
         part_subtitle_enabled=_part_subtitle_enabled,
         feature_base_clip_first=_FEATURE_BASE_CLIP_FIRST,
         feature_overlay_after_base_clip=_FEATURE_OVERLAY_AFTER_BASE_CLIP,
-    ):
+    )
+    _payload_motion_aware = bool(getattr(ctx.payload, "motion_aware_crop", False))
+    _skip_active = (
+        _skip_predicate_fires and _FEATURE_RAW_PART_SKIP and not _payload_motion_aware
+    )
+    if _skip_predicate_fires:
         _job_log(
             ctx.effective_channel,
             ctx.job_id,
             f"raw_part_skip_eligible part={idx} predicate=true "
-            f"subtitle_enabled=False base_clip_consumer=False",
+            f"subtitle_enabled=False base_clip_consumer=False "
+            f"motion_aware={_payload_motion_aware} flag={_FEATURE_RAW_PART_SKIP} "
+            f"active={_skip_active}",
             kind="debug",
         )
+    if _skip_active:
+        _job_log(
+            ctx.effective_channel,
+            ctx.job_id,
+            f"raw_part_skip_active part={idx} cut_video bypassed — "
+            f"render_part_from_source will fuse cut+render in render_encode",
+            kind="info",
+        )
 
-    if not (ctx.payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
+    if _skip_active:
+        # Sprint 7.4 — cut_video bypassed. raw_part stays absent; the
+        # encode stage detects this via raw_part.exists() and routes to
+        # render_part_from_source (input-side -ss/-t fused with the
+        # final encode). _cut_ms stays 0 — the time shows up in the
+        # encode stage timing instead.
+        logger.info("cut_video_skipped_sprint_7_4 part=%d", idx)
+    elif not (ctx.payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
         _t_cut = time.perf_counter()
         cut_video(str(ctx.source_path), str(raw_part), _effective_start, _effective_end,
                   retry_count=ctx.retry_count, force_accurate_cut=_force_accurate_cut)

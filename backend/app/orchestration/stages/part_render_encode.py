@@ -96,6 +96,9 @@ from app.services.render_engine import (
     render_base_clip,
     render_part_smart,
 )
+# Sprint 7.4 — direct import (not via render_engine shim) since this is
+# a new helper that does not need the historical re-export.
+from app.services.render.base_clip_renderer import render_part_from_source
 from app.services.subtitle_engine import (
     slice_srt_to_output_timeline,
     srt_to_ass_bounce,
@@ -110,6 +113,8 @@ _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
 # Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
 # see render_pipeline.py for the closure rationale.
+# Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
+_FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
 
 
 @dataclass
@@ -292,43 +297,93 @@ def run_render_encode(
                 ctx.job_id, idx, part_manifest.base_clip_path, _oc_err,
             )
 
+    # Sprint 7.4 — fused-cut+render path detection. When run_cut_stage
+    # skipped cut_video (predicate fired + FEATURE_RAW_PART_SKIP=1 +
+    # motion_aware_crop=False), raw_part stays absent on disk. Route to
+    # render_part_from_source instead of render_part_smart so the input-
+    # side -ss/-t seek runs in the same FFmpeg invocation as the encode.
+    _raw_part_absent = not raw_part.exists()
+    _resolved_playback_speed = float(
+        seg.get("variant_playback_speed")
+        or max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.07)
+               + _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)))
+    )
     try:
         if not _overlay_composite_succeeded:
-            render_part_smart(
-                str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if ctx.payload.add_title_overlay else "",
-                ctx.payload.aspect_ratio, ctx.payload.frame_scale_x, ctx.payload.frame_scale_y,
-                ctx.payload.motion_aware_crop,
-                reframe_mode=ctx.payload.reframe_mode,
-                add_subtitle=part_subtitle_enabled,
-                add_title_overlay=ctx.payload.add_title_overlay,
-                effect_preset=ctx.payload.effect_preset,
-                transition_sec=ctx.tuned["transition_sec"],
-                video_codec=ctx.payload.video_codec,
-                video_crf=_part_video_crf,
-                video_preset=ctx.tuned["video_preset"],
-                audio_bitrate=ctx.payload.audio_bitrate,
-                retry_count=ctx.retry_count,
-                encoder_mode=ctx.payload.encoder_mode,
-                output_fps=ctx.payload.output_fps,
-                reup_mode=ctx.payload.reup_mode,
-                reup_overlay_enable=ctx.payload.reup_overlay_enable,
-                reup_overlay_opacity=ctx.payload.reup_overlay_opacity,
-                reup_bgm_enable=ctx.payload.reup_bgm_enable,
-                reup_bgm_path=ctx.payload.reup_bgm_path,
-                reup_bgm_gain=ctx.payload.reup_bgm_gain,
-                playback_speed=float(
-                    seg.get("variant_playback_speed")
-                    or max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.07)
-                           + _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)))
-                ),
-                text_layers=part_text_layers,
-                loudnorm_enabled=getattr(ctx.payload, "loudnorm_enabled", False),
-                ffmpeg_threads=ctx.ffmpeg_threads,
-                content_type=seg.get("content_type_hint", "vlog"),
-                _motion_cache_key=_motion_ck,
-                _fallback_flag=_motion_crop_fallback,
-                visual_intensity_hint=ctx.vis_intensity_hint,
-            )
+            if _raw_part_absent and not ctx.payload.motion_aware_crop:
+                # Sprint 7.4 — fused cut+render: read source with input-side
+                # -ss/-t instead of from a pre-cut raw_part.mp4.
+                _source_duration = float(part_timeline.source_end - part_timeline.source_start)
+                logger.info(
+                    "render_part_from_source_invoked part=%d source_start=%.3f duration=%.3f",
+                    idx, part_timeline.source_start, _source_duration,
+                )
+                render_part_from_source(
+                    str(ctx.source_path),
+                    str(final_part),
+                    part_timeline.source_start,
+                    _source_duration,
+                    str(ass_part) if part_subtitle_enabled else None,
+                    overlay_title if ctx.payload.add_title_overlay else "",
+                    aspect_ratio=ctx.payload.aspect_ratio,
+                    scale_x=ctx.payload.frame_scale_x,
+                    scale_y=ctx.payload.frame_scale_y,
+                    add_subtitle=part_subtitle_enabled,
+                    add_title_overlay=ctx.payload.add_title_overlay,
+                    effect_preset=ctx.payload.effect_preset,
+                    transition_sec=ctx.tuned["transition_sec"],
+                    video_codec=ctx.payload.video_codec,
+                    video_crf=_part_video_crf,
+                    video_preset=ctx.tuned["video_preset"],
+                    audio_bitrate=ctx.payload.audio_bitrate,
+                    retry_count=ctx.retry_count,
+                    encoder_mode=ctx.payload.encoder_mode,
+                    output_fps=ctx.payload.output_fps,
+                    reup_mode=ctx.payload.reup_mode,
+                    reup_overlay_enable=ctx.payload.reup_overlay_enable,
+                    reup_overlay_opacity=ctx.payload.reup_overlay_opacity,
+                    reup_bgm_enable=ctx.payload.reup_bgm_enable,
+                    reup_bgm_path=ctx.payload.reup_bgm_path,
+                    reup_bgm_gain=ctx.payload.reup_bgm_gain,
+                    playback_speed=_resolved_playback_speed,
+                    text_layers=part_text_layers,
+                    loudnorm_enabled=getattr(ctx.payload, "loudnorm_enabled", False),
+                    ffmpeg_threads=ctx.ffmpeg_threads,
+                    content_type=seg.get("content_type_hint", "vlog"),
+                    visual_intensity_hint=ctx.vis_intensity_hint,
+                )
+            else:
+                render_part_smart(
+                    str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if ctx.payload.add_title_overlay else "",
+                    ctx.payload.aspect_ratio, ctx.payload.frame_scale_x, ctx.payload.frame_scale_y,
+                    ctx.payload.motion_aware_crop,
+                    reframe_mode=ctx.payload.reframe_mode,
+                    add_subtitle=part_subtitle_enabled,
+                    add_title_overlay=ctx.payload.add_title_overlay,
+                    effect_preset=ctx.payload.effect_preset,
+                    transition_sec=ctx.tuned["transition_sec"],
+                    video_codec=ctx.payload.video_codec,
+                    video_crf=_part_video_crf,
+                    video_preset=ctx.tuned["video_preset"],
+                    audio_bitrate=ctx.payload.audio_bitrate,
+                    retry_count=ctx.retry_count,
+                    encoder_mode=ctx.payload.encoder_mode,
+                    output_fps=ctx.payload.output_fps,
+                    reup_mode=ctx.payload.reup_mode,
+                    reup_overlay_enable=ctx.payload.reup_overlay_enable,
+                    reup_overlay_opacity=ctx.payload.reup_overlay_opacity,
+                    reup_bgm_enable=ctx.payload.reup_bgm_enable,
+                    reup_bgm_path=ctx.payload.reup_bgm_path,
+                    reup_bgm_gain=ctx.payload.reup_bgm_gain,
+                    playback_speed=_resolved_playback_speed,
+                    text_layers=part_text_layers,
+                    loudnorm_enabled=getattr(ctx.payload, "loudnorm_enabled", False),
+                    ffmpeg_threads=ctx.ffmpeg_threads,
+                    content_type=seg.get("content_type_hint", "vlog"),
+                    _motion_cache_key=_motion_ck,
+                    _fallback_flag=_motion_crop_fallback,
+                    visual_intensity_hint=ctx.vis_intensity_hint,
+                )
     finally:
         preflight.encode_stop.set()
         preflight.encode_timer.join(timeout=5.0)
