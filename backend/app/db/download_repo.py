@@ -1,8 +1,18 @@
+"""download_repo.py — download_jobs table CRUD.
+
+Sprint 5.4 (Sub-A): migrated from raw get_conn() + manual close to
+db_conn() context manager. Matches the Sprint 5.3 precedent set by
+creator_repo.py and feedback_repo.py — same exception-safety guarantee
+that jobs_repo.py has had. db_conn() also auto-commits/rolls back on
+exit, so explicit conn.commit() calls here are redundant; left in
+place for the cleanup pass in a follow-up sprint (same disposition as
+creator_repo.py).
+"""
 from __future__ import annotations
 
 from typing import Any
 
-from app.db.connection import get_conn, _utc_now_iso
+from app.db.connection import _utc_now_iso, db_conn
 
 
 def create_download_job(
@@ -11,8 +21,7 @@ def create_download_job(
     platform: str,
     output_dir: str,
 ) -> None:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         conn.execute(
             """
             INSERT INTO download_jobs (id, url, platform, output_dir, status, created_at, updated_at)
@@ -21,8 +30,6 @@ def create_download_job(
             (job_id, url, platform, output_dir, _utc_now_iso(), _utc_now_iso()),
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 def update_download_job(job_id: str, **fields: Any) -> None:
@@ -39,41 +46,29 @@ def update_download_job(job_id: str, **fields: Any) -> None:
     updates["updated_at"] = _utc_now_iso()
     cols = ", ".join(f"{k} = ?" for k in updates)
     vals = list(updates.values()) + [job_id]
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         conn.execute(f"UPDATE download_jobs SET {cols} WHERE id = ?", vals)
         conn.commit()
-    finally:
-        conn.close()
 
 
 def get_download_job(job_id: str) -> dict | None:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         row = conn.execute(
             "SELECT * FROM download_jobs WHERE id = ?", (job_id,)
         ).fetchone()
-        return dict(row) if row else None
-    finally:
-        conn.close()
+    return dict(row) if row else None
 
 
 def list_download_jobs(limit: int = 100) -> list[dict]:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM download_jobs ORDER BY created_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
+    return [dict(r) for r in rows]
 
 
 def delete_download_job(job_id: str) -> None:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         conn.execute("DELETE FROM download_jobs WHERE id = ?", (job_id,))
         conn.commit()
-    finally:
-        conn.close()
