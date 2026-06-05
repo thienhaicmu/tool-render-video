@@ -548,12 +548,16 @@ When a render fails at any stage, the cleanup path (deleting downloaded source f
 
 **Why:** The connection module sets WAL mode, registers row factories, and manages thread-local connection state for the render thread. Bypassing it creates connections without WAL mode, without row factories, and in incompatible isolation levels — all of which corrupt the consistency guarantees the pipeline depends on.
 
-### Known Issue — Mixed Connection Model (Do Not Worsen)
+### Known Issue — Mixed Connection Model (Sprint 5.4 partial closure)
 
-`upsert_job()` uses `get_conn()` — a new connection per call, manually closed.
-`update_job_progress()` uses `_thread_conn()` — a thread-local persistent connection.
+Helpers live in `backend/app/db/connection.py` (not `services/db.py`, which is a 50-line re-export facade):
 
-Both models coexist in `backend/app/services/db.py` and `backend/app/db/jobs_repo.py`. This is an inconsistency. Do not add new callers that introduce a third model. Do not silently switch one model to the other without a full audit of all callers and their transaction semantics. Unifying this is future architecture work requiring a dedicated plan.
+- `db_conn()` ctxmgr — HTTP path / bounded ops. Auto-commit on normal exit, rollback on exception. Used by `jobs_repo.py`, `creator_repo.py`, `feedback_repo.py`, `download_repo.py` (`download_repo` migrated to `db_conn()` in Sprint 5.4, commit `9347613`).
+- `_thread_conn()` — render hot path only. Thread-local persistent connection used by `update_job_progress()` and `upsert_job_part()` in `db/jobs_repo.py`. Released via `close_thread_conn()` at end of `render_pipeline.py`.
+
+Sprint 5.4 ruling: the `_thread_conn` → `db_conn` unification stays DEFERRED. The per-frame progress write opening a new connection on every call would block readers under the polling fallback (CLAUDE.md WAL+polling concern below). Unification is gated on per-frame benchmarking. Full audit + Sprint-5.4 decision in `docs/review/DB_CONNECTION_AUDIT_2026-06-05.md`.
+
+Do not add callers that introduce a third model (raw `sqlite3.connect()` outside the sanctioned sites in `connection.py`, `services/db_backup.py`, and `services/cookie_extractor.py`). Enforced by `tests/test_contract_db_sole_authority.py`.
 
 ---
 
@@ -787,12 +791,13 @@ Running `npm run build` updates the live served UI correctly.
 
 Caveat: `emptyOutDir: true` will wipe `backend/static-v2/` on every build — do not place hand-authored assets there.
 
-### Issue 2 — Mixed DB Connection Model
+### Issue 2 — Mixed DB Connection Model (PARTIALLY RESOLVED 2026-06-05 Sprint 5.4)
 
-`upsert_job()` calls `get_conn()` (new connection + manual close per call).
-`update_job_progress()` calls `_thread_conn()` (thread-local persistent connection).
-Both exist in the same module. Do not add callers of a third model.
-Unifying these is future architectural work — requires a dedicated plan and full caller audit.
+After Sprint 5.4 the surface is two patterns, not three:
+- `db_conn()` ctxmgr for HTTP path / bounded ops (`jobs_repo` `upsert_job`/`get_job`/etc., `creator_repo`, `feedback_repo`, `download_repo` after Sprint 5.4 commit `9347613`).
+- `_thread_conn()` for render hot path only (`update_job_progress` + `upsert_job_part` in `db/jobs_repo.py`).
+
+Full `_thread_conn → db_conn` unification stays DEFERRED until per-frame progress-write benchmarking confirms no perf regression. Sprint 5.4 audit: `docs/review/DB_CONNECTION_AUDIT_2026-06-05.md`.
 
 ### Issue 3 — Cache Location (PARTIALLY RESOLVED 2026-06-02)
 
