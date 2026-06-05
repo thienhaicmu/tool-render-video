@@ -128,10 +128,20 @@ _FEATURE_BASE_CLIP_VALIDATION_ARTIFACT: bool = (
 # (clips + subtitle_policy + camera_strategy + audio_plan + overlays) via
 # ai.llm.select_render_plan BEFORE the Sprint 2.2 builder shim runs. If the
 # AI returns a RenderPlan we use it directly; if it returns None or raises,
-# we fall back to the shim path — Sacred Contract #3 absolute. Default OFF
-# preserves baseline behaviour (Sacred Contract #2). Sprint 4.E-G will
-# migrate stage decision logic to read this AI-emitted plan.
-_FEATURE_LLM_EMIT_RENDER_PLAN: bool = os.getenv("LLM_EMIT_RENDER_PLAN", "0") == "1"
+# we fall back to the shim path — Sacred Contract #3 absolute. Sprint 4.E-G
+# migrated stage decision logic (subtitle_policy, camera_strategy, rank) to
+# read this AI-emitted plan with per-field merge — empty plan fields still
+# inherit legacy fallback (Sacred Contract #2 baseline preservation).
+#
+# Sprint 7.6a (2026-06-05): default flipped OFF → ON. The dual-mode fallback
+# at lines 457-552 (outer try/except wrapping the entire emission block)
+# means AI emission failure cannot crash a render — _render_plan stays None
+# and the legacy resolvers behave exactly as in the pre-flip baseline.
+# Operators who need the pre-flip behaviour set LLM_EMIT_RENDER_PLAN=0 (the
+# 3-second rollback). Sprint 7.6 will retire the legacy select_segments path
+# + LLMSegment + _to_scored_dict after ≥ 1 release cycle of this flip.
+# See docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md.
+_FEATURE_LLM_EMIT_RENDER_PLAN: bool = os.getenv("LLM_EMIT_RENDER_PLAN", "1") == "1"
 
 logger = logging.getLogger("app.render")
 

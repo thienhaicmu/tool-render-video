@@ -81,10 +81,20 @@ class TestFlagGate:
         result = _resolve_rank_from_plan(_plan(1, 2, 3), _scored(3), failed_idx_set=set())
         assert result == (None, "fallback")
 
-    def test_flag_unset_returns_fallback(self, monkeypatch):
+    def test_flag_unset_returns_consume_path(self, monkeypatch):
+        """Sprint 7.6a (2026-06-05): default flipped OFF → ON. Unset env
+        now resolves to the consume path (mirrors the
+        render_pipeline.py:134 module-load constant). Sacred Contract #2
+        spirit pressure mitigated by the dual-mode fallback at
+        render_pipeline.py:457-552 — AI emission failure cannot crash a
+        render. See docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md."""
         monkeypatch.delenv("LLM_EMIT_RENDER_PLAN", raising=False)
         result = _resolve_rank_from_plan(_plan(1, 2, 3), _scored(3), failed_idx_set=set())
-        assert result == (None, "fallback")
+        # Sequential ranks 1..N → consume path returns mapping with the
+        # "render_plan" source tag (NOT "fallback").
+        mapping, source = result
+        assert mapping == {1: 1, 2: 2, 3: 3}
+        assert source == "render_plan"
 
     def test_flag_loose_truthy_does_not_count(self, monkeypatch):
         """Strict `== "1"` compare. Anything else stays OFF, matching
