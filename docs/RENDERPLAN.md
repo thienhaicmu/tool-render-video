@@ -240,9 +240,13 @@ appropriate migration step before instantiating sub-dataclasses. v1
   `_compute_output_ranking_entry` (`pipeline_ranking.py:237-238`).
   Neither the consume nor fallback rank path can drop them.
 - **#2 RenderRequest defaults** — `render_plan_json` is `NULL` by
-  default; `LLM_EMIT_RENDER_PLAN` defaults OFF; every resolver returns
-  the legacy fallback when `ctx.render_plan is None`. Baseline
-  behaviour byte-identical.
+  default; `LLM_EMIT_RENDER_PLAN` defaults **ON since Sprint 7.6a
+  (2026-06-05)** — operators set `LLM_EMIT_RENDER_PLAN=0` to revert
+  to the pre-Sprint-7.6a baseline. Every resolver still returns the
+  legacy fallback when `ctx.render_plan is None` (per-field merge),
+  and the dual-mode try/except at `render_pipeline.py:457-552`
+  guarantees AI emission failure cannot crash a render. See
+  `docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md`.
 - **#3 AI modules return None on failure** — every helper involved
   (`select_render_plan`, `parse_render_plan_response`,
   `update_render_plan`, `get_render_plan`, every `_resolve_*_from_plan`)

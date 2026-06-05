@@ -218,21 +218,24 @@ retired in Phase G. The AI Director surface is now distributed across
 The orchestrator runs one of two emission paths per render job, gated
 on the `LLM_EMIT_RENDER_PLAN` env var:
 
-- **`LLM_EMIT_RENDER_PLAN=1`** (Sprint 4.D AI-emission path):
-  `render_pipeline.py` calls `ai.llm.select_render_plan(...)` and gets
-  an `Optional[RenderPlan]`. Success persists via
-  `jobs_repo.update_render_plan(job_id, plan.to_json())` and threads
-  the plan into `PartRenderContext.render_plan`. Failure (None /
-  raise) emits `render.plan.ai_fallback` and leaves `_render_plan =
-  None` — the stage resolvers (Sprint 4.E/F/G) then fall back to the
-  legacy payload-derived logic.
-- **OFF (default)**: `ctx.render_plan` stays `None`. The legacy
-  per-stage decisions run unchanged.
+- **`LLM_EMIT_RENDER_PLAN=1`** (Sprint 4.D AI-emission path — **default
+  since Sprint 7.6a, 2026-06-05**): `render_pipeline.py` calls
+  `ai.llm.select_render_plan(...)` and gets an `Optional[RenderPlan]`.
+  Success persists via `jobs_repo.update_render_plan(job_id,
+  plan.to_json())` and threads the plan into
+  `PartRenderContext.render_plan`. Failure (None / raise) emits
+  `render.plan.ai_fallback` and leaves `_render_plan = None` — the
+  stage resolvers (Sprint 4.E/F/G) then fall back to the legacy
+  payload-derived logic.
+- **`LLM_EMIT_RENDER_PLAN=0`** (operator opt-out, pre-Sprint-7.6a
+  baseline): `ctx.render_plan` stays `None`. The legacy per-stage
+  decisions run unchanged. The 3-second rollback escape hatch
+  documented in `docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md`.
 
 The Sprint 2.2 builder shim that previously synthesised a RenderPlan
 from the scored list was retired in Sprint 4.H — when the flag is
-OFF, no RenderPlan is constructed at all. See `docs/RENDERPLAN.md`
-for the full Schema + flow.
+explicitly set to 0, no RenderPlan is constructed at all. See
+`docs/RENDERPLAN.md` for the full Schema + flow.
 
 ### Stage consume sites (Sprint 4.E/F/G)
 

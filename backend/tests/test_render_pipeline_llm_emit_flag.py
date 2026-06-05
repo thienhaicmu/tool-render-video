@@ -34,19 +34,32 @@ class TestLlmEmitFlagWiring:
         assert hasattr(rp, "_FEATURE_LLM_EMIT_RENDER_PLAN")
         assert isinstance(rp._FEATURE_LLM_EMIT_RENDER_PLAN, bool)
 
-    def test_flag_defaults_off_when_env_unset(self, monkeypatch):
-        """Sacred Contract #2: behavior identical baseline when the
-        env var is absent. The constant resolves on module reload."""
+    def test_flag_defaults_on_when_env_unset(self, monkeypatch):
+        """Sprint 7.6a (2026-06-05): default flipped OFF → ON. Operators
+        who need the pre-flip baseline set LLM_EMIT_RENDER_PLAN=0
+        explicitly (the rollback escape hatch — pinned by
+        test_flag_off_when_env_set_to_0_explicitly below)."""
         monkeypatch.delenv("LLM_EMIT_RENDER_PLAN", raising=False)
         import app.orchestration.render_pipeline as rp
         rp = importlib.reload(rp)
-        assert rp._FEATURE_LLM_EMIT_RENDER_PLAN is False
+        assert rp._FEATURE_LLM_EMIT_RENDER_PLAN is True
 
     def test_flag_on_when_env_set_to_1(self, monkeypatch):
         monkeypatch.setenv("LLM_EMIT_RENDER_PLAN", "1")
         import app.orchestration.render_pipeline as rp
         rp = importlib.reload(rp)
         assert rp._FEATURE_LLM_EMIT_RENDER_PLAN is True
+
+    def test_flag_off_when_env_set_to_0_explicitly(self, monkeypatch):
+        """Sprint 7.6a — Sacred Contract #2 escape-hatch pin. After the
+        Sprint 7.6a default flip, operators who need the legacy behaviour
+        revert by setting LLM_EMIT_RENDER_PLAN=0 explicitly. This is the
+        3-second rollback documented in
+        docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md."""
+        monkeypatch.setenv("LLM_EMIT_RENDER_PLAN", "0")
+        import app.orchestration.render_pipeline as rp
+        rp = importlib.reload(rp)
+        assert rp._FEATURE_LLM_EMIT_RENDER_PLAN is False
 
     def test_flag_off_when_env_set_to_anything_else(self, monkeypatch):
         """The flag is a strict '== "1"' compare — anything else

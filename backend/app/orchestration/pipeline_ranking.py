@@ -304,10 +304,13 @@ def _resolve_rank_from_plan(
     Never raises — any attribute lookup or comparison failure surfaces
     as a fallback tag.
     """
-    # F.5 Option C — consume only when the feature flag is explicitly ON.
+    # F.5 Option C — consume only when the feature flag is "1".
     # Reading the env var per call (rather than once at module load)
     # lets tests monkeypatch the flag without reload gymnastics.
-    if _os.getenv("LLM_EMIT_RENDER_PLAN", "0") != "1":
+    # Sprint 7.6a (2026-06-05): default flipped "0" → "1" to match
+    # render_pipeline.py:134. Operators set LLM_EMIT_RENDER_PLAN=0 to revert.
+    # See docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md.
+    if _os.getenv("LLM_EMIT_RENDER_PLAN", "1") != "1":
         return None, "fallback"
     if render_plan is None:
         return None, "fallback"
