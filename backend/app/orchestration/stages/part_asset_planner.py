@@ -60,11 +60,17 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import time
 from typing import Tuple
 
 from app.core.stage import JobPartStage
 from app.orchestration.part_assets import PartAssets
+from app.orchestration.pipeline_cache import (
+    _ass_cache_get,
+    _ass_cache_key,
+    _ass_cache_put,
+)
 from app.orchestration.pipeline_segment_selection import (
     _PLATFORM_PROFILES,
     _select_cta_text,
@@ -600,44 +606,104 @@ def prepare_part_assets(
             except Exception as _cta_exc:
                 logger.warning("cta_append_failed part=%d: %s", idx, _cta_exc)
 
+        # Sprint 7.3 — default cache-hit state for the subtitle_style_applied
+        # event context (additive key, Sacred Contract #6 compliant).
+        _ass_cache_hit = False
         if needs_ass:
             _play_res_y = _aspect_play_res_y(ctx.payload.aspect_ratio)
             _margin_v = getattr(ctx.payload, "sub_margin_v", 180)
             if not ctx.payload.motion_aware_crop and seg.get("content_type_hint") in ("interview", "commentary"):
                 _margin_v += 40
             _t_sub = time.perf_counter()
-            if _effective_subtitle_style == "pro_karaoke":
-                from app.services.subtitle_engine import _hex_to_ass
-                srt_to_ass_karaoke(
-                    str(_ass_srt_source), str(ass_part),
-                    scale_y=ctx.payload.frame_scale_y,
-                    font_size=getattr(ctx.payload, "sub_font_size", 46),
-                    font_name=getattr(ctx.payload, "sub_font", "Bungee"),
-                    margin_v=_margin_v,
-                    play_res_y=_play_res_y,
-                    base_color=_hex_to_ass(getattr(ctx.payload, "sub_color", "#FFFFFF")),
-                    highlight_color=_hex_to_ass(getattr(ctx.payload, "sub_highlight", "#FFFF00")),
-                    outline_size=getattr(ctx.payload, "sub_outline", 3),
-                    x_percent=getattr(ctx.payload, "sub_x_percent", 50.0),
-                )
-            else:
-                srt_to_ass_bounce(
-                    str(_ass_srt_source),
-                    str(ass_part),
-                    subtitle_style=_effective_subtitle_style,
-                    scale_y=ctx.payload.frame_scale_y,
-                    highlight_per_word=ctx.payload.highlight_per_word,
-                    font_name=getattr(ctx.payload, "sub_font", "Bungee"),
-                    margin_v=_margin_v,
-                    play_res_y=_play_res_y,
-                    x_percent=getattr(ctx.payload, "sub_x_percent", 50.0),
-                    font_size=getattr(ctx.payload, "sub_font_size", 0),
-                )
+
+            # Sprint 7.3 — content-addressable ASS cache. Compute a SHA-256
+            # key from the 13 inputs that determine the ASS body and try a
+            # cache hit before the writer call. Cache hits skip both the
+            # 5-20 ms srt_to_ass_* generation and the file write — the
+            # cached file is shutil.copy2'd to ass_part so the existing
+            # downstream contract (ass_part as a file path consumed by
+            # base_clip_renderer/overlay_compositor/motion_crop) is preserved.
+            # See docs/review/SPRINT_7_3_ASS_CONTENT_CACHE_2026-06-05.md.
+            _ass_writer = "karaoke" if _effective_subtitle_style == "pro_karaoke" else "bounce"
+            _ass_cache_k = _ass_cache_key(
+                srt_path=_ass_srt_source,
+                writer=_ass_writer,
+                style=_effective_subtitle_style or "",
+                scale_y=int(ctx.payload.frame_scale_y or 0),
+                font_name=getattr(ctx.payload, "sub_font", "Bungee") or "Bungee",
+                font_size=int(getattr(ctx.payload, "sub_font_size", 0) or 0),
+                margin_v=int(_margin_v),
+                play_res_y=int(_play_res_y),
+                play_res_x=1080,
+                x_percent=float(getattr(ctx.payload, "sub_x_percent", 50.0) or 50.0),
+                highlight_per_word=bool(getattr(ctx.payload, "highlight_per_word", False)),
+                base_color=str(getattr(ctx.payload, "sub_color", "") or "")
+                    if _ass_writer == "karaoke" else "",
+                highlight_color=str(getattr(ctx.payload, "sub_highlight", "") or "")
+                    if _ass_writer == "karaoke" else "",
+                outline_size=int(getattr(ctx.payload, "sub_outline", 0) or 0)
+                    if _ass_writer == "karaoke" else 0,
+            )
+            _ass_cache_path = _ass_cache_get(_ass_cache_k) if _ass_cache_k else None
+            if _ass_cache_path is not None:
+                try:
+                    shutil.copy2(str(_ass_cache_path), str(ass_part))
+                    _ass_cache_hit = True
+                except Exception as _ass_copy_exc:
+                    # Copy failure: fall through to generation path. Cache
+                    # acts purely as a best-effort optimisation, never the
+                    # critical path.
+                    logger.debug(
+                        "ass_cache_copy_failed part=%d key=%s err=%s — falling through to generation",
+                        idx, (_ass_cache_k[:8] if _ass_cache_k else "?"), _ass_copy_exc,
+                    )
+
+            if not _ass_cache_hit:
+                if _effective_subtitle_style == "pro_karaoke":
+                    from app.services.subtitle_engine import _hex_to_ass
+                    srt_to_ass_karaoke(
+                        str(_ass_srt_source), str(ass_part),
+                        scale_y=ctx.payload.frame_scale_y,
+                        font_size=getattr(ctx.payload, "sub_font_size", 46),
+                        font_name=getattr(ctx.payload, "sub_font", "Bungee"),
+                        margin_v=_margin_v,
+                        play_res_y=_play_res_y,
+                        base_color=_hex_to_ass(getattr(ctx.payload, "sub_color", "#FFFFFF")),
+                        highlight_color=_hex_to_ass(getattr(ctx.payload, "sub_highlight", "#FFFF00")),
+                        outline_size=getattr(ctx.payload, "sub_outline", 3),
+                        x_percent=getattr(ctx.payload, "sub_x_percent", 50.0),
+                    )
+                else:
+                    srt_to_ass_bounce(
+                        str(_ass_srt_source),
+                        str(ass_part),
+                        subtitle_style=_effective_subtitle_style,
+                        scale_y=ctx.payload.frame_scale_y,
+                        highlight_per_word=ctx.payload.highlight_per_word,
+                        font_name=getattr(ctx.payload, "sub_font", "Bungee"),
+                        margin_v=_margin_v,
+                        play_res_y=_play_res_y,
+                        x_percent=getattr(ctx.payload, "sub_x_percent", 50.0),
+                        font_size=getattr(ctx.payload, "sub_font_size", 0),
+                    )
+                # Sprint 7.3 — after a successful generation, put the
+                # produced ASS into the cache for future re-renders.
+                if _ass_cache_k:
+                    _ass_cache_put(_ass_cache_k, ass_part)
+
             _subtitle_ass_ms = int((time.perf_counter() - _t_sub) * 1000)
             logger.info(
-                "subtitle_ass_ms=%d part=%d style=%s content_type=%s",
+                "subtitle_ass_ms=%d part=%d style=%s content_type=%s ass_cache_hit=%s",
                 _subtitle_ass_ms, idx, _effective_subtitle_style,
-                seg.get("content_type_hint", ""),
+                seg.get("content_type_hint", ""), _ass_cache_hit,
+            )
+            _job_log(
+                ctx.effective_channel, ctx.job_id,
+                f"ass_content_cache part_no={idx} hit={_ass_cache_hit} "
+                f"key={(_ass_cache_k[:8] if _ass_cache_k else 'disabled')} "
+                f"elapsed_ms={_subtitle_ass_ms} writer={_ass_writer} "
+                f"style={_effective_subtitle_style}",
+                kind="debug",
             )
             _dbg_first_line = ""
             _dbg_first_ts: float = -1.0
@@ -695,6 +761,12 @@ def prepare_part_assets(
                     "margin_v": _margin_v,
                     "play_res_y": _play_res_y,
                     "aspect_ratio": ctx.payload.aspect_ratio,
+                    # Sprint 7.3 — additive only. Sibling to existing
+                    # resume_cache_hit_srt / resume_cache_hit_ass keys in
+                    # subtitle_part_sync. False on generation, True on
+                    # content-cache hit. Sacred Contract #6 compliant
+                    # (event signature unchanged; only context dict grows).
+                    "ass_cache_hit": _ass_cache_hit,
                 },
             )
             _part_manifest.ass_path = str(ass_part)
