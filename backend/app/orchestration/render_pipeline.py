@@ -113,6 +113,15 @@ _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1
 # When both flags are ON: overlay composite path → fallback render_part_smart() on failure.
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
 
+# Sprint 7.4 (2026-06-05) — feature flag: when ON, the raw_part.mp4
+# intermediate is skipped (cut_video bypassed) when the predicate at
+# part_cut._should_skip_raw_part_write fires AND payload.motion_aware_crop
+# is False. The fused cut+render call uses
+# services.render.base_clip_renderer.render_part_from_source with
+# input-side -ss/-t seek. Default OFF (Sacred Contract #2) — 30-day
+# settling window. See docs/review/SPRINT_7_4_RAW_PART_FUSE_2026-06-05.md.
+_FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
+
 # Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed.
 # The validation-artifact opt-in (Sprint 6 P0 HIGH) was a 30-day settling
 # escape hatch for users who relied on writing base_clip.mp4 as an A/B

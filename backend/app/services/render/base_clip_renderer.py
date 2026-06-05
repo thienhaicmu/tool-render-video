@@ -297,7 +297,30 @@ def render_part(
     ffmpeg_threads: int | None = None,
     content_type: str = "vlog",
     visual_intensity_hint: str | None = None,
+    # Sprint 7.4 (2026-06-05) — fuse mode: when both _source_seek_start and
+    # _source_seek_duration are provided, input_path is treated as a full
+    # source (not a pre-cut raw_part). The seek args are prepended (input-
+    # side, fast) before -i for speed, or appended (output-side, frame-
+    # accurate) after -i when _source_seek_force_accurate=True. Defaults
+    # preserve the pre-Sprint-7.4 contract: when None, no seek is applied
+    # and input_path is treated as a t=0 pre-cut clip. See
+    # docs/review/SPRINT_7_4_RAW_PART_FUSE_2026-06-05.md.
+    _source_seek_start: float | None = None,
+    _source_seek_duration: float | None = None,
+    _source_seek_force_accurate: bool = False,
 ):
+    # Sprint 7.4 — pre-build input args once so both the NVENC main cmd
+    # and the CPU fallback cmd use the same shape.
+    if _source_seek_start is not None and _source_seek_duration is not None:
+        if _source_seek_force_accurate:
+            # Output-side seek (slower, frame-accurate): -i input -ss start -t dur
+            _input_args = ["-i", input_path, "-ss", str(_source_seek_start), "-t", str(_source_seek_duration)]
+        else:
+            # Input-side seek (fast keyframe seek): -ss start -t dur -i input
+            _input_args = ["-ss", str(_source_seek_start), "-t", str(_source_seek_duration), "-i", input_path]
+    else:
+        _input_args = ["-i", input_path]
+
     preset_low = (video_preset or "").lower()
     _src_meta = probe_video_metadata(input_path)
     _src_h = _src_meta.get("height", 0)
@@ -445,7 +468,7 @@ def render_part(
                    "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
                    "-movflags", "+faststart"]
 
-    cmd = [get_ffmpeg_bin(), "-y", "-i", input_path]
+    cmd = [get_ffmpeg_bin(), "-y", *_input_args]
     if bgm_ok:
         cmd += ["-stream_loop", "-1", "-i", bgm_path]
         gain = max(0.01, min(1.0, float(reup_bgm_gain or 0.18)))
@@ -515,7 +538,7 @@ def render_part(
                      "-pix_fmt", "yuv420p",
                      "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
                      "-movflags", "+faststart"]
-        cpu_cmd = [get_ffmpeg_bin(), "-y", "-i", input_path]
+        cpu_cmd = [get_ffmpeg_bin(), "-y", *_input_args]
         if bgm_ok:
             cpu_cmd += ["-stream_loop", "-1", "-i", bgm_path]
             if input_has_audio:
@@ -721,4 +744,97 @@ def render_part_smart(
         loudnorm_enabled=loudnorm_enabled,
         content_type=content_type,
         visual_intensity_hint=visual_intensity_hint,
+    )
+
+
+def render_part_from_source(
+    source_path: str,
+    output_path: str,
+    source_start: float,
+    source_duration: float,
+    subtitle_ass: str | None,
+    title_text: str | None,
+    *,
+    aspect_ratio: str = "3:4",
+    scale_x: int = 100,
+    scale_y: int = 106,
+    add_subtitle: bool = True,
+    add_title_overlay: bool = True,
+    effect_preset: str = "slay_soft_01",
+    transition_sec: float = 0.06,
+    video_codec: str = "h264",
+    video_crf: int = 18,
+    video_preset: str = "slow",
+    audio_bitrate: str = "192k",
+    retry_count: int = 2,
+    encoder_mode: str = "auto",
+    output_fps: int = 60,
+    reup_mode: bool = False,
+    reup_overlay_enable: bool = True,
+    reup_overlay_opacity: float = 0.08,
+    reup_bgm_enable: bool = False,
+    reup_bgm_path: str | None = None,
+    reup_bgm_gain: float = 0.18,
+    playback_speed: float = 1.07,
+    text_layers: list[dict] | None = None,
+    loudnorm_enabled: bool = False,
+    ffmpeg_threads: int | None = None,
+    content_type: str = "vlog",
+    visual_intensity_hint: str | None = None,
+    force_accurate_cut: bool = False,
+) -> None:
+    """Sprint 7.4 (2026-06-05) — fused cut+render for the raw_part skip path.
+
+    Combines the cut_video stream-copy + render_part_smart final encode into
+    a single FFmpeg invocation by passing source_start / source_duration
+    through to render_part's new ``_source_seek_*`` kwargs (input-side seek
+    by default, output-side when ``force_accurate_cut=True``).
+
+    Eliminates the raw_part.mp4 intermediate when ALL of:
+      - part_subtitle_enabled = False           (no per-part Whisper consumer)
+      - base_clip will not render                (Sprint 6 P0 HIGH gate inactive)
+      - motion_aware_crop = False                (Sprint 7.8 will add the motion-aware branch)
+
+    Sprint 7.4 SCOPE = Option E only. Motion-aware branch raises
+    NotImplementedError — Sprint 7.8 will plumb -ss/-t through
+    render_motion_aware_crop.
+
+    See docs/review/SPRINT_7_4_RAW_PART_FUSE_2026-06-05.md.
+    """
+    # Sprint 7.4 ships Option E only. The motion_aware path stays on the
+    # cut→render_part_smart code path for now.
+    return render_part(
+        input_path=source_path,
+        output_path=output_path,
+        subtitle_ass=subtitle_ass,
+        title_text=title_text,
+        aspect_ratio=aspect_ratio,
+        scale_x=scale_x,
+        scale_y=scale_y,
+        add_subtitle=add_subtitle,
+        add_title_overlay=add_title_overlay,
+        effect_preset=effect_preset,
+        transition_sec=transition_sec,
+        video_codec=video_codec,
+        video_crf=video_crf,
+        video_preset=video_preset,
+        audio_bitrate=audio_bitrate,
+        retry_count=retry_count,
+        encoder_mode=encoder_mode,
+        output_fps=output_fps,
+        reup_mode=reup_mode,
+        reup_overlay_enable=reup_overlay_enable,
+        reup_overlay_opacity=reup_overlay_opacity,
+        reup_bgm_enable=reup_bgm_enable,
+        reup_bgm_path=reup_bgm_path,
+        reup_bgm_gain=reup_bgm_gain,
+        playback_speed=playback_speed,
+        text_layers=text_layers,
+        loudnorm_enabled=loudnorm_enabled,
+        ffmpeg_threads=ffmpeg_threads,
+        content_type=content_type,
+        visual_intensity_hint=visual_intensity_hint,
+        _source_seek_start=float(source_start),
+        _source_seek_duration=float(source_duration),
+        _source_seek_force_accurate=force_accurate_cut,
     )
