@@ -151,7 +151,7 @@ if os.getenv("ENABLE_V2", "1") != "0":
 if _UI_VERSION == "v2":
     # static-v2 index.html uses relative paths (assets/…) so mount at /assets
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="static_assets")
-else:
+elif STATIC_DIR.is_dir():
     # Legacy index.html references /static/… absolute paths
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
