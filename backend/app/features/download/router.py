@@ -108,7 +108,7 @@ class BatchDownloadStartRequest(BaseModel):
 # ── Background worker ─────────────────────────────────────────────────────────
 
 def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -> None:
-    from app.features.render.engine.pipeline.workflow_trace import dl_job_start, dl_job_done, dl_job_fail
+    from app.core.tracing import dl_job_start, dl_job_done, dl_job_fail
 
     _t_start = time.monotonic()
     _platform = platform or "unknown"

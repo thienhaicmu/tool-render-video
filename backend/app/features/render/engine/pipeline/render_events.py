@@ -138,7 +138,7 @@ def _emit_render_event(
         _append_json_line(LOGS_DIR / "error.log", entry)
     # Feed workflow trace â€” swallowed, never raises
     try:
-        from app.features.render.engine.pipeline.workflow_trace import _feed_render_event
+        from app.core.tracing import _feed_render_event
         _feed_render_event(
             job_id=job_id, event=event, step=step,
             context=context or {}, duration_ms=duration_ms or 0,
