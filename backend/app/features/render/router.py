@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse, StreamingResponse
-from app.models.schemas import RenderRequest, PrepareSourceRequest, QuickProcessRequest
+from app.models.schemas import RenderRequest, RenderRequestStrict, PrepareSourceRequest, QuickProcessRequest
 from app.services.db import upsert_job, get_job, list_job_parts, update_job_progress
 from app.jobs.manager import submit_job, is_running
 from app.services.channel_service import ensure_channel
@@ -582,7 +582,11 @@ def _queue_render_job(job_id: str, effective_channel: str, payload: RenderReques
 
 
 @router.post("/process")
-def create_render_job(payload: RenderRequest):
+def create_render_job(payload: RenderRequestStrict):
+    # Audit FINDING-C04 closure (2026-06-06): use RenderRequestStrict so an
+    # unknown FE field surfaces as 422 instead of being silently dropped.
+    # All other internal paths (resume, retry, replay from stored payload)
+    # keep using the Lenient RenderRequest below.
     _coerce_legacy_channel_payload(payload)
     # Apply server-wide LLM provider default to NEW jobs only.
     # Resume/retry: ai_provider stays as stored.

@@ -518,6 +518,34 @@ class RenderRequest(BaseModel):
     # docs/review/SPRINT_7_5_GROQ_DELETION_2026-06-05.md.
 
 
+# ── RenderRequestStrict (audit FINDING-C04 closure, 2026-06-06) ──────────────
+# Closes the silent-drop hazard for phased FE rollouts. The parent
+# `RenderRequest` carries extra="ignore" because stored payloads with
+# deprecated keys (groq_*, ai_director_enabled, ...) must replay cleanly —
+# Sacred Contract #2. But at the API boundary, "silently drop unknowns" is
+# a footgun: an FE field renamed on the wire is invisible until rendering
+# behaviour diverges, which can take days to notice.
+#
+# Use:
+# - POST /api/render/process → RenderRequestStrict (extra="forbid": unknown
+#   field → 422 Unprocessable Entity, FE learns immediately).
+# - resume/retry from a stored job → RenderRequest (Lenient): replays cleanly.
+# - background pipeline replay → RenderRequest (Lenient): same.
+#
+# Audit verification (2026-06-06): the FE sends 56 fields, all of which
+# are defined on RenderRequest. There are 0 FE-only fields — switching the
+# POST handler to Strict will not break any current FE submission.
+class RenderRequestStrict(RenderRequest):
+    """RenderRequest variant that rejects unknown fields with 422.
+
+    Inherits every field, validator, and model_validator from
+    ``RenderRequest`` and only overrides ``model_config`` to flip the
+    extra-fields policy from "ignore" to "forbid".
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
 # ── Job status response (GET /api/jobs/{job_id}) ─────────────────────────────
 # Mirrors frontend/src/types/api.ts:JobStatus and the day-1 columns of the
 # `jobs` table in app.db. Wired as response_model on routes/jobs.py:359 so the
