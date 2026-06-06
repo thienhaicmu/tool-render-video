@@ -255,7 +255,7 @@ def _scene_worker(
         return result
     t0 = time.perf_counter()
     try:
-        from app.services.scene_detector import detect_scenes
+        from app.features.render.engine.pipeline.scene_detector import detect_scenes
         cached = cache_get(str(source_path))
         if cached is not None:
             result.scenes = cached
@@ -287,8 +287,8 @@ def _transcription_worker(
     result = _TranscriptionResult()
     t0 = time.perf_counter()
     try:
-        from app.services.subtitle_engine import has_audio_stream
-        from app.services.subtitle_transcription_adapters import transcribe_with_adapter
+        from app.features.render.engine.subtitle.transcription.whisper import has_audio_stream
+        from app.features.render.engine.subtitle.transcription.adapters import transcribe_with_adapter
 
         if not has_audio_stream(str(source_path)):
             result.transcription_error = "no_audio_stream"

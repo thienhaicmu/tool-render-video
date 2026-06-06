@@ -142,8 +142,8 @@ from app.features.render.engine.pipeline.render_output import RenderOutputResult
 from app.features.render.engine.stages.part_render_context import PartRenderContext
 from app.features.render.engine.stages.part_render_encode import RenderEncodeResult
 from app.features.render.engine.stages.part_render_setup import RenderPreflightResult
-from app.services.manifest_writer import manifest_path as _manifest_path
-from app.services.render_engine import apply_micro_pacing
+from app.features.render.engine.stages.manifest_writer import manifest_path as _manifest_path
+from app.features.render.engine.encoder.clip_ops import apply_micro_pacing
 # Track C bug fix C2 (2026-06-03): restore the missing import that the
 # Phase A-1..A-4 refactor on 2026-05-28 (commit 765616d) lost when it
 # extracted process_one_part into stages/part_renderer.py. The call
@@ -151,7 +151,7 @@ from app.services.render_engine import apply_micro_pacing
 # by try/except for 6 days, making market_viral_scored a no-op.
 # See docs/review/AUDIT_2026-06-02_followup_6.md for the timeline +
 # impact assessment.
-from app.services.viral_scoring import score_part_for_market as _mv_score_part
+from app.features.render.engine.stages.viral_scoring import score_part_for_market as _mv_score_part
 
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5d).
 logger = logging.getLogger("app.render")

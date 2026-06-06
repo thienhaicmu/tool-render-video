@@ -35,10 +35,10 @@ These three plus all 10 other helpers are re-exported from
 app.services.motion_crop so all existing import paths keep working.
 
 Deferred-import note (ffprobe_video_info / has_audio_stream):
-  Both helpers do a deferred `from app.services.render_engine import ...`
-  inside the function body to break the render_engine â†” motion_crop
-  module-level circular dependency (render_engine imports
-  render_motion_aware_crop from motion_crop at its module top). Keep
+  Both helpers do a deferred `from app.features.render.engine.encoder.ffmpeg_helpers import ...`
+  inside the function body to break the encoder â†” motion_crop
+  module-level circular dependency (encoder modules import
+  render_motion_aware_crop from motion_crop at their module top). Keep
   the imports deferred â€” moving them to module top here would
   reintroduce the cycle.
 """
@@ -51,7 +51,7 @@ from typing import Optional, Tuple
 import cv2
 import numpy as np
 
-from app.services.encoder_helpers import (
+from app.features.render.engine.encoder.encoder_helpers import (
     codec_extra_flags as _codec_extra_flags_shared,
 )
 
@@ -125,7 +125,7 @@ def ffprobe_video_info(video_path: str) -> Tuple[int, int, float]:
     Deferred import used to break the render_engine â†” motion_crop module-level
     circular dependency (render_engine imports motion_crop at its own module level).
     """
-    from app.services.render_engine import probe_video_metadata
+    from app.features.render.engine.encoder.ffmpeg_helpers import probe_video_metadata
     meta = probe_video_metadata(video_path)
     fps = meta["fps"] if meta["fps"] > 0 else 30.0
     return meta["width"], meta["height"], fps
@@ -133,7 +133,7 @@ def ffprobe_video_info(video_path: str) -> Tuple[int, int, float]:
 
 def has_audio_stream(video_path: str) -> bool:
     """Return True when the file has at least one audio stream (uses cached probe)."""
-    from app.services.render_engine import _has_audio_stream
+    from app.features.render.engine.encoder.ffmpeg_helpers import _has_audio_stream
     return _has_audio_stream(video_path)
 
 

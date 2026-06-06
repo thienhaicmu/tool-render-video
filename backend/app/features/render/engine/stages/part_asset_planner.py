@@ -84,22 +84,22 @@ from app.features.render.engine.pipeline.pipeline_subtitle_utils import (
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 from app.features.render.engine.stages.part_render_context import PartRenderContext
 from app.services.db import upsert_job_part
-from app.services.manifest_writer import write_manifest
-from app.services.subtitle_engine import (
+from app.features.render.engine.stages.manifest_writer import write_manifest
+from app.features.render.engine.subtitle.generator.ass import srt_to_ass_bounce, srt_to_ass_karaoke
+from app.features.render.engine.subtitle.generator.srt import parse_srt_blocks, write_srt_blocks
+from app.features.render.engine.subtitle.processing.readability import (
+    resegment_srt_for_readability,
+    subtitle_emphasis_pass,
+)
+from app.features.render.engine.subtitle.processing.text_transforms import (
     apply_hook_subtitle_format,
     apply_market_hook_text_to_srt,
     apply_market_line_break_to_srt,
-    parse_srt_blocks,
-    resegment_srt_for_readability,
     resolve_hook_overlay_text,
-    srt_to_ass_bounce,
-    srt_to_ass_karaoke,
-    subtitle_emphasis_pass,
-    write_srt_blocks,
 )
-from app.services.subtitle_transcription_adapters import transcribe_with_adapter
-from app.services.text_overlay import MAX_TEXT_LAYERS
-from app.services.translation_service import translate_srt_file
+from app.features.render.engine.subtitle.transcription.adapters import transcribe_with_adapter
+from app.features.render.engine.overlay.text_overlay import MAX_TEXT_LAYERS
+from app.features.render.engine.subtitle.translation_service import translate_srt_file
 
 # Preserve original logger name (Sprint 6.D-2.1 pattern) â€” used by the
 # original code in stages/part_renderer.py and by downstream filters.
@@ -660,7 +660,7 @@ def prepare_part_assets(
 
             if not _ass_cache_hit:
                 if _effective_subtitle_style == "pro_karaoke":
-                    from app.services.subtitle_engine import _hex_to_ass
+                    from app.features.render.engine.subtitle.generator.ass import _hex_to_ass
                     srt_to_ass_karaoke(
                         str(_ass_srt_source), str(ass_part),
                         scale_y=ctx.payload.frame_scale_y,

@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.ai.dependencies import has_deepfilternet
+from app.features.render.ai.dependencies import has_deepfilternet
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
 
 _DEEPFILTERNET_TIMEOUT_SEC = 180

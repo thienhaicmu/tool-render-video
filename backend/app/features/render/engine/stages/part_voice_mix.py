@@ -85,10 +85,10 @@ from app.features.render.engine.pipeline.render_events import (
     _safe_unlink,
 )
 from app.features.render.engine.stages.part_render_context import PartRenderContext
-from app.services.audio.mix import mix_narration_audio
-from app.services.manifest_writer import write_manifest
-from app.services.subtitle_engine import slice_srt_to_text
-from app.services.audio.tts import generate_narration_audio
+from app.features.render.engine.audio.mixer import mix_narration_audio
+from app.features.render.engine.stages.manifest_writer import write_manifest
+from app.features.render.engine.subtitle.generator.srt import slice_srt_to_text
+from app.features.render.engine.audio.tts import generate_narration_audio
 
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5d).
 logger = logging.getLogger("app.render")

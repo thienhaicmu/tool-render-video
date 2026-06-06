@@ -110,8 +110,8 @@ from app.features.render.engine.motion.path_scene import (
 import cv2
 
 from app.services.bin_paths import get_ffmpeg_bin, _summarize_ffmpeg_stderr
-from app.services.text_overlay import append_text_layer_filters
-from app.services.encoder_helpers import (
+from app.features.render.engine.overlay.text_overlay import append_text_layer_filters
+from app.features.render.engine.encoder.encoder_helpers import (
     resolve_encoder as _resolve_encoder,
     map_preset_for_encoder as _map_preset_for_encoder,
     reup_video_filters as _reup_video_filters,

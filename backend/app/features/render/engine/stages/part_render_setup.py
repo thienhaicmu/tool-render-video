@@ -78,7 +78,7 @@ from app.features.render.engine.pipeline.pipeline_cache import _render_cache_key
 from app.features.render.engine.pipeline.pipeline_segment_selection import _PLATFORM_PROFILES
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _render_progress_timer
 from app.features.render.engine.stages.part_render_context import PartRenderContext
-from app.services.render_engine import (
+from app.features.render.engine.encoder.ffmpeg_helpers import (
     content_type_crf_delta as _crf_delta_for_content_type,
 )
 

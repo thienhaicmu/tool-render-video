@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.services.voice_profiles import get_voice_profiles, get_voice_list
+from app.features.render.engine.audio.profiles import get_voice_profiles, get_voice_list
 
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])

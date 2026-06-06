@@ -5,8 +5,8 @@ from pathlib import Path
 from app.domain.timeline import TimelineMap
 from app.features.render.engine.motion import render_motion_aware_crop, MotionCropConfig
 from app.services.bin_paths import get_ffmpeg_bin
-from app.services.text_overlay import append_text_layer_filters
-from app.services.encoder_helpers import (
+from app.features.render.engine.overlay.text_overlay import append_text_layer_filters
+from app.features.render.engine.encoder.encoder_helpers import (
     codec_extra_flags as _codec_extra_flags,
     map_preset_for_encoder as _map_preset_for_encoder,
     reup_video_filters as _reup_video_filters,

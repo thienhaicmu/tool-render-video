@@ -77,7 +77,7 @@ from app.features.render.engine.pipeline.render_events import (
 )
 from app.features.render.engine.stages.part_render_context import PartRenderContext
 from app.services.db import upsert_job_part
-from app.services.render_engine import extract_thumbnail_frame
+from app.features.render.engine.encoder.ffmpeg_helpers import extract_thumbnail_frame
 
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5a).
 logger = logging.getLogger("app.render")
@@ -123,7 +123,7 @@ def run_part_done(
             _qi_srt_path = Path(str(_qi_srt))
         _qi_manifest: Path | None = None
         try:
-            from app.ai.tracing import _DEFAULT_LOG_DIR as _ai_log_dir
+            from app.features.render.ai.tracing import _DEFAULT_LOG_DIR as _ai_log_dir
             _qi_ai_trace = _ai_log_dir / f"{ctx.job_id}_ai_trace.jsonl"
             _qi_ai_trace = _qi_ai_trace if _qi_ai_trace.exists() else None
         except Exception:
@@ -166,7 +166,7 @@ def run_part_done(
         _cover_bytes = None
         if os.getenv("S4_THUMBNAIL_QUALITY_ENABLED") == "1":
             try:
-                from app.services.thumbnail_quality import select_best_thumbnail
+                from app.features.render.engine.thumbnail.thumbnail_quality import select_best_thumbnail
                 _t_thumb = time.perf_counter()
                 _cover_bytes, _cover_offset, _cover_quality_reasons = select_best_thumbnail(
                     str(final_part), _cover_offset, _clip_dur, width=640

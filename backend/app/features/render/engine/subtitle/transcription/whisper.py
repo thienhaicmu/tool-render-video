@@ -70,7 +70,7 @@ def has_audio_stream(video_path: str) -> bool:
     Imports directly from render.ffmpeg_helpers (Phase 4G.6 coupling fix â€” no longer
     routes through the render_engine shim).
     """
-    from app.services.render.ffmpeg_helpers import _has_audio_stream
+    from app.features.render.engine.encoder.ffmpeg_helpers import _has_audio_stream
     return _has_audio_stream(video_path)
 
 

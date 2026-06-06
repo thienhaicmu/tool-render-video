@@ -24,7 +24,7 @@ logger = logging.getLogger("app.render.llm_stage")
 logger.info("llm_stage: module loaded (build=2026-06-04.gemini-default)")
 
 try:
-    from app.ai.llm import select_segments as _llm_select, SUPPORTED_PROVIDERS
+    from app.features.render.ai.llm import select_segments as _llm_select, SUPPORTED_PROVIDERS
     _LLM_MODULE_AVAILABLE = True
 except ImportError as _import_exc:
     _LLM_MODULE_AVAILABLE = False
@@ -92,7 +92,7 @@ def _build_editorial_hint(payload: Any) -> str:
     # None on any internal error; we belt-and-braces here so even a
     # raised import failure can't propagate.
     try:
-        from app.ai.context.creator_context import build_creator_context
+        from app.features.render.ai.context.builder import build_creator_context
         creator_ctx = build_creator_context()
         if creator_ctx is not None:
             creator_hint = creator_ctx.to_prompt_hint()

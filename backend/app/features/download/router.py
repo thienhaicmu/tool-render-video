@@ -267,7 +267,7 @@ def refresh_cookies():
     """
     try:
         from app.core.config import COOKIES_DIR
-        from app.services.cookie_extractor import extract_youtube_cookies
+        from app.features.download.engine.cookie_extractor import extract_youtube_cookies
         output_path = COOKIES_DIR / "youtube_cookies.txt"
         ok = extract_youtube_cookies(output_path)
         if ok:

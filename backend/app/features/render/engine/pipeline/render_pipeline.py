@@ -32,15 +32,15 @@ from app.services.db import (
     list_job_parts,
     close_thread_conn,
 )
-from app.services.subtitle_engine import has_audio_stream
-from app.services.render_engine import nvenc_available
-from app.services import cancel_registry
-from app.services.job_manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
-from app.services.report_service import append_rows
+from app.features.render.engine.subtitle.transcription.whisper import has_audio_stream
+from app.features.render.engine.encoder.ffmpeg_helpers import nvenc_available
+from app.jobs import cancel as cancel_registry
+from app.jobs.manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
+from app.features.render.engine.pipeline.report_service import append_rows
 from app.core.config import TEMP_DIR
 from app.core.stage import JobStage, JobPartStage
-from app.ai.visibility.ai_visibility_summary import attach_ai_visibility_summaries
-from app.services.remotion_adapter import (  # noqa: F401 (re-exported for mock.patch in tests/test_remotion_adapter.py)
+from app.features.render.ai.visibility.ai_visibility_summary import attach_ai_visibility_summaries
+from app.features.render.engine.pipeline.remotion_adapter import (  # noqa: F401 (re-exported for mock.patch in tests/test_remotion_adapter.py)
     generate_hook_intro,
     prepend_intro_clip,
 )
@@ -99,7 +99,7 @@ from app.features.render.engine.pipeline.pipeline_config import (
 # the LLM_EMIT_RENDER_PLAN flag is OFF (default) ctx.render_plan stays
 # None and the Sprint 4.E/F/G stage resolvers fall back to the legacy
 # payload-derived logic — Sacred Contract #2 baseline preservation.
-from app.ai.llm import select_render_plan as _llm_select_render_plan
+from app.features.render.ai.llm import select_render_plan as _llm_select_render_plan
 from app.db.jobs_repo import update_render_plan
 
 # Feature flag: generate a no-overlay base clip as a parallel artifact before the
@@ -224,7 +224,7 @@ _render_active_count: list[int] = [0]   # mutable int; guarded by _render_active
 
 
 def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
-    from app.services.text_overlay import normalize_text_layers
+    from app.features.render.engine.overlay.text_overlay import normalize_text_layers
     try:
         raw_layers = [x.model_dump() if hasattr(x, "model_dump") else dict(x) for x in (payload.text_layers or [])]
         return normalize_text_layers(raw_layers)
@@ -962,7 +962,7 @@ def run_render_pipeline(
         else:
             max_workers = hw_cap
 
-        from app.services.render_engine import _resolve_codec
+        from app.features.render.engine.encoder.ffmpeg_helpers import _resolve_codec
         _effective_codec = _resolve_codec(payload.video_codec, encoder_mode=payload.encoder_mode)
         _job_log(
             effective_channel, job_id,

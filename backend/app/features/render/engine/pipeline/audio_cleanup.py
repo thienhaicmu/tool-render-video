@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.models.schemas import RenderRequest
 from app.features.render.engine.pipeline.render_events import _job_log, _safe_unlink
-from app.services.audio.cleanup_adapters import cleanup_audio_with_adapter
+from app.features.render.engine.audio.cleanup_adapters import cleanup_audio_with_adapter
 
 logger = logging.getLogger("app.render")
 
@@ -25,7 +25,7 @@ def _maybe_cleanup_narration_audio(
     # OQ-2.1: Auto-upgrade "none" â†’ "deepfilternet" when package is installed.
     # AUDIO_CLEANUP_AUTO=0 opts out. Explicit payload value always wins (including "none").
     if engine == "none" and os.environ.get("AUDIO_CLEANUP_AUTO", "1") == "1":
-        from app.ai.dependencies import has_deepfilternet as _has_dfn
+        from app.features.render.ai.dependencies import has_deepfilternet as _has_dfn
         if _has_dfn():
             engine = "deepfilternet"
 

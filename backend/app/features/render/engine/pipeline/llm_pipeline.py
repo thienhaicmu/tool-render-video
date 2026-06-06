@@ -30,8 +30,8 @@ from app.features.render.engine.pipeline.pipeline_cache import (
 )
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log, _safe_unlink
 from app.services.db import update_job_progress
-from app.services.subtitle_engine import has_audio_stream
-from app.services.subtitle_transcription_adapters import transcribe_with_adapter
+from app.features.render.engine.subtitle.transcription.whisper import has_audio_stream
+from app.features.render.engine.subtitle.transcription.adapters import transcribe_with_adapter
 
 logger = logging.getLogger("app.render.llm_pipeline")
 

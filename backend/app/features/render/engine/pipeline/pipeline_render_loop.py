@@ -28,9 +28,9 @@ from app.features.render.engine.stages.part_renderer import (
     PartRenderContext,
     process_one_part as _run_part,
 )
-from app.services import cancel_registry
+from app.jobs import cancel as cancel_registry
 from app.services.db import upsert_job_part
-from app.services.render_engine import resolve_ffmpeg_threads
+from app.features.render.engine.encoder.ffmpeg_helpers import resolve_ffmpeg_threads
 
 
 @dataclass

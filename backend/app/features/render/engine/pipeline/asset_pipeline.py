@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.models.schemas import RenderRequest
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log, _safe_unlink
-from app.services.remotion_adapter import (
+from app.features.render.engine.pipeline.remotion_adapter import (
     append_outro_clip,
     apply_logo_watermark,
     generate_hook_intro,

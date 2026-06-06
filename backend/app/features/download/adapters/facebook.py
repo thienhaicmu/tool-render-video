@@ -32,6 +32,6 @@ class FacebookAdapter(DownloadAdapter):
         cancel_event: Optional[threading.Event] = None,
         context: str = "download",
     ) -> dict:
-        from app.services.downloader import download_youtube
+        from app.features.download.engine.downloader import download_youtube
         result = download_youtube(url, output_dir, context=context, cancel_event=cancel_event)
         return {**result, "platform": "facebook", "url": url}

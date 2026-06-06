@@ -19,7 +19,7 @@ from app.core.stage import JobPartStage
 from app.features.render.engine.pipeline.qa_pipeline import _resume_output_valid
 from app.features.render.engine.pipeline.render_events import _job_log
 from app.services.db import upsert_job_part
-from app.services.render_engine import set_thread_cancel_event
+from app.features.render.engine.encoder.ffmpeg_helpers import set_thread_cancel_event
 
 logger = logging.getLogger("app.render")
 

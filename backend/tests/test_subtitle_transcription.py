@@ -31,7 +31,7 @@ def test_model_transcribe_locks_is_dict():
 
 def test_has_audio_stream_delegates_to_helpers():
     with patch(
-        "app.services.render.ffmpeg_helpers._has_audio_stream",
+        "app.features.render.engine.encoder.ffmpeg_helpers._has_audio_stream",
         return_value=True,
     ) as mock_fn:
         result = has_audio_stream("/fake/video.mp4")
@@ -41,7 +41,7 @@ def test_has_audio_stream_delegates_to_helpers():
 
 def test_has_audio_stream_false_path():
     with patch(
-        "app.services.render.ffmpeg_helpers._has_audio_stream",
+        "app.features.render.engine.encoder.ffmpeg_helpers._has_audio_stream",
         return_value=False,
     ):
         assert has_audio_stream("/fake/video.mp4") is False

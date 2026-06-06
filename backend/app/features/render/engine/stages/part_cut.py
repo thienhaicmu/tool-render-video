@@ -67,8 +67,8 @@ from app.features.render.engine.pipeline.pipeline_segment_selection import (
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 from app.features.render.engine.stages.part_render_context import PartRenderContext
 from app.services.db import upsert_job_part
-from app.services.manifest_writer import write_manifest
-from app.services.render_engine import (
+from app.features.render.engine.stages.manifest_writer import write_manifest
+from app.features.render.engine.encoder.clip_ops import (
     cut_video,
     detect_bad_first_frame,
     detect_silence_trim_offset,

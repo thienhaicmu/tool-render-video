@@ -9,7 +9,7 @@ import logging
 import re as _re
 from pathlib import Path
 
-from app.services.subtitle_engine import parse_srt_blocks, write_srt_blocks
+from app.features.render.engine.subtitle.generator.srt import parse_srt_blocks, write_srt_blocks
 
 logger = logging.getLogger("app.render")
 

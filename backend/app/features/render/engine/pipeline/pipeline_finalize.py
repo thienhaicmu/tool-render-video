@@ -227,7 +227,7 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
     # Triggers every Nth job or after the configured time interval (see
     # app.services.db_backup). Sacred Contract 7 follow-up.
     try:
-        from app.services.db_backup import maybe_snapshot_after_job
+        from app.features.render.engine.pipeline.db_backup import maybe_snapshot_after_job
         maybe_snapshot_after_job()
     except Exception:
         pass

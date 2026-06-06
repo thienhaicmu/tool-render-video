@@ -90,19 +90,15 @@ from app.features.render.engine.pipeline.pipeline_subtitle_utils import _aspect_
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 from app.features.render.engine.stages.part_render_context import PartRenderContext
 from app.features.render.engine.stages.part_render_setup import RenderPreflightResult
-from app.services.manifest_writer import write_manifest
-from app.services.render_engine import (
-    composite_overlays_on_base_clip,
+from app.features.render.engine.stages.manifest_writer import write_manifest
+from app.features.render.engine.encoder.clip_renderer import (
     render_base_clip,
     render_part_smart,
+    render_part_from_source,
 )
-# Sprint 7.4 â€” direct import (not via render_engine shim) since this is
-# a new helper that does not need the historical re-export.
-from app.services.render.base_clip_renderer import render_part_from_source
-from app.services.subtitle_engine import (
-    slice_srt_to_output_timeline,
-    srt_to_ass_bounce,
-)
+from app.features.render.engine.encoder.overlay_compositor import composite_overlays_on_base_clip
+from app.features.render.engine.subtitle.generator.ass import srt_to_ass_bounce
+from app.features.render.engine.subtitle.generator.timeline import slice_srt_to_output_timeline
 
 # Preserve original logger name (same pattern as 6.D-2.1 / 2.2 / 2.3 / 2.4).
 logger = logging.getLogger("app.render")

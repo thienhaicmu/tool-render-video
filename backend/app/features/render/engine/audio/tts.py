@@ -289,7 +289,7 @@ def generate_narration_audio(
         )
 
     # XTTS path: availability check before import
-    from app.ai.dependencies import has_xtts as _has_xtts
+    from app.features.render.ai.dependencies import has_xtts as _has_xtts
     if not _has_xtts():
         logger.warning("xtts_unavailable_fallback job_id=%s — TTS package absent, using edge", job_id)
         return generate_narration_mp3(
@@ -310,7 +310,7 @@ def generate_narration_audio(
     )
 
     try:
-        from app.services.audio.tts_xtts import synthesize_xtts
+        from app.features.render.engine.audio.tts_xtts import synthesize_xtts
         return synthesize_xtts(
             text=_humanized,
             language=language,

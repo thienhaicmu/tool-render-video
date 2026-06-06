@@ -34,9 +34,9 @@ import traceback
 from typing import Optional, Tuple
 
 from app.models.schemas import RenderRequest
-from app.services import cancel_registry
+from app.jobs import cancel as cancel_registry
 from app.services.db import update_job_progress
-from app.services.audio.tts import generate_narration_audio
+from app.features.render.engine.audio.tts import generate_narration_audio
 from app.features.render.engine.pipeline.audio_cleanup import _maybe_cleanup_narration_audio
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 

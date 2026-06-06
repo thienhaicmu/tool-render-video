@@ -327,7 +327,7 @@ def _assess_render_quality_intelligence(
     Returns the report dict or None on any failure.
     """
     try:
-        from app.quality.assessor import assess_rendered_part_quality
+        from app.features.render.engine.quality.assessor import assess_rendered_part_quality
 
         report = assess_rendered_part_quality(
             video_path=video_path,

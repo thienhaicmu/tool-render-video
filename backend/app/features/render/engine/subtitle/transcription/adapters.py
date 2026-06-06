@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from app.ai.dependencies import has_faster_whisper, has_whisperx
+from app.features.render.ai.dependencies import has_faster_whisper, has_whisperx
 
 # Languages with a supported wav2vec2 alignment model in WhisperX.
 # Configurable via WHISPERX_ALIGN_LANGS env var (comma-separated ISO codes).

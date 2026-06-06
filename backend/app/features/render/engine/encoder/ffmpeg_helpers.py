@@ -9,7 +9,7 @@ from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin, _summarize_ffmpeg_stderr
-from app.services.encoder_helpers import (
+from app.features.render.engine.encoder.encoder_helpers import (
     has_encoder as _has_encoder,
     nvenc_runtime_ready as _nvenc_runtime_ready,
     reup_audio_filter as _reup_audio_filter,

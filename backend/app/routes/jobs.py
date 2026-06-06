@@ -13,8 +13,8 @@ from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
 from app.models.schemas import JobStatusResponse
-from app.quality.report_locator import load_quality_report_for_part
-from app.quality.report_summary import build_job_quality_summary
+from app.features.render.engine.quality.report_locator import load_quality_report_for_part
+from app.features.render.engine.quality.report_summary import build_job_quality_summary
 
 logger = logging.getLogger("app.jobs")
 
@@ -348,7 +348,7 @@ def api_jobs_history(limit: int = 20, offset: int = 0):
 
 @router.get("/queue/status")
 def api_queue_status():
-    from app.services.job_manager import active_count, pending_count, MAX_CONCURRENT_JOBS
+    from app.jobs.manager import active_count, pending_count, MAX_CONCURRENT_JOBS
     return {
         "max_concurrent": MAX_CONCURRENT_JOBS,
         "active": active_count(),

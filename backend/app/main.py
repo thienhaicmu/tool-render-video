@@ -22,16 +22,16 @@ from app.core.logging_setup import configure_logging as _configure_logging
 # Uvicorn's console handlers are not touched — this only adds file handlers.
 _configure_logging(LOGS_DIR)
 from app.routes.channels import router as channels_router
-from app.routes.render import router as render_router
+from app.features.render.router import router as render_router
 from app.routes.jobs import router as jobs_router
 from app.routes.voice import router as voice_router
 from app.routes.files import router as files_router
-from app.routes.editing import router as editing_router
+from app.features.render.editing.router import router as editing_router
 from app.features.download.router import router as platform_downloader_router
 from app.routes.feedback import router as feedback_router
 from app.routes.metrics import router as metrics_router
 from app.routes.settings import router as settings_router
-from app.services.job_manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
+from app.jobs.manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
 from app.services.warmup import start_warmup, get_status as warmup_status
 from app.core.ui_gate import resolve_static_directory
 from fastapi import Request
@@ -194,7 +194,7 @@ def _run_periodic_cleanup():
     while True:
         _time.sleep(_CLEANUP_INTERVAL_SEC)
         try:
-            from app.routes.render import evict_stale_preview_sessions
+            from app.features.render.router import evict_stale_preview_sessions
             evicted = evict_stale_preview_sessions()
             result_preview = prune_preview_dirs(TEMP_DIR, max_age_hours=6)
             result_render = prune_render_temp_dirs(TEMP_DIR)
@@ -254,7 +254,7 @@ def startup():
     def _whisper_model_warmup():
         try:
             _wm = os.getenv("WARMUP_WHISPER_MODEL", "small")
-            from app.services.subtitle_transcription_adapters import warmup_fw_model
+            from app.features.render.engine.subtitle.transcription.adapters import warmup_fw_model
             ok = warmup_fw_model(_wm)
             logging.getLogger("app.startup").info(
                 "whisper_warmup: model=%s loaded=%s", _wm, ok
@@ -268,7 +268,7 @@ def startup():
     def _cookie_warmup():
         try:
             from app.core.config import COOKIES_DIR
-            from app.services.cookie_extractor import extract_youtube_cookies
+            from app.features.download.engine.cookie_extractor import extract_youtube_cookies
             out = COOKIES_DIR / "youtube_cookies.txt"
             ok = extract_youtube_cookies(out)
             if ok:
