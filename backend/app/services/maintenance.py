@@ -103,6 +103,16 @@ def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
             for f in subdir.iterdir():
                 if not f.is_file():
                     continue
+                # Audit FINDING-BR14 closure (Batch 10F 2026-06-06):
+                # never touch a ".tmp" sidecar. pipeline_cache writes
+                # atomically via "<key>.json.tmp" → os.replace into the
+                # final name; deleting the tmp file mid-write makes the
+                # writer's flush either fail (Windows sharing violation)
+                # or write into an orphaned inode (POSIX). The tmp file
+                # is by definition fresh, so we'd never legitimately
+                # match the cutoff anyway — this is belt-and-suspenders.
+                if f.suffix == ".tmp":
+                    continue
                 try:
                     st = f.stat()
                     mtime = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)

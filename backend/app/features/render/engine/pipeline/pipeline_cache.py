@@ -2,10 +2,22 @@
 
 Extracted from render_pipeline.py (lines 175–264) as part of C-1 decomposition.
 All logic is identical — this is a mechanical lift, not a rewrite.
+
+Audit FINDING-BR14 closure (Batch 10F 2026-06-06): all four ``_*_cache_put``
+helpers now write via a temp file + ``os.replace`` to give the cache file
+atomic-rename semantics. The pruner in ``services/maintenance.py`` was
+walking each subdir on a 30-minute cadence and could ``unlink`` a target
+mid-write — the writer's flush would then either fail (Windows: sharing
+violation) or write into an orphaned inode (POSIX). With atomic-rename the
+file is either fully present or absent; the pruner can never observe a
+half-written state. Belt-and-suspenders: the pruner also skips ``.tmp``
+sidecars so a freshly-allocated tmp file that's about to be renamed in
+can't be pruned mid-flight.
 """
 
 import hashlib
 import json
+import os
 import shutil
 import time
 from pathlib import Path
@@ -17,6 +29,33 @@ _RENDER_CACHE_TTL_SEC = 72 * 3600  # 72 h
 
 def _render_cache_key(*parts) -> str:
     return hashlib.md5("|".join(str(p) for p in parts).encode()).hexdigest()
+
+
+# Audit FINDING-BR14 helpers — atomic write via temp + os.replace.
+# os.replace is atomic on both POSIX (rename(2)) and Windows (MoveFileExW
+# with MOVEFILE_REPLACE_EXISTING). The pruner is taught to skip the
+# ".tmp" sidecar so even a 30-minute-stale tmp file (from a crashed
+# writer) is not deleted out from under a concurrent writer.
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically via a ``.tmp`` sidecar.
+
+    The pruner is instructed to skip ``.tmp`` files (see
+    services/maintenance.prune_render_cache) so the sidecar is safe even
+    if this process crashes between create and rename. A subsequent
+    successful write will overwrite the orphan; the periodic prune will
+    eventually evict it once its mtime ages past the TTL.
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _atomic_copy2(src: Path, dst: Path) -> None:
+    """``shutil.copy2`` source → tmp sidecar, then ``os.replace`` into dst."""
+    tmp = dst.with_suffix(dst.suffix + ".tmp")
+    shutil.copy2(str(src), str(tmp))
+    os.replace(tmp, dst)
 
 
 def _scene_cache_get(source_path: str) -> list | None:
@@ -44,7 +83,7 @@ def _scene_cache_put(source_path: str, scenes: list) -> None:
         key = _render_cache_key(source_path, st.st_mtime, st.st_size)
         cache_dir = APP_DATA_DIR / "cache" / "scene_detect"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        (cache_dir / f"{key}.json").write_text(json.dumps(scenes), encoding="utf-8")
+        _atomic_write_text(cache_dir / f"{key}.json", json.dumps(scenes))
     except Exception:
         pass
 
@@ -76,7 +115,7 @@ def _transcription_cache_put(source_path: str, model_name: str, cache_suffix: st
         key = _render_cache_key(source_path, st.st_mtime, st.st_size, model_name, cache_suffix)
         cache_dir = APP_DATA_DIR / "cache" / "transcription"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(srt_path), str(cache_dir / f"{key}.srt"))
+        _atomic_copy2(srt_path, cache_dir / f"{key}.srt")
     except Exception:
         pass
 
@@ -166,13 +205,18 @@ def _ass_cache_get(key: str) -> Path | None:
 
 
 def _ass_cache_put(key: str, src_path: Path) -> None:
-    """shutil.copy2 src_path → cache/ass/{key}.ass. Silent on any error."""
+    """Atomic ``shutil.copy2`` src_path → cache/ass/{key}.ass.
+
+    Audit BR14: the copy is staged through a ``.tmp`` sidecar and renamed
+    with ``os.replace`` so the periodic prune can never observe a
+    half-written cache entry. Silent on any error.
+    """
     try:
         if not src_path.exists() or src_path.stat().st_size == 0:
             return
         cache_dir = APP_DATA_DIR / "cache" / "ass"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(src_path), str(cache_dir / f"{key}.ass"))
+        _atomic_copy2(src_path, cache_dir / f"{key}.ass")
     except Exception:
         pass
 
@@ -194,6 +238,6 @@ def _score_cache_put(key: str, scored: list) -> None:
     try:
         cache_dir = APP_DATA_DIR / "cache" / "segment_scores"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        (cache_dir / f"{key}.json").write_text(json.dumps(scored), encoding="utf-8")
+        _atomic_write_text(cache_dir / f"{key}.json", json.dumps(scored))
     except Exception:
         pass
