@@ -15,6 +15,7 @@ from typing import Optional
 
 from app.features.render.ai.llm.parser import LLMSegment, parse_render_plan_response, parse_segment_response
 from app.features.render.ai.llm.prompts import build_render_plan_prompt, build_segment_prompt
+from app.features.render.ai.llm.retry import call_with_retry
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.openai_client")
@@ -227,22 +228,26 @@ def _run_render_plan(
     return plan
 
 
+def _call_openai_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Single OpenAI Chat Completions call — raises on SDK error."""
+    client = _openai.OpenAI(api_key=api_key, timeout=30)
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        max_tokens=_MAX_TOKENS,
+        temperature=_TEMPERATURE,
+        response_format={"type": "json_object"},
+    )
+    return resp.choices[0].message.content
+
+
 def _call_openai(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-    """Direct OpenAI Chat Completions call with JSON mode."""
-    try:
-        client = _openai.OpenAI(api_key=api_key, timeout=30)
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=_MAX_TOKENS,
-            temperature=_TEMPERATURE,
-            response_format={"type": "json_object"},
-        )
-        return resp.choices[0].message.content
-    except Exception as exc:
-        logger.warning("openai_client: API call failed (model=%s) â€” %s", model, exc)
-        return None
+    """OpenAI Chat Completions call with one-attempt retry (Retry-After honoured)."""
+    return call_with_retry(
+        lambda: _call_openai_once(api_key, model, system_prompt, user_prompt),
+        label="openai",
+    )
 

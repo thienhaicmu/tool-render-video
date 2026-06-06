@@ -21,6 +21,7 @@ from typing import Optional
 
 from app.features.render.ai.llm.parser import LLMSegment, parse_render_plan_response, parse_segment_response
 from app.features.render.ai.llm.prompts import build_render_plan_prompt, build_segment_prompt
+from app.features.render.ai.llm.retry import call_with_retry
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.claude_client")
@@ -233,23 +234,27 @@ def _run_render_plan(
     return plan
 
 
-def _call_claude(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-    """Direct Anthropic Messages API call."""
-    try:
-        client = _AnthClient(api_key=api_key, timeout=30)
-        resp = client.messages.create(
-            model=model,
-            max_tokens=_MAX_TOKENS,
-            temperature=_TEMPERATURE,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        # Claude returns content blocks; concatenate text-type blocks.
-        if not resp.content:
-            return None
-        parts = [block.text for block in resp.content if getattr(block, "type", "") == "text"]
-        return "\n".join(parts) if parts else None
-    except Exception as exc:
-        logger.warning("claude_client: API call failed (model=%s) â€” %s", model, exc)
+def _call_claude_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Single Anthropic Messages API call — raises on SDK error."""
+    client = _AnthClient(api_key=api_key, timeout=30)
+    resp = client.messages.create(
+        model=model,
+        max_tokens=_MAX_TOKENS,
+        temperature=_TEMPERATURE,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    # Claude returns content blocks; concatenate text-type blocks.
+    if not resp.content:
         return None
+    parts = [block.text for block in resp.content if getattr(block, "type", "") == "text"]
+    return "\n".join(parts) if parts else None
+
+
+def _call_claude(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Anthropic Messages API call with one-attempt retry (Retry-After honoured)."""
+    return call_with_retry(
+        lambda: _call_claude_once(api_key, model, system_prompt, user_prompt),
+        label="claude",
+    )
 

@@ -14,6 +14,7 @@ from typing import Optional
 
 from app.features.render.ai.llm.parser import LLMSegment, parse_render_plan_response, parse_segment_response
 from app.features.render.ai.llm.prompts import build_render_plan_prompt, build_segment_prompt
+from app.features.render.ai.llm.retry import call_with_retry
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.gemini_client")
@@ -247,8 +248,8 @@ def _run_render_plan(
     return plan
 
 
-def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-    """Call Gemini Chat with JSON-object output mode.
+def _call_gemini_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Single Gemini call — raises on SDK error.
 
     Timeout is enforced via http_options on the Client. google-genai accepts
     a plain dict for http_options (Client converts to HttpOptions internally
@@ -256,24 +257,28 @@ def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str)
     MILLISECONDS (client.py:178: `http_opts.timeout / 1000`). The 30s default
     Override via GEMINI_REQUEST_TIMEOUT env.
     """
-    try:
-        client = _genai.Client(
-            api_key=api_key,
-            http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000},
-        )
-        resp = client.models.generate_content(
-            model=model,
-            contents=user_prompt,
-            config={
-                "system_instruction": system_prompt,
-                "response_mime_type": "application/json",
-                "temperature": _TEMPERATURE,
-                "max_output_tokens": _MAX_OUTPUT_TOKENS,
-                "thinking_config": {"thinking_budget": 0},
-            },
-        )
-        return resp.text
-    except Exception as exc:
-        logger.warning("gemini_client: API call failed (model=%s) â€” %s", model, exc)
-        return None
+    client = _genai.Client(
+        api_key=api_key,
+        http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000},
+    )
+    resp = client.models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "response_mime_type": "application/json",
+            "temperature": _TEMPERATURE,
+            "max_output_tokens": _MAX_OUTPUT_TOKENS,
+            "thinking_config": {"thinking_budget": 0},
+        },
+    )
+    return resp.text
+
+
+def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Gemini call with one-attempt retry (Retry-After honoured)."""
+    return call_with_retry(
+        lambda: _call_gemini_once(api_key, model, system_prompt, user_prompt),
+        label="gemini",
+    )
 
