@@ -43,6 +43,28 @@ def has_xtts() -> bool:
     return importlib.util.find_spec("TTS") is not None
 
 
+def motion_crop_quality() -> str:
+    """Report the effective motion-crop quality tier.
+
+    Closes audit FINDING-T01 (2026-06-06). The motion-aware crop pipeline
+    prefers MediaPipe (face + pose detection) but silently falls back to
+    OpenCV Haar cascade when MediaPipe is absent. The Haar fallback is
+    materially worse — face-only, no pose anchor — and the user has no
+    way to know without inspecting render output.
+
+    Returns:
+        "high"     — MediaPipe is installed; subject tracking uses face +
+                     pose, eye-anchor crop framing available.
+        "low"      — MediaPipe absent; Haar cascade fallback active.
+                     Suggests installing AI extras for best results.
+        "unknown"  — Probe failed for an unexpected reason (defensive).
+    """
+    try:
+        return "high" if has_mediapipe() else "low"
+    except Exception:  # pragma: no cover — defensive
+        return "unknown"
+
+
 def get_ai_dependency_status() -> dict:
     """Return availability of all optional AI libraries."""
     return {
@@ -54,4 +76,6 @@ def get_ai_dependency_status() -> dict:
         "whisperx": has_whisperx(),
         "deepfilternet": has_deepfilternet(),
         "xtts": has_xtts(),
+        # Audit FINDING-T01 closure — surfaces the silent-degrade signal.
+        "motion_crop_quality": motion_crop_quality(),
     }
