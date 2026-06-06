@@ -18,7 +18,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.core import config as _cfg
 from app.core.config import CHANNELS_DIR, TEMP_DIR
-from app.features.download.engine.downloader import slugify
+from app.core.naming import slugify
 from app.features.render.engine.pipeline.render_pipeline import (
     _emit_render_event,
     _probe_video_duration,

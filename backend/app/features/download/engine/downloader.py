@@ -93,10 +93,10 @@ def _resolve_ytdlp_proxy(context: str = "download") -> str:
     return ""  # explicit no-proxy
 
 
-def slugify(text: str) -> str:
-    text = text.lower().strip()
-    text = re.sub(r"[^a-z0-9]+", "-", text)
-    return text.strip("-")[:80] or "video"
+# slugify lives in app.core.naming as of audit A08 closure (2026-06-06).
+# Re-exported here so existing in-feature callers (and any third-party
+# code that imports from this module) keep working without edits.
+from app.core.naming import slugify  # noqa: E402,F401 — re-export
 
 
 def _ensure_ffmpeg_on_path() -> str:

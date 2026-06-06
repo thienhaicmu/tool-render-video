@@ -43,7 +43,7 @@ from app.models.schemas import RenderRequest
 from app.core.config import TEMP_DIR
 from app.core.stage import JobStage
 from app.services.bin_paths import get_ffmpeg_bin, _summarize_ffmpeg_stderr
-from app.features.download.engine.downloader import slugify
+from app.core.naming import slugify
 from app.features.render.engine.pipeline.pipeline_config import (
     _probe_video_duration,
     _reserve_source_path_in_dir,
