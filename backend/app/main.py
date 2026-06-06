@@ -10,6 +10,7 @@ from app.db.connection import init_db
 from app.services.channel_service import ensure_channel
 from app.services.maintenance import (
     prune_job_logs,
+    prune_old_jobs,
     prune_preview_dirs,
     prune_render_cache,
     prune_render_temp_dirs,
@@ -185,6 +186,11 @@ async def _csp_middleware(request: Request, call_next):
 
 
 _CLEANUP_INTERVAL_SEC: int = int(os.getenv("CLEANUP_INTERVAL_SEC", "1800"))  # default 30 min
+# Audit FINDING-DB05 / MT-7 / ST-12 (Batch 10A 2026-06-06): env-gated row
+# retention for completed/failed jobs. 0 = disabled (default). Set to e.g.
+# 90 to evict any non-active job whose ``updated_at`` is more than 90 days
+# old. Active rows (running/queued) are never touched regardless of age.
+_JOB_RETENTION_DAYS: int = int(os.getenv("JOB_RETENTION_DAYS", "0"))
 _cleanup_logger = logging.getLogger("app.cleanup")
 
 
@@ -208,9 +214,13 @@ def _run_periodic_cleanup():
             # Now runs on every periodic tick as well. 72h TTL matches
             # _RENDER_CACHE_TTL_SEC in pipeline_cache.py.
             result_cache = prune_render_cache(CACHE_DIR, max_age_hours=72)
+            # Audit FINDING-DB05 / MT-7 / ST-12: env-gated DB row retention.
+            # No-op when JOB_RETENTION_DAYS=0 (default). Never raises.
+            result_jobs = prune_old_jobs(_JOB_RETENTION_DAYS)
             _cleanup_logger.info(
                 "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d "
-                "xtts_removed=%d overlay_removed=%d cache_removed=%d cache_freed_mb=%.1f",
+                "xtts_removed=%d overlay_removed=%d cache_removed=%d cache_freed_mb=%.1f "
+                "jobs_pruned=%d parts_pruned=%d",
                 evicted,
                 result_preview.get("removed", 0),
                 result_render.get("removed", 0),
@@ -218,6 +228,8 @@ def _run_periodic_cleanup():
                 result_overlay.get("removed", 0),
                 result_cache.get("removed", 0),
                 result_cache.get("freed_bytes", 0) / (1024 * 1024),
+                result_jobs.get("removed_jobs", 0),
+                result_jobs.get("removed_parts", 0),
             )
         except Exception as exc:
             _cleanup_logger.warning("periodic cleanup error: %s", exc)

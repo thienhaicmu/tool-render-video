@@ -5,12 +5,28 @@ import logging
 import os
 import sqlite3
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from app.core.config import DATABASE_PATH
 
 logger = logging.getLogger("app.db")
+
+
+# Audit FINDING-DB09 / ST-15 closure (Batch 10A 2026-06-06).
+# ``services.metrics`` is a higher-layer module than ``db.connection`` — to
+# avoid an import-time cycle (services/* freely imports from db/*), pull the
+# histogram lazily and tolerate ImportError. The NoOp shim in metrics.py
+# already covers the prometheus-missing case; this helper covers the
+# import-order case for any tooling that imports db.connection first.
+def _observe_acquire_wait(role: str, elapsed_seconds: float) -> None:
+    try:
+        from app.services.metrics import DB_CONN_ACQUIRE_WAIT
+        DB_CONN_ACQUIRE_WAIT.labels(role=role).observe(elapsed_seconds)
+    except Exception:
+        # Instrumentation must NEVER fail a DB acquire.
+        pass
 _DB_PATH_LOCK = threading.Lock()
 _ACTIVE_DB_PATH: Path | None = None
 
@@ -126,8 +142,15 @@ def db_conn():
 
     Callers that want to abort without raising must `conn.rollback()`
     explicitly before exiting the with-block (or raise an exception).
+
+    Batch 10A ST-15 (audit DB09): time-to-open is observed in the
+    ``db_conn_acquire_seconds`` Prometheus histogram (role="db_conn") so
+    lock-contention spikes are visible in /metrics. Instrumentation never
+    fails an acquire — see ``_observe_acquire_wait``.
     """
+    _start = time.monotonic()
     conn = get_conn()
+    _observe_acquire_wait("db_conn", time.monotonic() - _start)
     try:
         yield conn
         conn.commit()
@@ -148,7 +171,15 @@ _tls = threading.local()
 
 
 def _thread_conn() -> sqlite3.Connection:
-    """Return this thread's cached DB connection, re-opening if stale."""
+    """Return this thread's cached DB connection, re-opening if stale.
+
+    Batch 10A ST-15 (audit DB09): the open + PRAGMA-init path is observed
+    in the ``db_conn_acquire_seconds`` histogram with role="_thread_conn".
+    Cache-hits (the hot path on the render worker thread after the first
+    write) are NOT observed — they're essentially free and would only
+    dilute the histogram. Stale-handle resets ARE observed because they
+    incur the full open cost.
+    """
     conn = getattr(_tls, 'conn', None)
     if conn is not None:
         try:
@@ -160,6 +191,7 @@ def _thread_conn() -> sqlite3.Connection:
             except Exception:
                 pass
             _tls.conn = None
+    _start = time.monotonic()
     db_path = _resolve_db_path()
     conn = sqlite3.connect(str(db_path), timeout=30)
     conn.row_factory = sqlite3.Row
@@ -167,6 +199,7 @@ def _thread_conn() -> sqlite3.Connection:
     conn.execute('PRAGMA synchronous=NORMAL;')
     conn.execute('PRAGMA foreign_keys=ON;')
     _tls.conn = conn
+    _observe_acquire_wait("_thread_conn", time.monotonic() - _start)
     return conn
 
 

@@ -59,6 +59,7 @@ from app.features.render.engine.preview.session_service import (
 )
 from app.jobs.manager import is_running, submit_job
 from app.models.schemas import RenderRequest
+from app.db.connection import close_thread_conn
 from app.db.jobs_repo import get_job, update_job_progress, upsert_job
 logger = logging.getLogger("app.render")
 
@@ -189,6 +190,19 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         final_status = "failed"
         raise
     finally:
+        # Audit FINDING-BR10 closure (Batch 10A ST-14): belt-and-suspenders
+        # cleanup of the worker thread's cached SQLite connection.
+        # ``run_render_pipeline`` already closes it in its own outer finally
+        # for the normal path. But if the pipeline dies BEFORE reaching its
+        # try block (e.g., setup_render_pipeline / prepare_output_dir raises),
+        # the cleanup there never runs and the thread-local connection lives
+        # until the worker thread is GC'd — a cumulative leak on a long-lived
+        # process. Calling it here is idempotent: the second close sees
+        # ``_tls.conn is None`` from the first and no-ops.
+        try:
+            close_thread_conn()
+        except Exception:
+            pass
         duration = time.monotonic() - start_monotonic
         try:
             RENDER_JOBS_TOTAL.labels(status=final_status).inc()
