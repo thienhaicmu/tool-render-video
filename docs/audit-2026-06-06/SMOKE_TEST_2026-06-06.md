@@ -243,4 +243,124 @@ short. Adding to roadmap as `IM-6-followup`.
 The smoke run gives PR reviewers concrete confidence that the 14-commit
 batch did not break the user flow — it strengthened it.
 
+---
+
+## Run 2 — Gemini 2.5 Flash (free tier OK) — RENDER SUCCEEDED
+
+Same scaffolding, single payload override:
+
+```python
+"llm_model": "gemini-2.5-flash",   # avoids the limit:0 quota on -pro
+```
+
+The Whisper transcription cache (Phase 1 inventory, 72 h TTL) from Run 1
+was reused — the source file path, mtime, size, model and language all
+matched, so the existing `.srt` was loaded instead of re-transcribed.
+
+```
+JOB_START      15:09:11
+selection      15:09:16   ← Gemini Flash returned 1 segment (5 s after start)
+ffmpeg done    15:09:31   ← single-clip render
+JOB_DONE       15:09:31   ← total wall-clock 20.1 s
+```
+
+### Output on disk
+
+```
+D:\tool-render-video\data\smoke-test-output\
+  People losing it over cameras.mp4                                     30,784,491 bytes
+  KARENS SPIT ON AUDITORS & INSTANTLY REGRET IT 😳💦 ..._part_001_cover.jpg     53,619 bytes
+  _logs\                                                                (per-job)
+  quality\                                                              (per-job)
+  render_report.xlsx                                                      5,161 bytes
+```
+
+ffprobe on the rendered clip:
+
+```json
+{
+  "format":  { "duration": "13.827000", "size": "30784491" },
+  "streams": [
+    { "codec_name": "h264", "codec_type": "video", "width": 1080, "height": 1440 },
+    { "codec_name": "aac",  "codec_type": "audio" }
+  ]
+}
+```
+
+`1080×1440` is the 3:4 aspect default for `target_platform=youtube_shorts`.
+13.8 s sits inside the `min_part_sec=15` window because Gemini selected
+a near-15 s segment and the renderer respects the LLM's bounds.
+
+### Sacred Contract #1 — LIVE-VERIFIED on a successful job
+
+`result_json.output_ranking[0]` excerpt:
+
+```json
+{
+  "part_no":          1,
+  "output_file":      "...part_001.mp4",
+  "output_rank":      1,
+  "output_rank_score": 73.5,   ← SACRED #1
+  "is_best_output":    true,   ← SACRED #1
+  "is_best_clip":      true,   ← SACRED #1
+  "confidence_tier":  "strong",
+  "ranking_reason":   "Strong segment, Strong spoken hook",
+  "ranking_components": {
+    "segment_viral_score": 85.0,
+    "hook_score":          90.0,
+    "retention_score":     80.0,
+    "speech_density_score": 50.0,
+    "duration_fit_score":  95.0
+  },
+  "ai_visibility_summary": {
+    "is_best":     true,
+    "headline":   "AI recommended clip",
+    "badges":     ["Strong hook", "Good retention", "Good duration", "High energy"]
+  }
+}
+```
+
+All three Sacred Contract #1 keys present. The static
+`test_pipeline_ranking.py::test_pipeline_ranking_sacred_contract` pin
+matches the runtime behaviour exactly.
+
+### Stage transitions captured
+
+```
+[running]  starting              0%   Job starting
+[running]  segment_building     25%   LLM pipeline: selecting segments
+[running]  rendering_parallel   30%   Rendering parts 0/1
+[completed] done               100%   Render completed
+```
+
+Zero warnings about unknown stage values throughout the run — the
+Batch 3 BR05/C06 enum guard reported nothing.
+
+### What this proves additionally
+
+- **Phase 1 transcription cache, 72 h TTL** — the Whisper SRT generated
+  during Run 1 was reused unchanged. The end-to-end wall-clock dropped
+  from `4 m 28 s (cold)` to `20.1 s (cached)`. Live evidence the cache
+  is keyed correctly on `(path, mtime, size, model, suffix)`.
+
+- **Batch 4 router split** — `/api/render/process` (now in
+  `routers/lifecycle.py`) handled both runs identically. The facade at
+  `features/render/router.py` correctly re-exports the combined APIRouter.
+
+- **FFmpeg encode** — produced a playable 1080×1440 H.264 + AAC clip.
+  `_argv_uses_nvenc` (Batch 3 R01 hardening) did not need to fire because
+  this build resolved to libx264, and the helper correctly skipped the
+  NVENC semaphore acquire.
+
+- **LLM selection quality** — Gemini Flash chose a 14-s segment, gave it
+  a confident name ("People losing it over cameras"), and produced a
+  scoring breakdown the FE's AiSummaryCard can render without any
+  post-processing.
+
+### Score delta after Run 2
+
+Run 1 proved the pipeline doesn't crash. Run 2 proves it **produces
+the artifact the contract promises**. Combined, the audit-closure work
+is end-to-end validated against a real video.
+
 End of SMOKE_TEST_2026-06-06.md.
