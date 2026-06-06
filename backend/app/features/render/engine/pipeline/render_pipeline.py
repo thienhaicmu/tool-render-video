@@ -1,4 +1,4 @@
-﻿
+
 # Sprint 6.D dead-import cleanup: most heavy service-level imports that
 # the original run_render_pipeline used directly now live inside the
 # extracted stage modules (orchestration/pipeline_*.py and
@@ -380,7 +380,7 @@ def run_render_pipeline(
         normalized_text_layers = []
         _job_log(effective_channel, job_id, f"Text layer parse warning: {layer_exc}", kind="warning")
         update_job_progress(
-            job_id, "starting", 0,
+            job_id, JobStage.STARTING, 0,
             f"âš ï¸ Text overlays skipped (parse error): {layer_exc}",
         )
     _job_log(
