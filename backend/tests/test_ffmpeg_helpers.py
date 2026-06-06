@@ -51,8 +51,14 @@ def test_argv_uses_nvenc_empty_list():
     assert _argv_uses_nvenc([]) is False
 
 
-def test_argv_uses_nvenc_case_insensitive():
-    assert _argv_uses_nvenc(["H264_NVENC"]) is True
+def test_argv_uses_nvenc_case_sensitive_match_only():
+    # Batch 3 (audit FINDING-R01) tightened the detector to exact-set
+    # membership. FFmpeg's codec names are always lowercase
+    # (h264_nvenc / hevc_nvenc / av1_nvenc), so an upper-case spelling
+    # is treated as a non-NVENC string and does NOT trigger the lock.
+    # This rejects the prior substring-match false-positive class.
+    assert _argv_uses_nvenc(["H264_NVENC"]) is False
+    assert _argv_uses_nvenc(["h264_nvenc"]) is True
 
 
 # ---------------------------------------------------------------------------

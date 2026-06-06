@@ -166,21 +166,36 @@ def extract_thumbnail_frame(
     return None
 
 
-def _argv_uses_nvenc(args: list[str]) -> bool:
-    """Return True if any argv token names an NVENC codec.
+# Curated set of NVENC encoder codec names recognised by FFmpeg.
+# Extend this set as NVIDIA releases new codecs (e.g. a future avx_nvenc).
+# Using an exact-match set rather than a substring search avoids the
+# false-positive trap where a filename or path token containing the
+# literal substring "_nvenc" (e.g. /tmp/render_my_nvenc.mp4) would
+# incorrectly trigger semaphore acquisition.
+NVENC_CODECS: frozenset[str] = frozenset({
+    "h264_nvenc",
+    "hevc_nvenc",
+    "av1_nvenc",
+})
 
-    Sprint 4.2 (audit 2026-06-02 P2-B1): the NVENC_SEMAPHORE is only
-    acquired at a few call sites (base_clip_renderer for render_base_clip,
-    render_part, and render_part_smart after Sprint 5.2 merge; plus
-    overlay_compositor). Any other FFmpeg invocation that happens to use
-    an NVENC codec would silently exceed the GPU session limit. This
-    helper enables _run_ffmpeg_with_retry to detect and protect those
-    paths internally.
+
+def _argv_uses_nvenc(args: list[str]) -> bool:
+    """Return True if any argv token exactly matches a known NVENC codec.
+
+    Sprint 4.2 (audit 2026-06-02 P2-B1) introduced this guard so that
+    _run_ffmpeg_with_retry can acquire NVENC_SEMAPHORE automatically for
+    any FFmpeg invocation that uses an NVENC codec — closing the gap
+    that the explicit acquire sites in clip_renderer.py and
+    overlay_compositor.py alone could not cover.
+
+    Batch 3 hardening (audit FINDING-R01/BR04, 2026-06-06): switched
+    from substring match to exact-set membership. The old form
+    `"_nvenc" in token.lower()` matched filenames and paths that happen
+    to contain the literal substring, occasionally producing false
+    positives that held the semaphore unnecessarily. The new form is
+    precise: only the codec tokens themselves trigger the lock.
     """
-    for token in args:
-        if isinstance(token, str) and "_nvenc" in token.lower():
-            return True
-    return False
+    return any(isinstance(t, str) and t in NVENC_CODECS for t in args)
 
 
 def _run_ffmpeg_with_retry(
