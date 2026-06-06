@@ -9,8 +9,128 @@ import pytest
 from app.features.render.ai.llm.retry import (
     DEFAULT_MAX_ATTEMPTS,
     call_with_retry,
+    _extract_google_retry_info,
     _extract_retry_after,
+    _parse_protobuf_duration,
 )
+
+
+# ---------------------------------------------------------------------------
+# _parse_protobuf_duration — Google serialises Duration as "<number>s"
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    ("raw", "want"),
+    [
+        ("38s", 38.0),
+        ("38.8s", 38.8),
+        ("38.800581929s", 38.800581929),
+        ("0s", 0.0),
+        ("0.5s", 0.5),
+        (38, 38.0),
+        (38.8, 38.8),
+        ("", None),
+        (None, None),
+        ("not-a-number", None),
+        ("38xs", None),
+    ],
+)
+def test_parse_protobuf_duration(raw, want):
+    got = _parse_protobuf_duration(raw)
+    if want is None:
+        assert got is None
+    else:
+        assert got == pytest.approx(want)
+
+
+# ---------------------------------------------------------------------------
+# _extract_google_retry_info — three places google-genai / google.api_core
+# expose the structured error body
+# ---------------------------------------------------------------------------
+
+_RETRY_INFO_ENTRY = {
+    "@type": "type.googleapis.com/google.rpc.RetryInfo",
+    "retryDelay": "38.8s",
+}
+_HELP_ENTRY = {
+    "@type": "type.googleapis.com/google.rpc.Help",
+    "links": [{"description": "x", "url": "y"}],
+}
+_QUOTA_ENTRY = {
+    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+    "violations": [],
+}
+
+
+def test_google_retry_info_from_details_list_attr():
+    """google.api_core ResourceExhausted carries the list as an attribute."""
+    exc = RuntimeError("quota")
+    exc.details = [_HELP_ENTRY, _QUOTA_ENTRY, _RETRY_INFO_ENTRY]  # type: ignore[attr-defined]
+    assert _extract_google_retry_info(exc) == pytest.approx(38.8)
+
+
+def test_google_retry_info_from_details_callable():
+    """google.api_core.exceptions.GoogleAPICallError.details() is a method."""
+    exc = RuntimeError("quota")
+    exc.details = lambda: [_RETRY_INFO_ENTRY]  # type: ignore[attr-defined]
+    assert _extract_google_retry_info(exc) == pytest.approx(38.8)
+
+
+def test_google_retry_info_from_body_dict():
+    """google-genai ClientError sometimes stores the response body as a dict."""
+    exc = RuntimeError("quota")
+    exc.body = {  # type: ignore[attr-defined]
+        "error": {
+            "code": 429,
+            "message": "Quota exceeded",
+            "status": "RESOURCE_EXHAUSTED",
+            "details": [_HELP_ENTRY, _RETRY_INFO_ENTRY],
+        }
+    }
+    assert _extract_google_retry_info(exc) == pytest.approx(38.8)
+
+
+def test_google_retry_info_accepts_snake_case():
+    """The protobuf snake_case `retry_delay` form is also valid."""
+    exc = RuntimeError("quota")
+    exc.details = [{  # type: ignore[attr-defined]
+        "@type": "type.googleapis.com/google.rpc.RetryInfo",
+        "retry_delay": "5s",
+    }]
+    assert _extract_google_retry_info(exc) == pytest.approx(5.0)
+
+
+def test_google_retry_info_returns_none_when_absent():
+    exc = RuntimeError("no RetryInfo here")
+    exc.details = [_HELP_ENTRY, _QUOTA_ENTRY]  # type: ignore[attr-defined]
+    assert _extract_google_retry_info(exc) is None
+
+
+def test_google_retry_info_returns_none_when_details_not_list():
+    exc = RuntimeError("no details")
+    assert _extract_google_retry_info(exc) is None
+
+
+# ---------------------------------------------------------------------------
+# _extract_retry_after — preserves prior precedence; Google fallback last
+# ---------------------------------------------------------------------------
+
+def test_retry_after_prefers_attribute_over_google_details():
+    """When BOTH an explicit retry_after attribute AND a Google RetryInfo
+    are present, the attribute wins (it's the more direct signal).
+    """
+    exc = RuntimeError("both")
+    exc.retry_after = 4  # type: ignore[attr-defined]
+    exc.details = [_RETRY_INFO_ENTRY]  # type: ignore[attr-defined]
+    # _RETRY_INFO_ENTRY says 38.8s, but the explicit attribute wins at 4.
+    assert _extract_retry_after(exc) == 4.0
+
+
+def test_retry_after_falls_back_to_google_details():
+    """When no header / attribute is present, the Google RetryInfo is used."""
+    exc = RuntimeError("google-only")
+    exc.details = [_RETRY_INFO_ENTRY]  # type: ignore[attr-defined]
+    assert _extract_retry_after(exc) == pytest.approx(38.8)
 
 
 # ---------------------------------------------------------------------------

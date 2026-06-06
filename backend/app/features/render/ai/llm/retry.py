@@ -39,6 +39,93 @@ DEFAULT_BACKOFF_SEC = 2.0    # base sleep for backoff fallback
 DEFAULT_RETRY_AFTER_CAP_SEC = 15.0  # never sleep longer than this on Retry-After
 
 
+_GOOGLE_RETRY_INFO_TYPE = "type.googleapis.com/google.rpc.RetryInfo"
+
+
+def _parse_protobuf_duration(raw) -> Optional[float]:
+    """Parse a Google protobuf Duration string into seconds.
+
+    The serialised form is `"<number>s"` (e.g. `"38s"`, `"38.8s"`,
+    `"38.800581929s"`). Returns None for any value that doesn't match.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    if s.endswith("s"):
+        s = s[:-1]
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_google_retry_info(exc: Exception) -> Optional[float]:
+    """Find a RetryInfo entry in a Google-style structured error body.
+
+    Closes audit IM-6-followup (post-smoke-test gap). The Google AI Studio
+    `RESOURCE_EXHAUSTED` response carries the retry hint in a structured
+    ``details`` list of error messages — NOT in the HTTP `Retry-After`
+    header. Example payload observed during the 2026-06-06 smoke run:
+
+        'details': [
+            {'@type': 'type.googleapis.com/google.rpc.Help', ...},
+            {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', ...},
+            {'@type': 'type.googleapis.com/google.rpc.RetryInfo',
+             'retryDelay': '38.800581929s'},
+        ]
+
+    This helper probes several shapes the google-genai / google.api_core
+    SDKs use to expose that list, and parses the protobuf Duration value.
+    """
+    # The list may be on the exception itself (google.api_core.exceptions)
+    # or stringified inside exc.message for google.genai.errors.ClientError.
+    candidates = []
+
+    direct = getattr(exc, "details", None)
+    if isinstance(direct, list):
+        candidates.append(direct)
+    elif callable(direct):
+        # google.api_core.exceptions.GoogleAPICallError.details() is a callable
+        # that returns the list.
+        try:
+            value = direct()
+        except Exception:  # pragma: no cover — defensive
+            value = None
+        if isinstance(value, list):
+            candidates.append(value)
+
+    # Some SDKs expose the structured body inside a wrapping dict.
+    for attr in ("response_json", "error_details", "body"):
+        v = getattr(exc, attr, None)
+        if isinstance(v, dict):
+            err = v.get("error") if isinstance(v.get("error"), dict) else None
+            inner = (err or v).get("details")
+            if isinstance(inner, list):
+                candidates.append(inner)
+
+    for details in candidates:
+        for entry in details:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("@type") != _GOOGLE_RETRY_INFO_TYPE:
+                continue
+            # The field is `retryDelay` in JSON / camelCase, `retry_delay`
+            # in protobuf snake_case. Accept either.
+            raw = entry.get("retryDelay") or entry.get("retry_delay")
+            parsed = _parse_protobuf_duration(raw)
+            if parsed is not None:
+                return parsed
+
+    return None
+
+
 def _extract_retry_after(exc: Exception) -> Optional[float]:
     """Best-effort extraction of Retry-After from an SDK exception.
 
@@ -47,6 +134,8 @@ def _extract_retry_after(exc: Exception) -> Optional[float]:
     - ``retry_after`` attribute (Anthropic SDK exposes this on some errors)
     - ``response.headers['retry-after']`` (httpx-based SDKs)
     - ``response.headers['Retry-After']``
+    - Google `RetryInfo` inside a structured error ``details`` list
+      (closes audit IM-6-followup discovered during the 2026-06-06 smoke run).
     """
     # 1. Direct attribute
     val = getattr(exc, "retry_after", None)
@@ -68,6 +157,12 @@ def _extract_retry_after(exc: Exception) -> Optional[float]:
                     return float(raw)
                 except (TypeError, ValueError):
                     pass
+
+    # 3. Google-style structured error body (RetryInfo entry in details list).
+    google_hint = _extract_google_retry_info(exc)
+    if google_hint is not None:
+        return google_hint
+
     return None
 
 
