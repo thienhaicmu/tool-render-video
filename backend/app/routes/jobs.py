@@ -465,13 +465,33 @@ def api_get_job_ai_summary(job_id: str):
     Parses result_json and returns job-level AI reasoning: director plan, story,
     ranking summary, and segment-level context for all evaluated clips (including
     those not selected as final outputs).
+
+    Audit FINDING-BR11 closure (Batch 10C 2026-06-06): the response now
+    carries an explicit ``ai_status`` enum plus a human ``status_message``
+    so the FE can distinguish four cases and stop rendering an empty card:
+
+        - "ok"           — full ranking + best_clip present, normal display
+        - "no_ranking"   — pipeline finished but output_ranking is empty
+                           (LLM Call 2 failed, or every part failed QA)
+        - "degraded"     — best_clip present but story / director hint missing
+        - "no_result"    — result_json itself absent (job is still running or
+                           failed before persisting any AI artefacts)
+
+    Backward-compat: the legacy ``available`` boolean is preserved — false
+    for "no_result", true for every other case. Existing callers that only
+    look at ``available`` are unaffected.
     """
     row = get_job(job_id)
     if not row:
         raise HTTPException(status_code=404, detail="Job not found")
     result = _parse_json(row.get("result_json"))
     if not result:
-        return {"job_id": job_id, "available": False}
+        return {
+            "job_id":          job_id,
+            "available":       False,
+            "ai_status":       "no_result",
+            "status_message":  "AI analysis is not available yet — the job has no recorded result data.",
+        }
 
     output_ranking: list[dict] = result.get("output_ranking") or []
     best_clip: dict | None     = result.get("best_clip")
@@ -509,9 +529,32 @@ def api_get_job_ai_summary(job_id: str):
 
     hybrid_analysis: dict = ai_director.get("hybrid_analysis") or {}
 
+    # FINDING-BR11: classify the response so the FE can show a meaningful
+    # message instead of an empty card. "no_ranking" is the most common
+    # interesting case — the job ran to completion but no part was ranked,
+    # usually because LLM Call 2 failed or every part lost QA.
+    if not output_ranking and not best_clip:
+        ai_status = "no_ranking"
+        status_message = (
+            "No clips were ranked by the AI. The render completed without "
+            "producing an output-ranking — usually because the second LLM "
+            "call failed or every part was rejected by quality validation."
+        )
+    elif best_clip and not story and not ai_director.get("enabled"):
+        ai_status = "degraded"
+        status_message = (
+            "Partial AI analysis available — ranking is present but the "
+            "story / director hint is missing."
+        )
+    else:
+        ai_status = "ok"
+        status_message = ""
+
     return {
         "job_id":           job_id,
         "available":        True,
+        "ai_status":        ai_status,
+        "status_message":   status_message,
         "director_enabled": bool(ai_director.get("enabled")),
         "story":            story,
         "ai_ux":            ai_ux,

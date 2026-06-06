@@ -282,8 +282,34 @@ function StepResultsBase({
           </div>
         )}
 
-        {/* AI Summary card */}
-        {aiSummary && (
+        {/* AI Summary card
+            Audit FINDING-BR11 closure (Batch 10C 2026-06-06):
+            - aiSummary.ai_status === 'no_result' → render nothing (job had no
+              AI data persisted, so the card would be entirely empty).
+            - ai_status === 'no_ranking' / 'degraded' → render a compact card
+              with the backend-supplied status_message so the user knows
+              WHY the analysis is empty instead of seeing a blank panel. */}
+        {aiSummary && aiSummary.ai_status !== 'no_result' && (
+          aiSummary.ai_status && aiSummary.ai_status !== 'ok' ? (
+            <div
+              style={{
+                borderBottom: '1px solid var(--border)', flexShrink: 0,
+                padding: '10px 16px', display: 'flex', alignItems: 'flex-start', gap: 8,
+                fontSize: 11, color: 'var(--text-3)',
+              }}
+              data-testid="ai-summary-degraded"
+            >
+              <span style={{ color: 'var(--warn)', fontSize: 13 }}>⚠</span>
+              <div>
+                <div style={{ fontWeight: 700, color: 'var(--text-2)', marginBottom: 2 }}>
+                  AI Analysis Unavailable
+                </div>
+                <div style={{ lineHeight: 1.5 }}>
+                  {aiSummary.status_message || 'AI analysis is not available for this render.'}
+                </div>
+              </div>
+            </div>
+          ) : (
           <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
             <button
               onClick={() => setAiSummaryOpen(o => !o)}
@@ -371,6 +397,7 @@ function StepResultsBase({
               </div>
             )}
           </div>
+          )
         )}
 
         {/* Sort / count bar */}
