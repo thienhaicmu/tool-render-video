@@ -244,7 +244,10 @@ def startup():
     # Same scheduler tick handles them periodically; startup prune
     # catches anything that accumulated between restarts.
     prune_xtts_cache(TEMP_DIR, max_age_days=30)
-    from app.services.text_overlay import get_text_overlay_temp_dir
+    # Phase 1-18 feature-layer migration moved text_overlay to
+    # features/render/engine/overlay/text_overlay.py. The old import path
+    # `app.services.text_overlay` no longer exists; using the new location.
+    from app.features.render.engine.overlay.text_overlay import get_text_overlay_temp_dir
     prune_text_overlay_dir(get_text_overlay_temp_dir(), max_age_days=7)
     # Re-queue any render jobs that were interrupted by a previous server restart
     recover_pending_render_jobs()
