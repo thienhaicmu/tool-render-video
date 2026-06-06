@@ -367,9 +367,95 @@ def api_get_job(job_id: str):
     return row
 
 
+_PART_AI_FIELDS = ("clip_name", "ai_title", "ai_reason", "source")
+
+
+def _enrich_parts_with_segment_ai_fields(parts: list, result_json_raw) -> list:
+    """Merge AI-decision metadata from result_json.segments into each part.
+
+    Closes audit FINDING-C03 (2026-06-06). The FE's JobPart TS type
+    (frontend/src/types/api.ts:266-269) declares four optional AI fields:
+    ``clip_name``, ``ai_title``, ``ai_reason`` and ``source``. None of
+    these are stored on the ``job_parts`` table; they live in the LLM
+    output blob at ``jobs.result_json.segments[*]``.
+
+    Before this commit the FE always saw ``undefined`` for these fields
+    and fell back to placeholder labels. This helper performs the
+    server-side join keyed by ``part_no`` so the FE receives the
+    AI-generated titles + reasons that the LLM emitted.
+
+    The helper is defensive: a malformed result_json or a missing
+    segments list silently degrades to the un-enriched parts so the
+    endpoint never breaks.
+    """
+    if not result_json_raw:
+        return parts
+    try:
+        result = json.loads(result_json_raw) if isinstance(result_json_raw, str) else result_json_raw
+    except Exception:
+        return parts
+    if not isinstance(result, dict):
+        return parts
+    segments = result.get("segments")
+    if not isinstance(segments, list) or not segments:
+        return parts
+
+    # Build a {part_no: segment} index. The pipeline emits segments in
+    # the order the renderer processes them — that is, segments[i] is
+    # for part_no = i + 1. The per-segment dict may ALSO carry an
+    # explicit "part_no" key on the ranking pass; prefer that when present.
+    by_part: dict[int, dict] = {}
+    for idx, seg in enumerate(segments):
+        if not isinstance(seg, dict):
+            continue
+        explicit = seg.get("part_no")
+        try:
+            part_no = int(explicit) if explicit is not None else idx + 1
+        except (TypeError, ValueError):
+            part_no = idx + 1
+        by_part[part_no] = seg
+
+    enriched: list = []
+    for p in parts:
+        if not isinstance(p, dict):
+            enriched.append(p)
+            continue
+        try:
+            part_no = int(p.get("part_no") or 0)
+        except (TypeError, ValueError):
+            part_no = 0
+        seg = by_part.get(part_no)
+        if not seg:
+            enriched.append(p)
+            continue
+        # Shallow-merge the 4 documented fields, leaving everything else
+        # on the DB row untouched. The DB row wins where it has a value
+        # (Sacred Contract #2 spirit — never overwrite a stored truth).
+        merged = dict(p)
+        for key in _PART_AI_FIELDS:
+            if merged.get(key) not in (None, ""):
+                continue
+            value = seg.get(key)
+            if value is None or value == "":
+                continue
+            merged[key] = value
+        enriched.append(merged)
+    return enriched
+
+
 @router.get("/{job_id}/parts")
 def api_get_job_parts(job_id: str):
-    return {"items": list_job_parts(job_id)}
+    parts = list_job_parts(job_id)
+    # Merge AI-decision metadata (clip_name, ai_title, ai_reason, source)
+    # from the job's result_json.segments. Closes audit FINDING-C03.
+    try:
+        job_row = get_job(job_id)
+        result_json_raw = (job_row or {}).get("result_json")
+        parts = _enrich_parts_with_segment_ai_fields(parts, result_json_raw)
+    except Exception:
+        # Never break the parts list because of an enrichment edge case.
+        pass
+    return {"items": parts}
 
 
 @router.get("/{job_id}/ai-summary")
