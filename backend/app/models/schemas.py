@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Literal, Optional
+
+_security_logger = logging.getLogger("app.api.security")
 
 
 # ── Channel ──────────────────────────────────────────────────────────────
@@ -381,6 +385,40 @@ class RenderRequest(BaseModel):
     openai_api_key: Optional[str] = None
     claude_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
+
+    # ── Cloud LLM credential policy (audit FINDING-F07 / C02 closure) ────────
+    # Cloud API keys MUST come from the server's .env (GEMINI_API_KEY,
+    # OPENAI_API_KEY, CLAUDE_API_KEY) — never from the client payload.
+    # Previously the FE shipped keys via RenderRequest, where they:
+    #   - persisted forever in jobs.payload_json
+    #   - leaked into per-job log files
+    #   - travelled in any DB dump / support bundle
+    # The validator below strips any client-supplied *_api_key field to
+    # None at parse time and emits a WARN log. The fields are kept in the
+    # model (rather than removed) for Sacred Contract #2 backwards-compat:
+    # stored payloads with legacy keys deserialize cleanly, just get
+    # stripped on re-validation. The LLM stage then falls through to the
+    # server env via _resolve_api_key.
+    #
+    # The /api/render/test-cloud-ai endpoint is unaffected — it accepts a
+    # raw dict and uses the key only in-process (no persistence).
+    @field_validator(
+        "ai_cloud_api_key",
+        "gemini_api_key",
+        "openai_api_key",
+        "claude_api_key",
+        "groq_api_key",
+    )
+    @classmethod
+    def _strip_client_api_key(cls, v: Optional[str]) -> Optional[str]:
+        if v and isinstance(v, str) and v.strip():
+            _security_logger.warning(
+                "RenderRequest received a non-empty *_api_key field — stripping to None. "
+                "Cloud LLM credentials MUST come from server .env (GEMINI_API_KEY / "
+                "OPENAI_API_KEY / CLAUDE_API_KEY). Plaintext keys in payload_json + "
+                "per-job logs are a security risk (audit FINDING-F07 / C02)."
+            )
+        return None
 
     @field_validator("target_duration")
     @classmethod
