@@ -485,6 +485,16 @@ def retry_failed_parts(job_id: str):
 
     Done parts are preserved; only parts with status='failed' are re-processed.
     Equivalent to resume, but validated to have at least one failed part.
+
+    Audit FINDING-BR13 closure (Batch 10B 2026-06-06): retry semantic is
+    "fresh plan per retry". This handler does NOT touch ``render_plan_json``
+    directly. The pipeline runs end-to-end (LLM Call 1 + Call 2) on retry
+    just like a normal render, and ``update_render_plan(job_id, new_plan)``
+    overwrites whatever blob was previously stored. This is the correct
+    behaviour for creator-context updates between retries — the new plan
+    reflects the current creator prefs. Done parts are still skipped by
+    the per-part status check in ``part_renderer.py``, so the new plan
+    only drives the re-rendering of failed parts.
     """
     row = get_job(job_id)
     if not row:

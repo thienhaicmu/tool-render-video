@@ -146,6 +146,16 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
         set_thread_cancel_event(_cancel_ev)
 
     _existing_part_info = ctx.existing_parts.get(idx, {})
+    # Audit FINDING-BR12 closure (Batch 10B 2026-06-06): resume decision is
+    # disk-truth, not DB-truth. The ``job_parts.output_file`` column
+    # defaults to '' and is sometimes left empty by interrupted writers, so
+    # using it as the resume signal would either over-skip (DB stale, file
+    # gone) or over-render (DB empty-string, file present). Instead we:
+    #   1. Require the DB ``status == 'done'`` flag (cheap precondition)
+    #   2. Recompute ``final_part`` from ``output_dir + part_name``
+    #      (independent of DB state)
+    #   3. Probe the file with ffprobe via ``_resume_output_valid``
+    # All four conditions must hold for skip — any failure re-renders.
     if (
         ctx.payload.resume_from_last
         and ((_existing_part_info.get("status") or "").lower() == "done")
