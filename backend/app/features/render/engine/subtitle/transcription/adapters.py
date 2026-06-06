@@ -1,11 +1,15 @@
 ﻿from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 from app.features.render.ai.dependencies import has_faster_whisper, has_whisperx
 
@@ -29,8 +33,16 @@ _WORD_MIN_GAP_SEC = 0.01
 # In-process faster-whisper model cache â€” one WhisperModel per
 # (model_name, device, compute_type) key.  Guarded by a threading.Lock so
 # that concurrent render jobs share one loaded model without re-initializing.
+#
+# Audit FINDING-BR15 closure (Batch 10E 2026-06-06): LRU eviction so a
+# preview/main mix (e.g., tiny + large-v3) doesn't accumulate. Default
+# cap is 2 entries, overridable via FW_MODEL_CACHE_MAX. The CUDA→CPU
+# fallback path inserts TWO entries per load (a CUDA key aliased to a
+# CPU model) so callers see the same instance regardless of which key
+# they query; the LRU policy treats them as independent entries.
 # ---------------------------------------------------------------------------
-_FW_MODEL_CACHE: dict = {}
+_FW_MODEL_CACHE_MAX: int = max(1, int(os.getenv("FW_MODEL_CACHE_MAX", "2")))
+_FW_MODEL_CACHE: "OrderedDict[tuple, object]" = OrderedDict()
 _FW_MODEL_LOCK = threading.Lock()
 
 
@@ -86,26 +98,76 @@ def _detect_fw_device_compute() -> tuple[str, str]:
     return "cpu", "int8"
 
 
+def _release_fw_model(cache_key: tuple, model) -> None:
+    """Drop a faster-whisper model reference + best-effort CUDA cleanup.
+    Never raises — runs inside _FW_MODEL_LOCK so an exception here would
+    deadlock subsequent loads."""
+    try:
+        del model
+    except Exception:
+        pass
+    try:
+        import ctranslate2  # noqa: PLC0415
+        if ctranslate2.get_cuda_device_count() > 0:
+            # ctranslate2 manages its own CUDA caching; no explicit empty
+            # call exists, but dropping the model handle is enough for GC.
+            pass
+    except Exception:
+        pass
+    logger.info("faster-whisper LRU: evicted key=%s", cache_key)
+
+
+def _enforce_fw_lru() -> None:
+    """Evict oldest entries until ``_FW_MODEL_CACHE`` is within the cap.
+    Must be called with ``_FW_MODEL_LOCK`` held."""
+    while len(_FW_MODEL_CACHE) > _FW_MODEL_CACHE_MAX:
+        evict_key, evict_model = _FW_MODEL_CACHE.popitem(last=False)
+        _release_fw_model(evict_key, evict_model)
+
+
 def _get_fw_model(model_name: str, device: str, compute_type: str):
     """Return a cached WhisperModel, loading it on first call per (model, device, compute).
 
     On CUDA init failure, retries with CPU int8 and aliases the CUDA cache key
     to the CPU model so subsequent calls do not re-attempt CUDA.
+
+    Audit FINDING-BR15 closure: cache touches move the entry to MRU end,
+    new entries trigger LRU eviction (cap ``_FW_MODEL_CACHE_MAX``).
     """
     cache_key = (model_name, device, compute_type)
     with _FW_MODEL_LOCK:
-        if cache_key not in _FW_MODEL_CACHE:
-            from faster_whisper import WhisperModel  # noqa: PLC0415
-            try:
-                model = WhisperModel(model_name, device=device, compute_type=compute_type)
-            except Exception:
-                if device == "cuda":
-                    model = WhisperModel(model_name, device="cpu", compute_type="int8")
-                    _FW_MODEL_CACHE[(model_name, "cpu", "int8")] = model
+        if cache_key in _FW_MODEL_CACHE:
+            _FW_MODEL_CACHE.move_to_end(cache_key)
+            return _FW_MODEL_CACHE[cache_key]
+        from faster_whisper import WhisperModel  # noqa: PLC0415
+        try:
+            model = WhisperModel(model_name, device=device, compute_type=compute_type)
+        except Exception:
+            if device == "cuda":
+                model = WhisperModel(model_name, device="cpu", compute_type="int8")
+                # Alias entry — if the CPU fallback key is already cached,
+                # move it to MRU; otherwise insert.
+                cpu_key = (model_name, "cpu", "int8")
+                if cpu_key in _FW_MODEL_CACHE:
+                    _FW_MODEL_CACHE.move_to_end(cpu_key)
                 else:
-                    raise
-            _FW_MODEL_CACHE[cache_key] = model
+                    _FW_MODEL_CACHE[cpu_key] = model
+            else:
+                raise
+        _FW_MODEL_CACHE[cache_key] = model
+        _enforce_fw_lru()
         return _FW_MODEL_CACHE[cache_key]
+
+
+def unload_all_fw_models() -> int:
+    """Drop every cached faster-whisper model. Returns the count evicted."""
+    with _FW_MODEL_LOCK:
+        evicted = 0
+        while _FW_MODEL_CACHE:
+            key, model = _FW_MODEL_CACHE.popitem(last=False)
+            _release_fw_model(key, model)
+            evicted += 1
+        return evicted
 
 
 # ---------------------------------------------------------------------------

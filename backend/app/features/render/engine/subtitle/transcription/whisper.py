@@ -3,6 +3,7 @@ import os
 import time
 import threading
 import logging
+from collections import OrderedDict
 from pathlib import Path
 import whisper
 from app.services.bin_paths import get_ffmpeg_bin
@@ -10,7 +11,13 @@ from app.features.render.engine.subtitle.generator.srt import format_srt_timesta
 
 logger = logging.getLogger(__name__)
 
-_MODEL_CACHE: dict = {}
+# Audit FINDING-BR15 closure (Batch 10E 2026-06-06): LRU eviction so we
+# don't hold both `tiny` (preview) and `large-v3` (main) resident — that
+# pair eats several GB of RAM with no upper bound on the cache. The cap
+# is set via WHISPER_MODEL_CACHE_MAX (default 2) so a future deployment
+# with more RAM can opt in to a deeper cache.
+_MODEL_CACHE_MAX: int = max(1, int(os.getenv("WHISPER_MODEL_CACHE_MAX", "2")))
+_MODEL_CACHE: "OrderedDict[str, object]" = OrderedDict()
 _MODEL_CACHE_LOCK = threading.Lock()
 _MODEL_TRANSCRIBE_LOCKS: dict = {}
 WORD_MIN_GAP_SEC = 0.02
@@ -23,13 +30,54 @@ _WHISPER_CACHE_DIR: Path = Path(__file__).resolve().parents[4] / "data" / "whisp
 _WHISPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _release_whisper_model(model_name: str, model) -> None:
+    """Drop a model reference + release CUDA memory if torch is loaded.
+
+    Never raises — the eviction path runs inside the cache lock and a
+    failure here must not deadlock subsequent loads.
+    """
+    try:
+        del model
+    except Exception:
+        pass
+    try:
+        import torch  # noqa: PLC0415
+        if hasattr(torch, "cuda") and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+    # Drop the transcribe-lock entry too so future re-loads start clean.
+    _MODEL_TRANSCRIBE_LOCKS.pop(model_name, None)
+    logger.info("whisper LRU: evicted model=%s", model_name)
+
+
 def get_whisper_model(model_name: str = "base"):
     with _MODEL_CACHE_LOCK:
         model = _MODEL_CACHE.get(model_name)
-        if model is None:
-            model = whisper.load_model(model_name, download_root=str(_WHISPER_CACHE_DIR))
-            _MODEL_CACHE[model_name] = model
+        if model is not None:
+            # Touch → move to MRU end. OrderedDict.move_to_end is O(1).
+            _MODEL_CACHE.move_to_end(model_name)
+            return model
+        model = whisper.load_model(model_name, download_root=str(_WHISPER_CACHE_DIR))
+        _MODEL_CACHE[model_name] = model
+        # Evict oldest entries until cache size is within cap. We loop
+        # rather than evict-one to be safe if the cap was lowered at runtime.
+        while len(_MODEL_CACHE) > _MODEL_CACHE_MAX:
+            evict_name, evict_model = _MODEL_CACHE.popitem(last=False)
+            _release_whisper_model(evict_name, evict_model)
         return model
+
+
+def unload_all_whisper_models() -> int:
+    """Explicitly drop every cached Whisper model (e.g., from a shutdown hook
+    or a /maintenance endpoint). Returns the count evicted. Never raises."""
+    with _MODEL_CACHE_LOCK:
+        evicted = 0
+        while _MODEL_CACHE:
+            name, model = _MODEL_CACHE.popitem(last=False)
+            _release_whisper_model(name, model)
+            evicted += 1
+        return evicted
 
 
 def _get_transcribe_lock(model_name: str):
