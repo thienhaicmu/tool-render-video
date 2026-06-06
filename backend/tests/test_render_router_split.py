@@ -40,7 +40,9 @@ _EXPECTED_ENDPOINTS: set[tuple[str, str]] = {
     ("POST",   "/api/render/retry/{job_id}"),
     ("POST",   "/api/render/{job_id}/cancel"),
 
-    ("GET",    "/api/render/jobs/{job_id}"),
+    # GET /api/render/jobs/{job_id} was removed in audit API03 closure
+    # (2026-06-06). It was a byte-for-byte duplicate of GET /api/jobs/{id}
+    # and the FE only ever called the canonical path.
     ("GET",    "/api/render/jobs/{job_id}/parts/{part_no}/media"),
     ("GET",    "/api/render/jobs/{job_id}/parts/{part_no}/thumbnail"),
     ("GET",    "/api/render/subtitle-preview"),
@@ -89,9 +91,10 @@ def test_combined_router_does_not_add_unexpected_endpoints():
     assert not extra, f"unexpected endpoint(s) appeared after split: {sorted(extra)}"
 
 
-def test_combined_router_route_count_is_19():
+def test_combined_router_route_count_is_18():
+    # Was 19 pre-audit; the API03 duplicate /api/render/jobs/{id} was deleted.
     actual = _collect_routes(combined_router)
-    assert len(actual) == 19, f"expected 19 routes, got {len(actual)}: {sorted(actual)}"
+    assert len(actual) == 18, f"expected 18 routes, got {len(actual)}: {sorted(actual)}"
 
 
 # ---------------------------------------------------------------------------

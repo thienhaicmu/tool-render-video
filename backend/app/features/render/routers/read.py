@@ -17,17 +17,18 @@ from app.features.render.engine.preview.media_streaming import (
     _iter_file_bytes,
     _parse_range_header,
 )
-from app.services.db import get_job, list_job_parts
+from app.services.db import list_job_parts
 
 router = APIRouter(tags=["render"])
 
 
-@router.get("/jobs/{job_id}")
-def get_render_job(job_id: str):
-    row = get_job(job_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Not found")
-    return row
+# Audit FINDING-API03 closure (2026-06-06): the GET /api/render/jobs/{job_id}
+# endpoint that used to live here was a byte-for-byte duplicate of
+# GET /api/jobs/{job_id} (routes/jobs.py:api_get_job). The FE only ever
+# called the /api/jobs/... path; the duplicate just bloated the contract
+# surface. The /api/render/jobs/{job_id}/parts/{part_no}/{media,thumbnail}
+# endpoints below are NOT duplicates — they expose render-specific
+# artefacts (streaming bytes, JPEG thumbnails) that /api/jobs/... doesn't.
 
 
 # ── Rendered clip media streaming ───────────────────────────────────────────
