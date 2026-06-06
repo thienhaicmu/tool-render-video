@@ -19,6 +19,7 @@ import logging
 import os
 from typing import Optional
 
+from app.features.render.ai.llm.cache import llm_cache_get, llm_cache_put
 from app.features.render.ai.llm.parser import LLMSegment, parse_render_plan_response, parse_segment_response
 from app.features.render.ai.llm.prompts import build_render_plan_prompt, build_segment_prompt
 from app.features.render.ai.llm.retry import call_with_retry
@@ -252,9 +253,21 @@ def _call_claude_once(api_key: str, model: str, system_prompt: str, user_prompt:
 
 
 def _call_claude(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-    """Anthropic Messages API call with one-attempt retry (Retry-After honoured)."""
-    return call_with_retry(
+    """Anthropic Messages API call with cache + one-attempt retry (Retry-After honoured).
+
+    Cache check (audit AI06 closure) precedes the retry loop — a hit short-circuits
+    the SDK call entirely. On miss, the retry-wrapped call runs and a successful
+    result is written back to the 72 h content-addressable cache.
+    """
+    cached = llm_cache_get("claude", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("claude_client: cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
         lambda: _call_claude_once(api_key, model, system_prompt, user_prompt),
         label="claude",
     )
+    if result is not None:
+        llm_cache_put("claude", model, system_prompt, user_prompt, result)
+    return result
 
