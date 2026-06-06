@@ -1,6 +1,5 @@
-from __future__ import annotations
-
-import importlib
+# COMPAT shim — canonical: app.features.render.engine.audio.cleanup_adapters
+from app.features.render.engine.audio.cleanup_adapters import *  # noqa: F401, F403
 import subprocess
 import time
 from dataclasses import dataclass, field

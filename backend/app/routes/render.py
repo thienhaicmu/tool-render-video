@@ -27,14 +27,14 @@ from app.core import config as _cfg
 from app.core.config import TEMP_DIR, CHANNELS_DIR, REQUEST_LOG
 from app.core.stage import JobStage
 from app.services.bin_paths import get_ffprobe_bin, get_ffmpeg_bin
-from app.orchestration.render_pipeline import (
+from app.features.render.engine.pipeline.render_pipeline import (
     run_render_pipeline,
     _emit_render_event,
     _probe_video_duration,
     _validate_text_layers_or_400,
     _append_json_line,
 )
-from app.services.preview.ffmpeg_probers import (
+from app.features.render.engine.preview.ffmpeg_probers import (
     _probe_video_codec,
     _probe_preview_profile,
     _is_browser_safe_preview,
@@ -42,7 +42,7 @@ from app.services.preview.ffmpeg_probers import (
     _run_ffmpeg_checked,
     _detect_leading_black_duration,
 )
-from app.services.preview.session_service import (
+from app.features.render.engine.preview.session_service import (
     _PREVIEW_SESSIONS,
     _PREVIEW_DIR,
     _SESSION_TTL_HOURS,
@@ -52,7 +52,7 @@ from app.services.preview.session_service import (
     _cleanup_preview_session,
     evict_stale_preview_sessions,  # re-exported: main.py imports this from app.routes.render
 )
-from app.services.preview.media_streaming import (
+from app.features.render.engine.preview.media_streaming import (
     _parse_range_header,
     _iter_file_bytes,
 )
@@ -64,7 +64,7 @@ logger = logging.getLogger("app.render")
 @router.get("/queue-status")
 def get_queue_status():
     """Read-only — returns active render count and max concurrent slots."""
-    from app.orchestration.render_pipeline import _render_active_count, _render_active_lock, _JOB_SEM_VALUE
+    from app.features.render.engine.pipeline.render_pipeline import _render_active_count, _render_active_lock, _JOB_SEM_VALUE
     with _render_active_lock:
         active = _render_active_count[0]
     return {"active_renders": active, "max_renders": _JOB_SEM_VALUE}

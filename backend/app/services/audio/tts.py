@@ -1,6 +1,5 @@
-import asyncio
-import html as _html
-import logging
+# COMPAT shim — canonical: app.features.render.engine.audio.tts
+from app.features.render.engine.audio.tts import *  # noqa: F401, F403
 import os
 import re
 from pathlib import Path

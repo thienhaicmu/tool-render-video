@@ -27,7 +27,7 @@ from app.routes.jobs import router as jobs_router
 from app.routes.voice import router as voice_router
 from app.routes.files import router as files_router
 from app.routes.editing import router as editing_router
-from app.features.downloader.router import router as platform_downloader_router
+from app.features.download.router import router as platform_downloader_router
 from app.routes.feedback import router as feedback_router
 from app.routes.metrics import router as metrics_router
 from app.routes.settings import router as settings_router

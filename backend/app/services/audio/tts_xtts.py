@@ -1,6 +1,5 @@
-"""XTTS v2 adapter — premium narration synthesis with voice personas.
-
-OQ-2.2A hardening:
+# COMPAT shim — canonical: app.features.render.engine.audio.tts_xtts
+from app.features.render.engine.audio.tts_xtts import *  # noqa: F401, F403
   - Voice personas: content_type × gender → dedicated speaker per content character
   - Hash-based synthesis cache (TEMP_DIR/xtts_cache/)
   - CPU safety: no CUDA → RuntimeError → caller falls back to Edge-TTS

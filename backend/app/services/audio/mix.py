@@ -1,5 +1,5 @@
-import subprocess
-from pathlib import Path
+# COMPAT shim — canonical: app.features.render.engine.audio.mixer
+from app.features.render.engine.audio.mixer import *  # noqa: F401, F403
 
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
 

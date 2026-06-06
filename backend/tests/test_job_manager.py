@@ -1,0 +1,175 @@
+"""Tests for app.jobs.manager."""
+import threading
+import time
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+import app.jobs.manager as manager
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _reset_manager():
+    """Reset shared module state between tests to prevent cross-test pollution."""
+    with manager._cond:
+        manager._pending.clear()
+        manager._pending_job_ids.clear()
+        manager._active_job_ids.clear()
+        manager._stopping = False
+    if manager._executor is not None:
+        try:
+            manager._executor.shutdown(wait=False)
+        except Exception:
+            pass
+        manager._executor = None
+
+
+@pytest.fixture(autouse=True)
+def isolate_manager():
+    """Reset manager state before and after each test."""
+    _reset_manager()
+    yield
+    _reset_manager()
+
+
+# ---------------------------------------------------------------------------
+# Module-level state variables
+# ---------------------------------------------------------------------------
+
+def test_lock_is_lock():
+    assert isinstance(manager._lock, type(threading.Lock()))
+
+
+def test_cond_is_condition():
+    assert isinstance(manager._cond, type(threading.Condition()))
+
+
+def test_active_job_ids_is_set():
+    assert isinstance(manager._active_job_ids, set)
+
+
+# ---------------------------------------------------------------------------
+# active_count / pending_count
+# ---------------------------------------------------------------------------
+
+def test_active_count_initially_zero():
+    assert manager.active_count() == 0
+
+
+def test_pending_count_initially_zero():
+    assert manager.pending_count() == 0
+
+
+# ---------------------------------------------------------------------------
+# is_running
+# ---------------------------------------------------------------------------
+
+def test_is_running_false_for_unknown_job():
+    assert manager.is_running("nonexistent-job-id") is False
+
+
+def test_is_running_true_when_in_active_set():
+    with manager._cond:
+        manager._active_job_ids.add("test-job-active")
+    assert manager.is_running("test-job-active") is True
+
+
+def test_is_running_true_when_in_pending_set():
+    with manager._cond:
+        manager._pending_job_ids.add("test-job-pending")
+    assert manager.is_running("test-job-pending") is True
+
+
+# ---------------------------------------------------------------------------
+# submit_job
+# ---------------------------------------------------------------------------
+
+def test_submit_job_returns_true_for_new_job():
+    fn = MagicMock()
+    with patch("app.jobs.manager._mark_job_running"):
+        result = manager.submit_job("new-job-1", fn)
+    assert result is True
+
+
+def test_submit_job_returns_false_for_duplicate_active():
+    fn = MagicMock()
+    with manager._cond:
+        manager._active_job_ids.add("dupe-job")
+    result = manager.submit_job("dupe-job", fn)
+    assert result is False
+
+
+def test_submit_job_returns_false_for_duplicate_pending():
+    fn = MagicMock()
+    with manager._cond:
+        manager._pending_job_ids.add("dupe-job-2")
+    result = manager.submit_job("dupe-job-2", fn)
+    assert result is False
+
+
+def test_submit_job_increments_pending_count():
+    fn = MagicMock()
+    with patch("app.jobs.manager._mark_job_running"):
+        manager.submit_job("pending-job-count", fn)
+    assert manager.pending_count() >= 1
+
+
+def test_submit_job_rejected_when_stopping():
+    fn = MagicMock()
+    with manager._cond:
+        manager._stopping = True
+    result = manager.submit_job("stopped-job", fn)
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# submit_job + job execution
+# ---------------------------------------------------------------------------
+
+def test_submitted_job_eventually_executes():
+    done_event = threading.Event()
+    fn = MagicMock(side_effect=lambda: done_event.set())
+
+    with patch("app.jobs.manager._mark_job_running"):
+        manager.submit_job("exec-job", fn)
+
+    done_event.wait(timeout=5.0)
+    assert done_event.is_set(), "Job function was not called within timeout"
+    fn.assert_called_once()
+
+
+def test_job_no_longer_active_after_completion():
+    done_event = threading.Event()
+
+    def _fn():
+        pass
+
+    done_event_after = threading.Event()
+
+    def _fn_with_wait():
+        _fn()
+
+    with patch("app.jobs.manager._mark_job_running"):
+        manager.submit_job("cleanup-job", _fn_with_wait)
+
+    # Wait for the manager scheduler to clean up
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if not manager.is_running("cleanup-job"):
+            break
+        time.sleep(0.05)
+
+    assert not manager.is_running("cleanup-job")
+
+
+# ---------------------------------------------------------------------------
+# shutdown
+# ---------------------------------------------------------------------------
+
+def test_shutdown_sets_stopping_flag():
+    manager.shutdown(wait=False)
+    with manager._lock:
+        assert manager._stopping is True

@@ -1,3 +1,2 @@
-from app.ai.analysis.cloud.openai_provider import OpenAIProvider
-
-__all__ = ["OpenAIProvider"]
+# COMPAT shim — canonical: app.features.render.ai.analysis.cloud
+from app.features.render.ai.analysis.cloud import *  # noqa: F401, F403
