@@ -1,3 +1,18 @@
+# Thin backwards-compat facade for legacy ``from app.services.db import …``
+# call sites. New code should import directly from ``app.db.*``.
+#
+# Audit FINDING-A14 sunset progress (2026-06-06):
+# - download_repo helpers were removed from the facade — Phase 1 sweep
+#   confirmed every caller already imports from ``app.db.download_repo``
+#   directly. Re-exporting them just bloated the facade's surface.
+# - creator_repo helpers were removed for the same reason (only two
+#   call sites, both direct).
+# - jobs_repo + feedback_repo helpers stay re-exported because they
+#   still have callers using the facade path; those will migrate in
+#   follow-up batches.
+#
+# Test ``test_services_db_facade_surface.py`` pins the current surface
+# so any re-introduction of a removed re-export is caught in CI.
 import logging
 
 from app.db.connection import (
@@ -24,19 +39,6 @@ from app.db.jobs_repo import (
     update_job_progress,
     upsert_job,
     upsert_job_part,
-)
-
-from app.db.creator_repo import (
-    get_creator_prefs,
-    upsert_creator_prefs,
-)
-
-from app.db.download_repo import (
-    create_download_job,
-    update_download_job,
-    get_download_job,
-    list_download_jobs,
-    delete_download_job,
 )
 
 from app.db.feedback_repo import (
