@@ -1,4 +1,4 @@
-﻿"""Render-pipeline finalize stage â€” success-path terminal block.
+"""Render-pipeline finalize stage â€” success-path terminal block.
 
 Sprint 6.D-1.5 â€” extracted verbatim from render_pipeline.py
 (lines 1295â€“1455 of the pre-extraction file). No logic changes;
@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.models.schemas import RenderRequest
-from app.services.db import upsert_job
+from app.db.jobs_repo import upsert_job
 from app.core.stage import JobStage
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 

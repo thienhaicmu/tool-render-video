@@ -18,7 +18,7 @@ import uuid
 from pathlib import Path
 
 from app.core.config import CHANNELS_DIR, TEMP_DIR
-from app.services.db import get_job, list_job_parts, upsert_job
+from app.db.jobs_repo import get_job, list_job_parts, upsert_job
 from app.features.render.engine.encoder.clip_ops import cut_video
 from app.features.render.engine.encoder.ffmpeg_helpers import probe_video_metadata
 

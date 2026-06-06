@@ -284,7 +284,7 @@ def _read_tail_lines(path: Path, max_bytes: int = 500_000, max_lines: int = 3000
 
 def _current_jobs() -> list[tuple[str, str]]:
     try:
-        from app.services.db import list_jobs
+        from app.db.jobs_repo import list_jobs
         rows = list_jobs()
     except Exception:
         return []
@@ -301,7 +301,7 @@ def _current_jobs() -> list[tuple[str, str]]:
 
 def _current_render_job() -> dict[str, Any] | None:
     try:
-        from app.services.db import list_jobs
+        from app.db.jobs_repo import list_jobs
         rows = list_jobs()
     except Exception:
         return None

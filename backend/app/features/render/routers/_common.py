@@ -59,8 +59,7 @@ from app.features.render.engine.preview.session_service import (
 )
 from app.jobs.manager import is_running, submit_job
 from app.models.schemas import RenderRequest
-from app.services.db import get_job, update_job_progress, upsert_job
-
+from app.db.jobs_repo import get_job, update_job_progress, upsert_job
 logger = logging.getLogger("app.render")
 
 _UUID_RE = re.compile(

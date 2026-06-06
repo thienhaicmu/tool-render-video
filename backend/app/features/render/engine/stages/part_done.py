@@ -1,4 +1,4 @@
-﻿"""Per-part DONE stage â€” quality intelligence + cover frame + terminal upsert.
+"""Per-part DONE stage â€” quality intelligence + cover frame + terminal upsert.
 
 Sprint 6.D-2.5d â€” extracted verbatim from stages/part_renderer.py
 (lines 939-1037 of the post-2.5a file). No logic changes; pure relocation.
@@ -76,7 +76,7 @@ from app.features.render.engine.pipeline.render_events import (
     _safe_unlink,
 )
 from app.features.render.engine.stages.part_render_context import PartRenderContext
-from app.services.db import upsert_job_part
+from app.db.jobs_repo import upsert_job_part
 from app.features.render.engine.encoder.ffmpeg_helpers import extract_thumbnail_frame
 
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5a).

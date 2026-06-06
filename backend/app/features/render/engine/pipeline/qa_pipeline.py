@@ -6,8 +6,7 @@ import subprocess
 from pathlib import Path
 
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
-from app.services.db import list_job_parts
-
+from app.db.jobs_repo import list_job_parts
 logger = logging.getLogger(__name__)
 
 

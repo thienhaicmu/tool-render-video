@@ -6,7 +6,7 @@ from pathlib import Path
 import os
 import logging
 import threading
-from app.services.db import init_db
+from app.db.connection import init_db
 from app.services.channel_service import ensure_channel
 from app.services.maintenance import (
     prune_job_logs,

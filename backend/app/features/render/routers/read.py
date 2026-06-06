@@ -17,8 +17,7 @@ from app.features.render.engine.preview.media_streaming import (
     _iter_file_bytes,
     _parse_range_header,
 )
-from app.services.db import list_job_parts
-
+from app.db.jobs_repo import list_job_parts
 router = APIRouter(tags=["render"])
 
 

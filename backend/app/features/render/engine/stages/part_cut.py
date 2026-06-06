@@ -1,4 +1,4 @@
-﻿"""Per-part CUT stage â€” post-WAITING / pre-RENDERING block.
+"""Per-part CUT stage â€” post-WAITING / pre-RENDERING block.
 
 Sprint 6.D-2.3 â€” extracted verbatim from stages/part_renderer.py
 (lines 182-349 of the pre-2.3 file). No logic changes; pure relocation.
@@ -66,7 +66,7 @@ from app.features.render.engine.pipeline.pipeline_segment_selection import (
 )
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 from app.features.render.engine.stages.part_render_context import PartRenderContext
-from app.services.db import upsert_job_part
+from app.db.jobs_repo import upsert_job_part
 from app.features.render.engine.stages.manifest_writer import write_manifest
 from app.features.render.engine.encoder.clip_ops import (
     cut_video,

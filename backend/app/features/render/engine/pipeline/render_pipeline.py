@@ -25,13 +25,8 @@ from typing import Callable
 from fastapi import HTTPException
 
 from app.models.schemas import RenderRequest
-from app.services.db import (
-    upsert_job,
-    update_job_progress,
-    upsert_job_part,
-    list_job_parts,
-    close_thread_conn,
-)
+from app.db.connection import close_thread_conn
+from app.db.jobs_repo import list_job_parts, update_job_progress, upsert_job, upsert_job_part
 from app.features.render.engine.subtitle.transcription.whisper import has_audio_stream
 from app.features.render.engine.encoder.ffmpeg_helpers import nvenc_available
 from app.jobs import cancel as cancel_registry

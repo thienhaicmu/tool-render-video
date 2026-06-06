@@ -49,7 +49,7 @@ def prune_render_temp_dirs(temp_dir: Path) -> dict:
     Directories whose names are NOT UUID-format (e.g. preview/, downloads/, tmp/)
     are always left untouched.
     """
-    from app.services.db import get_job
+    from app.db.jobs_repo import get_job
     removed = kept = skipped = 0
     if not temp_dir.exists():
         return {"removed": removed, "kept": kept, "skipped": skipped}

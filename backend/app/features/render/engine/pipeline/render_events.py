@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import logging
@@ -10,8 +10,7 @@ from pathlib import Path
 
 from app.core.config import CHANNELS_DIR, LOGS_DIR
 from app.core.stage import STAGE_TO_EVENT, JobPartStage
-from app.services.db import upsert_job_part
-
+from app.db.jobs_repo import upsert_job_part
 logger = logging.getLogger("app.render")
 
 # Maps job_id -> log directory for the active render. Read by _job_log()

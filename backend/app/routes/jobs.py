@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job, delete_job, clear_part_output, save_error_kind
+from app.db.jobs_repo import clear_part_output, delete_job, get_job, list_job_parts, list_job_parts_bulk, list_jobs, list_jobs_page, save_error_kind
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
 from app.models.schemas import JobStatusResponse

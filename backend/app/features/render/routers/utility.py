@@ -36,8 +36,7 @@ def get_system_info():
     Returns cache sizes, job counts, and runtime config. Never mutates state.
     """
     from app.core.config import APP_DATA_DIR, DATABASE_PATH
-    from app.services.db import list_jobs
-
+    from app.db.jobs_repo import list_jobs
     def _dir_size_mb(path: Path) -> float:
         try:
             total = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())

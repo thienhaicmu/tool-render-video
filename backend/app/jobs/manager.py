@@ -1,4 +1,4 @@
-﻿"""
+"""
 Scheduler-backed job queue with priority and concurrency control.
 
 Architecture:
@@ -82,7 +82,7 @@ def _get_executor() -> concurrent.futures.ThreadPoolExecutor:
 def _mark_job_running(job_id: str) -> None:
     """Best-effort: transition DB status queued â†’ running before dispatch."""
     try:
-        from app.services.db import update_job_progress
+        from app.db.jobs_repo import update_job_progress
         update_job_progress(job_id, "starting", 0, "Job starting", status="running")
     except Exception as exc:
         logger.warning("Could not mark job %s as running in DB: %s", job_id, exc)
@@ -319,8 +319,7 @@ def recover_pending_render_jobs():
     may have intentionally stopped the server, or the jobs may be days old.
     """
     try:
-        from app.services.db import list_jobs, update_job_progress
-
+        from app.db.jobs_repo import list_jobs, update_job_progress
         jobs = list_jobs()
         marked = 0
         for job in jobs:

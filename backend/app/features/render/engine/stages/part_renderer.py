@@ -1,4 +1,4 @@
-﻿"""
+"""
 Per-part render logic extracted from run_render_pipeline() inner closures (Phase A-3).
 PartRenderContext carries all closure-captured state.
 
@@ -18,7 +18,7 @@ import time
 from app.core.stage import JobPartStage
 from app.features.render.engine.pipeline.qa_pipeline import _resume_output_valid
 from app.features.render.engine.pipeline.render_events import _job_log
-from app.services.db import upsert_job_part
+from app.db.jobs_repo import upsert_job_part
 from app.features.render.engine.encoder.ffmpeg_helpers import set_thread_cancel_event
 
 logger = logging.getLogger("app.render")

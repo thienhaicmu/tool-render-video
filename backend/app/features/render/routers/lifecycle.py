@@ -35,8 +35,7 @@ from app.models.schemas import (
 )
 from app.services.bin_paths import get_ffmpeg_bin
 from app.services.channel_service import ensure_channel
-from app.services.db import get_job, list_job_parts, update_job_progress
-
+from app.db.jobs_repo import get_job, list_job_parts, update_job_progress
 from ._common import (
     _coerce_legacy_channel_payload,
     _emit_request_event,

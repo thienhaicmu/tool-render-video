@@ -1,4 +1,4 @@
-﻿"""
+"""
 pipeline_render_loop.py â€” FFmpeg encode loop extracted from run_render_pipeline().
 
 Encapsulates the JOB_SEMAPHORE acquire/release, worker throttle, per-part
@@ -29,7 +29,7 @@ from app.features.render.engine.stages.part_renderer import (
     process_one_part as _run_part,
 )
 from app.jobs import cancel as cancel_registry
-from app.services.db import upsert_job_part
+from app.db.jobs_repo import upsert_job_part
 from app.features.render.engine.encoder.ffmpeg_helpers import resolve_ffmpeg_threads
 
 

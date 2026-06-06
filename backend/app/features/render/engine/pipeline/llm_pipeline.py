@@ -1,4 +1,4 @@
-﻿"""
+"""
 llm_pipeline.py â€” LLM pre-render path.
 
 The configured LLM (Gemini / OpenAI / Claude) is the sole authority for
@@ -29,7 +29,7 @@ from app.features.render.engine.pipeline.pipeline_cache import (
     _transcription_cache_put,
 )
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log, _safe_unlink
-from app.services.db import update_job_progress
+from app.db.jobs_repo import update_job_progress
 from app.features.render.engine.subtitle.transcription.whisper import has_audio_stream
 from app.features.render.engine.subtitle.transcription.adapters import transcribe_with_adapter
 

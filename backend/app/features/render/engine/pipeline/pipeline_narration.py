@@ -1,4 +1,4 @@
-﻿"""Render-pipeline narration stage â€” manual-mode AI voice TTS.
+"""Render-pipeline narration stage â€” manual-mode AI voice TTS.
 
 Sprint 6.D-1.4 â€” extracted verbatim from render_pipeline.py
 (lines 406â€“483 of the pre-1.4 file). No logic changes; pure relocation.
@@ -35,7 +35,7 @@ from typing import Optional, Tuple
 
 from app.models.schemas import RenderRequest
 from app.jobs import cancel as cancel_registry
-from app.services.db import update_job_progress
+from app.db.jobs_repo import update_job_progress
 from app.features.render.engine.audio.tts import generate_narration_audio
 from app.features.render.engine.pipeline.audio_cleanup import _maybe_cleanup_narration_audio
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log

@@ -1,4 +1,4 @@
-﻿"""Per-part asset planner â€” Layer 7 of the render pipeline.
+"""Per-part asset planner â€” Layer 7 of the render pipeline.
 
 Sprint 6.D-2.2 â€” extracted verbatim from stages/part_renderer.py
 (lines 107-716 of the pre-2.2 file). No logic changes; pure relocation.
@@ -83,7 +83,7 @@ from app.features.render.engine.pipeline.pipeline_subtitle_utils import (
 )
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 from app.features.render.engine.stages.part_render_context import PartRenderContext
-from app.services.db import upsert_job_part
+from app.db.jobs_repo import upsert_job_part
 from app.features.render.engine.stages.manifest_writer import write_manifest
 from app.features.render.engine.subtitle.generator.ass import srt_to_ass_bounce, srt_to_ass_karaoke
 from app.features.render.engine.subtitle.generator.srt import parse_srt_blocks, write_srt_blocks
