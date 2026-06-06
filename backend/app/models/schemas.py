@@ -270,9 +270,10 @@ class RenderRequest(BaseModel):
     # Produces {stem}_aggressive.mp4, {stem}_balanced.mp4, {stem}_story_first.mp4.
     multi_variant: bool = False
     # Platform-aware editing (UP14) — small editorial biases per distribution platform.
-    # Options: "tiktok" | "youtube_shorts" | "instagram_reels". Default: youtube_shorts.
+    # Options: "tiktok" | "youtube_shorts" | "instagram_reels". Default: tiktok
+    # (aligned with FE default in RenderWorkflow.tsx — fixes audit FINDING-C05).
     # Creator explicit settings always win; this is fallback guidance only.
-    target_platform: str = "youtube_shorts"
+    target_platform: str = "tiktok"
     # CTA / Series Intelligence (UP16) — optional subtitle end card. Default OFF.
     # cta_type: "auto" | "comment" | "part_2" | "follow". Auto picks by content type.
     cta_enabled: bool = False
@@ -434,6 +435,20 @@ class RenderRequest(BaseModel):
         if v not in allowed:
             raise ValueError(f"render_profile must be one of {sorted(allowed)!r}, got {v!r}")
         return v
+
+    @field_validator("part_order")
+    @classmethod
+    def _validate_part_order(cls, v: Optional[str]) -> str:
+        # Closes audit FINDING-C01: FE constrains to {'viral','sequential'}.
+        # Coerces (not raises) to preserve Sacred Contract #2 — stored
+        # payloads with stale values must replay cleanly. Unknown values
+        # fall back to 'viral' (current pipeline behavior). When the pipeline
+        # implements true 'sequential' ordering, this validator can stay
+        # the same — semantic gating happens at the ranking stage.
+        if v is None:
+            return "viral"
+        allowed = {"viral", "sequential"}
+        return v if v in allowed else "viral"
 
     @field_validator("source_quality_mode")
     @classmethod

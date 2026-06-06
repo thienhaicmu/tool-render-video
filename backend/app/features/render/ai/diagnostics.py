@@ -69,26 +69,10 @@ def _collect() -> dict:
 
 
 def _memory_diagnostics(warnings: list[str]) -> dict:
-    """Check SQLite memory store status. Never raises."""
-    try:
-        from app.ai.rag.sqlite_store import SQLiteMemoryStore, _default_db_path
-        db_path = _default_db_path()
-        sanitized = db_path.name  # filename only — no full filesystem path exposed
-
-        store = SQLiteMemoryStore(db_path=db_path)
-        health = store.health()
-        return {
-            "sqlite_available": health.get("sqlite_available", True),
-            "count": health.get("count"),
-            "db_path": sanitized,
-            "warnings": health.get("warnings", []),
-        }
-    except Exception as exc:
-        warnings.append("memory_diagnostics_error")
-        logger.debug("ai_memory_diagnostics_failed: %s", exc)
-        return {
-            "sqlite_available": False,
-            "count": None,
-            "db_path": None,
-            "warnings": ["sqlite_unavailable"],
-        }
+    """Return static "not available" status — RAG memory store removed in Phase G."""
+    return {
+        "sqlite_available": False,
+        "count": None,
+        "db_path": None,
+        "warnings": ["memory_store_retired"],
+    }

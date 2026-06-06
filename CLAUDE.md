@@ -1,5 +1,15 @@
 # CLAUDE.md — AI Video Render Studio
 
+> ⚠️ **STALE-CONTENT NOTICE (2026-06-06):** parts of this file describe paths that no longer exist on `feature/ai-workflow-upgrade`. See [docs/audit-2026-06-06/](docs/audit-2026-06-06/) for the current canonical reference. Specifically:
+> - `backend/app/orchestration/`, `backend/app/services/render/`, `backend/app/ai/` listed below as CRITICAL paths **do not exist** — code lives under `backend/app/features/render/{ai,engine,editing}/` after the Phase 1-18 feature-layer migration (commits `cf80766`, `e641a21`).
+> - `render_pipeline.py` is now `backend/app/features/render/engine/pipeline/render_pipeline.py` (1,357 LOC).
+> - `part_renderer.py` is now `backend/app/features/render/engine/stages/part_renderer.py`.
+> - `motion_crop.py` is now `backend/app/features/render/engine/motion/crop.py`.
+> - `ffmpeg_helpers.py` is now `backend/app/features/render/engine/encoder/ffmpeg_helpers.py`.
+> - The Sacred Contracts still apply; just the file paths have moved.
+>
+> For a clean current view, prefer reading [docs/audit-2026-06-06/17_system_overview.md](docs/audit-2026-06-06/17_system_overview.md) → [18_architecture.md](docs/audit-2026-06-06/18_architecture.md) → [19_backend.md](docs/audit-2026-06-06/19_backend.md).
+
 ## ⚡ AGENT TEAM PROTOCOL
 
 **All requests route through the agent team. Claude acts as Leader by default.**

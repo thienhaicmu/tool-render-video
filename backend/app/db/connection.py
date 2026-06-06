@@ -368,6 +368,14 @@ def init_db():
     except Exception as exc:
         logger.warning("schema migrations failed (non-fatal): %s", exc)
 
+    # Refresh query-planner stats so the first session has accurate stats
+    # for the indexes created above. Cheap (~1 ms on a small DB) and safe.
+    try:
+        conn.execute("ANALYZE")
+        conn.commit()
+    except Exception as exc:
+        logger.warning("ANALYZE failed (non-fatal): %s", exc)
+
     conn.close()
 
 
