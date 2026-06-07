@@ -475,3 +475,211 @@ The branch is in good shape for a merge plan. Of the open audit roadmap
 items, only MT-3 / MT-4 carry blast-radius concerns that justify a
 dedicated review session before implementation; MT-7-UI and MT-9 can
 be picked up at leisure.
+
+---
+
+# Addendum 2 — Batches 10N through 10R (2026-06-06)
+
+The remaining MT roadmap items closed in five further batches.
+Branch is now **50 commits ahead** of `f3b6858`. BE: 743 / 743. FE:
+408 / 408. The "Updated audit status" table in Addendum 1 above is
+now superseded by the final table at the bottom of this addendum —
+**only MT-9 remains open**, and the audit itself classifies it as
+LT-scale.
+
+## Scope delta (vs Addendum 1)
+
+| Dimension | After Addendum 1 (10M) | After Addendum 2 (10R) |
+|-----------|------------------------|------------------------|
+| Branch position    | 44 ahead of `f3b6858` | 50 ahead |
+| Backend tests      | 680 / 680            | 743 / 743 |
+| Frontend tests     | 403 / 403            | 408 / 408 |
+| Total              | 1083                  | 1151 |
+| Open audit MT items | MT-3, MT-4, MT-7-UI, MT-9 | MT-9 only |
+
+## Closures
+
+### MT-3 phase 1 — RenderRequestPublic surface (Batch 10N)
+
+- **Source:** [27_future_roadmap.md MT-3](27_future_roadmap.md). The
+  audit's vision was to split RenderRequest's 152 fields into a
+  Public (FE-facing) and Internal (server-derived) surface so the API
+  contract becomes self-documenting.
+- **Discovery during planning:** the audit's "~30 FE-facing / 50+
+  BE-only" estimate was off — the FE TS interface declares 88 of 152
+  fields, leaving 64 internal-only. Cross-check showed **zero FE-only
+  drift** (every FE field exists on RenderRequest).
+- **Fix shipped (`f9ddc52`):** additive only — no wire change.
+  - `app/models/render_public.py`: `FE_FACING_FIELDS` (frozenset of 88
+    names), `BE_ONLY_FIELDS` (derived complement of 64),
+    `RenderRequestPublic` built via Pydantic `create_model` from
+    RenderRequest's live field definitions (annotations + defaults
+    stay in lockstep automatically).
+  - `extra='forbid'` on the new model — a future wire switch
+    immediately enforces "only Public fields" at the boundary.
+- **Regression guard:** 10 tests in
+  [tests/test_render_request_public_surface.py](../../backend/tests/test_render_request_public_surface.py).
+  Pins TS-interface parity (regex-extracted), Public ∪ BE_only
+  partitions RenderRequest cleanly, 88 + 64 = 152 count pin,
+  annotation + resolved-default lockstep, extra='forbid' rejection,
+  round-trip + subset-dump proof.
+
+### MT-3 phase 2 — Wire /process to RenderRequestPublic (Batch 10O)
+
+- **Source:** completion of MT-3.
+- **Fix shipped (`1936995`):** `POST /api/render/process` switched
+  from `RenderRequestStrict` to `RenderRequestPublic`. Two-step
+  validation:
+  1. FastAPI deserializes body into Public — `extra='forbid'` over
+     88 fields rejects BE-only fields + typos with HTTP 422 at the
+     wire.
+  2. Handler does `RenderRequest(**public.model_dump())` server-side
+     to apply RenderRequest's validators (api-key strip per F07,
+     `target_duration` / `output_count` range bounds, allow-lists)
+     AND fill in defaults for the 64 BE-only fields.
+- **Sacred Contracts preserved:** #2 (replay path still uses
+  RenderRequest with all defaults — historical jobs replay unchanged);
+  #4/#5/#6/#7/#8 (pipeline downstream still receives the full
+  RenderRequest object).
+- **Breaking change for external clients** sending BE-only fields:
+  they now 422. The smoke driver was the only known internal client
+  doing so — updated. FE never sent BE-only fields per the audit
+  verification.
+- **Regression guard:** 24 tests in
+  [tests/test_render_process_public_wire.py](../../backend/tests/test_render_process_public_wire.py).
+  Parametrised over 20 BE-only field names each producing 422 with the
+  offending field named in the error detail's `loc` array.
+
+### MT-4 phase A — SegmentMetadata extract (Batch 10P)
+
+- **Source:** [11_bug_risk_report.md A20 mention](11_bug_risk_report.md)
+  + [27_future_roadmap.md MT-4](27_future_roadmap.md). CRITICAL-tier
+  per CLAUDE.md.
+- **Render Edit Protocol followed strictly:** baseline pytest before
+  (714/714), planner analysis embedded in commit message, explicit
+  user approval given via scope-confirmation prompt, surgical Edit
+  tool diffs, post-edit pytest (726/726 — zero regression).
+- **Fix shipped (`54ee26e`):** the 22-line inline path-derivation
+  block (lines 92-113 of pre-extraction `process_one_part`) lifted
+  into `app/features/render/engine/stages/segment_metadata.py`:
+  - `@dataclass(frozen=True) PartPaths` with 6 fields
+    (`raw_part`, `srt_part`, `ass_part`, `translated_srt_part`,
+    `final_part`, `part_name`).
+  - `build_part_paths(ctx, idx, seg) → PartPaths`. Pure function —
+    only I/O is the collision-guard `output_dir.exists()` check.
+  - Every original local-variable name preserved at the call site so
+    the 250+ lines that follow run byte-identically.
+- **Regression guard:** 12 tests in
+  [tests/test_segment_metadata_paths.py](../../backend/tests/test_segment_metadata_paths.py).
+  Pins the three filename selection branches (variant_type wins over
+  clip_name; clip_name + collision suffix; default with index
+  zero-padding); `subtitle_target_language` parametrised across
+  en/ja/vi; Sacred Contract #2 spirit (pre-Sprint-4 payload replay
+  via `getattr` default); PartPaths frozen-mutation guard.
+
+### MT-4 phase B — PartDB facade (Batch 10Q)
+
+- **Source:** completion of MT-4.
+- **Render Edit Protocol followed strictly:** baseline 726/726,
+  post-edit 733/733. 11 render contract tests still green.
+- **Fix shipped (`4b20a40`):** the three Sacred Contract #5 stage
+  transitions `process_one_part` emitted inline (resume-skip DONE,
+  WAITING, RENDERING) moved into named facade methods in
+  `app/features/render/engine/stages/part_db.py`:
+  - `mark_part_skipped_done(ctx, idx, paths, seg)` — DONE @ 100 with
+    `final_part` output, "Skipped (already rendered)" message.
+  - `mark_part_waiting(ctx, idx, paths, seg)` — WAITING @ 5 with
+    empty output_file, "Waiting for worker" message.
+  - `mark_part_rendering(ctx, idx, paths, seg)` — RENDERING @ 70 with
+    `final_part` committed, "Rendering final video" message.
+- **Sacred Contract #5 enforcement tightened:** every facade emits a
+  `JobPartStage` enum value, never a raw string. Tests parametrised
+  over all three facades verify this.
+- **Out of scope (per A20 sketch):** other stage helpers
+  (`part_done.run_part_done` per-part terminal DONE,
+  `part_asset_planner` TRANSCRIBING, `part_cut` CUTTING) keep their
+  direct `upsert_job_part` imports — they couple to stage-local state.
+- **Regression guard:** 7 tests in
+  [tests/test_part_db_transitions.py](../../backend/tests/test_part_db_transitions.py).
+
+### MT-7 UI — Settings data-retention toggle (Batch 10R)
+
+- **Source:** completion of MT-7 (backend ST-12 shipped in Batch 10A).
+- **Fix shipped (`87441b2`):** full vertical (BE + FE + tests).
+  - **Backend storage:** new `_DATA_RETENTION_KEY = "data_retention"`
+    nested into `creator_prefs.prefs_json`. Repo helpers
+    `get_job_retention_days` / `upsert_job_retention_days` with
+    `[0, 365]` clamp on both read + write.
+  - **Backend API:** new `GET / PUT /api/settings/data-retention`,
+    envelope shape mirrors `/creator-context`. Pydantic `ge=0 / le=365`
+    enforces range on PUT.
+  - **Backend cleanup wire-up:** `main.py:_run_periodic_cleanup`
+    reads the DB value first each tick; falls back to
+    `JOB_RETENTION_DAYS` env var when `get_job_retention_days()`
+    returns `None` (first-boot / scripted deployment). Setting
+    changes via UI take effect on next 30-min cycle.
+  - **Frontend types + client:** `api/dataRetention.ts` with
+    `DataRetentionPayload`, `DataRetentionEnvelope`,
+    `BLANK_DATA_RETENTION`, `getDataRetention`, `putDataRetention`.
+  - **Frontend UI:** new `DataRetentionSection` placed between
+    `CreatorContextSection` and the Render Cache section. Number
+    input (0-365) with onChange clamping, header badge
+    ("AUTO-PRUNE Nd" when configured + non-zero, "TẮT" otherwise),
+    Save button + status message distinguishing "Đã tắt auto-prune"
+    (0) from "Sẽ xóa job cũ hơn N ngày" (N>0), help text noting
+    active/queued jobs are never pruned.
+- **Regression guard:** +15 tests (10 BE + 5 FE):
+  - BE
+    ([tests/test_settings_data_retention.py](../../backend/tests/test_settings_data_retention.py)):
+    fresh-DB defaults, round-trip, 0-with-configured-flag distinction,
+    Pydantic 422 for negative + >365, repo clamp on tampered DB blob,
+    key-missing returns None, coexistence with creator_context in
+    both write orders, inline cleanup-loop resolution proof
+    (DB overrides env).
+  - FE
+    ([tests/settings-data-retention-form.test.tsx](../../frontend/tests/settings-data-retention-form.test.tsx)):
+    hydration from getDataRetention, save with non-zero status
+    message, save with zero status message, TẮT badge for
+    0-configured, client-side clamp of out-of-range typed input.
+
+## Commits (addendum 2 ordering)
+
+```
+f9ddc52  feat(schemas):   Batch 10N — MT-3 phase 1 RenderRequestPublic surface
+1936995  feat(api):       Batch 10O — MT-3 phase 2 wire /process to RenderRequestPublic
+54ee26e  refactor(render):Batch 10P — MT-4 phase A SegmentMetadata extract (A20)
+4b20a40  refactor(render):Batch 10Q — MT-4 phase B PartDB facade (A20)
+87441b2  feat(settings):  Batch 10R — MT-7 UI data-retention toggle
+```
+
+## Updated audit MT roadmap status
+
+| Audit MT item | Status as of Batch 10R |
+|---------------|------------------------|
+| MT-1 dev_commands decomp | CLOSED (Batch 10J) |
+| MT-2 schemas.py split    | CLOSED (Batch 10I) |
+| MT-3 RenderRequest split | **CLOSED** — phase 1 (10N) + phase 2 wire switch (10O) |
+| MT-4 process_one_part extraction | **CLOSED** — phase A SegmentMetadata (10P) + phase B PartDB (10Q) |
+| MT-5 pipeline integration test | CLOSED (Batch 10K) |
+| MT-6 FK + cascade        | CLOSED (Batch 10L) |
+| MT-7 DB row retention    | **CLOSED** — backend (Batch 10A as ST-12) + UI toggle (Batch 10R) |
+| MT-8 JobPart fields cleanup | Already closed in Batch 8 (C03) |
+| MT-9 WS push redesign    | OPEN — LT-scale per audit |
+
+**8 of 9 MT items closed.** Only MT-9 remains, and the audit itself
+classifies it as "LT-scale, only worth doing if FE adds multi-window
+support" — it's not actually a follow-up.
+
+The branch is **ready** for a merge plan to `main`. The full audit-
+2026-06-06 catalog is closed end to end:
+
+- HIGH findings (15): closed in Batches 1-9
+- LOW findings (6 — BR10 through BR15): closed in Batches 10A-F
+- FE smoke gap (TEST09): closed in Batch 10D
+- DB hygiene (DB05/MT-7/DB09): closed in Batch 10A
+- API05 orphan channels: closed in Batch 10H
+- MT-1 through MT-7: closed across Batches 10I/J/K/L/N/O/P/Q/R
+
+When the merge plan lands, this ledger plus
+[SMOKE_TEST_2026-06-06_BATCH10.md](SMOKE_TEST_2026-06-06_BATCH10.md)
+remain the canonical "what changed and why it's safe" appendix.
