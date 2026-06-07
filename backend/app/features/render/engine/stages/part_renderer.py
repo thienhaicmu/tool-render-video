@@ -15,10 +15,16 @@ import logging
 import os
 import time
 
-from app.core.stage import JobPartStage
+# Batch 10Q: JobPartStage was previously imported here for the 3 inline
+# upsert_job_part calls. Those moved to part_db.py — every reference to
+# the enum in this file is now in docstrings / comments only.
 from app.features.render.engine.pipeline.qa_pipeline import _resume_output_valid
 from app.features.render.engine.pipeline.render_events import _job_log
-from app.db.jobs_repo import upsert_job_part
+# Batch 10Q: ``upsert_job_part`` is no longer imported here — the 3 stage
+# transitions this file owned (resume-skip DONE, WAITING, RENDERING)
+# moved to part_db.py. Other stage helpers (part_done, part_asset_planner,
+# part_cut) still import upsert_job_part directly for their own
+# Sacred Contract #5 transitions; those are out of scope for this batch.
 from app.features.render.engine.encoder.ffmpeg_helpers import set_thread_cancel_event
 
 logger = logging.getLogger("app.render")
@@ -90,6 +96,17 @@ from app.features.render.engine.stages.part_render_finalize import run_part_fina
 # derivation (raw_part / srt_part / ass_part / translated_srt_part /
 # final_part / part_name) extracted to a pure data helper.
 from app.features.render.engine.stages.segment_metadata import build_part_paths  # noqa: F401
+# Batch 10Q (MT-4 phase B): per-part DB-write facade. Centralizes the
+# three Sacred Contract #5 stage transitions that ``process_one_part``
+# emits inline (WAITING / RENDERING / resume-skip DONE). Other
+# transitions (CUTTING, TRANSCRIBING, the per-part terminal DONE) live
+# inside their respective stage helpers — part_cut, part_asset_planner,
+# part_done — and stay there because they couple to stage-local state.
+from app.features.render.engine.stages.part_db import (
+    mark_part_rendering,
+    mark_part_skipped_done,
+    mark_part_waiting,
+)
 
 
 def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
@@ -159,11 +176,16 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
         and final_part.stat().st_size > 0
         and _resume_output_valid(final_part)
     ):
-        upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.DONE, 100, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Skipped (already rendered)")
+        # Batch 10Q (MT-4 phase B): the 13-arg inline upsert is now a
+        # named facade call — Sacred Contract #5 transition (resume-skip
+        # → DONE @ 100) lives in part_db.mark_part_skipped_done.
+        mark_part_skipped_done(ctx, idx, _paths, seg)
         _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx} skipped: final output already exists", kind="debug")
         return {"idx": idx, "output": str(final_part), "row": None, "skipped": True}
 
-    upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.WAITING, 5, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), "", "Waiting for worker")
+    # Batch 10Q: first DB write after the resume check — Sacred Contract
+    # #5 WAITING @ 5%. The 13-arg inline call moved to part_db.mark_part_waiting.
+    mark_part_waiting(ctx, idx, _paths, seg)
 
     _t_part_start = time.perf_counter()
     _subtitle_ass_ms = 0
@@ -196,7 +218,9 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
     _effective_subtitle_style = _part_assets.subtitle_style
     _hook_overlay_applied_for_part = _part_assets.hook_overlay_applied
     overlay_title = (ctx.payload.title_overlay_text or "").strip() or ctx.source["title"]
-    upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.RENDERING, 70, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Rendering final video")
+    # Batch 10Q: assets ready, encode about to start — Sacred Contract #5
+    # RENDERING @ 70%. The 13-arg inline call moved to part_db.mark_part_rendering.
+    mark_part_rendering(ctx, idx, _paths, seg)
 
     # Sprint 6.D-2.4: RENDER pre-flight (encoding params + progress-timer
     # thread + cache key + PartExecutionPlan + CameraStrategy +
