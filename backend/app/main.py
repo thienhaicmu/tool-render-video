@@ -22,7 +22,6 @@ from app.core.logging_setup import configure_logging as _configure_logging
 # Configure file-based logging before any other module emits a log event.
 # Uvicorn's console handlers are not touched — this only adds file handlers.
 _configure_logging(LOGS_DIR)
-from app.routes.channels import router as channels_router
 from app.features.render.router import router as render_router
 from app.routes.jobs import router as jobs_router
 from app.routes.voice import router as voice_router
@@ -111,7 +110,6 @@ os.environ.setdefault("TMP",  str(_DATA_DIR / "tmp"))
 (_DATA_DIR / "tmp").mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="YT TikTok Desktop Local Platform")
-app.include_router(channels_router)
 app.include_router(render_router)
 app.include_router(jobs_router)
 # Security: POST /api/dev/command executes arbitrary shell commands with no auth.

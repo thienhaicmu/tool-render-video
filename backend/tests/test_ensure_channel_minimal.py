@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.channel_service import ensure_channel, list_channels
+from app.services.channel_service import ensure_channel
 
 
 # ---------------------------------------------------------------------------
@@ -131,18 +131,5 @@ def test_preserves_existing_upload_files_on_old_channels(tmp_path):
     assert (base / "account" / "upload_settings.json").read_text(encoding="utf-8") == '{"keep": "me"}'
 
 
-# ---------------------------------------------------------------------------
-# list_channels — accessor unaffected by the writer slim
-# ---------------------------------------------------------------------------
-
-def test_list_channels_after_ensure(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        "app.services.channel_service.CHANNELS_DIR",
-        tmp_path,
-        raising=False,
-    )
-    ensure_channel("alpha", root_dir=tmp_path)
-    ensure_channel("beta",  root_dir=tmp_path)
-    listing = list_channels()
-    assert "alpha" in listing
-    assert "beta"  in listing
+# list_channels test removed in Batch 10H — the function was deleted
+# alongside the orphan /api/channels/* surface (audit FINDING-API05 closure).

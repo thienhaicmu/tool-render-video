@@ -8,35 +8,10 @@ from typing import Literal, Optional
 _security_logger = logging.getLogger("app.api.security")
 
 
-# ── Channel ──────────────────────────────────────────────────────────────
-
-class ChannelCreate(BaseModel):
-    channel_code: str
-    channel_path: Optional[str] = None
-    account_key: Optional[str] = None
-    schedule_slots: Optional[list[str]] = None
-    browser_preference: Optional[str] = "chromeportable"
-    network_mode: Optional[str] = "direct"
-    video_output_subdir: Optional[str] = "video_out"
-    proxy_server: Optional[str] = ""
-    proxy_username: Optional[str] = ""
-    proxy_password: Optional[str] = ""
-    tiktok_username: Optional[str] = ""
-    tiktok_password: Optional[str] = ""
-    mail_username: Optional[str] = ""
-    mail_password: Optional[str] = ""
-    credential_line: Optional[str] = ""
-    default_hashtags: Optional[str] = ""
-
-
-class ChannelInfo(BaseModel):
-    channel_code: str
-    hashtags_file: str
-    input_dir: str
-    uploaded_dir: str
-    failed_dir: str
-    browser_profile_dir: str
-
+# ── Channel schemas removed (Batch 10H, audit FINDING-API05 closure 2026-06-06):
+#    the 6 /api/channels/* endpoints were orphan since the Phase 4F.5A upload
+#    pipeline retirement and have been deleted. ChannelCreate / ChannelInfo
+#    had zero callers outside the deleted routes/channels.py.
 
 # ── Render ───────────────────────────────────────────────────────────────
 

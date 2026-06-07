@@ -61,6 +61,6 @@ def ensure_channel(channel_code: str, root_dir=None):
     return base
 
 
-def list_channels():
-    CHANNELS_DIR.mkdir(parents=True, exist_ok=True)
-    return sorted([p.name for p in CHANNELS_DIR.iterdir() if p.is_dir()])
+# list_channels() removed in Batch 10H (audit FINDING-API05 closure): its sole
+# caller was routes/channels.py:get_channels, which has been deleted alongside
+# the rest of the orphan /api/channels surface.
