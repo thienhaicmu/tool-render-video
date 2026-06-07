@@ -212,9 +212,21 @@ def _run_periodic_cleanup():
             # Now runs on every periodic tick as well. 72h TTL matches
             # _RENDER_CACHE_TTL_SEC in pipeline_cache.py.
             result_cache = prune_render_cache(CACHE_DIR, max_age_hours=72)
-            # Audit FINDING-DB05 / MT-7 / ST-12: env-gated DB row retention.
-            # No-op when JOB_RETENTION_DAYS=0 (default). Never raises.
-            result_jobs = prune_old_jobs(_JOB_RETENTION_DAYS)
+            # Audit FINDING-DB05 / MT-7: DB row retention.
+            # Batch 10R (MT-7 UI): the Settings screen can now persist
+            # ``job_retention_days`` in creator_prefs. Each cleanup tick
+            # reads the DB-stored value first; falls back to the
+            # ``JOB_RETENTION_DAYS`` env var when the user hasn't
+            # configured anything via the UI (first boot / scripted
+            # deployment). Either way, 0 = retention disabled.
+            try:
+                from app.db.creator_repo import get_job_retention_days
+                _db_days = get_job_retention_days()
+            except Exception as _exc:  # pragma: no cover — repo helper is defensive
+                _db_days = None
+                _cleanup_logger.warning("data_retention read failed: %s", _exc)
+            _retention_days = _db_days if _db_days is not None else _JOB_RETENTION_DAYS
+            result_jobs = prune_old_jobs(_retention_days)
             _cleanup_logger.info(
                 "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d "
                 "xtts_removed=%d overlay_removed=%d cache_removed=%d cache_freed_mb=%.1f "

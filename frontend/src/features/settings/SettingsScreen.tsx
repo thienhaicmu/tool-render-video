@@ -6,6 +6,10 @@ import {
   putCreatorContext,
   type CreatorContextPayload,
 } from '@/api/creatorContext'
+import {
+  getDataRetention,
+  putDataRetention,
+} from '@/api/dataRetention'
 
 interface CacheInfo {
   total_mb: number
@@ -333,6 +337,146 @@ function CreatorContextSection() {
 }
 
 
+// Batch 10R (MT-7 UI): Settings section for the job-retention auto-prune
+// setting (backend wiring shipped in Batch 10A as ST-12). Keeps the
+// same shape as CreatorContextSection so reviewers can diff them.
+function DataRetentionSection() {
+  const [days, setDays] = useState<number>(0)
+  const [isConfigured, setIsConfigured] = useState<boolean>(false)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [saving, setSaving] = useState<boolean>(false)
+  const [saveResult, setSaveResult] = useState<string | null>(null)
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    try {
+      const env = await getDataRetention()
+      setDays(env.data_retention.job_retention_days)
+      setIsConfigured(env.is_configured)
+    } catch {
+      setDays(0)
+      setIsConfigured(false)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetch()
+  }, [fetch])
+
+  async function handleSave() {
+    setSaving(true)
+    setSaveResult(null)
+    try {
+      const env = await putDataRetention({ job_retention_days: days })
+      setDays(env.data_retention.job_retention_days)
+      setIsConfigured(env.is_configured)
+      setSaveResult(
+        env.data_retention.job_retention_days === 0
+          ? 'Đã tắt auto-prune'
+          : `Sẽ xóa job cũ hơn ${env.data_retention.job_retention_days} ngày`,
+      )
+    } catch {
+      setSaveResult('Lưu thất bại')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid="data-retention-section"
+      style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        padding: '16px 18px',
+      }}
+    >
+      <SectionTitle>
+        Data Retention{' '}
+        <span
+          style={{
+            marginLeft: 8,
+            fontSize: 9,
+            fontWeight: 700,
+            padding: '2px 6px',
+            borderRadius: 4,
+            background: isConfigured && days > 0
+              ? 'rgba(0,200,150,.12)'
+              : 'rgba(138,147,176,.10)',
+            color: isConfigured && days > 0 ? 'var(--ok)' : 'var(--text-3)',
+            letterSpacing: '.04em',
+          }}
+        >
+          {isConfigured && days > 0 ? `AUTO-PRUNE ${days}D` : 'TẮT'}
+        </span>
+      </SectionTitle>
+
+      {loading ? (
+        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Đang tải…</div>
+      ) : (
+        <>
+          <FormRow
+            label="Số ngày giữ job"
+            hint="0 = không xóa tự động · 1-365 = xóa job hoàn thành/lỗi cũ hơn N ngày"
+          >
+            <input
+              data-testid="dr-job-retention-days"
+              type="number"
+              min={0}
+              max={365}
+              value={days}
+              onChange={(e) => {
+                const raw = parseInt(e.target.value || '0', 10)
+                const clamped = isNaN(raw) ? 0 : Math.max(0, Math.min(365, raw))
+                setDays(clamped)
+                setSaveResult(null)
+              }}
+              style={_inputStyle}
+            />
+          </FormRow>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+            <button
+              data-testid="dr-save"
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                padding: '6px 16px',
+                borderRadius: 7,
+                fontSize: 11,
+                fontWeight: 700,
+                fontFamily: 'var(--fh)',
+                letterSpacing: '.04em',
+                border: '1px solid rgba(123,97,255,.4)',
+                background: 'rgba(123,97,255,.10)',
+                color: 'var(--accent)',
+                cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? 0.5 : 1,
+              }}
+            >
+              {saving ? 'Đang lưu…' : 'Lưu'}
+            </button>
+            {saveResult ? (
+              <span data-testid="dr-status" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                {saveResult}
+              </span>
+            ) : null}
+          </div>
+
+          <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5 }}>
+            Job đang chạy / chờ KHÔNG bao giờ bị xóa. Chỉ áp dụng cho các job đã hoàn thành,
+            lỗi, hủy hoặc bị gián đoạn. Kiểm tra mỗi 30 phút (chu kỳ dọn dẹp định kỳ).
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+
 export function SettingsScreen() {
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -386,6 +530,8 @@ export function SettingsScreen() {
       </div>
 
       <CreatorContextSection />
+
+      <DataRetentionSection />
 
       {loading ? (
         <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Đang tải…</div>

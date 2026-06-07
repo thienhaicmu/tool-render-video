@@ -33,6 +33,13 @@ logger = logging.getLogger("app.db")
 # string to grep for.
 _CREATOR_CONTEXT_KEY = "creator_context"
 
+# Batch 10R (MT-7 UI): nested key for the data-retention settings the
+# Settings screen writes. Stores ``{"job_retention_days": int}`` (0 =
+# disabled). The periodic cleanup loop in main.py reads from here on
+# each tick and falls back to the ``JOB_RETENTION_DAYS`` env var when
+# the key is absent (first-boot / no UI configuration).
+_DATA_RETENTION_KEY = "data_retention"
+
 
 def get_creator_prefs() -> dict:
     with db_conn() as conn:
@@ -120,3 +127,70 @@ def upsert_creator_context(context: Optional[CreatorContext]) -> Optional[Creato
         logger.warning("upsert_creator_context: write failed: %s", exc)
         return None
     return get_creator_context()
+
+
+# ── Batch 10R (MT-7 UI) — data-retention helpers ────────────────────────
+
+# Hard bounds the API enforces. 0 = retention disabled (Sacred Contract
+# safety net: a fresh DB starts at 0 so jobs accumulate until the user
+# opts in). 365 caps the upper bound at 1 year — past that, RAG of
+# render_plan_json starts to dominate disk usage per the audit.
+_RETENTION_MIN_DAYS = 0
+_RETENTION_MAX_DAYS = 365
+
+
+def get_job_retention_days() -> Optional[int]:
+    """Return the persisted ``job_retention_days`` (0–365) or None when
+    the user hasn't configured anything via the Settings screen.
+
+    Caller is expected to fall back to the ``JOB_RETENTION_DAYS`` env
+    var when this returns None. Never raises — defensive about every
+    DB / JSON / type-coercion step so a transient repo failure can't
+    crash the cleanup loop.
+    """
+    try:
+        prefs = get_creator_prefs()
+    except Exception as exc:
+        logger.warning("get_job_retention_days: read failed: %s", exc)
+        return None
+    nested = prefs.get(_DATA_RETENTION_KEY)
+    if not isinstance(nested, dict):
+        return None
+    raw = nested.get("job_retention_days")
+    if raw is None:
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    # Clamp on read too — a manually-edited DB blob shouldn't trip the
+    # cleanup loop into deleting too much.
+    return max(_RETENTION_MIN_DAYS, min(_RETENTION_MAX_DAYS, value))
+
+
+def upsert_job_retention_days(days: int) -> Optional[int]:
+    """Persist ``job_retention_days`` under the singleton creator_prefs
+    row. Other top-level prefs keys are preserved verbatim.
+
+    Returns the value that was actually persisted (after clamping), or
+    None on error. Setting 0 is "retention disabled" — kept as 0 rather
+    than removing the key so the UI can show the user their last
+    setting (0 is a deliberate choice).
+    """
+    clamped = max(_RETENTION_MIN_DAYS, min(_RETENTION_MAX_DAYS, int(days)))
+    try:
+        current = get_creator_prefs()
+    except Exception as exc:
+        logger.warning("upsert_job_retention_days: read failed: %s", exc)
+        current = {}
+    nested = current.get(_DATA_RETENTION_KEY)
+    if not isinstance(nested, dict):
+        nested = {}
+    nested["job_retention_days"] = clamped
+    current[_DATA_RETENTION_KEY] = nested
+    try:
+        upsert_creator_prefs(current)
+    except Exception as exc:
+        logger.warning("upsert_job_retention_days: write failed: %s", exc)
+        return None
+    return get_job_retention_days()
