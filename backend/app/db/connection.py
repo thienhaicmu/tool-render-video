@@ -253,6 +253,9 @@ def init_db():
         )
         """
     )
+    # Audit MT-6 closure (Batch 10L 2026-06-06): the FOREIGN KEY clause
+    # here lands on NEW databases. Existing databases keep their FK-less
+    # job_parts table until migration 0003 rewrites it.
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS job_parts (
@@ -272,7 +275,8 @@ def init_db():
             message TEXT DEFAULT '',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(job_id, part_no)
+            UNIQUE(job_id, part_no),
+            FOREIGN KEY (job_id) REFERENCES jobs(job_id) ON DELETE CASCADE
         )
         """
     )
@@ -365,6 +369,8 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_dl_jobs_created ON download_jobs(created_at DESC)"
     )
     # ── Clip feedback (Phase 6) — user ratings that bias future AI clip selection ─
+    # Audit MT-6 closure (Batch 10L 2026-06-06): FK on NEW databases.
+    # Migration 0003 retrofits existing DBs.
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS clip_feedback (
@@ -380,7 +386,8 @@ def init_db():
             end_sec      REAL    NOT NULL DEFAULT 0.0,
             duration_sec REAL    NOT NULL DEFAULT 0.0,
             rated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(job_id, part_no)
+            UNIQUE(job_id, part_no),
+            FOREIGN KEY (job_id) REFERENCES jobs(job_id) ON DELETE CASCADE
         )
         """
     )
