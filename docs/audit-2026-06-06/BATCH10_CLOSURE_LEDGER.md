@@ -270,3 +270,208 @@ next conversation.
 When that merge plan is drafted, this ledger plus
 [SMOKE_TEST_2026-06-06_BATCH10.md](SMOKE_TEST_2026-06-06_BATCH10.md)
 together form the "what changed and why it's safe" appendix.
+
+---
+
+# Addendum — Batches 10H through 10M (2026-06-06)
+
+Six follow-on closures landed on `feature/ai-workflow-upgrade` after
+the original ledger entry. The branch is now **44 commits ahead** of
+`f3b6858`. BE: 680 / 680. FE: 403 / 403. The original
+"Not closed / deferred" section above is now partly stale — MT-1, MT-2,
+MT-5, MT-6 have all closed; the addendum below records what shipped.
+
+## Scope delta (vs original entry)
+
+| Dimension | Original entry (Batch 10G) | Addendum (Batch 10M) |
+|-----------|---------------------------|----------------------|
+| Branch position    | 36 ahead of `f3b6858` | 44 ahead |
+| Backend tests      | 621 / 621             | 680 / 680 |
+| Frontend tests     | 403 / 403             | 403 / 403 |
+| Total              | 1024                  | 1083 |
+| Open audit MT items | MT-1 through MT-7    | MT-3, MT-4, MT-7-UI, MT-9 only |
+
+## Closures
+
+### FINDING-API05 — orphan `/api/channels/*` surface (Batch 10H)
+
+- **Source:** [13_api_catalog.md](13_api_catalog.md), [11_bug_risk_report.md](11_bug_risk_report.md). MED.
+- **Risk:** 6 endpoints with zero FE callers since the Phase 4F.5A
+  upload-pipeline retirement. The audit's two options were "delete"
+  or "build a management screen"; no product owner stepped forward
+  for the second.
+- **Fix shipped (`f611cda`):**
+  - Deleted `backend/app/routes/channels.py` (475 LOC, 6 endpoints).
+  - Removed the `channels_router` import + `include_router` mount
+    from `main.py`.
+  - Removed `ChannelCreate` / `ChannelInfo` from
+    `app/models/schemas.py` and `list_channels()` from
+    `services/channel_service.py` — both were only consumed by the
+    deleted route.
+  - `ensure_channel()` survived because render_pipeline + main.py
+    startup still call it for the default `k1` channel folder.
+- **Regression guard:** 4 tests in
+  [tests/test_channels_surface_gone.py](../../backend/tests/test_channels_surface_gone.py).
+
+### MT-2 — schemas.py decomposition (Batch 10I)
+
+- **Source:** [27_future_roadmap.md MT-2](27_future_roadmap.md). 3–6
+  month tier in the audit roadmap; closed earlier in practice.
+- **Risk:** 570-LOC monolith hosting render, jobs, and (formerly)
+  channel schemas. Hard to scan; small risk of accidental cross-domain
+  coupling on future additions.
+- **Fix shipped (`acf5452`):** split by domain:
+  - `app/models/render.py`  — `PrepareSourceRequest`, `QuickProcessRequest`,
+    `TextLayer*` helpers, `RenderRequest`, `RenderRequestStrict`.
+  - `app/models/jobs.py`    — `JobStatusResponse`.
+  - `app/models/schemas.py` — 39-LOC re-export shim, identity-preserving.
+  - Sacred Contract #2 preserved by construction: every field,
+    default, validator, and ConfigDict survives the move byte-for-byte.
+- **Regression guard:** 8 tests in
+  [tests/test_schemas_split_re_export.py](../../backend/tests/test_schemas_split_re_export.py)
+  — re-export identity, no shim back-deps, field count pin (152),
+  validator behaviour preserved, API-key stripping still fires.
+
+### MT-1 — dev_commands.py decomposition (Batch 10J)
+
+- **Source:** [27_future_roadmap.md MT-1](27_future_roadmap.md). The
+  audit's biggest split target. 3–6 month tier; closed in one session
+  via a coarse-grained boundary split.
+- **Fix shipped (`ba548b4`):** the 1542-LOC monolith became the
+  `app.services.dev` package (7 files, ~250 LOC average):
+  - `_shared.py` (94)   — bottom-layer utilities.
+  - `log.py` (385)      — `/log` + discovery / parsing / classification.
+  - `bug.py` (307)      — bug classification + `/error` + `_LAST_ERROR` state
+    with `get_last_error` / `set_last_error` accessors.
+  - `registry.py` (276) — fix feature registry + target parsing.
+  - `autofix.py` (430)  — `/fix` + autofix machinery.
+  - `router.py` (236)   — dispatcher + simple commands.
+  - `__init__.py` (15)  — re-export.
+  - `dev_commands.py` (22) — re-export shim. `routes/devtools.py`
+    keeps its existing `from app.services.dev_commands import …` line.
+- **Design call:** `bug.py ↔ autofix.py` has a logical loop
+  (`_choose_error` needs `_infer_code_targets`; `_cmd_fix` needs
+  `_choose_error`). Resolved with lazy imports inside each function
+  body — the package loads cleanly, runtime calls work.
+- **Regression guard:** 23 tests in
+  [tests/test_dev_commands_split.py](../../backend/tests/test_dev_commands_split.py)
+  — shim identity, every sub-module loads, dispatcher routes each of
+  the 8 prefixes correctly, pure-function behaviour pinned.
+
+### MT-5 — render-pipeline integration test (Batch 10K)
+
+- **Source:** [27_future_roadmap.md MT-5](27_future_roadmap.md). The
+  audit's TEST02 finding explicitly punted on this because the
+  orchestrator calls 15+ heavy dependencies.
+- **Fix shipped (`bb13467`):** 3 integration tests at the coarsest
+  safe boundary — six pipeline helper mocks (`prepare_render_source`,
+  `run_manual_voice_tts`, `run_llm_pre_render`,
+  `_llm_select_render_plan`, `run_render_loop`, `run_render_finalize`)
+  let everything else run for real against a tmp SQLite database.
+- **Asserts:**
+  - 2-part ranking with the 3 Sacred Contract #1 keys on every entry
+  - Top entry wins `output_rank=1` + `is_best_clip=True`
+  - Direct sqlite read shows 2 `job_parts` rows persisted
+  - Every `_emit_render_event` call uses kwargs only with
+    `channel_code` / `job_id` / `event` / `step` at minimum
+    (Sacred Contract #6)
+- **Two shape gotchas documented for future maintainers:**
+  - `output_mode="channel"` requires `render_output_subdir` — use
+    `"manual"` for fake-source tests.
+  - `run_render_loop.rows` is a list of LISTS (10-column shape), not
+    dicts; orchestrator sorts by `int(x[3])` (part_no).
+- **Regression guard:**
+  [tests/test_render_pipeline_integration.py](../../backend/tests/test_render_pipeline_integration.py).
+
+### FINDING-BR03 / MT-6 — FK + cascade on job_parts + clip_feedback (Batch 10L)
+
+- **Source:** [11_bug_risk_report.md FINDING-BR03](11_bug_risk_report.md)
+  + [15_database_review.md](15_database_review.md). Defense-in-depth
+  gap; `delete_job` was already atomic via `db_conn` transaction, but
+  a future maintenance script bypassing the helper could leave orphan
+  rows.
+- **Fix shipped (`4726955`):**
+  - `init_db` baseline DDL now defines both child tables with
+    `FOREIGN KEY (job_id) REFERENCES jobs(job_id) ON DELETE CASCADE` —
+    new databases get the constraint directly.
+  - Migration `0003_add_fk_cascade_to_job_parts_and_clip_feedback.py`
+    retrofits existing DBs via the SQLite temp-table-rename recipe.
+  - Defensive orphan cleanup before the FK-enforced INSERT so the
+    migration runs cleanly even on a DB that had bypassed
+    `delete_job` historically.
+  - `idx_feedback_channel` re-created after the table rename.
+  - Skipped `PRAGMA foreign_keys=OFF` because the migration runner
+    has already opened a transaction (SQLite silently ignores PRAGMA
+    mid-tx); the orphan-cleanup step makes the PRAGMA dance
+    unnecessary.
+- **Regression guard:** 6 tests in
+  [tests/test_migration_0003_fk_cascade.py](../../backend/tests/test_migration_0003_fk_cascade.py).
+  Includes a positive test that `DELETE FROM jobs` actually cascades
+  to both child tables after migration.
+
+### Stale-paths cleanup in dev/qa lookups (Batch 10M)
+
+- **Source:** carry-over from Batch 10H / 10J — the dev-tools lookup
+  tables referenced modules that no longer exist (deleted in Phase
+  1-18, Phase 4F.5A, Batch 9, Batch 10H).
+- **Why this matters:** every `/fix` category whose lookup pointed at
+  a deleted file returned an empty list — the command was silently
+  useless for roughly 60% of its routes. The lookups WERE static
+  strings, so they never crashed; the failure mode was "no
+  suggestion" without any error.
+- **Fix shipped (`8788395`):**
+  - `services/dev/registry.py`: dropped the entire upload / login /
+    proxy / profile / scheduler domain trees. Render domain remains
+    and now points at the feature-layer paths.
+  - `services/dev/autofix.py`: rewrote 6 lookup tables; deleted
+    `_apply_upload_selector_wait_autofix` (which patched the
+    deleted `services/upload_engine.py`); folded the
+    `upload_selector_wait` branch in `_cmd_fix` into the generic
+    planned-fix path.
+  - `services/dev/bug.py`: `_likely_functions_for_targets` now matches
+    feature-layer paths (`features/render/router.py`,
+    `engine/pipeline/render_pipeline.py`) instead of the pre-migration
+    `routes/render.py` / `services/render_engine.py`.
+  - `services/qa_runner.py`: reduced `_default_patch_targets` from 9
+    dead-subsystem categories to 3 live ones; fallback now points
+    at `services/dev/router.py` (post-MT-1) instead of the retired
+    `services/dev_commands.py` monolith.
+- **Net deletion:** ~166 lines of dead lookup tables removed.
+- **Regression guard:** 16 tests in
+  [tests/test_dev_paths_live.py](../../backend/tests/test_dev_paths_live.py):
+  every path returned by every lookup table must exist on disk; a
+  source-grep guard scans 7 files for 9 known-deleted paths outside
+  comments / docstrings; the deleted
+  `_apply_upload_selector_wait_autofix` helper is prevented from
+  silently returning.
+
+## Commits (addendum ordering)
+
+```
+f611cda  chore(channels):    Batch 10H — delete orphan /api/channels surface (API05)
+acf5452  refactor(schemas):  Batch 10I — MT-2 split schemas.py by domain (additive)
+b0d7917  fix(test):          flaky test_submit_job_increments_pending_count (1-liner)
+ba548b4  refactor(dev):      Batch 10J — MT-1 decompose dev_commands.py into 6 sub-modules
+bb13467  test(pipeline):     Batch 10K — MT-5 render-pipeline integration test
+4726955  feat(db):           Batch 10L — MT-6 FK+cascade on job_parts and clip_feedback (BR03)
+8788395  chore(dev):         Batch 10M — purge stale paths from dev-tools lookup tables
+```
+
+## Updated audit status
+
+| Audit MT item | Status as of Batch 10M |
+|---------------|------------------------|
+| MT-1 dev_commands decomp | **CLOSED** (Batch 10J) |
+| MT-2 schemas.py split    | **CLOSED** (Batch 10I) |
+| MT-3 RenderRequest split | OPEN — HIGH-risk per CLAUDE.md, needs explicit Sacred Contract review session |
+| MT-4 process_one_part extraction | OPEN — CRITICAL tier, needs planner |
+| MT-5 pipeline integration test | **CLOSED** (Batch 10K) |
+| MT-6 FK + cascade        | **CLOSED** (Batch 10L) |
+| MT-7 DB row retention    | Backend **CLOSED** (Batch 10A as ST-12); UI toggle still open |
+| MT-8 JobPart fields cleanup | Already closed in Batch 8 (C03) |
+| MT-9 WS push redesign    | OPEN — LT-scale per audit |
+
+The branch is in good shape for a merge plan. Of the open audit roadmap
+items, only MT-3 / MT-4 carry blast-radius concerns that justify a
+dedicated review session before implementation; MT-7-UI and MT-9 can
+be picked up at leisure.
