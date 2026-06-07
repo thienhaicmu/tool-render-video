@@ -1,6 +1,10 @@
 # Render Pipeline
 
-Entry point: `POST /api/render/process` → `routes/render.py` → `job_manager.py` → `run_render_pipeline()` in `features/render/engine/pipeline/render_pipeline.py`.
+Entry point: `POST /api/render/process` → `features/render/routers/lifecycle.py:create_render_job` → `jobs/manager.py:submit_job` → `routers/_common.process_render` → `run_render_pipeline()` in `features/render/engine/pipeline/render_pipeline.py`.
+
+The wire receives `RenderRequestPublic` (88 fields, `extra='forbid'`) post-Batch-10O and the handler expands to the full `RenderRequest` server-side via `RenderRequest(**public.model_dump())` before enqueueing. See [API_CONTRACT.md](API_CONTRACT.md) for the Public ⇄ RenderRequest contract.
+
+> **Path note (post-Phase-1-18 + Batch 10P/Q):** the old `routes/render.py` no longer exists — wire handlers live under `features/render/routers/`. The `services/job_manager.py` is now `jobs/manager.py`. Per-part path derivation moved to `stages/segment_metadata.build_part_paths` (Batch 10P MT-4 phase A) and three Sacred Contract #5 transitions to `stages/part_db.{mark_part_waiting,mark_part_rendering,mark_part_skipped_done}` (Batch 10Q MT-4 phase B).
 
 ---
 
@@ -127,7 +131,14 @@ Translates the full SRT to `payload.subtitle_translate_target_lang` before part 
 
 Dispatches each segment in `scored[]` to a worker thread in `ThreadPoolExecutor(max_workers=MAX_RENDER_JOBS)`.
 
-Each worker calls `process_one_part(ctx, part_no, seg)` in `stages/part_renderer.py`.
+Each worker calls `process_one_part(ctx, part_no, seg)` in `stages/part_renderer.py`. The worker function structure post-Batch-10P/Q:
+
+1. `build_part_paths(ctx, idx, seg)` (Batch 10P) → frozen `PartPaths` dataclass with `raw_part`, `srt_part`, `ass_part`, `translated_srt_part`, `final_part`, `part_name`. Replaces 22 lines of inline path arithmetic that mixed three filename branches.
+2. Resume-skip check (Sacred Contract #BR12) — if `payload.resume_from_last` AND DB status is `done` AND `final_part.exists()` AND `_resume_output_valid(final_part)`, call `part_db.mark_part_skipped_done` and return early.
+3. `part_db.mark_part_waiting` (Batch 10Q) — Sacred Contract #5 transition to `WAITING` at 5% progress.
+4. Stage helpers in sequence: `part_cut.run_cut_stage` → `part_asset_planner.prepare_part_assets` → `part_db.mark_part_rendering` (Batch 10Q — RENDERING at 70%) → `part_render_setup.run_render_preflight` → `part_render_encode.run_render_encode` → `part_voice_mix.run_part_voice_mix` → `part_render_finalize.run_part_finalize` → `part_done.run_part_done`.
+
+The Sacred Contract #5 transitions `WAITING` / `RENDERING` are owned by the `part_db` facade. `CUTTING` (during `part_cut`), `TRANSCRIBING` (during `part_asset_planner` subtitle path), and the terminal `DONE` (in `part_done`) still come from their respective helpers — those upserts couple to stage-local state.
 
 ---
 
@@ -235,6 +246,10 @@ ffmpeg -y -i {part_video} -i {tts_audio} \
 ### [8.5] Finalize Per-Part — `stages/part_done.py`
 
 **Function:** `run_part_done(ctx, idx, seg, ...)`
+
+This is the terminal `DONE` transition for a non-skipped part. (The
+resume-skip variant of the DONE transition lives in
+`part_db.mark_part_skipped_done` — Batch 10Q.)
 
 1. **Quality intelligence:** calls `_assess_render_quality_intelligence()` in `qa_pipeline.py` (no-op on failure, Sacred Contract #3)
 2. **Cover frame selection:**

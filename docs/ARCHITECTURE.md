@@ -24,8 +24,11 @@ D:\tool-render-video\
 ├── backend/                  FastAPI server + render engine
 │   ├── app/                  Application package
 │   │   ├── main.py           Entry point — router mounts + startup hooks
-│   │   ├── models/           Pydantic schemas (RenderRequest, etc.)
-│   │   ├── routes/           Non-render HTTP handlers (jobs, channels, voice, files, feedback, settings)
+│   │   ├── models/           Pydantic schemas — post-MT-2 split (Batch 10I):
+│   │   │                     schemas.py is a re-export shim;
+│   │   │                     render.py + render_public.py + jobs.py own the actual definitions
+│   │   ├── routes/           Non-render HTTP handlers (jobs, voice, files, feedback, settings, devtools)
+│   │   │                     Batch 10H deleted routes/channels.py (audit FINDING-API05)
 │   │   ├── features/         All feature modules — canonical code location
 │   │   │   ├── render/       Render feature (router, editing, engine/)
 │   │   │   │   ├── router.py         POST /api/render/process + preview
@@ -44,10 +47,15 @@ D:\tool-render-video\
 │   │   │   │   └── ai/               AI modules — LLM providers, parser, prompts, visibility
 │   │   │   └── download/     Download feature (router, engine/)
 │   │   ├── core/             Config, stage enums, logging, UI gate
-│   │   ├── db/               SQLite connection + migrations + repos
+│   │   ├── db/               SQLite connection + migrations + repos. migration_steps/ now ships
+│   │   │                     0001 render_plan_json, 0002 groq→llm rewrite, 0003 FK+cascade on
+│   │   │                     job_parts + clip_feedback (Batch 10L MT-6)
 │   │   ├── domain/           Pure dataclasses (RenderPlan, CreatorContext)
 │   │   ├── jobs/             Job queue (manager.py) + cancel registry (cancel.py)
-│   │   └── services/         Shared utilities (channel_service, maintenance, warmup, db facade)
+│   │   └── services/         Shared utilities (channel_service, maintenance, warmup).
+│   │                         Batch 9 deleted services/db.py — use app/db/connection directly.
+│   │                         dev/ sub-package (Batch 10J MT-1) is the decomp of the
+│   │                         former dev_commands.py monolith — 6 sub-modules behind a shim.
 │   ├── static/               Legacy UI build output (served when STATIC_UI_VERSION=legacy)
 │   └── static-v2/            v2 UI build output (served when STATIC_UI_VERSION=v2)
 ├── frontend/                 React + TypeScript UI (Vite)
@@ -94,23 +102,28 @@ The **Download feature** (`features/download/`) is a separate system mounted at 
 
 | Prefix | Module | Source |
 |--------|--------|--------|
-| `/api/channels` | channels_router | `routes/channels.py` |
-| `/api/render` | render_router | `features/render/router.py` |
+| `/api/render` | render_router | `features/render/router.py` (POST /process now accepts `RenderRequestPublic` — Batch 10O) |
 | `/api/jobs` | jobs_router | `routes/jobs.py` |
 | `/api/voice` | voice_router | `routes/voice.py` |
 | `/api/files` | files_router | `routes/files.py` |
 | `/api/editing` | editing_router | `features/render/editing/router.py` |
 | `/api/download` | platform_downloader_router | `features/download/router.py` |
 | `/api/feedback` | feedback_router | `routes/feedback.py` |
-| `/metrics` | metrics_router | `routes/metrics.py` (Prometheus) |
-| `/api/settings` | settings_router | `routes/settings.py` |
+| `/metrics` | metrics_router | `routes/metrics.py` (Prometheus — includes `db_conn_acquire_seconds` since Batch 10A ST-15) |
+| `/api/settings` | settings_router | `routes/settings.py` — `/creator-context` (Sprint 3) + `/data-retention` (Batch 10R MT-7-UI) |
 | `/api/dev/command` | devtools_router | `routes/devtools.py` (ENABLE_DEVTOOLS=1 only) |
+
+> Removed in Batch 10H (audit FINDING-API05): `/api/channels/*`
+> (6 endpoints) — see `tests/test_channels_surface_gone.py` for the
+> regression guard. The render pipeline still uses `channel_code` as
+> an internal field; `ensure_channel()` survives in
+> `services/channel_service.py`.
 
 **Static file mounts:**
 - Legacy UI: `/static` → `backend/static/`
 - v2 UI: `/assets` → `backend/static-v2/assets/` (when `STATIC_UI_VERSION=v2`)
 
-**v2 API routes** (`ENABLE_V2=1`, default ON): Import attempted from `v2.api.routes.*` — directory does not exist in current codebase, import silently fails.
+**v2 API routes** (`ENABLE_V2=1`, default ON): Import attempted from `v2.api.routes.*` — directory does not exist in current codebase, import silently fails. (Per audit-2026-06-06 [LT-2 roadmap](audit-2026-06-06/27_future_roadmap.md), either commit to V2 and migrate or delete the conditional. Open long-term item.)
 
 ---
 
@@ -138,6 +151,8 @@ User (Electron / Browser)
         │                       │               ├── part_render_encode.py  (FFmpeg)
         │                       │               ├── part_voice_mix.py
         │                       │               └── part_done.py
+        │                       │               ├── (path derivation via segment_metadata.build_part_paths — Batch 10P)
+        │                       │               └── (WAITING/RENDERING/skipped-DONE via part_db facade — Batch 10Q)
         │                       └── pipeline_finalize.py      (result_json assembly)
         │
         ├── routes/jobs.py → GET /api/jobs/{id}/ws (WebSocket)
