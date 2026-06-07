@@ -1,14 +1,41 @@
 # CLAUDE.md — AI Video Render Studio
 
-> ⚠️ **STALE-CONTENT NOTICE (2026-06-06):** parts of this file describe paths that no longer exist on `feature/ai-workflow-upgrade`. See [docs/audit-2026-06-06/](docs/audit-2026-06-06/) for the current canonical reference. Specifically:
-> - `backend/app/orchestration/`, `backend/app/services/render/`, `backend/app/ai/` listed below as CRITICAL paths **do not exist** — code lives under `backend/app/features/render/{ai,engine,editing}/` after the Phase 1-18 feature-layer migration (commits `cf80766`, `e641a21`).
-> - `render_pipeline.py` is now `backend/app/features/render/engine/pipeline/render_pipeline.py` (1,357 LOC).
-> - `part_renderer.py` is now `backend/app/features/render/engine/stages/part_renderer.py`.
+> ⚠️ **STALE-CONTENT NOTICE (refreshed 2026-06-06 post-Batch 10R):**
+> The Phase 1-18 feature-layer migration (commits `cf80766`, `e641a21`)
+> + 18 batches of audit closures (Batches 10A–R) have moved or deleted
+> several paths this file used to reference. The Sacred Contracts still
+> apply; file paths have moved. Highlights:
+> - **CRITICAL paths now under `backend/app/features/render/{ai,engine,editing}/`** —
+>   `backend/app/orchestration/`, `backend/app/services/render/`,
+>   `backend/app/ai/` no longer exist.
+> - `render_pipeline.py` is now `backend/app/features/render/engine/pipeline/render_pipeline.py`.
+> - `part_renderer.py` is now `backend/app/features/render/engine/stages/part_renderer.py` —
+>   path derivation extracted to `stages/segment_metadata.py` (Batch 10P)
+>   and three Sacred Contract #5 transitions extracted to
+>   `stages/part_db.py` (Batch 10Q).
 > - `motion_crop.py` is now `backend/app/features/render/engine/motion/crop.py`.
 > - `ffmpeg_helpers.py` is now `backend/app/features/render/engine/encoder/ffmpeg_helpers.py`.
-> - The Sacred Contracts still apply; just the file paths have moved.
+> - **Deleted (do NOT recreate):**
+>   `backend/app/services/db.py` (Batch 9 audit A14 closure — use
+>   `app/db/connection.py` directly).
+>   `backend/app/routes/channels.py` + 6 orphan endpoints (Batch 10H
+>   audit FINDING-API05 — see `tests/test_channels_surface_gone.py`).
+> - **New surfaces introduced by Batches 10A–R:**
+>   `backend/app/models/render_public.py` (`RenderRequestPublic`, 88-field
+>   FE-facing slice, now the wire surface for `/api/render/process` —
+>   Batch 10N/10O); `backend/app/models/render.py` + `models/jobs.py`
+>   (MT-2 split — `models/schemas.py` is a 39-LOC re-export shim);
+>   `backend/app/services/dev/` package (MT-1 decomp from
+>   `dev_commands.py`); migration `0003_add_fk_cascade_*` for
+>   `job_parts` / `clip_feedback` (MT-6); `/api/settings/data-retention`
+>   endpoint (MT-7 UI).
 >
-> For a clean current view, prefer reading [docs/audit-2026-06-06/17_system_overview.md](docs/audit-2026-06-06/17_system_overview.md) → [18_architecture.md](docs/audit-2026-06-06/18_architecture.md) → [19_backend.md](docs/audit-2026-06-06/19_backend.md).
+> The audit catalog is closed end-to-end. For a clean current view,
+> prefer reading [docs/audit-2026-06-06/BATCH10_CLOSURE_LEDGER.md](docs/audit-2026-06-06/BATCH10_CLOSURE_LEDGER.md)
+> first (3 sections — original + 2 addenda covering Batches 10A–R),
+> then drill into [17_system_overview.md](docs/audit-2026-06-06/17_system_overview.md) →
+> [18_architecture.md](docs/audit-2026-06-06/18_architecture.md) →
+> [19_backend.md](docs/audit-2026-06-06/19_backend.md).
 
 ## ⚡ AGENT TEAM PROTOCOL
 
@@ -211,7 +238,7 @@ These interfaces are consumed by the Electron frontend, by stored job records de
 
 | Method | Path | Body / Response |
 |--------|------|-----------------|
-| POST | `/api/render/process` | `RenderRequest` body → job creation response |
+| POST | `/api/render/process` | `RenderRequestPublic` body → job creation response. Wire surface (Batch 10O) — 88 FE-facing fields, `extra='forbid'`. Handler expands to `RenderRequest` server-side to apply validators + fill the 64 BE-only defaults. |
 | GET | `/api/jobs/{id}` | Job status poll response |
 | GET | `/api/jobs/{id}/ws` | WebSocket upgrade for live progress stream |
 
@@ -221,6 +248,17 @@ These interfaces are consumed by the Electron frontend, by stored job records de
 - Do not remove fields from response payloads
 - Additions are allowed; removals never are
 - Changing a path requires updating the Electron app, the frontend, and all stored job records simultaneously
+
+**MT-3 Public/Internal surface (since Batch 10O):**
+- Wire receives `RenderRequestPublic` (88 fields). A FE field that
+  moves to "user-facing" needs adding to BOTH `models/render.py`
+  (internal) AND `models/render_public.py:FE_FACING_FIELDS`.
+- Replay path (resume / retry / stored payload deserialisation) still
+  uses `RenderRequest` with all 152 fields — Sacred Contract #2
+  unchanged. Historical job replay is bit-identical.
+- Adding a server-derived field to RenderRequest does NOT require
+  Public surface changes — by default new RenderRequest fields are
+  BE-only and live behind the wire.
 
 ### WebSocket Event Shape (Frozen)
 
@@ -279,13 +317,14 @@ data/app.db                                                            # sole jo
 ### HIGH — Planner + explicit user approval + full pytest recommended
 
 ```
-backend/app/models/schemas.py                                          # Pydantic API contracts — additive only, never rename
+backend/app/models/schemas.py                                          # 39-LOC re-export shim post-MT-2 (Batch 10I); see models/render.py + models/jobs.py
+backend/app/models/render.py                                           # MT-2 split: RenderRequest, RenderRequestStrict, TextLayer*, PrepareSourceRequest, QuickProcessRequest — Sacred Contract #2 surface
+backend/app/models/render_public.py                                    # MT-3 wire surface: RenderRequestPublic (88 FE-facing fields, extra=forbid). Wired at /api/render/process (Batch 10O)
 backend/app/jobs/manager.py                                            # in-process queue — thread safety and queue semantics
 backend/app/features/render/engine/encoder/ffmpeg_helpers.py          # FFmpeg execution + NVENC_SEMAPHORE (defined here)
 backend/app/features/render/engine/stages/part_render_encode.py       # FFmpeg encoding — acquires NVENC semaphore
 backend/app/features/render/engine/encoder/clip_ops.py                # clip assembly operations
-backend/app/services/db.py                                             # DB re-export facade
-backend/app/db/connection.py                                           # SQLite connection + WAL mode + thread-local
+backend/app/db/connection.py                                           # SQLite connection + WAL mode + thread-local. (Batch 9 deleted services/db.py — use connection directly.)
 backend/app/core/ui_gate.py                                            # controls which UI is served
 backend/app/main.py                                                    # startup sequence + router mounts
 backend/app/features/render/engine/pipeline/render_events.py          # _emit_render_event — frozen signature
@@ -319,14 +358,22 @@ backend/app/features/render/engine/pipeline/scene_detector.py              # sce
 
 ```
 backend/app/routes/voice.py
-backend/app/routes/channels.py
 backend/app/routes/feedback.py
-backend/app/routes/settings.py                      # Sprint 3-FE CreatorContext API
+backend/app/routes/settings.py                      # Sprint 3-FE CreatorContext API + MT-7-UI data-retention (Batch 10R)
 backend/app/core/config.py                          # env vars and data paths only
 backend/knowledge/**                                # add only — never delete existing entries
 backend/app/domain/render_plan.py                   # pure dataclass — defensive (de)serialisation, no I/O
 backend/app/domain/creator_context.py               # pure dataclass — defensive, no I/O
+backend/app/services/dev/                           # MT-1 decomp of dev_commands.py — 6 sub-modules (_shared/log/bug/registry/autofix/router) behind a re-export shim
+backend/app/features/render/engine/stages/segment_metadata.py  # MT-4 phase A: build_part_paths pure helper (Batch 10P)
+backend/app/features/render/engine/stages/part_db.py           # MT-4 phase B: 3 Sacred Contract #5 facade methods (Batch 10Q)
 ```
+
+> Removed in Batch 10H (audit FINDING-API05): `backend/app/routes/channels.py`
+> + 6 orphan `/api/channels/*` endpoints + `ChannelCreate` /
+> `ChannelInfo` schemas. `ensure_channel()` survives in
+> `services/channel_service.py` (still called by render_pipeline +
+> main.py startup). Regression guard: `tests/test_channels_surface_gone.py`.
 
 > Note: Render router: `backend/app/features/render/router.py` (mounted at `/api/render/`). Editing router: `backend/app/features/render/editing/router.py`. Downloader router: `backend/app/features/download/router.py` (mounted at `/api/download/`). All three are mounted in `main.py`.
 
@@ -545,16 +592,16 @@ When a render fails at any stage, the cleanup path (deleting downloaded source f
 
 ### No Direct Writes Outside the db/ Module
 
-**Rule:** Never access `data/app.db` using a raw `sqlite3.connect()` call outside of `backend/app/db/` or `backend/app/services/db.py`. All database access must go through the established connection module.
+**Rule:** Never access `data/app.db` using a raw `sqlite3.connect()` call outside of `backend/app/db/`. All database access must go through the established connection module. (Batch 9 deleted the `backend/app/services/db.py` re-export facade — older docs that named it as a sanctioned access path are obsolete.)
 
 **Why:** The connection module sets WAL mode, registers row factories, and manages thread-local connection state for the render thread. Bypassing it creates connections without WAL mode, without row factories, and in incompatible isolation levels — all of which corrupt the consistency guarantees the pipeline depends on.
 
 ### Known Issue — Mixed Connection Model (Sprint 5.4 partial closure)
 
-Helpers live in `backend/app/db/connection.py` (not `services/db.py`, which is a 50-line re-export facade):
+Helpers live in `backend/app/db/connection.py`:
 
 - `db_conn()` ctxmgr — HTTP path / bounded ops. Auto-commit on normal exit, rollback on exception. Used by `jobs_repo.py`, `creator_repo.py`, `feedback_repo.py`, `download_repo.py` (`download_repo` migrated to `db_conn()` in Sprint 5.4, commit `9347613`).
-- `_thread_conn()` — render hot path only. Thread-local persistent connection used by `update_job_progress()` and `upsert_job_part()` in `db/jobs_repo.py`. Released via `close_thread_conn()` at end of `render_pipeline.py`.
+- `_thread_conn()` — render hot path only. Thread-local persistent connection used by `update_job_progress()` and `upsert_job_part()` in `db/jobs_repo.py`. Released via `close_thread_conn()` at end of `render_pipeline.py` AND belt-and-suspenders in `routers/_common.process_render`'s finally (Batch 10A, audit BR10 closure — covers worker-thread death before the pipeline's own cleanup runs).
 
 Sprint 5.4 ruling: the `_thread_conn` → `db_conn` unification stays DEFERRED. Empirical benchmark shows `db_conn` is ~165× slower per call (3,152 μs vs 18.8 μs median, WAL mode). The two-pattern surface is steady state. See `docs/DATABASE.md` for the full decision record.
 
@@ -616,19 +663,31 @@ The render pipeline handles `None` returns from AI modules with fallback behavio
 
 ## Audit Ledger
 
-`docs/review/**` is an append-only audit ledger. It records architectural findings, decisions, and audits over the lifetime of the project. It is READ-ONLY for all agents.
+Architecture audits live in dated folders under `docs/`. The current
+canonical audit is `docs/audit-2026-06-06/`. The older `docs/review/`
+folder was archived during the Phase 1-18 feature-layer migration
+(commit `e641a21`) — its files are recoverable from git history but
+the directory no longer exists on the working tree. `docs/archive/**`
+likewise holds frozen historical artifacts.
 
-### Correct Process for New Findings
+The append-only rule still applies to whichever folder is current.
+For `audit-2026-06-06/` specifically:
 
-1. Create a **new** file: `docs/review/TOPIC_YYYY-MM-DD.md`
-2. If the finding relates to a prior finding, reference the prior file by filename in the new file body
-3. Explain what changed, what was found, and why in the new file
-4. Never edit any existing file in `docs/review/`
-5. Never delete any file in `docs/review/`
+1. NEW findings or follow-up closures go in NEW files (e.g.
+   `BATCH10_CLOSURE_LEDGER.md`, `SMOKE_TEST_2026-06-06_BATCH10R.md`).
+2. Existing files in the audit folder are NEVER edited in place —
+   the closure ledger uses append-only addenda at the bottom (see
+   the 3-section structure of `BATCH10_CLOSURE_LEDGER.md` for the
+   pattern).
+3. If a finding relates to a prior file, reference it by filename in
+   the new file's body.
+4. Never delete files from any audit folder.
 
-`docs/archive/**` follows identical rules — read-only, append-only, never edit existing files.
-
-**Why:** `docs/review/` is the audit history of architectural knowledge at specific points in time. Editing existing files rewrites history. Future auditors must be able to read what was known at each point in time and trace what changed. Mutating historical records destroys the audit trail.
+**Why:** the audit folder is the history of architectural knowledge
+at specific points in time. Editing existing files rewrites history.
+Future auditors must be able to read what was known at each point in
+time and trace what changed. Mutating historical records destroys the
+audit trail.
 
 ---
 
@@ -763,7 +822,7 @@ Check auto-reject conditions first. Reject immediately on the first violation fo
 - [ ] Output validation still catches: missing file, file too small, no video stream, no audio stream, zero duration
 - [ ] Subtitle and voice code paths no-op cleanly when those features are disabled
 - [ ] AI module changes bounded: no import-time failures on missing optional deps, no unhandled raises
-- [ ] Any behavior or specification change is reflected in a new `docs/review/` file
+- [ ] Any behavior or specification change is reflected in a new file under the current audit folder (`docs/audit-2026-06-06/` as of 2026-06-06)
 
 **Overengineering Flags (stop, escalate to Planner for rescoping):**
 
@@ -805,15 +864,30 @@ Two connection patterns are steady state (see `docs/DATABASE.md`):
 
 Do not add callers that introduce a third pattern (raw `sqlite3.connect()` outside `connection.py`, `features/render/engine/pipeline/db_backup.py`, and `features/download/engine/cookie_extractor.py`). Enforced by `tests/test_contract_db_sole_authority.py`.
 
+**Observability addition (Batch 10A, audit DB09 closure / ST-15):** every
+acquire of either connection emits to the
+`db_conn_acquire_seconds` Prometheus histogram with `role={db_conn|_thread_conn}`.
+`_thread_conn` cache hits are skipped — only first-opens and stale
+re-opens observe. See `/metrics` for live data.
+
 ### Issue 3 — Cache Location (RESOLVED)
 
 Cache root: `APP_DATA_DIR/cache`. Pruned at startup (`main.py`) and every 30 minutes (`_run_periodic_cleanup`). TTL 72h for render cache, 30d for XTTS, 7d for text overlay. Subdir-agnostic walker — new cache subdirs are automatically pruned.
+
+**Atomic-write addition (Batch 10F, audit BR14 closure):** the 4
+`_*_cache_put` helpers in `pipeline_cache.py` now stage bytes in a
+`.tmp` sidecar and `os.replace` into place. `prune_render_cache` skips
+`.tmp` files entirely. Concurrent prune vs Whisper-cache-write can no
+longer truncate the target.
 
 ### Issue 4 — Pipeline Files (CURRENT STATE)
 
 Current locations (all under `backend/app/features/render/engine/`):
 - `pipeline/render_pipeline.py` — main orchestrator
-- `stages/part_renderer.py` — per-part skeleton, delegates to 8 stage helpers
+- `stages/part_renderer.py` — per-part skeleton (~260 LOC), delegates
+  to 8 stage helpers + the two MT-4 extracts: `segment_metadata.py`
+  (path derivation — Batch 10P) and `part_db.py` (3 Sacred Contract #5
+  transitions — Batch 10Q)
 - `motion/crop.py` — OpenCV tracking skeleton
 - `motion/path.py` — `build_subject_path`; `motion/path_scene.py` — `build_subject_path_scene`
 
@@ -824,3 +898,31 @@ All CRITICAL tier — own state machines despite refactor.
 Real FFmpeg execution: `features/render/engine/encoder/ffmpeg_helpers.py` (NVENC semaphore defined here) + `stages/part_render_encode.py` (acquires semaphore).
 
 Clip assembly: `features/render/engine/encoder/clip_ops.py`. Overlay: `features/render/engine/overlay/text_overlay.py`. Audio: `features/render/engine/audio/mixer.py`.
+
+### Issue 6 — DB FK + cascade on job_parts / clip_feedback (RESOLVED — Batch 10L)
+
+`data/app.db` now enforces `FOREIGN KEY (job_id) REFERENCES jobs(job_id) ON DELETE CASCADE`
+on `job_parts` and `clip_feedback`. Fresh DBs get the constraint via
+`init_db`; existing DBs are retrofitted by migration
+`0003_add_fk_cascade_to_job_parts_and_clip_feedback.py` (defensive
+orphan cleanup + temp-table-rename recipe). `delete_job` was already
+atomic via `db_conn` transaction; this closes the defence-in-depth
+gap the audit flagged as BR03.
+
+### Issue 7 — Whisper model LRU (RESOLVED — Batch 10E)
+
+Both `_MODEL_CACHE` (OpenAI whisper) and `_FW_MODEL_CACHE` (faster-whisper)
+are now `OrderedDict` LRU caches with cap 2 (configurable via
+`WHISPER_MODEL_CACHE_MAX` / `FW_MODEL_CACHE_MAX`). Mixing `tiny`
+(preview) + `large-v3` (render) no longer pins multi-GB of model
+weights forever.
+
+### Issue 8 — DB row retention via Settings UI (RESOLVED — Batch 10A backend + 10R UI)
+
+`prune_old_jobs(max_age_days)` runs on every periodic cleanup tick.
+The cleanup loop reads the value from `creator_prefs.prefs_json`
+nested key `data_retention.job_retention_days` (Settings screen UI in
+Batch 10R) and falls back to the `JOB_RETENTION_DAYS` env var when
+the UI value isn't configured. 0 = retention disabled (the default).
+Active jobs (`status IN ('running', 'queued')`) are NEVER pruned
+regardless of age — Sacred Contract #7.
