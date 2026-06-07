@@ -86,31 +86,27 @@ from app.features.render.engine.stages.part_voice_mix import run_part_voice_mix
 # failure â€” the per-part worker in pipeline_render_loop catches it
 # and records the failure in result_json[failed_parts].
 from app.features.render.engine.stages.part_render_finalize import run_part_finalize
+# Sprint 6.D-2.6 / Batch 10P (MT-4 phase A): per-part filesystem path
+# derivation (raw_part / srt_part / ass_part / translated_srt_part /
+# final_part / part_name) extracted to a pure data helper.
+from app.features.render.engine.stages.segment_metadata import build_part_paths  # noqa: F401
 
 
 def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
-    raw_part = ctx.work_dir / f"{ctx.source['slug']}_part_{idx:03d}_raw.mp4"
-    srt_part = ctx.work_dir / f"{ctx.source['slug']}_part_{idx:03d}.srt"
-    ass_part = ctx.work_dir / f"{ctx.source['slug']}_part_{idx:03d}.ass"
-    _variant_type = str(seg.get("variant_type") or "")
-    if _variant_type:
-        final_part = ctx.output_dir / f"{ctx.output_stem}_{_variant_type}.mp4"
-        part_name  = f"{ctx.output_stem}_{_variant_type}.mp4"
-    else:
-        _clip_name = str(seg.get("clip_name") or "").strip()
-        if _clip_name:
-            # Groq-provided natural filename â€” already FS-safe (sanitized by groq/parser.py).
-            # Append part index if a file with the same name already exists (collision guard).
-            _cn_path = ctx.output_dir / f"{_clip_name}.mp4"
-            if _cn_path.exists():
-                _clip_name = f"{_clip_name}_{idx:03d}"
-            final_part = ctx.output_dir / f"{_clip_name}.mp4"
-            part_name  = f"{_clip_name}.mp4"
-        else:
-            final_part = ctx.output_dir / f"{ctx.output_stem}_part_{idx:03d}.mp4"
-            part_name  = f"{ctx.output_stem}_part_{idx:03d}.mp4"
-    _sub_target_lang = getattr(ctx.payload, "subtitle_target_language", "en")
-    translated_srt_part = ctx.work_dir / f"{ctx.source['slug']}_part_{idx:03d}.{_sub_target_lang}.srt"
+    # Audit MT-4 phase A closure (Batch 10P, 2026-06-06): the six
+    # per-part filesystem paths were derived inline here in 22 lines of
+    # branching logic. Moved verbatim to segment_metadata.build_part_paths
+    # so the path-derivation contract has its own test surface. Bindings
+    # below preserve the original local-variable names so the rest of
+    # this function stays byte-identical.
+    _paths              = build_part_paths(ctx, idx, seg)
+    raw_part            = _paths.raw_part
+    srt_part            = _paths.srt_part
+    ass_part            = _paths.ass_part
+    translated_srt_part = _paths.translated_srt_part
+    final_part          = _paths.final_part
+    part_name           = _paths.part_name
+    _variant_type       = str(seg.get("variant_type") or "")
     _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx}/{ctx.total_parts} start", kind="debug")
     import os as _os2
     if _os2.getenv("RENDER_DEBUG_LOG", "0") == "1":
