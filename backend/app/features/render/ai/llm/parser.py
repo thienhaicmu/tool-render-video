@@ -103,6 +103,13 @@ def parse_segment_response(
 
         # Second pass: LLM ignored duration constraints â€” accept any segment with
         # positive duration rather than failing the entire render.
+        #
+        # 2026-06-07 fix: the second pass ALSO clamps an over-end segment
+        # (end > video_duration) to video_duration so a small LLM
+        # overshoot (e.g. Gemini returning end=70 on a 65 s video) becomes
+        # usable rather than rejected by the bounds check at _parse_item.
+        # We only clamp small overshoots (≤ 10% of the video, or ≤ 10s)
+        # so a wildly-off hallucination still fails clearly.
         if not segments and rejected > 0:
             logger.warning(
                 "llm_parser: 0 valid segments with strict bounds "
@@ -110,7 +117,10 @@ def parse_segment_response(
                 min_sec, max_sec,
             )
             for item in data:
-                seg = _parse_item(item, min_sec=1.0, max_sec=86400, video_duration=video_duration)
+                # Best-effort clamp of small overshoots before re-parsing.
+                clamped_item = _clamp_overshoot_end(item, video_duration)
+                seg = _parse_item(clamped_item, min_sec=1.0, max_sec=86400,
+                                  video_duration=video_duration)
                 if seg is not None:
                     segments.append(seg)
 
@@ -163,6 +173,44 @@ def _extract_json_array(raw: str) -> object:
         except json.JSONDecodeError:
             pass
     return None
+
+
+def _clamp_overshoot_end(item: object, video_duration: float) -> object:
+    """Best-effort overshoot clamp for the parser's relaxed-retry path.
+
+    The LLM occasionally returns ``end`` slightly past ``video_duration``
+    (rounding up, or "to the end" intent). When the overshoot is small
+    (≤ 10 seconds OR ≤ 10% of the video, whichever is bigger), clamp
+    ``end`` to ``video_duration`` so the segment survives the bounds
+    check in ``_parse_item``. Larger overshoots are left alone — that
+    way a wildly-off hallucination still fails clearly.
+
+    Pure: returns a NEW dict on clamp, the original object on no-op.
+    Never raises.
+    """
+    if not isinstance(item, dict):
+        return item
+    if not (isinstance(video_duration, (int, float)) and video_duration > 0):
+        return item
+    try:
+        end = float(item.get("end", 0))
+    except (TypeError, ValueError):
+        return item
+    if end <= video_duration:
+        return item
+    overshoot = end - video_duration
+    tolerance = max(10.0, 0.10 * video_duration)
+    if overshoot > tolerance:
+        return item
+    # Build a shallow-copied dict with the clamped end so we don't mutate
+    # the caller's object.
+    clamped = dict(item)
+    clamped["end"] = float(video_duration)
+    logger.info(
+        "llm_parser: clamped segment end %.2f → %.2f (video_dur=%.2f, overshoot=%.2fs)",
+        end, video_duration, video_duration, overshoot,
+    )
+    return clamped
 
 
 def _parse_item(
