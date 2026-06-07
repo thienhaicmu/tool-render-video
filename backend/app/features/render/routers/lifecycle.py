@@ -33,6 +33,7 @@ from app.models.schemas import (
     RenderRequest,
     RenderRequestStrict,
 )
+from app.models.render_public import RenderRequestPublic
 from app.services.bin_paths import get_ffmpeg_bin
 from app.services.channel_service import ensure_channel
 from app.db.jobs_repo import get_job, list_job_parts, update_job_progress
@@ -48,15 +49,31 @@ logger = logging.getLogger("app.render")
 
 
 @router.post("/process")
-def create_render_job(payload: RenderRequestStrict):
-    # Audit FINDING-C04 closure (2026-06-06): use RenderRequestStrict so an
-    # unknown FE field surfaces as 422 instead of being silently dropped.
-    # All other internal paths (resume, retry, replay from stored payload)
-    # keep using the Lenient RenderRequest below.
+def create_render_job(public_payload: RenderRequestPublic):
+    # Audit MT-3 phase 2 closure (Batch 10O, 2026-06-06): the wire surface
+    # is now ``RenderRequestPublic`` — the explicit 88-field FE-facing
+    # subset. A FE that sends a BE-only field (channel_code, resume_job_id,
+    # ai_clip_*, ai_use_rag_memory, …) gets a 422 immediately instead of
+    # silently sending an internal-surface field over the wire.
+    #
+    # Two-step validation:
+    #   1. FastAPI deserializes the body into RenderRequestPublic
+    #      (``extra='forbid'`` — structural gate at the boundary).
+    #   2. Below we construct the full RenderRequest from the Public dump.
+    #      That step applies RenderRequest's field validators (api-key
+    #      strip per FINDING-F07, target_duration / output_count range
+    #      bounds, render_profile / source_quality_mode allow-lists)
+    #      AND fills in defaults for the 64 BE-only fields so the rest
+    #      of the pipeline sees the same RenderRequest it always did.
+    #
+    # FINDING-C04 (the original Strict closure) stays satisfied because
+    # Public is stricter than Strict on the FE-facing subset:
+    # ``extra='forbid'`` plus an even smaller allowed field set.
+    payload = RenderRequest(**public_payload.model_dump())
     _coerce_legacy_channel_payload(payload)
     # Apply server-wide LLM provider default to NEW jobs only.
     # Resume/retry: ai_provider stays as stored.
-    if "ai_provider" not in payload.model_fields_set:
+    if "ai_provider" not in public_payload.model_fields_set:
         payload.ai_provider = _cfg.AI_PROVIDER_DEFAULT
     try:
         _validate_render_source(payload)
@@ -71,6 +88,9 @@ def create_render_job(payload: RenderRequestStrict):
         )
         raise
     effective_channel = (payload.channel_code or "").strip() or "manual"
+    # resume_job_id is BE-only by design (resume goes through /resume/{id}).
+    # The full payload defaults it to None — fresh /process call always
+    # creates a new job_id.
     job_id = payload.resume_job_id or str(uuid.uuid4())
     existing = get_job(job_id) if payload.resume_job_id else None
     resume_mode = bool(existing) and payload.resume_from_last

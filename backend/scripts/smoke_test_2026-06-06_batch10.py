@@ -100,16 +100,20 @@ def main() -> int:
         return 3
 
     # ── Phase 2: submit render ──────────────────────────────────────────────
+    # Batch 10O: the wire endpoint is now RenderRequestPublic — BE-only
+    # fields like channel_code / ai_clip_min_duration_sec are rejected
+    # at the boundary (HTTP 422). The smoke driver mirrors the FE shape:
+    # output_mode='manual' + output_dir; channel resolves server-side to
+    # 'manual' (the default for non-channel-mode renders).
     payload = {
-        "channel_code": "smoke",
-        "source_mode": "local_file",
+        "source_mode": "local",
         "source_video_path": str(src_path),
         "edit_session_id": session_id,
         "output_mode": "manual",
         "output_dir": str(out_path),
         "output_count": 1,
-        "ai_clip_min_duration_sec": 30,
-        "ai_clip_max_duration_sec": 60,
+        "min_part_sec": 30,
+        "max_part_sec": 60,
         "render_profile": "fast",
         "add_subtitle": False,
         "voice_enabled": False,
