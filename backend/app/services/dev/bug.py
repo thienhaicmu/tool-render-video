@@ -113,16 +113,22 @@ def _interpret_bug(category: str, workflow_step: str, summary: str, snippet: str
 
 
 def _likely_functions_for_targets(bug_class: str, targets: list[str]) -> list[str]:
+    """Batch 10M cleanup: ``filesystem/render_path`` substring matches now
+    look for the feature-layer paths (``features/render/router.py`` and
+    ``engine/pipeline/render_pipeline.py``) instead of the pre-migration
+    ``routes/render.py`` / ``services/render_engine.py``.
+    ``upload_selector_wait`` hints removed — the upload subsystem was
+    retired in Phase 4F.5A.
+    """
     hints: list[str] = []
     lower_targets = " | ".join(targets).lower()
     if bug_class == "filesystem/render_path":
-        if "routes\\render.py" in lower_targets or "routes/render.py" in lower_targets:
+        if "features/render/router.py" in lower_targets or "features\\render\\router.py" in lower_targets:
             hints.append("quick_process")
             hints.append("prepare_source")
-        if "services\\render_engine.py" in lower_targets or "services/render_engine.py" in lower_targets:
+        if ("engine/pipeline/render_pipeline.py" in lower_targets
+                or "engine\\pipeline\\render_pipeline.py" in lower_targets):
             hints.append("render pipeline path preparation helper (TODO exact function)")
-    if bug_class == "upload_selector_wait":
-        hints.extend(["_upload_once", "_try_select_upload_option", "_wait_upload_started"])
     if bug_class == "download_format_fallback":
         hints.extend(["download_youtube", "_try_download", "check_youtube_download_health"])
     if not hints:

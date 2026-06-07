@@ -1,15 +1,23 @@
 """Feature registry + fix-target parsing.
 
-Audit MT-1 (Batch 10J 2026-06-06): extracted verbatim from
+Audit MT-1 (Batch 10J 2026-06-06): extracted from
 ``app.services.dev_commands``. The registry maps domain→feature→
 {files, workflow_steps, bug_classes, fix_strategy, likely_functions}
 so the /fix command can narrow a generic log signal down to a concrete
 target.
 
-Note: some file paths inside the registry tables reference modules
-that no longer exist (e.g., ``routes/channels.py`` deleted in Batch
-10H). The references are static lookup hints; they don't cause runtime
-errors. Cleaning them is a separate concern (audit follow-up).
+Batch 10M cleanup (2026-06-06): every entry now points at a path that
+exists in the current tree. The pre-Phase-1-18 paths (services/
+downloader.py, services/render_engine.py, services/upload_engine.py,
+services/scene_detector.py, routes/render.py, routes/channels.py,
+routes/upload.py) were left behind by the feature-layer migration and
+the Phase 4F.5A upload retirement.
+
+The whole ``upload`` / ``login`` / ``proxy`` / ``profile`` / ``scheduler``
+domain tree was removed entirely — those subsystems were retired with
+the upload pipeline (FINDING-API05 + the wider Phase 4F.5A purge).
+``_apply_upload_selector_wait_autofix`` (which only patched
+``upload_engine.py``) was deleted alongside autofix.py's lookup tables.
 """
 from __future__ import annotations
 
@@ -25,13 +33,19 @@ _FIX_MODES = {"dev", "force"}
 
 def _fix_feature_registry() -> dict[str, dict[str, Any]]:
     # Extensible registry: add new domain/features here only.
+    # File paths are validated against the live tree via
+    # tests/test_dev_registry_paths_live.py — adding a stale path will
+    # fail the suite.
     return {
         "render": {
             "keywords": ["render", "video.render", "ffmpeg"],
             "features": {
                 "download": {
                     "keywords": ["download", "youtube", "yt-dlp", "source"],
-                    "files": ["backend/app/services/downloader.py", "backend/app/routes/render.py"],
+                    "files": [
+                        "backend/app/features/download/engine/downloader.py",
+                        "backend/app/features/render/router.py",
+                    ],
                     "workflow_steps": ["video.download"],
                     "bug_classes": ["download_format_fallback"],
                     "fix_strategy": "targeted-download-fallback",
@@ -39,7 +53,10 @@ def _fix_feature_registry() -> dict[str, dict[str, Any]]:
                 },
                 "scene": {
                     "keywords": ["scene", "cut", "segment", "detect"],
-                    "files": ["backend/app/services/scene_detector.py", "backend/app/services/segment_builder.py"],
+                    "files": [
+                        "backend/app/features/render/engine/pipeline/scene_detector.py",
+                        "backend/app/features/render/engine/pipeline/pipeline_segment_selection.py",
+                    ],
                     "workflow_steps": ["video.render"],
                     "bug_classes": ["generic"],
                     "fix_strategy": "targeted-scene-processing",
@@ -47,7 +64,10 @@ def _fix_feature_registry() -> dict[str, dict[str, Any]]:
                 },
                 "trim_black": {
                     "keywords": ["trim", "black", "intro"],
-                    "files": ["backend/app/routes/render.py", "backend/app/services/render_engine.py"],
+                    "files": [
+                        "backend/app/features/render/router.py",
+                        "backend/app/features/render/engine/pipeline/render_pipeline.py",
+                    ],
                     "workflow_steps": ["video.render"],
                     "bug_classes": ["filesystem/render_path", "generic"],
                     "fix_strategy": "targeted-black-trim",
@@ -55,7 +75,10 @@ def _fix_feature_registry() -> dict[str, dict[str, Any]]:
                 },
                 "ffmpeg": {
                     "keywords": ["ffmpeg", "encode", "filter"],
-                    "files": ["backend/app/services/render_engine.py", "backend/app/routes/render.py"],
+                    "files": [
+                        "backend/app/features/render/engine/pipeline/render_pipeline.py",
+                        "backend/app/features/render/engine/encoder/ffmpeg_helpers.py",
+                    ],
                     "workflow_steps": ["video.render"],
                     "bug_classes": ["filesystem/render_path", "generic"],
                     "fix_strategy": "targeted-ffmpeg",
@@ -63,85 +86,15 @@ def _fix_feature_registry() -> dict[str, dict[str, Any]]:
                 },
                 "output_path": {
                     "keywords": ["output_path", "output", "path", "mkdir"],
-                    "files": ["backend/app/routes/render.py", "backend/app/services/render_engine.py"],
+                    "files": [
+                        "backend/app/features/render/router.py",
+                        "backend/app/features/render/engine/pipeline/render_pipeline.py",
+                    ],
                     "workflow_steps": ["video.render"],
                     "bug_classes": ["filesystem/render_path"],
                     "fix_strategy": "safe-path-remediation",
                     "likely_functions": ["quick_process", "prepare_source"],
                 },
-            },
-        },
-        "upload": {
-            "keywords": ["upload", "post"],
-            "features": {
-                "selector": {
-                    "keywords": ["selector", "file", "input", "wait", "ui"],
-                    "files": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-                    "workflow_steps": ["upload.file.select", "upload.ui.ready"],
-                    "bug_classes": ["upload_selector_wait"],
-                    "fix_strategy": "auto_patch_minimal",
-                    "likely_functions": ["_upload_once", "_try_select_upload_option", "_wait_upload_started"],
-                },
-                "submit": {
-                    "keywords": ["submit", "post-button", "publish"],
-                    "files": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-                    "workflow_steps": ["upload.submit"],
-                    "bug_classes": ["generic"],
-                    "fix_strategy": "targeted-upload-submit",
-                    "likely_functions": ["_upload_once", "_wait_upload_outcome"],
-                },
-            },
-        },
-        "login": {
-            "keywords": ["login", "auth", "session"],
-            "features": {
-                "session": {
-                    "keywords": ["session", "check", "authenticated", "persist"],
-                    "files": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-                    "workflow_steps": ["login.check"],
-                    "bug_classes": ["login_state"],
-                    "fix_strategy": "targeted-login-state",
-                    "likely_functions": ["check_login_with_persistent_profile", "login_with_persistent_profile"],
-                }
-            },
-        },
-        "proxy": {
-            "keywords": ["proxy", "network"],
-            "features": {
-                "apply": {
-                    "keywords": ["apply", "save", "runtime"],
-                    "files": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-                    "workflow_steps": ["proxy.apply"],
-                    "bug_classes": ["proxy_runtime"],
-                    "fix_strategy": "targeted-proxy-runtime",
-                    "likely_functions": ["_build_launch_kwargs", "save_upload_settings"],
-                }
-            },
-        },
-        "profile": {
-            "keywords": ["profile", "browser-profile"],
-            "features": {
-                "select": {
-                    "keywords": ["select", "create", "reuse"],
-                    "files": ["backend/app/services/upload_engine.py", "backend/app/routes/channels.py"],
-                    "workflow_steps": ["profile.create/select"],
-                    "bug_classes": ["profile_runtime"],
-                    "fix_strategy": "targeted-profile-runtime",
-                    "likely_functions": ["ensure_upload_account_profile", "_sync_profile_dir_for_browser"],
-                }
-            },
-        },
-        "scheduler": {
-            "keywords": ["scheduler", "schedule", "rule"],
-            "features": {
-                "rules": {
-                    "keywords": ["rules", "rule", "mapping", "slot"],
-                    "files": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-                    "workflow_steps": ["rule.load"],
-                    "bug_classes": ["generic"],
-                    "fix_strategy": "targeted-scheduler-rules",
-                    "likely_functions": ["upload_schedule", "compute_schedule_slots"],
-                }
             },
         },
     }

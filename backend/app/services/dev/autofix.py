@@ -57,87 +57,86 @@ def _traceback_project_files(text: str) -> list[str]:
 
 
 def _module_map(module: str) -> list[str]:
+    """Map a log module name → candidate file paths in the live tree.
+
+    Batch 10M cleanup: dropped ``upload_engine`` + ``channel_service``'s
+    stale ``routes/channels.py`` partner. The upload subsystem was retired
+    in Phase 4F.5A; channel_service still exists but its old route was
+    deleted in Batch 10H. ``services/db.py`` was retired in Batch 9.
+    """
     m = (module or "").strip().lower()
     table = {
-        "upload_engine": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "render_engine": ["backend/app/services/render_engine.py", "backend/app/routes/render.py"],
-        "downloader": ["backend/app/services/downloader.py", "backend/app/routes/render.py"],
-        "channel_service": ["backend/app/services/channel_service.py", "backend/app/routes/channels.py"],
-        "render": ["backend/app/routes/render.py", "backend/app/services/render_engine.py"],
-        "db": ["backend/app/services/db.py"],
-        "main": ["backend/app/main.py"],
+        "render_engine":   ["backend/app/features/render/engine/pipeline/render_pipeline.py",
+                            "backend/app/features/render/router.py"],
+        "downloader":      ["backend/app/features/download/engine/downloader.py"],
+        "channel_service": ["backend/app/services/channel_service.py"],
+        "render":          ["backend/app/features/render/router.py",
+                            "backend/app/features/render/engine/pipeline/render_pipeline.py"],
+        "main":            ["backend/app/main.py"],
     }
     return table.get(m, [])
 
 
 def _workflow_step_map(step: str) -> list[str]:
+    """Batch 10M cleanup: dropped the upload / login / profile / proxy /
+    rule.load steps; their backing files were deleted with the upload
+    subsystem retirement. ``app.start`` no longer points at the retired
+    ``services/db.py``."""
     s = (step or "").strip().lower()
-    if s in {"upload.file.select", "upload.ui.ready", "upload.submit"}:
-        return ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"]
-    if s in {"video.download"}:
-        return ["backend/app/services/downloader.py", "backend/app/routes/render.py"]
-    if s in {"video.render"}:
-        return ["backend/app/routes/render.py", "backend/app/services/render_engine.py"]
-    if s in {"login.check"}:
-        return ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"]
-    if s in {"profile.create/select"}:
-        return ["backend/app/services/upload_engine.py", "backend/app/routes/channels.py"]
-    if s in {"proxy.apply"}:
-        return ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"]
-    if s in {"rule.load"}:
-        return ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"]
-    if s in {"app.start"}:
-        return ["backend/app/main.py", "backend/app/services/db.py"]
+    if s == "video.download":
+        return ["backend/app/features/download/engine/downloader.py"]
+    if s == "video.render":
+        return ["backend/app/features/render/router.py",
+                "backend/app/features/render/engine/pipeline/render_pipeline.py"]
+    if s == "app.start":
+        return ["backend/app/main.py"]
     return []
 
 
 def _event_map(event: str) -> list[str]:
+    """Batch 10M cleanup: dropped upload / login / proxy / profile event
+    prefixes (their files are gone). ``render.*`` events now point at the
+    feature-layer paths."""
     e = (event or "").strip().lower()
     if e.startswith("video.download"):
-        return ["backend/app/services/downloader.py", "backend/app/routes/render.py"]
-    if e.startswith("login."):
-        return ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"]
-    if e.startswith("upload."):
-        return ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"]
-    if e.startswith("proxy."):
-        return ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"]
-    if e.startswith("profile.") or e.startswith("browser."):
-        return ["backend/app/services/upload_engine.py", "backend/app/routes/channels.py"]
+        return ["backend/app/features/download/engine/downloader.py"]
     if e.startswith("render."):
-        return ["backend/app/routes/render.py", "backend/app/services/render_engine.py"]
+        return ["backend/app/features/render/router.py",
+                "backend/app/features/render/engine/pipeline/render_pipeline.py"]
     return []
 
 
 def _error_code_map(code: str) -> list[str]:
+    """Batch 10M cleanup: error-code families LG / UP / PX / BR / SC pointed
+    at retired upload files. They now return [] so the orchestrator falls
+    back to other inference signals (traceback / module / context). RT no
+    longer cites ``services/db.py``."""
     c = (code or "").strip().upper()
     fam = c[:2]
     maps = {
-        "DL": ["backend/app/services/downloader.py", "backend/app/routes/render.py"],
-        "RN": ["backend/app/routes/render.py", "backend/app/services/render_engine.py"],
-        "LG": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "UP": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "PX": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "FS": ["backend/app/routes/render.py", "backend/app/services/channel_service.py", "backend/app/services/upload_engine.py"],
-        "BR": ["backend/app/services/upload_engine.py", "backend/app/routes/channels.py"],
-        "SC": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "RT": ["backend/app/main.py", "backend/app/services/db.py"],
+        "DL": ["backend/app/features/download/engine/downloader.py"],
+        "RN": ["backend/app/features/render/router.py",
+               "backend/app/features/render/engine/pipeline/render_pipeline.py"],
+        "FS": ["backend/app/features/render/router.py",
+               "backend/app/services/channel_service.py"],
+        "RT": ["backend/app/main.py"],
     }
     return maps.get(fam, [])
 
 
 def _context_map(context: dict[str, Any], message: str = "") -> list[str]:
+    """Batch 10M cleanup: dropped selector / browser / profile heuristics
+    (their files are gone). Kept the path-related and url-related cues
+    because they still map to live render / downloader files."""
     import json
     ctext = " ".join([str(message or ""), json.dumps(context or {}, ensure_ascii=False)])
     ctext = ctext.lower()
     out: list[str] = []
-    if "selector" in ctext:
-        out.extend(["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"])
     if any(k in ctext for k in ["file_path", "output", "root folder", "path", "permission denied"]):
-        out.extend(["backend/app/routes/render.py", "backend/app/services/upload_engine.py", "backend/app/services/channel_service.py"])
+        out.extend(["backend/app/features/render/router.py",
+                    "backend/app/services/channel_service.py"])
     if any(k in ctext for k in ["url", "video_id", "youtube"]):
-        out.extend(["backend/app/services/downloader.py", "backend/app/routes/render.py"])
-    if any(k in ctext for k in ["browser", "profile", "user_data_dir"]):
-        out.extend(["backend/app/services/upload_engine.py", "backend/app/routes/channels.py"])
+        out.extend(["backend/app/features/download/engine/downloader.py"])
     return out
 
 
@@ -168,9 +167,10 @@ def _infer_code_targets(parsed: dict[str, Any]) -> dict[str, Any]:
     module = str(parsed.get("module") or "").strip()
     step = str(parsed.get("step") or "").strip()
     category = derived_category
-    if category == "upload" and module == "upload_engine":
-        human = f"{module or 'upload_engine'} -> {step or 'upload_select_file'} -> upload UI selector/wait logic"
-    elif wf_step and wf_step != "unknown":
+    # Batch 10M cleanup: removed the upload-engine special case (subsystem
+    # was retired in Phase 4F.5A). The generic branches below cover what
+    # remains — render / download / generic logs.
+    if wf_step and wf_step != "unknown":
         human = f"{wf_step} -> {category} logic"
     elif module or step:
         human = " -> ".join([x for x in [module, step, f"{category} logic"] if x])
@@ -202,17 +202,17 @@ def _extract_paths(text: str) -> list[Path]:
 
 
 def _target_files(category: str) -> list[str]:
+    """Batch 10M cleanup: dropped login / upload / browser-profile /
+    proxy-network / scheduler-rules / ui-selector categories — their
+    files are gone with the upload subsystem retirement. ``startup/runtime``
+    no longer cites the retired ``services/db.py``."""
     maps = {
-        "download": ["backend/app/services/downloader.py", "backend/app/routes/render.py"],
-        "render": ["backend/app/routes/render.py", "backend/app/services/render_engine.py"],
-        "login": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "upload": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "browser/profile": ["backend/app/services/upload_engine.py", "backend/app/routes/channels.py"],
-        "proxy/network": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "scheduler/rules": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "ui selector/wait": ["backend/app/services/upload_engine.py"],
-        "file system": ["backend/app/routes/render.py", "backend/app/services/upload_engine.py", "backend/app/services/channel_service.py"],
-        "startup/runtime": ["backend/app/main.py", "backend/app/services/db.py"],
+        "download":         ["backend/app/features/download/engine/downloader.py"],
+        "render":           ["backend/app/features/render/router.py",
+                             "backend/app/features/render/engine/pipeline/render_pipeline.py"],
+        "file system":      ["backend/app/features/render/router.py",
+                             "backend/app/services/channel_service.py"],
+        "startup/runtime":  ["backend/app/main.py"],
     }
     out = []
     for rel in maps.get(category, []):
@@ -222,83 +222,12 @@ def _target_files(category: str) -> list[str]:
     return out
 
 
-def _apply_upload_selector_wait_autofix() -> tuple[list[str], list[str], list[str]]:
-    """
-    Minimal, deterministic auto-fix for high-confidence upload selector/wait bugs.
-    Patches only known upload wait/selection logic in upload_engine.py.
-    """
-    target = PROJECT_ROOT / "backend/app/services/upload_engine.py"
-    if not target.exists():
-        return [], [], ["upload_engine.py not found"]
-    text = target.read_text(encoding="utf-8")
-    original = text
-    patch_notes: list[str] = []
-    warnings: list[str] = []
-
-    old = (
-        "            page.goto(upload_url, wait_until=\"domcontentloaded\", timeout=90000)\n"
-        "            page.wait_for_timeout(1200)\n"
-    )
-    new = (
-        "            page.goto(upload_url, wait_until=\"domcontentloaded\", timeout=90000)\n"
-        "            page.wait_for_timeout(1200)\n"
-        "            try:\n"
-        "                page.wait_for_load_state(\"networkidle\", timeout=15000)\n"
-        "            except Exception:\n"
-        "                pass\n"
-    )
-    if old in text and "wait_for_load_state(\"networkidle\"" not in text:
-        text = text.replace(old, new, 1)
-        patch_notes.append("Added explicit upload-page readiness wait (networkidle).")
-
-    old = "            input_selector = _wait_any_selector(page, file_input, timeout_ms=30000)\n"
-    new = (
-        "            input_selector = _wait_any_selector(page, file_input, timeout_ms=45000)\n"
-        "            if not input_selector:\n"
-        "                _try_select_upload_option(page, selectors)\n"
-        "                input_selector = _wait_any_selector(page, file_input, timeout_ms=20000) or _first_existing_selector(page, file_input)\n"
-    )
-    if old in text and "timeout_ms=45000" not in text:
-        text = text.replace(old, new, 1)
-        patch_notes.append("Strengthened file-input selector wait with fallback retry path.")
-
-    old = (
-        "            if not input_selector:\n"
-        "                _screenshot_on_error(page, \"upload_input_not_found\")\n"
-        "                raise RuntimeError(\"Upload file input is not available on upload screen.\")\n"
-    )
-    new = (
-        "            if not input_selector:\n"
-        "                _screenshot_on_error(page, \"upload_input_not_found\")\n"
-        "                raise RuntimeError(\"Upload file input is not available on upload screen after readiness checks.\")\n"
-    )
-    if old in text:
-        text = text.replace(old, new, 1)
-        patch_notes.append("Improved missing-input error clarity.")
-
-    old = "            page.set_input_files(input_selector, str(video_path))\n"
-    new = (
-        "            try:\n"
-        "                page.set_input_files(input_selector, str(video_path))\n"
-        "            except Exception:\n"
-        "                page.locator(input_selector).first.set_input_files(str(video_path))\n"
-    )
-    if old in text and "page.locator(input_selector).first.set_input_files" not in text:
-        text = text.replace(old, new, 1)
-        patch_notes.append("Added resilient set_input_files fallback via locator().first.")
-
-    old = "        \"text=/0%|1%|2%|3%|4%|5%/i\",\n"
-    new = "        \"text=/\\\\b\\\\d{1,3}%\\\\b/i\",\n"
-    if old in text:
-        text = text.replace(old, new, 1)
-        patch_notes.append("Broadened upload-progress marker detection from 0-5% to generic percent pattern.")
-
-    if text == original:
-        warnings.append("No deterministic upload selector/wait patch point found.")
-        return [], patch_notes, warnings
-
-    target.write_text(text, encoding="utf-8")
-    return [str(target)], patch_notes, warnings
+# Batch 10M cleanup (2026-06-06): ``_apply_upload_selector_wait_autofix``
+# removed. It patched ``backend/app/services/upload_engine.py``, which was
+# deleted with the Phase 4F.5A upload subsystem retirement. The
+# ``upload_selector_wait`` bug class still exists in ``bug.py`` for
+# historical-log compatibility, but ``/fix`` no longer attempts an
+# auto-patch for it — it falls through to the planned/manual-fix path.
 
 
 def _cmd_fix(command_text: str) -> dict:
@@ -352,36 +281,12 @@ def _cmd_fix(command_text: str) -> dict:
             patch.append(f"Likely functions: {likely_functions}")
             risks.append("Manual code-level patch likely required for path composition/validation.")
 
-    elif bug_class == "upload_selector_wait":
-        # High-confidence auto-patch when upload-engine target is clearly identified.
-        has_upload_engine_target = any(str(p).replace("\\", "/").endswith("backend/app/services/upload_engine.py") for p in likely_targets)
-        has_key_functions = any(fn in likely_functions for fn in ["_upload_once", "_try_select_upload_option", "_wait_upload_started"])
-        if has_upload_engine_target and has_key_functions:
-            changed, patch_notes, patch_warnings = _apply_upload_selector_wait_autofix()
-            if changed:
-                status = "ok"
-                changes.extend(changed)
-                patch.append("Applied minimal upload selector/wait auto-fix in upload engine.")
-                patch.extend(patch_notes)
-                if patch_warnings:
-                    risks.extend(patch_warnings)
-            else:
-                status = "planned"
-                patch.append("Upload selector bug recognized, but deterministic patch points were not found.")
-                patch.append(f"Likely files: {likely_targets or ['unknown']}")
-                patch.append(f"Likely functions: {likely_functions}")
-                if patch_notes:
-                    patch.extend(patch_notes)
-                if patch_warnings:
-                    risks.extend(patch_warnings)
-        else:
-            status = "planned"
-            patch.append("Upload selector bug recognized but confidence is not high enough for auto-patch.")
-            patch.append(f"Likely files: {likely_targets or ['unknown']}")
-            patch.append(f"Likely functions: {likely_functions}")
-            risks.append("Likely target function set is incomplete.")
-
-    elif bug_class in {"download_format_fallback", "login_state", "profile_runtime", "proxy_runtime"}:
+    elif bug_class in {"download_format_fallback", "login_state",
+                       "profile_runtime", "proxy_runtime", "upload_selector_wait"}:
+        # Batch 10M: ``upload_selector_wait`` now falls into this planned-fix
+        # bucket alongside the other manual-confirmation classes. The
+        # auto-patch helper that used to run here patched the deleted
+        # ``services/upload_engine.py`` and was removed.
         status = "planned"
         patch.append("Recognized bug class; automatic code patch skipped to avoid risky behavior changes.")
         patch.append(f"Likely files: {likely_targets or ['unknown']}")
@@ -421,7 +326,7 @@ def _cmd_fix(command_text: str) -> dict:
         "## Fix strategy": (
             "safe-path-remediation"
             if (status == "ok" and bug_class == "filesystem/render_path")
-            else ("auto_patch_minimal" if (status == "ok" and bug_class == "upload_selector_wait") else (target_spec.get("fix_strategy") or "manual-targeted-recommendation"))
+            else (target_spec.get("fix_strategy") or "manual-targeted-recommendation")
         ),
         "## Files changed": changes,
         "## Patch summary": patch,
