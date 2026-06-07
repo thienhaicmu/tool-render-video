@@ -111,9 +111,21 @@ def test_submit_job_returns_false_for_duplicate_pending():
 
 
 def test_submit_job_increments_pending_count():
+    """The previous version of this test was flaky in isolation. ``patch``
+    on ``_mark_job_running`` did NOT prevent the scheduler thread from
+    popping the job out of ``_pending`` — the pop happens BEFORE
+    ``_mark_job_running`` is called, so when the scheduler woke fast
+    enough the assertion observed ``pending_count() == 0``.
+
+    Deterministic fix: pre-fill ``_active_job_ids`` to ``MAX_CONCURRENT_JOBS``
+    so the scheduler sees no free slot and never pops. The autouse
+    ``isolate_manager`` fixture clears these markers after the test.
+    """
     fn = MagicMock()
-    with patch("app.jobs.manager._mark_job_running"):
-        manager.submit_job("pending-job-count", fn)
+    with manager._cond:
+        for i in range(manager.MAX_CONCURRENT_JOBS):
+            manager._active_job_ids.add(f"slot-filler-{i}")
+    manager.submit_job("pending-job-count", fn)
     assert manager.pending_count() >= 1
 
 
