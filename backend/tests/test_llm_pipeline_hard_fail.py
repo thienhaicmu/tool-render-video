@@ -328,3 +328,56 @@ def test_clip_lock_promotes_segments_without_failing(baseline, monkeypatch):
     assert len(result.scored) == 2
     # The locked segment is promoted to the front.
     assert result.scored[0]["start"] == 60.0
+
+
+# ---------------------------------------------------------------------------
+# Error-message contract (2026-06-07 fix): the LLM Call 1 hard-fail
+# message must NOT lead the user to blame min_quality_score. The
+# threshold filter in llm_stage.run_llm_segment_selection falls back to
+# "best available" when no segment beats it — reaching the hard-fail
+# branch means the provider returned None or [] (the real cause —
+# 429 / API key / parse failure / network — is in the preceding log
+# lines from app.render.<provider>_client / app.render.llm.retry).
+# ---------------------------------------------------------------------------
+
+
+def test_none_result_message_directs_user_to_provider_logs(baseline, monkeypatch):
+    """When the provider returns None, the message must:
+    - preserve the legacy 'no segments' / 'returned no' substring
+      (existing consumers grep for that)
+    - explicitly tell the user min_quality_score is INFORMATIONAL
+    - redirect them at the preceding log lines for the real cause."""
+    monkeypatch.setattr(lp, "run_llm_segment_selection", lambda **kw: None)
+
+    with pytest.raises(LLMPipelineError) as exc_info:
+        baseline()
+    msg = str(exc_info.value)
+
+    # Legacy substring preserved (existing test_llm_returns_none_raises
+    # asserts 'no usable segments' or 'returned no' — keep both green).
+    msg_lower = msg.lower()
+    assert "no segments" in msg_lower or "returned no" in msg_lower, msg
+    # New: explicitly informational so a user reading just the error
+    # message doesn't waste hours tweaking min_quality_score.
+    assert "informational" in msg_lower, (
+        f"Error message should call out that min_quality_score is "
+        f"informational only. Got: {msg}"
+    )
+    # New: point them at the upstream log lines.
+    assert "log" in msg_lower, (
+        f"Error message should redirect the user to preceding log lines. "
+        f"Got: {msg}"
+    )
+
+
+def test_empty_list_message_directs_user_to_provider_logs(baseline, monkeypatch):
+    """Parallel test for the empty-list branch."""
+    monkeypatch.setattr(lp, "run_llm_segment_selection", lambda **kw: [])
+
+    with pytest.raises(LLMPipelineError) as exc_info:
+        baseline()
+    msg = str(exc_info.value)
+
+    assert "empty" in msg.lower(), msg
+    assert "informational" in msg.lower(), msg
+    assert "log" in msg.lower(), msg

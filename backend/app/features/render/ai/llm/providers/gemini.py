@@ -21,11 +21,15 @@ from app.domain.render_plan import RenderPlan
 logger = logging.getLogger("app.render.gemini_client")
 logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)")
 
-# Gemini Pro (latest): powerful, free tier, 1M context. The "latest" alias
-# auto-tracks the newest Pro release the account has access to â€”
-# important because raw "gemini-2.5-pro" returns quota-exceeded on many
-# accounts where "gemini-2.5-pro" works.
-_DEFAULT_MODEL = "gemini-2.5-pro"
+# Default model: ``gemini-2.5-flash``. The audit's 2026-06-06 smoke test
+# AND a live render on 2026-06-07 both hit ``429 RESOURCE_EXHAUSTED``
+# with ``limit: 0`` on free-tier ``gemini-2.5-pro``. The Flash model
+# works on the same free tier and is fast enough for segment-selection
+# (we need correct JSON + a handful of viral picks, not heavy reasoning).
+# Override via ``GEMINI_DEFAULT_MODEL`` env var when on a paid tier that
+# unlocks Pro. The prior comment here claimed ``gemini-2.5-pro`` works
+# where ``gemini-2.5-pro`` doesn't — almost certainly a typo for Flash.
+_DEFAULT_MODEL = os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 
 # 60K chars â‰ˆ 15K tokens â€” captures ~30 min of dense Vietnamese speech.
 _MAX_SRT_CHARS = int(os.getenv("GEMINI_MAX_SRT_CHARS", "60000"))

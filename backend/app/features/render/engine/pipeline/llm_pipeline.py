@@ -322,15 +322,30 @@ def run_llm_pre_render(
         source=source,
     )
     _min_score = float(getattr(payload, "llm_min_quality", None) or 0.6)
+    # The min_quality_score threshold is INFORMATIONAL only — the actual
+    # filter in llm_stage.run_llm_segment_selection falls back to "use
+    # best available" when no segment beats the threshold, so a low-score
+    # response NEVER causes this hard-fail. Reaching the raise here means
+    # the provider returned None or an empty list — the actual cause is
+    # in the provider's log line (look for 429 / quota / API key /
+    # parse_error / network-timeout in the previous WARN lines from
+    # app.render.<provider>_client and app.render.llm.retry).
     if scored is None:
         raise LLMPipelineError(
-            f"LLM pipeline: LLM returned no usable segments "
-            f"(min_quality_score={_min_score})"
+            "LLM pipeline: LLM Call 1 returned no segments (provider call "
+            "failed). Common causes in the preceding log lines: 429 quota "
+            "exceeded, invalid API key, network timeout, or response "
+            "JSON parse failure. The threshold "
+            f"min_quality_score={_min_score} is informational only — it "
+            "never causes hard-fail."
         )
     if not scored:
         raise LLMPipelineError(
-            f"LLM pipeline: LLM returned an empty segment list "
-            f"(min_quality_score={_min_score})"
+            "LLM pipeline: LLM Call 1 returned an empty segment list "
+            "(provider responded but no segments were extracted). Check "
+            "the preceding log lines for raw response / parse warnings. "
+            f"min_quality_score={_min_score} is informational only — it "
+            "never causes hard-fail."
         )
 
     # â”€â”€ 7. Bound-check segments against video duration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
