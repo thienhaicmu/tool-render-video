@@ -315,6 +315,15 @@ def recover_pending_render_jobs():
     'interrupted' — does NOT auto-restart them.  The user can manually
     resume from the UI (Resume button) if they want to continue.
 
+    Strategic-6 — Audit 2026-06-08 closure (Batch A V9-F5). Jobs left
+    in the transient 'cancelling' state are FINALISED to 'cancelled'
+    on restart. Pre-Strategic-6 the in-process cancel event lived in
+    ``cancel_registry`` (jobs/cancel.py) which evaporates at process
+    death; the DB status sat at 'cancelling' forever because the
+    recovery loop only handled queued/running. Adding the
+    cancelling → cancelled transition preserves the operator's
+    cancel intent across server restarts.
+
     Auto-restarting old jobs on startup is unexpected behaviour: the user
     may have intentionally stopped the server, or the jobs may be days old.
     """
@@ -322,26 +331,48 @@ def recover_pending_render_jobs():
         from app.db.jobs_repo import list_jobs, update_job_progress
         jobs = list_jobs()
         marked = 0
+        cancelled_finalised = 0
         for job in jobs:
             if job.get("kind") not in ("render", "download"):
                 continue
-            if job.get("status") not in ("queued", "running"):
-                continue
-
+            status = job.get("status")
             job_id = job["job_id"]
-            update_job_progress(
-                job_id,
-                job.get("stage", "unknown"),
-                job.get("progress_percent", 0),
-                "Server restarted — click Resume to continue",
-                status="interrupted",
-            )
-            marked += 1
-            logger.info("Marked job %s as interrupted (was %s)", job_id, job.get("status"))
 
-        if marked:
+            if status in ("queued", "running"):
+                update_job_progress(
+                    job_id,
+                    job.get("stage", "unknown"),
+                    job.get("progress_percent", 0),
+                    "Server restarted — click Resume to continue",
+                    status="interrupted",
+                )
+                marked += 1
+                logger.info("Marked job %s as interrupted (was %s)", job_id, status)
+            elif status == "cancelling":
+                # Strategic-6 — finalise the operator's cancel intent
+                # to the terminal CANCELLED state. The in-process
+                # cancel event is gone (process died); the DB row
+                # carries forward the user's last-known intent.
+                update_job_progress(
+                    job_id,
+                    "cancelled",
+                    job.get("progress_percent", 0),
+                    "Server restarted — finalising cancel from prior session",
+                    status="cancelled",
+                )
+                cancelled_finalised += 1
+                logger.info(
+                    "Finalised job %s cancelling -> cancelled "
+                    "(Strategic-6 — V9-F5 closure)", job_id,
+                )
+
+        total = marked + cancelled_finalised
+        if total:
             logger.info(
-                "Startup: marked %d job(s) as interrupted. User can resume from UI.", marked
+                "Startup: marked %d job(s) as interrupted, finalised %d "
+                "cancelling -> cancelled. User can resume any interrupted "
+                "job from the UI.",
+                marked, cancelled_finalised,
             )
         else:
             logger.info(

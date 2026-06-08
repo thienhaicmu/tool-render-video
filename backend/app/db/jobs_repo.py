@@ -32,6 +32,18 @@ logger = logging.getLogger("app.db")
 _VALID_JOB_STATUSES = frozenset({
     "queued",
     "running",
+    # Strategic-6 — Audit 2026-06-08 closure (Batch A V9-F5). The
+    # cancel route (features/render/routers/lifecycle.py:563) writes
+    # status="cancelling" as the transient state between operator
+    # click and the in-process cancel event landing. Pre-Strategic-6
+    # the string was written by the route but absent from the valid
+    # set, so every cancel produced a WARN log line at write time and
+    # the recovery loop at jobs/manager.py:328 ignored the state on
+    # restart (stuck-cancelling jobs). Adding it here legitimises the
+    # transient label; recover_pending_render_jobs now transitions
+    # cancelling → cancelled on startup so the operator's intent
+    # persists across server restarts.
+    "cancelling",
     "completed",
     "completed_with_errors",
     "failed",
