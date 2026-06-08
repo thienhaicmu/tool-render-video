@@ -288,6 +288,20 @@ def run_llm_pre_render(
             "LLM pipeline: SRT empty or missing after transcription"
         )
 
+    # T2.3 — Audit 2026-06-08 closure (Batch B B-10-A). Emit
+    # JobStage.SCENE_DETECTION between TRANSCRIBING_FULL (at progress
+    # 15-22 inside this function) and SEGMENT_BUILDING (at progress 25
+    # below). Sacred Contract #4 lists SCENE_DETECTION in the frozen
+    # ordering between TRANSCRIBING_FULL and SEGMENT_BUILDING; this
+    # is the closest natural slot. Even without an explicit scene-
+    # detector subprocess, the AI's transcript-to-segment mapping
+    # IS scene detection conceptually. Brief progress=23 tick keeps
+    # the FE progress bar advancing.
+    set_stage_fn(
+        JobStage.SCENE_DETECTION, 23,
+        "LLM pipeline: detecting scene boundaries from transcript",
+    )
+
     # ── 5. Segment-selection stage event ─────────────────────────────────
     set_stage_fn(
         JobStage.SEGMENT_BUILDING, 25,

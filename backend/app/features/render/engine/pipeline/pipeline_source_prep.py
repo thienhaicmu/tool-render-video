@@ -93,6 +93,17 @@ def prepare_render_source(
         message="Validating render input",
         step="render.input.validate",
     )
+    # T2.3 — Audit 2026-06-08 closure (Batch B B-10-A). Emit
+    # JobStage.ANALYZING before the existing DOWNLOADING transition so
+    # the Sacred Contract #4 frozen ordering (QUEUED → STARTING →
+    # RUNNING → ANALYZING → ...) is observable at runtime. ANALYZING
+    # corresponds to the "scanning the local source video" phase that
+    # precedes any prep work; DOWNLOADING stays directly after for
+    # backward-compatibility with stored job records that depended on
+    # it (the back-compat note in core/stage.py:10). Two adjacent
+    # transitions at progress=3 then progress=5 keep the FE progress
+    # bar moving forward without jitter.
+    set_stage(JobStage.ANALYZING, 3, "Analyzing source video")
     set_stage(JobStage.DOWNLOADING, 5, "Preparing source video")
     edit_session_id = (getattr(payload, "edit_session_id", None) or "").strip()
     sess = load_session_fn(edit_session_id) if edit_session_id else None
