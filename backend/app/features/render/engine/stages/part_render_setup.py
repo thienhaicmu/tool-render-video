@@ -1,18 +1,18 @@
-﻿"""Per-part RENDER pre-flight stage â€” encoding params + thread + plan.
+﻿"""Per-part RENDER pre-flight stage — encoding params + thread + plan.
 
-Sprint 6.D-2.4 â€” extracted verbatim from stages/part_renderer.py
+Sprint 6.D-2.4 — extracted verbatim from stages/part_renderer.py
 (lines 219-319 of the post-2.3 file). No logic changes; pure relocation.
 
 run_render_preflight() runs once per part during process_one_part,
 immediately after the JobPartStage.RENDERING upsert (which stays in
-the caller â€” Sacred Contract #5 visibility) and before the
+the caller — Sacred Contract #5 visibility) and before the
 base-clip/motion-crop/render_part_smart FFmpeg core (Sprint 6.D-2.5
 target).
 
 Scope re-cast note:
   Plan Â§3.2 originally listed phase 2.4 as "TRANSCRIBE stage block".
   By the time phase 2.4 ran, all TRANSCRIBE logic had already been
-  absorbed into prepare_part_assets (Sprint 6.D-2.2) â€” no separate
+  absorbed into prepare_part_assets (Sprint 6.D-2.2) — no separate
   TRANSCRIBE block remained in process_one_part. Phase 2.4 was
   re-scoped to "RENDER pre-flight" (this module) so that phase 2.5's
   FFmpeg/qa_pipeline core block could be tackled at a safer LOC
@@ -33,7 +33,7 @@ Block responsibilities (in order):
   5. PartExecutionPlan construction + part_execution_plan INFO log.
   6. CameraStrategy construction + camera_strategy INFO log.
   7. Feature-flag warning when FEATURE_OVERLAY_AFTER_BASE_CLIP=1 but
-     FEATURE_BASE_CLIP_FIRST=0 â€” read at the module-load level of
+     FEATURE_BASE_CLIP_FIRST=0 — read at the module-load level of
      this module via os.getenv (identical to part_renderer.py's
      module-level reads; same behavior, same env-var lookup).
 
@@ -44,7 +44,7 @@ the rest of the RENDER block is byte-for-byte unchanged.
 
 Sacred Contracts honored:
   - #5 Frozen part-stage names: JobPartStage.RENDERING transition
-       stays in the CALLER (process_one_part line 217) â€” not moved
+       stays in the CALLER (process_one_part line 217) — not moved
        into this module. This keeps the frozen state-machine
        transition visible at the call site where reviewers expect it.
   - #6 _emit_render_event signature: this block has NO _emit_render_event
@@ -59,7 +59,7 @@ Feature-flag env-var read note:
   `_FEATURE_BASE_CLIP_FIRST` and `_FEATURE_OVERLAY_AFTER_BASE_CLIP`
   are read at module-load time via os.getenv (identical to
   part_renderer.py's module-level reads). The flags are read ONCE
-  per process startup in BOTH modules â€” behavior is identical
+  per process startup in BOTH modules — behavior is identical
   because both reads happen at import time and read the same
   deterministic env var. No drift risk.
 """
@@ -85,24 +85,24 @@ from app.features.render.engine.encoder.ffmpeg_helpers import (
 # Preserve original logger name (same pattern as 6.D-2.1 / 2.2 / 2.3).
 logger = logging.getLogger("app.render")
 
-# Re-read feature flags at this module's load time â€” identical to
+# Re-read feature flags at this module's load time — identical to
 # part_renderer.py module-level reads. Both modules read the same env
 # vars deterministically at import; no drift possible.
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
-# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed â€”
+# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
 # see render_pipeline.py for the closure rationale.
-# Sprint 7.4 (2026-06-05): raw_part skip flag â€” see render_pipeline.py.
+# Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
-# Sprint 7.8 (2026-06-05): motion-aware extension flag â€” see render_pipeline.py.
+# Sprint 7.8 (2026-06-05): motion-aware extension flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Sprint 4.F â€” RenderPlan.camera_strategy consume helper.
+# ────────────────────────────────────────────────────────────────────
+# Sprint 4.F — RenderPlan.camera_strategy consume helper.
 #
 # When ctx.render_plan is None (LLM_EMIT_RENDER_PLAN OFF, no AI
-# emission), the resolver falls through to the caller's fallback â€”
+# emission), the resolver falls through to the caller's fallback —
 # Sacred Contract #2 (default behaviour identical baseline). When
 # ctx.render_plan is set, per-field merge applies: empty fields stay
 # at fallback ("empty == inherit" per render_plan.py CameraStrategy);
@@ -116,16 +116,16 @@ _FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOT
 #     explicitly disabled it". Honouring the plan value when present
 #     would flip baseline behaviour for jobs where
 #     payload.motion_aware_crop=True but the plan defaulted to False
-#     â€” same blocker the Sprint 4.E emphasis_pass deferral cited.
+#     — same blocker the Sprint 4.E emphasis_pass deferral cited.
 #   - tracker has zero orchestration consumer today; the dispatch
 #     happens inside services/motion_crop.py via internal capability
 #     detection. Nothing to migrate yet.
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ────────────────────────────────────────────────────────────────────
 
 # Vocabulary of reframe_mode values the planner will accept from a
 # RenderPlan. Matches the CameraStrategy dataclass docstring at
 # render_plan.py. Legacy fallback value "subject" stays valid via
-# the caller's fallback path â€” it is not in this set because that
+# the caller's fallback path — it is not in this set because that
 # token belongs to the payload schema, not the plan schema.
 _RENDER_PLAN_ALLOWED_REFRAME_MODES: frozenset[str] = frozenset({
     "center", "track", "fixed",
@@ -138,7 +138,7 @@ def _resolve_reframe_mode_from_plan(
     """Return ``(effective_reframe_mode, source_tag)``.
 
     Source tag is one of ``"render_plan"``, ``"fallback"``, or
-    ``"fallback_invalid_reframe"`` â€” the planner surfaces it in the
+    ``"fallback_invalid_reframe"`` — the planner surfaces it in the
     Sprint 4.F ``camera_strategy_applied`` event so operators can
     attribute the choice without re-reading the dataclass.
     """
@@ -155,7 +155,7 @@ def _resolve_reframe_mode_from_plan(
 
 @dataclass
 class RenderPreflightResult:
-    """Bundle of values produced by run_render_preflight â€” caller aliases
+    """Bundle of values produced by run_render_preflight — caller aliases
     each field back to its original local-variable name so the rest of
     process_one_part is byte-for-byte unchanged.
 
@@ -233,7 +233,7 @@ def run_render_preflight(
     _encode_timer.start()
     _t_encode = time.perf_counter()
     _t_render = time.perf_counter()
-    # Sprint 4.F â€” resolve effective reframe_mode ONCE so the cache
+    # Sprint 4.F — resolve effective reframe_mode ONCE so the cache
     # key (below), PartExecutionPlan, and CameraStrategy ctor all see
     # the same value. Falls back to ctx.payload value when
     # ctx.render_plan is None or its camera_strategy.reframe_mode is
@@ -305,12 +305,12 @@ def run_render_preflight(
         _camera_strategy.reframe_mode, _camera_strategy.aspect_ratio,
         _camera_strategy.frame_scale_x, _camera_strategy.frame_scale_y,
     )
-    # Sprint 4.F â€” additive event mirroring the Sprint 4.E
+    # Sprint 4.F — additive event mirroring the Sprint 4.E
     # `subtitle_style_applied` pattern. Lets operators attribute the
     # reframe choice ("render_plan" override vs legacy "fallback")
     # without grepping the logger output. The previous module-docstring
     # assertion at L50-51 ("this block has NO _emit_render_event
-    # calls") was Sprint 6.D-era â€” Sprint 4.F adds one event per part.
+    # calls") was Sprint 6.D-era — Sprint 4.F adds one event per part.
     _emit_render_event(
         channel_code=ctx.effective_channel,
         job_id=ctx.job_id,
@@ -331,7 +331,7 @@ def run_render_preflight(
         logger.warning(
             "overlay_flag_ignored job_id=%s part=%d: "
             "FEATURE_OVERLAY_AFTER_BASE_CLIP=1 requires FEATURE_BASE_CLIP_FIRST=1 "
-            "â€” using render_part_smart() for final output",
+            "— using render_part_smart() for final output",
             ctx.job_id, idx,
         )
 

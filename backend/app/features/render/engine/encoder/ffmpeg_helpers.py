@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Resource semaphores
 # ---------------------------------------------------------------------------
-# Consumer NVIDIA GPUs support 3â€“5 concurrent NVENC sessions. Exceeding the
+# Consumer NVIDIA GPUs support 3–5 concurrent NVENC sessions. Exceeding the
 # limit causes encode failures with "no NVENC capable devices found".
 # Override with NVENC_MAX_SESSIONS env var if your GPU supports more.
 _NVENC_SEM_VALUE: int = max(1, int(os.getenv("NVENC_MAX_SESSIONS", "3")))
@@ -44,11 +44,11 @@ def set_thread_cancel_event(ev) -> None:
     _tls.cancel_event = ev
 
 # ---------------------------------------------------------------------------
-# ffprobe metadata cache â€” keyed by (abspath, mtime_ns, size_bytes)
+# ffprobe metadata cache — keyed by (abspath, mtime_ns, size_bytes)
 # ---------------------------------------------------------------------------
 # Consolidates multiple per-attribute probes into one subprocess call per file.
 # Cache is invalidated automatically when file mtime or size changes.
-# Failed probes are never cached â€” they return zero/None defaults and retry.
+# Failed probes are never cached — they return zero/None defaults and retry.
 _PROBE_CACHE_MAX = 500
 _PROBE_CACHE: OrderedDict[tuple, dict] = OrderedDict()
 _PROBE_CACHE_LOCK = threading.Lock()
@@ -68,7 +68,7 @@ def probe_video_metadata(path: str, timeout: int = 15) -> dict:
 
     Runs one ffprobe JSON call and caches by (abspath, mtime, size) so repeated
     probes on the same unmodified file cost zero subprocess calls.
-    Failed probes are not cached â€” zero/None defaults are returned and retried.
+    Failed probes are not cached — zero/None defaults are returned and retried.
     """
     key = _file_probe_key(path)
     if key:
@@ -93,7 +93,7 @@ def probe_video_metadata(path: str, timeout: int = 15) -> dict:
             "-of", "json", str(path),
         ]
         t0 = time.monotonic()
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=timeout)
         _ms = int((time.monotonic() - t0) * 1000)
         if r.returncode == 0:
             data = json.loads(r.stdout or "{}")
@@ -131,7 +131,7 @@ def probe_video_metadata(path: str, timeout: int = 15) -> dict:
     except Exception:
         return result
 
-    # Only store probes where we confirmed video presence â€” avoids caching garbage.
+    # Only store probes where we confirmed video presence — avoids caching garbage.
     if key and result["has_video"]:
         with _PROBE_CACHE_LOCK:
             _PROBE_CACHE[key] = result
@@ -248,6 +248,7 @@ def _run_ffmpeg_with_retry(
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
+                    encoding="utf-8",
                 )
                 # Run communicate in a daemon thread so the main loop can poll for
                 # cancel/timeout without risking pipe-buffer deadlock.
@@ -327,8 +328,8 @@ def _run_ffmpeg_with_retry(
 
 
 # ---------------------------------------------------------------------------
-# nvenc_available â€” cached GPU-readiness check exported to render_pipeline
-# _resolve_codec â€” kept as a proper function so tests can patch _has_encoder
+# nvenc_available — cached GPU-readiness check exported to render_pipeline
+# _resolve_codec — kept as a proper function so tests can patch _has_encoder
 #                  and _nvenc_runtime_ready at the render_engine module level
 # ---------------------------------------------------------------------------
 
@@ -381,35 +382,35 @@ def _effect_filter(effect_preset: str):
 
 
 # ---------------------------------------------------------------------------
-# Phase 5.7 â€” Safe visual intensity â†’ effect preset resolver
+# Phase 5.7 — Safe visual intensity → effect preset resolver
 # ---------------------------------------------------------------------------
 # Supported preset names (all keys in _effect_filter above):
-#   slay_soft_01    default â€” natural cinematic, light sharpening
-#   slay_pop_01     high energy â€” boosted contrast/saturation/unsharp
-#   story_clean_01  subtle â€” low contrast/saturation, soft sharpening
-#   social_bright   bright social â€” high saturation, strong brightness
-#   cinematic_soft  cinematic desaturated â€” soft, denoised
-#   high_contrast   maximum contrast â€” heaviest unsharp
+#   slay_soft_01    default — natural cinematic, light sharpening
+#   slay_pop_01     high energy — boosted contrast/saturation/unsharp
+#   story_clean_01  subtle — low contrast/saturation, soft sharpening
+#   social_bright   bright social — high saturation, strong brightness
+#   cinematic_soft  cinematic desaturated — soft, denoised
+#   high_contrast   maximum contrast — heaviest unsharp
 #
 # AI visual_intensity mapping (renderer-owned, AI never picks the preset name):
-#   "low"    â†’ "story_clean_01"  (subtle look, gentle processing)
-#   "medium" â†’ "slay_soft_01"    (natural default, matches schema default)
-#   "high"   â†’ "slay_pop_01"     (energetic pop look, boosted processing)
+#   "low"    → "story_clean_01"  (subtle look, gentle processing)
+#   "medium" → "slay_soft_01"    (natural default, matches schema default)
+#   "high"   → "slay_pop_01"     (energetic pop look, boosted processing)
 #
 # Priority (documented in render contract):
-#   1. FFmpeg safety (enforced by _effect_filter â€” only accepts known presets)
-#   2. user_effect_is_explicit=True â†’ return effect_preset unchanged
-#   3. Valid visual_intensity_hint â†’ map to known preset (renderer decides)
+#   1. FFmpeg safety (enforced by _effect_filter — only accepts known presets)
+#   2. user_effect_is_explicit=True → return effect_preset unchanged
+#   3. Valid visual_intensity_hint → map to known preset (renderer decides)
 #   4. Default: return effect_preset unchanged
 
 _VISUAL_INTENSITY_ALLOWED = frozenset({"low", "medium", "high"})
 
 _VISUAL_INTENSITY_PRESET_MAP: dict[str, str] = {
-    # low  â†’ subtle look: lower contrast/saturation, softer sharpening
+    # low  → subtle look: lower contrast/saturation, softer sharpening
     "low": "story_clean_01",
-    # medium â†’ natural default: matches the schema default effect_preset
+    # medium → natural default: matches the schema default effect_preset
     "medium": "slay_soft_01",
-    # high â†’ energetic pop: boosted contrast/saturation/sharpening
+    # high → energetic pop: boosted contrast/saturation/sharpening
     "high": "slay_pop_01",
 }
 
@@ -421,14 +422,14 @@ def resolve_effect_preset_with_intensity(
 ) -> "str | None":
     """Map AI visual_intensity_hint to a renderer-owned effect preset.
 
-    Phase 5.7 safe injection point â€” renderer OWNS the mapping table.
+    Phase 5.7 safe injection point — renderer OWNS the mapping table.
     AI may only pass None, "low", "medium", or "high".
     This function NEVER raises. Invalid inputs are silently ignored.
 
     Priority:
-      1. user_effect_is_explicit=True â†’ return effect_preset unchanged
-      2. visual_intensity_hint is None or invalid â†’ return effect_preset unchanged
-      3. Valid hint â†’ return mapped preset (only known supported presets)
+      1. user_effect_is_explicit=True → return effect_preset unchanged
+      2. visual_intensity_hint is None or invalid → return effect_preset unchanged
+      3. Valid hint → return mapped preset (only known supported presets)
 
     NEVER returns:
       - A raw FFmpeg filter string (no "vf=", "eq=", "unsharp=" content)
@@ -437,7 +438,7 @@ def resolve_effect_preset_with_intensity(
 
     Args:
         effect_preset:          The current effect_preset (may be None or default).
-        visual_intensity_hint:  AI hint â€” one of None/"low"/"medium"/"high".
+        visual_intensity_hint:  AI hint — one of None/"low"/"medium"/"high".
         user_effect_is_explicit: True when the user explicitly chose effect_preset.
 
     Returns:
@@ -448,7 +449,7 @@ def resolve_effect_preset_with_intensity(
         if user_effect_is_explicit:
             return effect_preset
 
-        # Priority 2: missing or invalid hint â†’ no change
+        # Priority 2: missing or invalid hint → no change
         if not visual_intensity_hint:
             return effect_preset
         hint = str(visual_intensity_hint).strip().lower()
@@ -462,14 +463,14 @@ def resolve_effect_preset_with_intensity(
             return effect_preset
         return mapped
     except Exception:
-        # Safety: never raise â€” return unchanged on any error
+        # Safety: never raise — return unchanged on any error
         return effect_preset
 
 
 def _cinematic_color_filter(src_h: int, content_type: str = "vlog") -> "str | None":
     """Content-type-aware contrast/saturation lift after recompression.
 
-    tutorial/interview: near-neutral â€” preserve screen and face authenticity.
+    tutorial/interview: near-neutral — preserve screen and face authenticity.
     montage: slightly richer for energy feel.
     commentary/vlog: balanced lift (original behaviour).
     Disabled for sources below 480p.
@@ -489,7 +490,7 @@ def _cinematic_sharpen_filter(src_h: int, content_type: str = "vlog") -> "str | 
     tutorial/interview: slightly stronger for text and screen clarity.
     montage: reduced to avoid halos on fast motion.
     commentary/vlog: standard (original behaviour).
-    Disabled for sources below 480p â€” halos appear on noisy/low-res content.
+    Disabled for sources below 480p — halos appear on noisy/low-res content.
     """
     if 0 < src_h < 480:
         return None
@@ -503,10 +504,10 @@ def _cinematic_sharpen_filter(src_h: int, content_type: str = "vlog") -> "str | 
 def _smart_denoise_filter(content_type: str, preset: str, src_h: int) -> "str | None":
     """Return an hqdn3d denoise filter string, or None when denoise should be skipped.
 
-    montage: skipped â€” motion smearing risk outweighs benefit.
+    montage: skipped — motion smearing risk outweighs benefit.
     slower/veryslow preset: full denoise (quality mode, no change to existing behaviour).
     slow preset + interview/tutorial: lite denoise for static talking-head / screen content.
-    low-res source (<720p, any non-montage type): lite denoise â€” compressed noise amplified by upscale.
+    low-res source (<720p, any non-montage type): lite denoise — compressed noise amplified by upscale.
     """
     if content_type == "montage":
         return None
@@ -522,8 +523,8 @@ def _smart_denoise_filter(content_type: str, preset: str, src_h: int) -> "str | 
 def content_type_crf_delta(content_type: str) -> int:
     """Return a CRF adjustment for content-type-aware encode sharpness.
 
-    tutorial/interview: -2 â€” fine text and screen detail benefit from tighter quantisation.
-    montage: +1 â€” fast motion benefits more from AQ than marginal CRF improvement.
+    tutorial/interview: -2 — fine text and screen detail benefit from tighter quantisation.
+    montage: +1 — fast motion benefits more from AQ than marginal CRF improvement.
     Others: 0 (no change from profile default).
     """
     return {"tutorial": -2, "interview": -2, "montage": 1}.get(content_type or "", 0)
@@ -551,7 +552,7 @@ def _build_audio_filter(loudnorm_enabled: bool, reup_mode: bool, speed: float) -
     """Return a comma-joined -af filter string, or None when no audio processing is needed."""
     parts = []
     if loudnorm_enabled and not reup_mode:
-        # Creator-grade audio polish: rumble removal â†’ loudness target â†’ gentle compression â†’ limiter.
+        # Creator-grade audio polish: rumble removal → loudness target → gentle compression → limiter.
         # acompressor ratio=2 at -18dB threshold: natural dynamic control without pumping.
         parts.append("highpass=f=80")
         parts.append("loudnorm=I=-14:LRA=11:TP=-1.0")
@@ -564,7 +565,7 @@ def _build_audio_filter(loudnorm_enabled: bool, reup_mode: bool, speed: float) -
     return ",".join(parts) if parts else None
 
 
-_FPS_CAP = 60  # hard ceiling â€” prevents encode overhead for HFR sources
+_FPS_CAP = 60  # hard ceiling — prevents encode overhead for HFR sources
 
 
 def _parse_fps_ratio(s: str) -> float:
@@ -596,7 +597,7 @@ def _resolve_fps(input_path: str, output_fps: int) -> tuple[int, str]:
         Preserve source fps, capped at _FPS_CAP.
     output_fps  > 0  (user-specified):
         Use min(user_fps, source_fps, _FPS_CAP).
-        Never upscale beyond source â€” avoids judder without minterpolate.
+        Never upscale beyond source — avoids judder without minterpolate.
 
     Returns (target_fps, policy_str).  Caller should log policy_str.
     """

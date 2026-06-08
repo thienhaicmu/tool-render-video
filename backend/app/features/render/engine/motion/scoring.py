@@ -1,20 +1,20 @@
 ﻿"""Motion-crop subject scoring + plausibility filtering + best-subject pick.
 
-Sprint 6.D-3.5b â€” extracted verbatim from motion_crop.py
+Sprint 6.D-3.5b — extracted verbatim from motion_crop.py
 (lines 141-158, 299-393, 396-442 of the post-3.5a file). No logic
 changes; pure relocation.
 
 Contents (preserved in original source order):
 
   Geometric ratio primitives (used by scorers and filters):
-    _subject_area_ratio(subject, frame_w, frame_h) â†’ [0, 1]
+    _subject_area_ratio(subject, frame_w, frame_h) → [0, 1]
         subject_box_area / total_frame_area.
     _subject_edge_overlap_ratio(subject, frame_w, edge_ratio=0.10)
         Fraction of subject width that overlaps the left/right edge bands.
 
   Plausibility filtering (drop subjects unlikely to be the framing target):
     _is_plausible_subject(subject, frame_w, frame_h, subject_kind, previous_subject)
-        Per-kind heuristics for "face" vs "body" â€” area, aspect, vertical
+        Per-kind heuristics for "face" vs "body" — area, aspect, vertical
         position, edge overlap, center offset. Returns True/False.
         Treats same-as-previous subjects as automatically plausible to
         avoid tracker thrashing across frames.
@@ -29,7 +29,7 @@ Contents (preserved in original source order):
         highest-scoring one (or None when subjects is empty).
 
   Center primitive:
-    _subject_center(subject) â†’ (cx, cy) float tuple.
+    _subject_center(subject) → (cx, cy) float tuple.
 
   Scoring function:
     _score_subject_candidate(subject, frame_w, frame_h, previous_subject)
@@ -41,7 +41,7 @@ Contents (preserved in original source order):
         Distance-based identity test: same subject if center distance
         â‰¤ max(24px, max(a.w, a.h, b.w, b.h) Ã— 0.75).
 
-Internal-only â€” no external imports of these 8 symbols today. The module
+Internal-only — no external imports of these 8 symbols today. The module
 is re-exported from motion_crop.py so existing internal call sites
 (build_subject_path, build_subject_path_scene) keep their bare
 references unchanged.

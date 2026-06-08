@@ -30,7 +30,7 @@ _WORD_MIN_DURATION_SEC = 0.10
 _WORD_MIN_GAP_SEC = 0.01
 
 # ---------------------------------------------------------------------------
-# In-process faster-whisper model cache â€” one WhisperModel per
+# In-process faster-whisper model cache — one WhisperModel per
 # (model_name, device, compute_type) key.  Guarded by a threading.Lock so
 # that concurrent render jobs share one loaded model without re-initializing.
 #
@@ -85,7 +85,7 @@ class SubtitleTranscriptionAdapter(Protocol):
 def _detect_fw_device_compute() -> tuple[str, str]:
     """Return (device, compute_type) for faster-whisper / WhisperX.
 
-    Checks ctranslate2 CUDA device count â€” no PyTorch dependency required
+    Checks ctranslate2 CUDA device count — no PyTorch dependency required
     for the faster-whisper path.  Falls back to CPU int8 if CUDA is absent
     or ctranslate2 is not installed.
     """
@@ -171,14 +171,14 @@ def unload_all_fw_models() -> int:
 
 
 # ---------------------------------------------------------------------------
-# Public warmup â€” called at server startup to pre-load model into RAM
+# Public warmup — called at server startup to pre-load model into RAM
 # ---------------------------------------------------------------------------
 
 def warmup_fw_model(model_name: str) -> bool:
     """Load the faster-whisper model into _FW_MODEL_CACHE before the first job.
 
     Returns True if the model was loaded (or was already cached), False on any
-    failure. Never raises â€” startup must not crash due to a missing model.
+    failure. Never raises — startup must not crash due to a missing model.
     """
     if not has_faster_whisper():
         return False
@@ -189,7 +189,7 @@ def warmup_fw_model(model_name: str) -> bool:
     except Exception as exc:
         import logging
         logging.getLogger("app.startup").warning(
-            "whisper_warmup: failed to pre-load %s â€” %s", model_name, exc
+            "whisper_warmup: failed to pre-load %s — %s", model_name, exc
         )
         return False
 
@@ -421,7 +421,7 @@ class WhisperXAdapter:
             language = str(result.get("language") or "en")
 
             if language not in SUPPORTED_ALIGNMENT_LANGUAGES:
-                # No wav2vec2 model for this language â€” write SRT from transcription
+                # No wav2vec2 model for this language — write SRT from transcription
                 # result directly and return without alignment (single pass, no retry).
                 _write_whisperx_srt(result, str(tmp_path), word_level=highlight_per_word)
                 if not tmp_path.exists() or tmp_path.stat().st_size <= 0:
@@ -489,7 +489,7 @@ def transcribe_with_adapter(
     engine="default"
         Transparent upgrade: uses FasterWhisperAdapter when faster-whisper is
         installed, otherwise falls back to DefaultWhisperAdapter.  No caller
-        change required â€” existing payloads automatically benefit.
+        change required — existing payloads automatically benefit.
 
     engine="faster_whisper"
         Explicit faster-whisper request.  Falls back to DefaultWhisperAdapter
@@ -509,7 +509,7 @@ def transcribe_with_adapter(
     }
 
     # ------------------------------------------------------------------
-    # engine="default" â€” transparent upgrade when faster-whisper present
+    # engine="default" — transparent upgrade when faster-whisper present
     # ------------------------------------------------------------------
     if requested == "default":
         if has_faster_whisper():
@@ -546,7 +546,7 @@ def transcribe_with_adapter(
         )
 
     # ------------------------------------------------------------------
-    # engine="faster_whisper" â€” explicit request
+    # engine="faster_whisper" — explicit request
     # ------------------------------------------------------------------
     if requested == "faster_whisper":
         fw_result = FasterWhisperAdapter().transcribe(
@@ -586,7 +586,7 @@ def transcribe_with_adapter(
         return result
 
     # ------------------------------------------------------------------
-    # engine="whisperx" â€” WhisperX alignment, two-level fallback
+    # engine="whisperx" — WhisperX alignment, two-level fallback
     # ------------------------------------------------------------------
     if requested == "whisperx":
         whisperx_result = WhisperXAdapter().transcribe(
@@ -615,7 +615,7 @@ def transcribe_with_adapter(
                 )
             return whisperx_result
 
-        # WhisperX runtime failure â€” try faster-whisper before falling all the way back
+        # WhisperX runtime failure — try faster-whisper before falling all the way back
         warning = whisperx_result.warnings[0] if whisperx_result.warnings else "whisperx_fallback"
         if logger is not None:
             logger.warning(
@@ -656,7 +656,7 @@ def transcribe_with_adapter(
         return result
 
     # ------------------------------------------------------------------
-    # Unknown engine â€” log and use default path
+    # Unknown engine — log and use default path
     # ------------------------------------------------------------------
     if logger is not None:
         logger.warning(
@@ -676,7 +676,7 @@ def transcribe_with_adapter(
 
 
 # ---------------------------------------------------------------------------
-# WhisperX SRT writer (unchanged from original â€” preserved for compatibility)
+# WhisperX SRT writer (unchanged from original — preserved for compatibility)
 # ---------------------------------------------------------------------------
 
 def _write_whisperx_srt(result: dict, srt_path: str, *, word_level: bool) -> None:

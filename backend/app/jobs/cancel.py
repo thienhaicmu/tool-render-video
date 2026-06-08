@@ -33,7 +33,7 @@ def request_cancel(job_id: str) -> bool:
         if ev is not None:
             ev.set()
             return True
-        # Job not yet in process_render â€” queue the cancel so register() picks it up
+        # Job not yet in process_render — queue the cancel so register() picks it up
         _PENDING.add(job_id)
         return False
 

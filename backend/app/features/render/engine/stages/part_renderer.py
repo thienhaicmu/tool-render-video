@@ -5,7 +5,7 @@ PartRenderContext carries all closure-captured state.
 After Sprint 6.D-2.x decomposition, this file is a thin orchestrator
 skeleton: process_one_part owns the frozen JobPartStage state-machine
 transitions and delegates layer work to 7 stages/* helpers. The
-imports below reflect that smaller surface â€” most service-level helpers
+imports below reflect that smaller surface — most service-level helpers
 that the original process_one_part used directly now live inside the
 extracted stage modules. See docs/review/SPRINT_6D_PLAN.md.
 """
@@ -31,11 +31,11 @@ logger = logging.getLogger("app.render")
 
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
-# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed â€”
+# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
 # see render_pipeline.py for the closure rationale.
-# Sprint 7.4 (2026-06-05): raw_part skip flag â€” see render_pipeline.py.
+# Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
-# Sprint 7.8 (2026-06-05): motion-aware extension flag â€” see render_pipeline.py.
+# Sprint 7.8 (2026-06-05): motion-aware extension flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
 
 
@@ -81,7 +81,7 @@ from app.features.render.engine.stages.part_render_encode import (
 from app.features.render.engine.stages.part_done import run_part_done
 # Sprint 6.D-2.5b: Per-part voice TTS + audio mix block (subtitle and
 # translated_subtitle voice paths + mix_narration_audio with atomic
-# file swap) extracted to a dedicated module. Side-effect-only â€”
+# file swap) extracted to a dedicated module. Side-effect-only —
 # mutates ctx.voice_part_tts_attempts / voice_mix_ok lists,
 # part_manifest.narration_path, and overwrites final_part with the
 # mixed video.
@@ -89,7 +89,7 @@ from app.features.render.engine.stages.part_voice_mix import run_part_voice_mix
 # Sprint 6.D-2.5c (CRITICAL): Per-part finalize block (micro-pacing +
 # intro/outro/logo + duration math + scoring + Sacred Contract #8
 # qa_pipeline validation surface). Raises RuntimeError on validation
-# failure â€” the per-part worker in pipeline_render_loop catches it
+# failure — the per-part worker in pipeline_render_loop catches it
 # and records the failure in result_json[failed_parts].
 from app.features.render.engine.stages.part_render_finalize import run_part_finalize
 # Sprint 6.D-2.6 / Batch 10P (MT-4 phase A): per-part filesystem path
@@ -270,7 +270,7 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
     # Sprint 6.D-2.5c: Finalize block (micro-pacing + intro/outro/logo +
     # duration math + scoring + Sacred Contract #8 qa_pipeline validation)
     # moved to part_render_finalize.run_part_finalize. The helper raises
-    # RuntimeError on validation failure â€” propagates up to the per-part
+    # RuntimeError on validation failure — propagates up to the per-part
     # worker in pipeline_render_loop which records the failure.
     run_part_finalize(
         ctx, idx, seg, srt_part, ass_part, final_part,

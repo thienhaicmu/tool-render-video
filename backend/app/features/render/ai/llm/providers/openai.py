@@ -1,11 +1,11 @@
 ﻿"""
-openai_provider.py â€” OpenAI implementation of segment selection.
+openai_provider.py — OpenAI implementation of segment selection.
 
 Uses the openai SDK with native JSON mode (response_format=json_object).
-Default model: gpt-4o-mini â€” cheapest, fastest, reliable structured output.
-Context window: 128K tokens â€” plenty for 30K-char SRT + prompt.
+Default model: gpt-4o-mini — cheapest, fastest, reliable structured output.
+Context window: 128K tokens — plenty for 30K-char SRT + prompt.
 
-AI Safety (Contract 3): never raises â€” returns None on any error.
+AI Safety (Contract 3): never raises — returns None on any error.
 """
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ def select_render_plan(
 ) -> Optional[RenderPlan]:
     """Send SRT to OpenAI and return a RenderPlan emitted in one pass.
 
-    Sprint 4.C â€” additive partner of select_segments. Same OpenAI Chat
+    Sprint 4.C — additive partner of select_segments. Same OpenAI Chat
     Completions call (JSON mode) underneath; prompt builder and parser
     swap out. The editorial_hint parameter mirrors Gemini/Claude so
     the Sprint 4.D dispatcher can forward it uniformly.
@@ -66,7 +66,7 @@ def select_render_plan(
             editorial_hint=editorial_hint,
         )
     except Exception as exc:
-        logger.warning("openai_client: select_render_plan unexpected error â€” %s", exc, exc_info=True)
+        logger.warning("openai_client: select_render_plan unexpected error — %s", exc, exc_info=True)
         return None
 
 

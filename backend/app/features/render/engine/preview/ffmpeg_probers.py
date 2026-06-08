@@ -27,7 +27,7 @@ def _probe_video_codec(video_path: Path) -> str:
         str(video_path),
     ]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=15)
         return (r.stdout or "").strip().lower()
     except Exception:
         return ""
@@ -43,7 +43,7 @@ def _probe_preview_profile(video_path: Path) -> dict:
         str(video_path),
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=20)
         data = json.loads(result.stdout or "{}")
         streams = data.get("streams") or []
         format_name = str((data.get("format") or {}).get("format_name") or "").lower()
@@ -99,7 +99,7 @@ def _ensure_h264_preview(src: Path, work_dir: Path, duration_sec: int = 0) -> Pa
 
 
 def _run_ffmpeg_checked(cmd: list[str], fail_message: str):
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
     if proc.returncode != 0:
         detail = ((proc.stderr or "") + "\n" + (proc.stdout or "")).strip()
         if len(detail) > 1200:

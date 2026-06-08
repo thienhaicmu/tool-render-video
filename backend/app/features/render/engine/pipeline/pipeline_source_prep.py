@@ -1,7 +1,7 @@
 ﻿"""Render-pipeline source-preparation stage.
 
-Sprint 6.D-1.3 â€” extracted verbatim from render_pipeline.py
-(lines 373â€“591 of the pre-1.3 file). No logic changes; pure relocation.
+Sprint 6.D-1.3 — extracted verbatim from render_pipeline.py
+(lines 373–591 of the pre-1.3 file). No logic changes; pure relocation.
 
 Responsibilities (in order):
   1. Emit render.prepare_source.start + render.input.validate.start.
@@ -21,13 +21,13 @@ Responsibilities (in order):
 
 This function executes inside the caller's outer try/except (the orchestrator
 in render_pipeline.py). All RuntimeError / FFmpeg exceptions propagate up
-unchanged â€” the caller's existing exception handler classifies them by
+unchanged — the caller's existing exception handler classifies them by
 current_stage (set via set_stage callable).
 
 Sacred Contracts honored:
   - #4 Frozen job stages: only JobStage.DOWNLOADING referenced (via set_stage).
   - #6 _emit_render_event signature: every call site preserves kwargs.
-  - #7 No raw DB writes â€” only update_job_progress (via set_stage) and
+  - #7 No raw DB writes — only update_job_progress (via set_stage) and
        no upsert_job calls here.
   - #8 qa_pipeline not bypassed (not touched here).
 """
@@ -98,7 +98,7 @@ def prepare_render_source(
     sess = load_session_fn(edit_session_id) if edit_session_id else None
     if edit_session_id and not sess:
         raise RuntimeError(
-            f"Editor session '{edit_session_id}' not found â€” "
+            f"Editor session '{edit_session_id}' not found — "
             "the session may have expired or the server was restarted. "
             "Please re-open the editor to re-prepare the source."
         )
@@ -231,7 +231,7 @@ def prepare_render_source(
         cmd += ["-avoid_negative_ts", "make_zero", str(edited_path)]
         _job_log(effective_channel, job_id, f"Applying edits: trim_in={trim_in:.1f}s trim_out={trim_out:.1f}s volume={edit_volume:.2f}")
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            subprocess.run(cmd, check=True, capture_output=True, text=True, encoding="utf-8")
         except subprocess.CalledProcessError as _preprocess_exc:
             _pp_stderr = _preprocess_exc.stderr or ""
             _pp_diag = _summarize_ffmpeg_stderr(_pp_stderr)
@@ -261,7 +261,7 @@ def prepare_render_source(
         source["duration"] = new_dur or max(1, source["duration"] - trim_in)
         source_path = edited_path
         source["filepath"] = str(edited_path)
-        _job_log(effective_channel, job_id, f"Edits applied â†’ {edited_path} | new_duration={source['duration']}s")
+        _job_log(effective_channel, job_id, f"Edits applied → {edited_path} | new_duration={source['duration']}s")
 
     # Pre-render source preflight: catch local files moved/deleted after initial validation
     if detected_source_mode == "local" and not source_path.exists():
@@ -278,7 +278,7 @@ def prepare_render_source(
         if output_dir.name.lower() in ("video_output", "video_out"):
             keep_source_dir = output_dir.parent / "source"
         # Only temp-origin files (YouTube downloads, edited locals) need to be
-        # persisted into source/. A user's original local file is already permanent â€”
+        # persisted into source/. A user's original local file is already permanent —
         # copying it would waste disk space (10 GB+) and slow render startup.
         is_temp_source = str(source_path).startswith(str(TEMP_DIR))
         if is_temp_source:
@@ -293,7 +293,7 @@ def prepare_render_source(
                     _job_log(effective_channel, job_id, f"Source copied to: {keep_path}")
             source_path = keep_path
         else:
-            # Local original (not temp): render directly from user's file â€” no copy, no hardlink.
+            # Local original (not temp): render directly from user's file — no copy, no hardlink.
             _job_log(effective_channel, job_id, f"local_source.passthrough path={source_path} (source copy skipped)")
 
     return SourcePrepResult(

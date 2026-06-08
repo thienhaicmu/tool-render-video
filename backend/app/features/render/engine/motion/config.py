@@ -1,18 +1,18 @@
 ﻿"""Motion-crop configuration dataclass + content-type tracking overrides.
 
-Sprint 6.D-3.2 â€” extracted verbatim from motion_crop.py
-(lines 212â€“313 of the pre-3.2 file). No logic changes; pure relocation.
+Sprint 6.D-3.2 — extracted verbatim from motion_crop.py
+(lines 212–313 of the pre-3.2 file). No logic changes; pure relocation.
 
 Contents (preserved in original source order):
-  - `_CONTENT_TYPE_TRACKING` dict â€” per-content-type multipliers for
+  - `_CONTENT_TYPE_TRACKING` dict — per-content-type multipliers for
     detect_interval, ema, and pan_speed. Keys: interview / commentary /
     vlog / tutorial / montage / podcast / education / reaction /
     storytelling / high-energy.
-  - `_apply_content_type_to_cfg(cfg, content_type)` â€” returns a shallow
+  - `_apply_content_type_to_cfg(cfg, content_type)` — returns a shallow
     dataclasses.replace() copy of cfg with the content-type multipliers
     applied to four tracking params (subject_detect_interval,
     ema_alpha_slow/normal/fast, max_pan_speed_ratio).
-  - `MotionCropConfig` dataclass â€” ~30 tracking parameters: output dims,
+  - `MotionCropConfig` dataclass — ~30 tracking parameters: output dims,
     subject detection cadence, EMA smoothing, scene-cut awareness,
     Gaussian smoothing window, pan-speed caps, legacy-motion settings.
 
@@ -38,9 +38,9 @@ _CONTENT_TYPE_TRACKING: dict[str, dict] = {
     "commentary":   {"detect_interval_mul": 0.5, "ema_mul": 0.80, "pan_speed_mul": 0.85},
     "vlog":         {"detect_interval_mul": 1.0, "ema_mul": 1.00, "pan_speed_mul": 1.00},
     "tutorial":     {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
-    # montage: subject moves fast â€” detect more often, pan faster, more reactive
+    # montage: subject moves fast — detect more often, pan faster, more reactive
     "montage":      {"detect_interval_mul": 0.5, "ema_mul": 1.30, "pan_speed_mul": 1.40},
-    # S4.4 content types â€” mapped to nearest existing profile
+    # S4.4 content types — mapped to nearest existing profile
     "podcast":      {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
     "education":    {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
     "reaction":     {"detect_interval_mul": 0.5, "ema_mul": 0.80, "pan_speed_mul": 0.85},
@@ -116,7 +116,7 @@ class MotionCropConfig:
     # Max camera pan acceleration per frame
     max_pan_accel_ratio: float = 0.0045
 
-    # Dead zone â€“ ignore subject shifts smaller than this fraction of crop size
+    # Dead zone – ignore subject shifts smaller than this fraction of crop size
     dead_zone_ratio: float = 0.06
 
     # --- Legacy motion-mode settings (used when reframe_mode="motion") ---

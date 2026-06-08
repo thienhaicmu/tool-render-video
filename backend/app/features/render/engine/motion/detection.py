@@ -1,40 +1,40 @@
-﻿"""Motion-crop subject detection â€” MediaPipe lazy helpers + Haar cascade
+﻿"""Motion-crop subject detection — MediaPipe lazy helpers + Haar cascade
 fallback chain + per-frame detection orchestration.
 
-Sprint 6.D-3.5a â€” extracted verbatim from motion_crop.py
+Sprint 6.D-3.5a — extracted verbatim from motion_crop.py
 (lines 84-248 + 510-570 of the post-3.4 file). No logic changes; pure
 relocation.
 
 Contents (preserved in original source order, two logical sub-blocks):
 
   MediaPipe face block:
-    _mp_face_detector, _mp_face_detector_initialized â€” per-process state.
-    _get_mp_detector() â€” lazy-load MediaPipe FaceDetection (full-range
+    _mp_face_detector, _mp_face_detector_initialized — per-process state.
+    _get_mp_detector() — lazy-load MediaPipe FaceDetection (full-range
       model, confidence â‰¥ 0.5). Returns None when MediaPipe is unavailable.
-    _detect_mediapipe_faces(frame_bgr_small, scale) â€” return absolute
+    _detect_mediapipe_faces(frame_bgr_small, scale) — return absolute
       (x, y, w, h) boxes in _det_frame coordinates. Returns [] on any failure.
-    _has_subject_in_sample(video_path, sample_count=24) â€” sparse-frame
+    _has_subject_in_sample(video_path, sample_count=24) — sparse-frame
       pre-flight. Conservatively returns True on any error so the full
       path is always the safe fallback.
 
   MediaPipe pose block (OQ-3.3 eye-level anchor):
-    _mp_pose_detector, _mp_pose_initialized â€” per-process state.
-    _POSE_LEFT_EYE = 2, _POSE_RIGHT_EYE = 5 â€” BlazePose landmark indices.
-    _EYE_CROP_THIRDS = 0.33 â€” rule-of-thirds eye placement target.
-    _get_mp_pose() â€” lazy-load MediaPipe Pose (BlazePose Lite,
+    _mp_pose_detector, _mp_pose_initialized — per-process state.
+    _POSE_LEFT_EYE = 2, _POSE_RIGHT_EYE = 5 — BlazePose landmark indices.
+    _EYE_CROP_THIRDS = 0.33 — rule-of-thirds eye placement target.
+    _get_mp_pose() — lazy-load MediaPipe Pose (BlazePose Lite,
       model_complexity=0). Honors POSE_EYE_ANCHOR_ENABLED env var.
     _get_eye_anchor_rel(frame_bgr_small, face_box_src, detect_scale,
-      det_sy=1.0) â€” return eye midpoint y as a fraction of face-box
+      det_sy=1.0) — return eye midpoint y as a fraction of face-box
       height from its top. Validates nose inside face box (Â±20% margin)
       to reject background subjects. Returns None on any failure.
 
   Detection orchestration:
-    prepare_detection_frame(frame, max_height=720) â€” cap height to
+    prepare_detection_frame(frame, max_height=720) — cap height to
       max_height before detection. Returns
       (detect_frame, scale_x, scale_y, original_wh, scaled_wh).
     _detect_subjects_in_frame(gray_small, face_cascade, body_cascade,
-      scale, frame_bgr_small=None) â€” MediaPipe primary â†’ Haar face
-      cascade fallback â†’ Haar body cascade fallback. Returns
+      scale, frame_bgr_small=None) — MediaPipe primary → Haar face
+      cascade fallback → Haar body cascade fallback. Returns
       (list of (x, y, w, h), kind: "face"|"body"|"none").
 
 Note on `_pick_best_subject`:
@@ -42,11 +42,11 @@ Note on `_pick_best_subject`:
   moved in this commit because it depends on `_score_subject_candidate`,
   which the plan assigns to phase 3.5b. Extracting `_pick_best_subject`
   alone would require an `import ... from app.features.render.engine.motion`
-  inside the new module â€” that creates a real load-time cycle since
+  inside the new module — that creates a real load-time cycle since
   motion_crop.py imports from this module at its top. `_pick_best_subject`
   will move together with `_score_subject_candidate` in 3.5b.
 
-Internal-only â€” no external imports of these symbols today. The module
+Internal-only — no external imports of these symbols today. The module
 is re-exported from motion_crop.py so existing internal call sites
 (build_subject_path, build_subject_path_scene, build_motion_path)
 keep working unchanged.
@@ -72,7 +72,7 @@ logger = logging.getLogger("app.services.motion_crop")
 
 
 # ---------------------------------------------------------------------------
-# MediaPipe face detection â€” optional, CPU-safe, replaces Haar cascade
+# MediaPipe face detection — optional, CPU-safe, replaces Haar cascade
 # ---------------------------------------------------------------------------
 
 _mp_face_detector = None
@@ -88,7 +88,7 @@ def _get_mp_detector():
     try:
         import mediapipe as mp  # noqa: PLC0415
         _mp_face_detector = mp.solutions.face_detection.FaceDetection(
-            model_selection=1,           # full-range model (â‰¤5m) â€” detects wide shots and small faces
+            model_selection=1,           # full-range model (â‰¤5m) — detects wide shots and small faces
             min_detection_confidence=0.5,
         )
         logger.info("mediapipe_face_detection_loaded model=full_range confidence_threshold=0.5")
@@ -119,7 +119,7 @@ def _detect_mediapipe_faces(
         boxes = []
         for det in results.detections:
             rb = det.location_data.relative_bounding_box
-            # Convert relative â†’ absolute in small-frame space, then â†’ _det_frame space
+            # Convert relative → absolute in small-frame space, then → _det_frame space
             x = int((rb.xmin * w_s) / scale)
             y = int((rb.ymin * h_s) / scale)
             w = int((rb.width * w_s) / scale)
@@ -140,7 +140,7 @@ def _has_subject_in_sample(video_path: str, sample_count: int = 24) -> bool:
     when MediaPipe is unavailable, so the full path is always the safe fallback.
     """
     if _get_mp_detector() is None:
-        return True  # MediaPipe not available â†’ assume subject present
+        return True  # MediaPipe not available → assume subject present
     try:
         cap = cv2.VideoCapture(video_path)
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -167,7 +167,7 @@ def _has_subject_in_sample(video_path: str, sample_count: int = 24) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# MediaPipe Pose â€” eye-level anchor for premium framing composition (OQ-3.3)
+# MediaPipe Pose — eye-level anchor for premium framing composition (OQ-3.3)
 # ---------------------------------------------------------------------------
 
 _mp_pose_detector = None
@@ -209,7 +209,7 @@ def _get_eye_anchor_rel(
 
     Runs MediaPipe Pose on the detect-scale frame. Validates the detected nose
     falls within the selected face box to reject background subjects.
-    Returns None on any failure â€” caller falls back to y + h * 0.34.
+    Returns None on any failure — caller falls back to y + h * 0.34.
     """
     pose = _get_mp_pose()
     if pose is None:
@@ -221,7 +221,7 @@ def _get_eye_anchor_rel(
         if not results.pose_landmarks:
             return None
         lm = results.pose_landmarks.landmark
-        # Convert relative-small coords â†’ src-frame y coords
+        # Convert relative-small coords → src-frame y coords
         l_eye_y = (lm[_POSE_LEFT_EYE].y * h_s / detect_scale) / det_sy
         r_eye_y = (lm[_POSE_RIGHT_EYE].y * h_s / detect_scale) / det_sy
         nose_y  = (lm[0].y * h_s / detect_scale) / det_sy
@@ -269,10 +269,10 @@ def _detect_subjects_in_frame(
     frame_bgr_small: Optional[np.ndarray] = None,
 ) -> Tuple[List[Tuple[int, int, int, int]], str]:
     """
-    Detect faces (MediaPipe primary â†’ Haar cascade fallback) then bodies as fallback.
+    Detect faces (MediaPipe primary → Haar cascade fallback) then bodies as fallback.
     Returns (list of (x,y,w,h) in _det_frame coords, kind).
     """
-    # MediaPipe primary path â€” neural, confidence-based, angle/lighting tolerant
+    # MediaPipe primary path — neural, confidence-based, angle/lighting tolerant
     if frame_bgr_small is not None:
         mp_boxes = _detect_mediapipe_faces(frame_bgr_small, scale)
         if mp_boxes:

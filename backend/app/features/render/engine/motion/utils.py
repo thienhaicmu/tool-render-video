@@ -1,8 +1,8 @@
-﻿"""Motion-crop generic helpers â€” codec flags, font detection, ffprobe,
+﻿"""Motion-crop generic helpers — codec flags, font detection, ffprobe,
 math primitives, OpenCV cascade/IoU.
 
-Sprint 6.D-3.3 â€” extracted verbatim from motion_crop.py
-(lines 316â€“459 of the pre-3.2 file, lines 227â€“369 of the post-3.2 file).
+Sprint 6.D-3.3 — extracted verbatim from motion_crop.py
+(lines 316–459 of the pre-3.2 file, lines 227–369 of the post-3.2 file).
 No logic changes; pure relocation.
 
 Contents (preserved in original source order):
@@ -10,25 +10,25 @@ Contents (preserved in original source order):
     NVENC path uses VBR-HQ (motion-crop is latency-sensitive). CPU paths
     delegate to encoder_helpers.codec_extra_flags for a single source of
     truth on libx264/libx265 tuning.
-  - _safe_filter_path(path) â€” FFmpeg filter-graph path escape.
+  - _safe_filter_path(path) — FFmpeg filter-graph path escape.
   - _detect_windows_fontfile / _detect_windows_fonts_dir /
-    _get_custom_fonts_dir â€” Windows + bundled-font discovery for FFmpeg
+    _get_custom_fonts_dir — Windows + bundled-font discovery for FFmpeg
     drawtext subtitle rendering.
-  - ffprobe_video_info(video_path) â†’ (width, height, fps).
+  - ffprobe_video_info(video_path) → (width, height, fps).
     Delegates to render_engine.probe_video_metadata() which caches
     by (abspath, mtime_ns, size_bytes). Falls back to fps=30.0.
-  - has_audio_stream(video_path) â†’ bool. Delegates to
+  - has_audio_stream(video_path) → bool. Delegates to
     render_engine._has_audio_stream() (also cached).
-  - clamp / ema / _smoothstep â€” math primitives used by EMA smoothing
+  - clamp / ema / _smoothstep — math primitives used by EMA smoothing
     and cinematic camera easing throughout the crop-path builder.
-  - _gaussian_smooth_1d(arr, window) â€” 1-D Gaussian convolution with
+  - _gaussian_smooth_1d(arr, window) — 1-D Gaussian convolution with
     reflect-pad for camera-path temporal smoothing.
-  - _load_cascade(filename) â€” OpenCV Haar cascade loader (None on failure).
-  - _iou_xywh(a, b) â†’ Intersection-over-Union for two (x, y, w, h) boxes.
+  - _load_cascade(filename) — OpenCV Haar cascade loader (None on failure).
+  - _iou_xywh(a, b) → Intersection-over-Union for two (x, y, w, h) boxes.
 
 Public re-export contract:
-  - `ffprobe_video_info`, `has_audio_stream` â€” used by tests/test_probe_unification.py
-  - `_codec_flags` â€” used by tests/test_motion_crop_guards.py +
+  - `ffprobe_video_info`, `has_audio_stream` — used by tests/test_probe_unification.py
+  - `_codec_flags` — used by tests/test_motion_crop_guards.py +
                      tests/test_render_audit_p0_fixes.py
 
 These three plus all 10 other helpers are re-exported from
@@ -39,7 +39,7 @@ Deferred-import note (ffprobe_video_info / has_audio_stream):
   inside the function body to break the encoder â†” motion_crop
   module-level circular dependency (encoder modules import
   render_motion_aware_crop from motion_crop at their module top). Keep
-  the imports deferred â€” moving them to module top here would
+  the imports deferred — moving them to module top here would
   reintroduce the cycle.
 """
 from __future__ import annotations
@@ -118,7 +118,7 @@ def ffprobe_video_info(video_path: str) -> Tuple[int, int, float]:
     """Return (width, height, fps) via the shared cached probe service.
 
     Delegates to render_engine.probe_video_metadata() which caches results by
-    (abspath, mtime_ns, size_bytes) â€” zero subprocess cost on repeat calls to the
+    (abspath, mtime_ns, size_bytes) — zero subprocess cost on repeat calls to the
     same unmodified file.  Falls back to fps=30.0 when the probe cannot determine
     a valid frame rate.
 
@@ -150,10 +150,10 @@ def ema(prev: float, new: float, alpha: float) -> float:
 
 
 def _smoothstep(t: float) -> float:
-    """Classic cubic smoothstep: slow-in â†’ fast-mid â†’ slow-out, result in [0, 1].
+    """Classic cubic smoothstep: slow-in → fast-mid → slow-out, result in [0, 1].
 
     t is clamped to [0, 1] before evaluation so callers don't need to pre-clamp.
-    Used for cinematic camera easing â€” no overshoot, C1-continuous at both ends.
+    Used for cinematic camera easing — no overshoot, C1-continuous at both ends.
     """
     t = clamp(t, 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)

@@ -1,20 +1,20 @@
-﻿"""Render-pipeline setup stage â€” payload normalization, channel resolution,
+﻿"""Render-pipeline setup stage — payload normalization, channel resolution,
 and output-directory preparation.
 
-Sprint 6.D-1.1 â€” extracted setup_render_pipeline() verbatim from
-render_pipeline.py (lines 236â€“268 of the pre-1.1 file). No logic changes.
+Sprint 6.D-1.1 — extracted setup_render_pipeline() verbatim from
+render_pipeline.py (lines 236–268 of the pre-1.1 file). No logic changes.
 
-Sprint 6.D-1.2 â€” extracted prepare_output_dir() verbatim from
-render_pipeline.py (lines 254â€“286 of the post-1.1 file). No logic changes.
+Sprint 6.D-1.2 — extracted prepare_output_dir() verbatim from
+render_pipeline.py (lines 254–286 of the post-1.1 file). No logic changes.
 
 Responsibilities (in order):
-  1. setup_render_pipeline(payload) â€” derive output_mode, effective_channel,
+  1. setup_render_pipeline(payload) — derive output_mode, effective_channel,
      started_at, Market Viral cfg, hook flags, and output_dir (no I/O beyond
      ensure_channel in channel mode).
-  2. prepare_output_dir(job_id, effective_channel, output_dir) â€” emit the
+  2. prepare_output_dir(job_id, effective_channel, output_dir) — emit the
      three render.output.prepare.* WebSocket events and mkdir() the
      resolved output_dir. Re-raises on mkdir failure (matches pre-1.2
-     behavior â€” the caller's outer try/except handles propagation).
+     behavior — the caller's outer try/except handles propagation).
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class PipelineSetupResult:
     """Bundle of normalized values produced by setup_render_pipeline.
 
     Field names drop the leading underscores used in run_render_pipeline's
-    local scope (e.g. _mv_cfg â†’ mv_cfg). The caller aliases each field
+    local scope (e.g. _mv_cfg → mv_cfg). The caller aliases each field
     back to its original local-variable name to keep the rest of the
     function byte-for-byte unchanged.
     """
@@ -67,7 +67,7 @@ def setup_render_pipeline(payload: RenderRequest) -> PipelineSetupResult:
     effective_channel = (payload.channel_code or "").strip() or "manual"
     started_at = datetime.utcnow()
 
-    # Market Viral â€” resolve target market once; used by all part workers via closure
+    # Market Viral — resolve target market once; used by all part workers via closure
     _mv_cfg = getattr(payload, "market_viral", None) or {}
     _mv_cfg_enabled = isinstance(_mv_cfg, dict) and bool(_mv_cfg)
     _mv_payload_market = getattr(payload, "ai_target_market", None) or getattr(payload, "viral_market", None)
@@ -114,12 +114,12 @@ def setup_render_pipeline(payload: RenderRequest) -> PipelineSetupResult:
 def prepare_output_dir(job_id: str, effective_channel: str, output_dir: Path) -> None:
     """Emit prepare-events around output_dir.mkdir(); re-raise on failure.
 
-    Sprint 6.D-1.2 â€” extracted verbatim from run_render_pipeline. Emits:
+    Sprint 6.D-1.2 — extracted verbatim from run_render_pipeline. Emits:
       - render.output.prepare.start (before mkdir)
       - render.output.prepare.success (after successful mkdir)
       - render.output.prepare.error (if mkdir raises; then re-raises)
 
-    Side effects only â€” no return value. Caller's outer try/except handles
+    Side effects only — no return value. Caller's outer try/except handles
     error propagation (the function intentionally re-raises so the existing
     top-level exception handler in run_render_pipeline catches it).
     """

@@ -1,24 +1,24 @@
-﻿"""Motion-crop subject tracker â€” Kalman-inspired single-target tracker
-plus OpenCV tracker factory with KCF â†’ CSRT â†’ MOSSE fallback chain.
+﻿"""Motion-crop subject tracker — Kalman-inspired single-target tracker
+plus OpenCV tracker factory with KCF → CSRT → MOSSE fallback chain.
 
-Sprint 6.D-3.4 â€” extracted verbatim from motion_crop.py
+Sprint 6.D-3.4 — extracted verbatim from motion_crop.py
 (lines 257-348 of the post-3.3 file, originally lines 461-553 of the
 pre-Sprint-6.D file). No logic changes; pure relocation.
 
 Contents:
-  - `_ByteTrackSubject` (class) â€” single-subject tracker with velocity
+  - `_ByteTrackSubject` (class) — single-subject tracker with velocity
     state. predict() advances position by velocity (with 0.90 damping).
     update(box, gain=0.5) lerps toward measurement, rejects with IoU<0.10
     after â‰¥3 coast frames. Eliminates two problems from the OpenCV-tracker-
     only approach: (1) static last_subject hold replaced by velocity-
     predicted position, (2) unchecked tracker drift caught by IoU gate.
-  - `_create_tracker()` â€” OpenCV tracker factory: tries KCF first (fastest),
+  - `_create_tracker()` — OpenCV tracker factory: tries KCF first (fastest),
     falls back to CSRT (more accurate, slower), then MOSSE (deprecated but
-    sometimes available). Returns None if no tracker available â€” caller
+    sometimes available). Returns None if no tracker available — caller
     runs detection-only mode. Logs the chosen tracker once per process
     via `_TRACKER_CAPABILITY_LOGGED` flag.
 
-Internal-only â€” no external imports of these symbols. Re-exported from
+Internal-only — no external imports of these symbols. Re-exported from
 motion_crop.py so the existing 4 call sites (build_subject_path,
 build_subject_path_scene) inside motion_crop.py keep their bare references.
 
@@ -55,14 +55,14 @@ class _ByteTrackSubject:
     Rejects measurements with IoU < 0.10 after â‰¥3 coast frames.
 
     Eliminates two problems from the OpenCV-tracker-only approach:
-      1. Static last_subject hold â†’ replaced by velocity-predicted position.
-      2. Unchecked tracker drift accepted â†’ IoU gate rejects bad tracker output.
+      1. Static last_subject hold → replaced by velocity-predicted position.
+      2. Unchecked tracker drift accepted → IoU gate rejects bad tracker output.
 
     Uses existing cfg.lost_subject_hold_frames to bound coast lifetime.
     """
 
     _MIN_VALIDATE_COAST = 3   # frames coasted before IoU rejection kicks in
-    _MIN_IOU = 0.10           # IoU below this after coast â†’ reject update
+    _MIN_IOU = 0.10           # IoU below this after coast → reject update
 
     def __init__(self, box: Tuple[int, int, int, int]) -> None:
         x, y, w, h = box
@@ -78,7 +78,7 @@ class _ByteTrackSubject:
         """Advance state one frame using current velocity (no measurement)."""
         self.cx += self.vx
         self.cy += self.vy
-        self.vx *= 0.90   # gentle damping â€” prevents runaway drift
+        self.vx *= 0.90   # gentle damping — prevents runaway drift
         self.vy *= 0.90
         self.coast += 1
 

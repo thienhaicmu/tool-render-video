@@ -1,6 +1,6 @@
 ﻿"""Per-part voice TTS + audio mix stage.
 
-Sprint 6.D-2.5b â€” extracted verbatim from stages/part_renderer.py
+Sprint 6.D-2.5b — extracted verbatim from stages/part_renderer.py
 (lines 283-513 of the post-2.5d file). No logic changes; pure relocation.
 
 run_part_voice_mix() runs once per part during process_one_part,
@@ -27,9 +27,9 @@ Block responsibilities (in order):
      mixed file via _safe_unlink and emits voice_failed.
 
 State mutations (by-reference pattern):
-  - ctx.voice_part_tts_attempts.append(idx) â€” at TTS attempt sites.
-  - ctx.voice_mix_ok.append(idx) â€” on successful mix completion.
-  - part_manifest.narration_path = ... + write_manifest() â€” when
+  - ctx.voice_part_tts_attempts.append(idx) — at TTS attempt sites.
+  - ctx.voice_mix_ok.append(idx) — on successful mix completion.
+  - part_manifest.narration_path = ... + write_manifest() — when
     a voice path is present.
   - final_part on disk: replaced by mix_narration_audio output.
 
@@ -46,7 +46,7 @@ Sacred Contracts honored:
        (voice_tts_started, voice_tts_completed, voice_translated_subtitle_tts_started,
        voice_translated_subtitle_tts_completed, voice_failed [Ã—3 instances],
        voice_subtitle_source_missing, voice_mix_started, voice_mix_completed)
-       â€” total 9 emit events when counting both VOICE001 paths.
+       — total 9 emit events when counting both VOICE001 paths.
   - #7 Sole DB writer: 0 upsert_job_part calls.
 
 VOICE001 error code preservation:
@@ -383,7 +383,7 @@ def run_part_voice_mix(
     # By this point mix_narration_audio has already merged the audio
     # into final_part, so the intermediate files are dead weight. The
     # glob targets only files written by this part (part_{idx:03d}*.mp3)
-    # â€” ctx.voice_audio_path (a manual user-supplied audio file) lives
+    # — ctx.voice_audio_path (a manual user-supplied audio file) lives
     # under a different name and is never matched. Best-effort cleanup;
     # never raises.
     try:

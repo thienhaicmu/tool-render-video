@@ -6,7 +6,7 @@ This module owns:
 - _PRESETS canonical preset table
 - _STYLE_ALIASES backward-compat alias table
 - Resolution-dependent compute helpers (_compute_subtitle_scale, _compute_margin_v)
-- build_ass_style_line() â€” ASS Style line + per-word line_fx tag
+- build_ass_style_line() — ASS Style line + per-word line_fx tag
 
 No file I/O. No subprocess. No threading. No optional dependencies.
 """
@@ -18,9 +18,9 @@ _HL_CLOSE = "î„"
 
 
 def _compute_subtitle_scale(play_res_x: int = 1080, play_res_y: int = 1440) -> dict:
-    # Use height (play_res_y) as base â€” portrait-first scaling.
-    # Previously used min(x,y)=1080 for 9:16 video â†’ font 54/1920 = 2.8% (too small).
-    # Height-based: 1920*0.05 = 96px = 5% â†’ matches TikTok/Reels native subtitle size.
+    # Use height (play_res_y) as base — portrait-first scaling.
+    # Previously used min(x,y)=1080 for 9:16 video → font 54/1920 = 2.8% (too small).
+    # Height-based: 1920*0.05 = 96px = 5% → matches TikTok/Reels native subtitle size.
     base = max(1, int(play_res_y))
     return {
         "font_size": max(72, int(base * 0.05)),
@@ -42,26 +42,26 @@ def _compute_margin_v(play_res_x: int = 1080, play_res_y: int = 1440) -> int:
 # ASS Preset architecture
 # ---------------------------------------------------------------------------
 
-# Legacy constant â€” preserved for backward-compatible imports. Internal code uses _get_motion_fx().
+# Legacy constant — preserved for backward-compatible imports. Internal code uses _get_motion_fx().
 BOUNCE_FX = r"{\fscx122\fscy122\t(0,200,\fscx100\fscy100)}"
 
 # OQ-1.4: Per-preset pop-in motion profiles.
 # Energetic presets: higher scale, faster settle.
 # Editorial presets: softer micro-pop (108-106%), longer settle (160ms).
-# bounce_fx=False presets never reach this â€” caller guards on preset.bounce_fx.
+# bounce_fx=False presets never reach this — caller guards on preset.bounce_fx.
 _PRESET_MOTION_FX: dict[str, str] = {
-    # Energetic â€” Anton at large sizes reads best with snap-fast settle
+    # Energetic — Anton at large sizes reads best with snap-fast settle
     "viral":            r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
     "gaming":           r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
     "neon_glow":        r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
     "fire_bold":        r"{\fscx118\fscy118\t(0,130,\fscx100\fscy100)}",
     "bold_stroke":      r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
     "color_pop":        r"{\fscx115\fscy115\t(0,140,\fscx100\fscy100)}",
-    # Classic TikTok â€” punchy but softer than pre-OQ-1.4 (was 122%/200ms)
+    # Classic TikTok — punchy but softer than pre-OQ-1.4 (was 122%/200ms)
     "tiktok_bounce_v1": r"{\fscx112\fscy112\t(0,150,\fscx100\fscy100)}",
     "viral_bold":       r"{\fscx112\fscy112\t(0,150,\fscx100\fscy100)}",
     "bold_cap":         r"{\fscx112\fscy112\t(0,150,\fscx100\fscy100)}",
-    # Editorial / story â€” soft micro-pop: gentle entry, longer settle
+    # Editorial / story — soft micro-pop: gentle entry, longer settle
     "story_clean_01":   r"{\fscx108\fscy108\t(0,160,\fscx100\fscy100)}",
     "clean_pro":        r"{\fscx106\fscy106\t(0,160,\fscx100\fscy100)}",
     "slay_soft":        r"{\fscx108\fscy108\t(0,160,\fscx100\fscy100)}",
@@ -80,10 +80,10 @@ class ASSPreset:
     id: str
     font_default: str
     base_font_size: int
-    primary_color: str      # &HAABBGGRR â€” text fill
-    secondary_color: str    # &HAABBGGRR â€” karaoke highlight sweep
-    outline_color: str      # &HAABBGGRR â€” outline / box border
-    back_color: str         # &HAABBGGRR â€” drop shadow / box fill
+    primary_color: str      # &HAABBGGRR — text fill
+    secondary_color: str    # &HAABBGGRR — karaoke highlight sweep
+    outline_color: str      # &HAABBGGRR — outline / box border
+    back_color: str         # &HAABBGGRR — drop shadow / box fill
     bold: int               # -1 = bold, 0 = normal
     border_style: int       # 1 = outline+shadow, 3 = opaque box (boxed_caption)
     outline_default: int    # Default outline px (box padding when BorderStyle=3)
@@ -96,10 +96,10 @@ class ASSPreset:
     auto_scale: bool        # Font/outline/shadow scale with resolution when font_size=0
     heavy_scale: bool       # Use heavier viral_bold formula vs standard _compute_subtitle_scale
     margin_v_ratio: float   # 0.0 = use margin arg; >0 = override as ratio of play_res_y
-    spacing: float = 0.0   # ASS Spacing field â€” letter-spacing in pixels
+    spacing: float = 0.0   # ASS Spacing field — letter-spacing in pixels
 
 
-# Canonical preset table â€” one entry per supported style ID.
+# Canonical preset table — one entry per supported style ID.
 _PRESETS: dict[str, ASSPreset] = {
     "tiktok_bounce_v1": ASSPreset(
         id="tiktok_bounce_v1", font_default="Bungee", base_font_size=38,
@@ -156,7 +156,7 @@ _PRESETS: dict[str, ASSPreset] = {
         spacing=0.4,
     ),
 
-    # â”€â”€ Creator personality presets (QUALITY-UP6) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Creator personality presets (QUALITY-UP6) ────────────────────────────
     # Four content-type-native styles. Each has a distinct visual identity
     # while using the bundled Bungee font for render safety.
 
@@ -208,16 +208,16 @@ _PRESETS: dict[str, ASSPreset] = {
         spacing=0.3,
     ),
 
-    # â”€â”€ CapCut-inspired visual presets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── CapCut-inspired visual presets ──────────────────────────────────────────
 
     # neon_glow: white text + thick cyan outline + purple shadow = neon sign look.
     # Good for: night life, music, gaming, high-energy content.
     "neon_glow": ASSPreset(
         id="neon_glow", font_default="Bungee", base_font_size=50,
         primary_color="&H00FFFFFF", secondary_color="&H00FFFF00",
-        # outline_color: cyan (#00FFFF) in ASS BBGGRR = BB=FF GG=FF RR=00 â†’ &H00FFFF00
+        # outline_color: cyan (#00FFFF) in ASS BBGGRR = BB=FF GG=FF RR=00 → &H00FFFF00
         outline_color="&H00FFFF00",
-        # back_color: semi-transparent purple = RGB(128,0,255) â†’ BB=FF GG=00 RR=80 â†’ &H80FF0080
+        # back_color: semi-transparent purple = RGB(128,0,255) → BB=FF GG=00 RR=80 → &H80FF0080
         back_color="&H80FF0080",
         bold=-1, border_style=1, outline_default=6, shadow_default=4,
         alignment=2, margin_l=25, margin_r=25, wrap_max_em=14.0,
@@ -230,7 +230,7 @@ _PRESETS: dict[str, ASSPreset] = {
     "fire_bold": ASSPreset(
         id="fire_bold", font_default="Anton", base_font_size=52,
         primary_color="&H0000FFFF", secondary_color="&H00FFFFFF",
-        # outline_color: orange-red (#FF4500) â†’ BB=00 GG=45 RR=FF â†’ &H004500FF
+        # outline_color: orange-red (#FF4500) → BB=00 GG=45 RR=FF → &H004500FF
         outline_color="&H004500FF",
         back_color="&H00000000",
         bold=-1, border_style=1, outline_default=5, shadow_default=2,
@@ -239,7 +239,7 @@ _PRESETS: dict[str, ASSPreset] = {
         spacing=0.3,
     ),
 
-    # color_pop: high-contrast yellow on thick black stroke â€” max-readability pop.
+    # color_pop: high-contrast yellow on thick black stroke — max-readability pop.
     # Good for: commentary, listicle, tutorial, any viral short.
     "color_pop": ASSPreset(
         id="color_pop", font_default="Bungee", base_font_size=50,
@@ -252,7 +252,7 @@ _PRESETS: dict[str, ASSPreset] = {
     ),
 
     # dark_card: white text inside a dark semi-transparent card box.
-    # Good for: news, tutorial, podcast, educational â€” clean & professional.
+    # Good for: news, tutorial, podcast, educational — clean & professional.
     "dark_card": ASSPreset(
         id="dark_card", font_default="Montserrat", base_font_size=38,
         primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
@@ -265,12 +265,12 @@ _PRESETS: dict[str, ASSPreset] = {
         spacing=0.6,
     ),
 
-    # slay_soft: white text + hot-pink outline + soft pink shadow â€” trendy feminine.
+    # slay_soft: white text + hot-pink outline + soft pink shadow — trendy feminine.
     # Good for: lifestyle, beauty, fashion, soft-vibe TikTok content.
     "slay_soft": ASSPreset(
         id="slay_soft", font_default="Bungee", base_font_size=46,
         primary_color="&H00FFFFFF", secondary_color="&H00B469FF",
-        # outline_color: hot pink (#FF69B4) â†’ BB=B4 GG=69 RR=FF â†’ &H00B469FF
+        # outline_color: hot pink (#FF69B4) → BB=B4 GG=69 RR=FF → &H00B469FF
         outline_color="&H00B469FF",
         # back_color: semi-transparent hot-pink shadow
         back_color="&H60B469FF",
@@ -280,7 +280,7 @@ _PRESETS: dict[str, ASSPreset] = {
         spacing=0.5,
     ),
 
-    # bold_stroke: white text + mega-thick black stroke â€” printed-text impact.
+    # bold_stroke: white text + mega-thick black stroke — printed-text impact.
     # Good for: documentary, hook intro, cinematic title card mid-video.
     "bold_stroke": ASSPreset(
         id="bold_stroke", font_default="Anton", base_font_size=54,
@@ -293,7 +293,7 @@ _PRESETS: dict[str, ASSPreset] = {
     ),
 }
 
-# Legacy alias table â€” maps removed/renamed style IDs to canonical preset IDs.
+# Legacy alias table — maps removed/renamed style IDs to canonical preset IDs.
 # Backward-compatible: old saved job configs and API calls continue to work.
 _STYLE_ALIASES: dict[str, str] = {
     "viral_clean_montserrat": "tiktok_bounce_v1",
@@ -310,7 +310,7 @@ _DEFAULT_PRESET_ID = "tiktok_bounce_v1"
 
 
 def normalize_subtitle_style_id(style_id: str) -> str:
-    """Normalize a style ID: lowercase â†’ resolve alias â†’ fall back to default."""
+    """Normalize a style ID: lowercase → resolve alias → fall back to default."""
     sid = (style_id or _DEFAULT_PRESET_ID).lower().strip()
     sid = _STYLE_ALIASES.get(sid, sid)
     return sid if sid in _PRESETS else _DEFAULT_PRESET_ID
@@ -339,8 +339,8 @@ def build_ass_style_line(
     line_fx is the override tag prepended to each Dialogue Text field.
 
     Resolution of font/outline/shadow:
-      auto_scale=True  + font_size=0  â†’ computed from play_res (heavy or standard formula)
-      auto_scale=False or font_size>0 â†’ explicit value, else preset default
+      auto_scale=True  + font_size=0  → computed from play_res (heavy or standard formula)
+      auto_scale=False or font_size>0 → explicit value, else preset default
     """
     safe_font = (font_name or preset.font_default).replace(",", " ").strip() or preset.font_default
 
@@ -348,7 +348,7 @@ def build_ass_style_line(
     eff_back = preset.back_color
     if preset.auto_scale and font_size == 0:
         if preset.heavy_scale:
-            # Heavy formula: viral_bold / bold_cap â€” larger font, heavier outline
+            # Heavy formula: viral_bold / bold_cap — larger font, heavier outline
             _base = max(1, int(play_res_y))
             eff_font_size = max(72, int(_base * 0.055))
             eff_outline   = max(1, round(_base * 0.0035))

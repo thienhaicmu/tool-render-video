@@ -1,11 +1,11 @@
 """
-pipeline_render_loop.py â€” FFmpeg encode loop extracted from run_render_pipeline().
+pipeline_render_loop.py — FFmpeg encode loop extracted from run_render_pipeline().
 
 Encapsulates the JOB_SEMAPHORE acquire/release, worker throttle, per-part
 sequential/parallel dispatch, and part-failure handling.
 
 Phase A-7 extraction.  Frozen contracts unchanged:
-  - part status names: QUEUED â†’ WAITING â†’ CUTTING â†’ TRANSCRIBING â†’ RENDERING â†’ DONE
+  - part status names: QUEUED → WAITING → CUTTING → TRANSCRIBING → RENDERING → DONE
   - _emit_render_event call shape unchanged
   - WebSocket event field shape unchanged
 """
@@ -58,7 +58,7 @@ def run_render_loop(
 
     part_ctx.ffmpeg_threads is finalized here after contention-based throttling.
     Shared mutable lists (recovery_notes, voice_mix_ok, etc.) in part_ctx are
-    updated in-place by process_one_part() â€” callers see the changes via the
+    updated in-place by process_one_part() — callers see the changes via the
     original list references they passed during PartRenderContext construction.
     """
     job_semaphore.acquire()
@@ -70,7 +70,7 @@ def run_render_loop(
             max_workers = max(1, max_workers // _render_slot)
             _job_log(
                 effective_channel, job_id,
-                f"Throttling to {max_workers} worker(s) â€” {_render_slot} concurrent render(s) active",
+                f"Throttling to {max_workers} worker(s) — {_render_slot} concurrent render(s) active",
                 kind="info",
             )
         _ffmpeg_threads = resolve_ffmpeg_threads(max_workers)
@@ -150,7 +150,7 @@ def run_render_loop(
                         job_id=job_id,
                         event="part_degraded",
                         level="WARNING",
-                        message=f"Clip {idx} failed â€” {len(outputs)}/{total_parts} clips completed so far",
+                        message=f"Clip {idx} failed — {len(outputs)}/{total_parts} clips completed so far",
                         step="render.part",
                         context={
                             "part_no": idx,
@@ -213,7 +213,7 @@ def run_render_loop(
                             job_id=job_id,
                             event="part_degraded",
                             level="WARNING",
-                            message=f"Clip {idx} failed â€” {len(outputs)}/{total_parts} clips completed so far",
+                            message=f"Clip {idx} failed — {len(outputs)}/{total_parts} clips completed so far",
                             step="render.part",
                             context={
                                 "part_no": idx,

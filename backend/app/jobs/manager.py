@@ -49,7 +49,7 @@ _lock = threading.Lock()
 _cond = threading.Condition(_lock)          # wait/notify for scheduler
 
 # Min-heap entries: (-priority, seq, job_id, fn, args, kwargs)
-# Negated priority â†’ highest int pops first; seq gives FIFO within a tier.
+# Negated priority → highest int pops first; seq gives FIFO within a tier.
 _pending: list[tuple] = []
 _pending_job_ids: set[str] = set()         # O(1) mirror of job_ids in _pending
 _seq: int = 0                               # monotonic counter, never reset
@@ -76,11 +76,11 @@ def _get_executor() -> concurrent.futures.ThreadPoolExecutor:
 
 
 # ---------------------------------------------------------------------------
-# DB helper â€” lazy import avoids circular dependency at module load time
+# DB helper — lazy import avoids circular dependency at module load time
 # ---------------------------------------------------------------------------
 
 def _mark_job_running(job_id: str) -> None:
-    """Best-effort: transition DB status queued â†’ running before dispatch."""
+    """Best-effort: transition DB status queued → running before dispatch."""
     try:
         from app.db.jobs_repo import update_job_progress
         update_job_progress(job_id, "starting", 0, "Job starting", status="running")
@@ -137,7 +137,7 @@ def _scheduler_loop() -> None:
             finally:
                 with _cond:
                     _active_job_ids.discard(jid)
-                    _cond.notify_all()  # a slot just opened â€” wake the scheduler
+                    _cond.notify_all()  # a slot just opened — wake the scheduler
                     # Snapshot valid IDs while holding the lock for prune below
                     _valid_ids = frozenset(_active_job_ids) | frozenset(e[2] for e in _pending)
                     # Sprint 6.C: refresh the active gauge after a slot opens.
@@ -186,7 +186,7 @@ def submit_job(job_id: str, fn: Callable, *args, priority: int = 0, **kwargs) ->
 
     Returns True  if the job was accepted into the queue.
     Returns False if a job with this job_id is already active or pending
-                  (idempotent â€” safe to call multiple times).
+                  (idempotent — safe to call multiple times).
     """
     global _seq
 
@@ -198,10 +198,10 @@ def submit_job(job_id: str, fn: Callable, *args, priority: int = 0, **kwargs) ->
             return False
 
         if job_id in _active_job_ids:
-            logger.debug("Job %s already running â€” skip duplicate submit", job_id)
+            logger.debug("Job %s already running — skip duplicate submit", job_id)
             return False
         if job_id in _pending_job_ids:
-            logger.debug("Job %s already pending â€” skip duplicate submit", job_id)
+            logger.debug("Job %s already pending — skip duplicate submit", job_id)
             return False
 
         _seq += 1
@@ -246,14 +246,14 @@ def shutdown(wait: bool = True, timeout: float = 30.0) -> None:
         wait: if False, force-abandon immediately (backward-compat with the
               previous unbounded-wait=False behavior). Default True.
         timeout: max seconds to wait for graceful drain when wait=True.
-                 0 or negative â†’ force-abandon immediately.
+                 0 or negative → force-abandon immediately.
     """
     global _executor, _stopping
     with _cond:
         _stopping = True
         _cond.notify_all()
 
-    # Signal cancel to every active job FIRST â€” even when there is no executor
+    # Signal cancel to every active job FIRST — even when there is no executor
     # (e.g. test fixtures that registered cancel events but never submitted).
     # Long-running loops (ffmpeg_helpers, render_pipeline guards) poll their
     # cancel_event and raise JobCancelledError on set.
@@ -291,7 +291,7 @@ def shutdown(wait: bool = True, timeout: float = 30.0) -> None:
     finished.wait(timeout=timeout)
     if not finished.is_set():
         logger.warning(
-            "Graceful shutdown timed out after %.1fs â€” abandoning in-flight workers",
+            "Graceful shutdown timed out after %.1fs — abandoning in-flight workers",
             timeout,
         )
         # Belt + suspenders: ensure the executor reference is cleared even if
@@ -312,7 +312,7 @@ def recover_pending_render_jobs():
     Called once on server startup.
 
     Marks any jobs that were left in 'queued' or 'running' state as
-    'interrupted' â€” does NOT auto-restart them.  The user can manually
+    'interrupted' — does NOT auto-restart them.  The user can manually
     resume from the UI (Resume button) if they want to continue.
 
     Auto-restarting old jobs on startup is unexpected behaviour: the user
@@ -333,7 +333,7 @@ def recover_pending_render_jobs():
                 job_id,
                 job.get("stage", "unknown"),
                 job.get("progress_percent", 0),
-                "Server restarted â€” click Resume to continue",
+                "Server restarted — click Resume to continue",
                 status="interrupted",
             )
             marked += 1
@@ -345,7 +345,7 @@ def recover_pending_render_jobs():
             )
         else:
             logger.info(
-                "Startup: no interrupted jobs â€” queue is clean. "
+                "Startup: no interrupted jobs — queue is clean. "
                 "Note: jobs queued in memory at shutdown are not auto-restarted; "
                 "only DB-persisted jobs with status 'queued'/'running' are recovered."
             )

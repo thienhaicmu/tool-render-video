@@ -1,6 +1,6 @@
-"""Per-part DONE stage â€” quality intelligence + cover frame + terminal upsert.
+"""Per-part DONE stage — quality intelligence + cover frame + terminal upsert.
 
-Sprint 6.D-2.5d â€” extracted verbatim from stages/part_renderer.py
+Sprint 6.D-2.5d — extracted verbatim from stages/part_renderer.py
 (lines 939-1037 of the post-2.5a file). No logic changes; pure relocation.
 
 run_part_done() is the FINAL block of process_one_part. It runs after
@@ -9,10 +9,10 @@ responsible for the terminal JobPartStage.DONE transition + the
 return dict that the per-part worker hands back to the orchestrator.
 
 Block responsibilities (in order):
-  1. _assess_render_quality_intelligence â€” wraps qa_pipeline's AI quality
+  1. _assess_render_quality_intelligence — wraps qa_pipeline's AI quality
      evaluator. Result is silently dropped (any exception caught by the
      outer try/except). Sacred Contract #3 holds: AI module returns None
-     on failure â€” no propagation.
+     on failure — no propagation.
   2. Cover frame selection + extraction:
        - _select_cover_frame_time() chooses an offset using ai_edit_plan
          hints when available.
@@ -21,8 +21,8 @@ Block responsibilities (in order):
        - extract_thumbnail_frame() falls back when S4 fails or returns nothing.
        - cover_frame_selected emit when bytes were extracted.
        - Outer try/except logs cover_frame_extraction_failed on any error
-         and continues â€” never blocks the part completion.
-  3. JobPartStage.DONE upsert (Sacred Contract #5 â€” frozen terminal
+         and continues — never blocks the part completion.
+  3. JobPartStage.DONE upsert (Sacred Contract #5 — frozen terminal
      transition with progress=100).
   4. Row construction for /api/jobs result_json[outputs] table.
   5. Optional cleanup of raw_part / srt_part / ass_part when
@@ -38,7 +38,7 @@ Sacred Contracts honored:
   - #3 AI return-None contract: _assess_render_quality_intelligence
        lives in qa_pipeline (an orchestration module, not under
        backend/app/ai/**). It already catches all exceptions and
-       returns None â€” and this caller wraps it in an additional
+       returns None — and this caller wraps it in an additional
        try/except: pass for belt-and-suspenders safety.
   - #5 Frozen part-stage names: JobPartStage.DONE via enum reference
        only. Grep-confirmed no string literal "DONE" introduced.
@@ -53,7 +53,7 @@ Bug fix history (Track C C1, 2026-06-03):
   by the surrounding try/except, making _assess_render_quality_intelligence
   effectively a silent no-op for ALL renders. Sprint 6.D-2.5d preserved
   the typo verbatim per the no-while-I-am-here convention. Track C bug
-  fix C1 corrected the typo on 2026-06-03 â€” the function now actually
+  fix C1 corrected the typo on 2026-06-03 — the function now actually
   runs when SRT is available. See ledger entry
   AUDIT_2026-06-02_followup_5.md for full impact assessment.
 
@@ -113,8 +113,8 @@ def run_part_done(
         # Track C bug fix C1 (2026-06-03): the original code referenced
         # `srt_path` here (undefined NameError caught by surrounding try/except),
         # which made _assess_render_quality_intelligence a silent no-op.
-        # Restored to use `srt_part` â€” the function parameter holding the
-        # per-part SRT file path â€” which is the most likely original intent.
+        # Restored to use `srt_part` — the function parameter holding the
+        # per-part SRT file path — which is the most likely original intent.
         # See docs/review/AUDIT_2026-06-02_followup_5.md for the full impact
         # assessment.
         if srt_part is not None and Path(str(srt_part)).exists():

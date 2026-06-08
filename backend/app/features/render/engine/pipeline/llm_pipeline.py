@@ -1,10 +1,10 @@
 """
-llm_pipeline.py â€” LLM pre-render path.
+llm_pipeline.py — LLM pre-render path.
 
 The configured LLM (Gemini / OpenAI / Claude) is the sole authority for
-segment selection â€” NO scene detection, NO heuristic scoring.
+segment selection — NO scene detection, NO heuristic scoring.
 
-HARD-FAIL semantics (intentional â€” distinct from AI-module Contract 3):
+HARD-FAIL semantics (intentional — distinct from AI-module Contract 3):
 This is an ORCHESTRATION module, not an AI module. It MUST raise
 LLMPipelineError on any failure. There is no fallback path.
 
@@ -54,7 +54,7 @@ class LLMPreRenderResult:
 
 
 class LLMPipelineError(RuntimeError):
-    """HARD-FAIL â€” no fallback path.
+    """HARD-FAIL — no fallback path.
 
     Raised when any precondition fails or the LLM cannot produce a usable
     segment list. Caller (render_pipeline.py) must propagate this upward
@@ -82,10 +82,10 @@ def run_llm_pre_render(
         LLMPipelineError: any precondition or stage failure (HARD-FAIL).
         cancel_registry.JobCancelledError: job cancelled mid-flight.
     """
-    # â”€â”€ 1. Pre-flight validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 1. Pre-flight validation ──────────────────────────────────────────
     if not getattr(payload, "llm_enabled", False):
         logger.warning(
-            "llm_pipeline: llm_enabled=False â€” continuing anyway "
+            "llm_pipeline: llm_enabled=False — continuing anyway "
             "(pipeline is mandatory since Phase F1)"
         )
     if getattr(payload, "multi_variant", False):
@@ -93,7 +93,7 @@ def run_llm_pre_render(
         # Degrade to single-variant rather than failing the job outright.
         _job_log(
             effective_channel, job_id,
-            "multi_variant requested but not supported in llm_pipeline path â€” "
+            "multi_variant requested but not supported in llm_pipeline path — "
             "rendering single variant (set multi_variant=False to suppress this warning)",
             kind="warning",
         )
@@ -102,7 +102,7 @@ def run_llm_pre_render(
             job_id=job_id,
             event="llm_pipeline.multi_variant_degraded",
             level="WARNING",
-            message="multi_variant not supported in llm_pipeline path â€” using single variant",
+            message="multi_variant not supported in llm_pipeline path — using single variant",
             step="render.llm_pipeline.preflight",
         )
     from app.core import config as _cfg
@@ -123,7 +123,7 @@ def run_llm_pre_render(
 
     full_srt = work_dir / f"{source['slug']}_full.srt"
 
-    # â”€â”€ 2. Transcription stage event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 2. Transcription stage event ─────────────────────────────────────
     set_stage_fn(
         JobStage.TRANSCRIBING_FULL, 15,
         "LLM pipeline: transcribing for analysis",
@@ -136,7 +136,7 @@ def run_llm_pre_render(
         step="render.llm_pipeline.transcribe",
     )
 
-    # â”€â”€ 3. Whisper full transcription (with heartbeat + cache + resume) â”€â”€
+    # ── 3. Whisper full transcription (with heartbeat + cache + resume) ──
     _resume_hit = (
         getattr(payload, "resume_from_last", False)
         and full_srt.exists()
@@ -154,7 +154,7 @@ def run_llm_pre_render(
         # SEPARATELY in part_renderer.py with the higher-quality `small` model
         # so subtitle quality is untouched.
         #
-        # Default `base`: sweet spot for Vietnamese â€” ~85% accuracy (vs ~70%
+        # Default `base`: sweet spot for Vietnamese — ~85% accuracy (vs ~70%
         # for tiny, ~90% for small) and ~3x faster than small on CPU. LLM
         # segment selection tolerates the residual error well because Gemini/
         # GPT/Claude infer meaning from context. Override via LLM_WHISPER_MODEL
@@ -223,7 +223,7 @@ def run_llm_pre_render(
                     # DB progress: only bump stage % gradually (UI cap).
                     update_job_progress(
                         job_id, JobStage.TRANSCRIBING_FULL, _pct,
-                        f"Whisper transcribingâ€¦ {_el}s elapsed (~{_pct_est}% of eta)",
+                        f"Whisper transcribing… {_el}s elapsed (~{_pct_est}% of eta)",
                     )
                     _pct = _pct + 1 if _pct < 22 else 22
 
@@ -282,13 +282,13 @@ def run_llm_pre_render(
                 _hb_stop.set()
                 _hb.join(timeout=2)
 
-    # â”€â”€ 4. Verify SRT not empty â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 4. Verify SRT not empty ──────────────────────────────────────────
     if not (full_srt.exists() and full_srt.stat().st_size > 0):
         raise LLMPipelineError(
             "LLM pipeline: SRT empty or missing after transcription"
         )
 
-    # â”€â”€ 5. Segment-selection stage event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── 5. Segment-selection stage event ─────────────────────────────────
     set_stage_fn(
         JobStage.SEGMENT_BUILDING, 25,
         "LLM pipeline: selecting segments",
@@ -322,4 +322,4 @@ def run_llm_pre_render(
         seg_min_sec=int(payload.min_part_sec),
         seg_max_sec=int(payload.max_part_sec),
     )
-
+

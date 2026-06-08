@@ -1,5 +1,5 @@
 ﻿"""
-market_subtitle_policy.py â€” Market-aware subtitle rendering policy helper.
+market_subtitle_policy.py — Market-aware subtitle rendering policy helper.
 
 Returns per-market configuration for subtitle line length, keyword emphasis,
 and tone hints. Designed to be imported by the render pipeline when needed.
@@ -8,7 +8,7 @@ Usage:
     from app.features.render.engine.subtitle.processing.market_policy import get_market_subtitle_policy
 
     policy = get_market_subtitle_policy("US", subtitle_tone="bold")
-    # â†’ {
+    # → {
     #     "market": "US",
     #     "max_words_per_line": 4,
     #     "highlight_keywords": ["money", "results", ...],
@@ -22,14 +22,14 @@ from __future__ import annotations
 import re
 from typing import Dict, List
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ─────────────────────────────────────────────────────────────────────────────
 # Market policies
-# Each market has independent keyword sets â€” no cross-market reuse.
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Each market has independent keyword sets — no cross-market reuse.
+# ─────────────────────────────────────────────────────────────────────────────
 
 _POLICIES: Dict[str, Dict] = {
 
-    # â”€â”€ US â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── US ────────────────────────────────────────────────────────────────────
     # Direct, aggressive, high-energy. Short punchy lines.
     # Subtitle tone variants shift word-count ceiling and style hint only.
     "US": {
@@ -51,7 +51,7 @@ _POLICIES: Dict[str, Dict] = {
         "tone_hint": "aggressive",
     },
 
-    # â”€â”€ EU â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── EU ────────────────────────────────────────────────────────────────────
     # Informative, trust-based. Longer, readable lines. No hype language.
     "EU": {
         "base_max_words": 6,
@@ -72,7 +72,7 @@ _POLICIES: Dict[str, Dict] = {
         "tone_hint": "informative",
     },
 
-    # â”€â”€ JP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── JP ────────────────────────────────────────────────────────────────────
     # Subtle, emotional, soft. Very short lines. Curiosity-driven.
     "JP": {
         "base_max_words": 3,
@@ -195,7 +195,7 @@ def select_subtitle_keywords(text: str, keywords: list, market: str = "US", max_
 def highlight_keywords_in_text(text: str, keywords: list, market: str = "US") -> str:
     """Uppercase whole-word keyword matches in subtitle text.
 
-    JP is skipped â€” UPPERCASE is not meaningful for CJK characters.
+    JP is skipped — UPPERCASE is not meaningful for CJK characters.
     Multi-word keywords work as long as no line-break falls inside the phrase.
     """
     try:
@@ -225,9 +225,9 @@ def get_market_subtitle_policy(market: str, subtitle_tone: str = "clean") -> Dic
     Return a subtitle rendering policy for the given market and tone.
 
     Args:
-        market:        Target market â€” "US", "EU", or "JP".
+        market:        Target market — "US", "EU", or "JP".
                        Unknown values fall back to "US".
-        subtitle_tone: Subtitle style â€” "clean" | "bold" | "karaoke".
+        subtitle_tone: Subtitle style — "clean" | "bold" | "karaoke".
                        Unknown values fall back to "clean".
 
     Returns:

@@ -1,5 +1,5 @@
 ﻿"""
-parser.py â€” Parse LLM RenderPlan response into a validated RenderPlan.
+parser.py — Parse LLM RenderPlan response into a validated RenderPlan.
 
 All parsing is defensive: never raises, returns None on any failure.
 Caller treats None as signal to hard-fail the pipeline.
@@ -69,7 +69,7 @@ def parse_render_plan_response(
     """Parse the LLM's raw text response into a validated RenderPlan.
 
     Sprint 4.A (foundation for AI Director full RenderPlan). The
-    function is intentionally permissive about the wire shape â€” three
+    function is intentionally permissive about the wire shape — three
     forms are normalised:
 
       1. Native RenderPlan: ``{"clips": [...], "subtitle_policy": {...},
@@ -78,7 +78,7 @@ def parse_render_plan_response(
       2. Wrapped: ``{"render_plan": {...native...}}`` so providers can
          emit a structured top-level key without colliding with
          conversational prose.
-      3. Legacy segments-only: ``{"segments": [...]}`` â€” clips-only,
+      3. Legacy segments-only: ``{"segments": [...]}`` — clips-only,
          every other sub-plan stays at its safe default. This is the
          exact same payload shape ``parse_segment_response`` accepts,
          so a Sprint 4.D dual-path provider can hand the same response
@@ -90,11 +90,11 @@ def parse_render_plan_response(
         ``end <= video_duration + 1.0`` (legacy parser's bounds rule).
       - Clips that violate either rule are silently dropped.
       - When NO valid clips remain (or zero in the payload to begin
-        with) the function returns ``None`` â€” Sprint 4.D treats that
+        with) the function returns ``None`` — Sprint 4.D treats that
         as the cue to fall back to the Sprint 2.2 builder shim.
       - Top-level sub-plans that are malformed (wrong type, garbage
         values) fall back to default sub-dataclasses via
-        ``RenderPlan.from_json``'s defensive deserialiser â€” they do
+        ``RenderPlan.from_json``'s defensive deserialiser — they do
         NOT cause the whole parse to return None.
 
     Sacred Contract #3: never raises. Any unexpected exception is
@@ -104,7 +104,7 @@ def parse_render_plan_response(
         data = _extract_json_array(raw)
         if not isinstance(data, dict):
             logger.warning(
-                "llm_parser: parse_render_plan_response expected object, got %s â€” raw preview: %r",
+                "llm_parser: parse_render_plan_response expected object, got %s — raw preview: %r",
                 type(data).__name__, raw[:300],
             )
             return None
@@ -151,14 +151,14 @@ def parse_render_plan_response(
             return None
 
         # RenderPlan.from_json is itself defensive enough that this is
-        # belt-and-braces â€” but we want a strict "empty plan === None"
+        # belt-and-braces — but we want a strict "empty plan === None"
         # contract from this entry point.
         if not plan.clips:
             return None
         return plan
 
     except Exception as exc:
-        logger.warning("llm_parser: parse_render_plan_response unexpected error â€” %s", exc, exc_info=True)
+        logger.warning("llm_parser: parse_render_plan_response unexpected error — %s", exc, exc_info=True)
         return None
 
 
@@ -169,7 +169,7 @@ def _normalise_render_plan_shape(data: dict) -> Optional[dict]:
     """Map any of the three accepted shapes onto a native RenderPlan
     dict. Returns None when no recognisable shape is found.
     """
-    # Shape 2: wrapped â€” peel the top-level key.
+    # Shape 2: wrapped — peel the top-level key.
     if isinstance(data.get("render_plan"), dict):
         inner = data["render_plan"]
         if isinstance(inner, dict):
@@ -182,14 +182,14 @@ def _native_or_legacy(data: dict) -> Optional[dict]:
     """Decide whether `data` is the native shape (`clips` key) or the
     legacy shape (`segments` key), and synthesise the native shape."""
     if isinstance(data.get("clips"), list):
-        # Already native â€” pass through, but also accept LLMSegment-
+        # Already native — pass through, but also accept LLMSegment-
         # style keys inside each clip entry so providers can emit
         # either {"clips":[{start,end,score,...}]} (already ClipPlan-ish)
         # or {"clips":[{start,end,viral_score,hook_score,...}]} (still
         # LLMSegment shape but under a "clips" key).
         return data
     if isinstance(data.get("segments"), list):
-        # Legacy â€” convert each segment to a ClipPlan-shaped dict and
+        # Legacy — convert each segment to a ClipPlan-shaped dict and
         # leave every other sub-plan at its default.
         return {
             "clips": [_segment_to_clip_dict(s) for s in data["segments"] if isinstance(s, dict)],
@@ -202,7 +202,7 @@ def _segment_to_clip_dict(seg: dict) -> dict:
 
     Field mapping mirrors what the Sprint 2.2 builder shim produces in
     `render_plan_builder._build_clips`. Score fields are passed through
-    as-is â€” `_filter_and_score_clip_dicts` later coerces them to [0,1].
+    as-is — `_filter_and_score_clip_dicts` later coerces them to [0,1].
     """
     return {
         "start": seg.get("start"),
@@ -258,7 +258,7 @@ def _filter_and_score_clip_dicts(
                 start, end, video_duration,
             )
             continue
-        # Sanitise score â†’ [0,1] so RenderPlan.from_json doesn't have to
+        # Sanitise score → [0,1] so RenderPlan.from_json doesn't have to
         # coerce. Defaults to 0.5 when missing (same as parse_item).
         try:
             score = float(entry.get("score", 0.5))
@@ -272,7 +272,7 @@ def _filter_and_score_clip_dicts(
             "end": end,
             "score": score,
             # Normalise the clip_name through the same sanitiser the
-            # segment parser uses â€” keeps filesystem invariants for
+            # segment parser uses — keeps filesystem invariants for
             # downstream code (no slashes / nulls in output names).
             "clip_name": sanitize_clip_name(
                 str(entry.get("clip_name") or entry.get("title") or "clip")

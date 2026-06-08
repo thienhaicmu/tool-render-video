@@ -1,5 +1,5 @@
 ﻿"""
-ai/context/creator_context.py â€” CreatorContextBuilder.
+ai/context/creator_context.py — CreatorContextBuilder.
 
 Sprint 3.2 deliverable. A thin faÃ§ade in front of `db.creator_repo` that:
 
@@ -13,7 +13,7 @@ Sprint 3.2 deliverable. A thin faÃ§ade in front of `db.creator_repo` that:
    reaches into the DB / domain layers directly.
 
 Sacred Contract #3 (AI modules return None on failure, never raise) is
-the absolute rule here â€” every public method swallows exceptions and
+the absolute rule here — every public method swallows exceptions and
 returns a safe default. The pipeline reads the result with a falsy
 guard and emits no editorial hint when None.
 """
@@ -31,7 +31,7 @@ logger = logging.getLogger("app.ai.context.creator_context")
 class CreatorContextBuilder:
     """Build the CreatorContext the AI Director should consider.
 
-    Single-method API for now â€” `build()`. Future extensions land here
+    Single-method API for now — `build()`. Future extensions land here
     as separate enrichment methods called from inside `build()`.
     """
 
@@ -42,8 +42,8 @@ class CreatorContextBuilder:
         - the repo helper returns None (no creator_prefs row, no
           creator_context key, or DB error swallowed at the repo layer)
         - the loaded context is empty (is_empty() True). An empty
-          context is functionally equivalent to None â€” the AI prompt
-          treats both as "no editorial hint" â€” but returning None here
+          context is functionally equivalent to None — the AI prompt
+          treats both as "no editorial hint" — but returning None here
           lets callers short-circuit the to_prompt_hint() call entirely.
         - any unexpected exception bubbles up (caught here as a
           defensive belt-and-braces over the repo's own try/except).
@@ -59,7 +59,7 @@ class CreatorContextBuilder:
             logger.warning("CreatorContextBuilder.build failed: %s", exc, exc_info=True)
             return None
 
-    # â”€â”€ Internal seams â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Internal seams ──────────────────────────────────────────────────
 
     def _fetch_persisted(self) -> Optional[CreatorContext]:
         """Read from `db.creator_repo`. Local import avoids the DB layer

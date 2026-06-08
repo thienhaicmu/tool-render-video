@@ -1,12 +1,12 @@
 ﻿"""SRT core parsing, writing, slicing, and subprocess retry helper.
 
 This module owns:
-- format_srt_timestamp / parse_srt_timestamp â€” timestamp format/parse
-- _parse_srt_blocks / parse_srt_blocks â€” SRT file parsing
-- write_srt_blocks â€” SRT file writing
-- slice_srt_by_time â€” time-range slicing with optional speed scaling
-- slice_srt_to_text â€” plain-text extraction for a time range
-- _run_with_retry â€” generic subprocess retry (shared with ass_core)
+- format_srt_timestamp / parse_srt_timestamp — timestamp format/parse
+- _parse_srt_blocks / parse_srt_blocks — SRT file parsing
+- write_srt_blocks — SRT file writing
+- slice_srt_by_time — time-range slicing with optional speed scaling
+- slice_srt_to_text — plain-text extraction for a time range
+- _run_with_retry — generic subprocess retry (shared with ass_core)
 
 No style presets. No ASS conversion. No Whisper. No TimelineMap.
 """
@@ -149,7 +149,7 @@ def slice_srt_by_time(
 
 
 def slice_srt_to_text(source_srt_path: str, start_sec: float, end_sec: float) -> str:
-    """Slice a SRT by time range and return plain text â€” no temp file written."""
+    """Slice a SRT by time range and return plain text — no temp file written."""
     src_blocks = _parse_srt_blocks(source_srt_path)
     start_sec = max(0.0, float(start_sec))
     end_sec = max(start_sec, float(end_sec))

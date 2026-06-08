@@ -1,7 +1,7 @@
 ﻿"""
-hybrid_analyzer.py â€” Orchestrates local + cloud analyzers with safe fallback.
+hybrid_analyzer.py — Orchestrates local + cloud analyzers with safe fallback.
 
-Always returns AnalysisSignals â€” never raises, never returns None.
+Always returns AnalysisSignals — never raises, never returns None.
 If both analyzers fail, returns empty signals so callers degrade gracefully.
 """
 from __future__ import annotations

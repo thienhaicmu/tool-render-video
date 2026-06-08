@@ -1,8 +1,8 @@
 ﻿"""
-contract.py â€” Abstract base class all analyzers must implement.
+contract.py — Abstract base class all analyzers must implement.
 
 Both LocalAnalyzer and cloud providers satisfy this interface.
-The AI Director talks only to this contract â€” never to concrete implementations.
+The AI Director talks only to this contract — never to concrete implementations.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class AnalyzerContract(ABC):
         """Analyze transcript chunks and return signals.
 
         Returns AnalysisSignals on success, None on failure.
-        MUST NOT raise under any circumstances â€” Contract 3.
+        MUST NOT raise under any circumstances — Contract 3.
         """
         ...
 

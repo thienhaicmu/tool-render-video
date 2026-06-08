@@ -22,7 +22,7 @@ def _maybe_cleanup_narration_audio(
 ) -> str:
     engine = str(getattr(payload, "audio_cleanup_engine", "none") or "none").strip().lower()
 
-    # OQ-2.1: Auto-upgrade "none" â†’ "deepfilternet" when package is installed.
+    # OQ-2.1: Auto-upgrade "none" → "deepfilternet" when package is installed.
     # AUDIO_CLEANUP_AUTO=0 opts out. Explicit payload value always wins (including "none").
     if engine == "none" and os.environ.get("AUDIO_CLEANUP_AUTO", "1") == "1":
         from app.features.render.ai.dependencies import has_deepfilternet as _has_dfn

@@ -1,4 +1,4 @@
-﻿"""Per-scene subject-path state machine â€” CapCut-style Auto Reframe.
+﻿"""Per-scene subject-path state machine — CapCut-style Auto Reframe.
 
 Sprint 5.2 split from path.py (was 977 LOC). This module owns
 build_subject_path_scene; the multi-scene dispatcher remains in path.py.
@@ -7,16 +7,16 @@ build_subject_path_scene operates only on the [start_sec, end_sec] frame
 range of a single scene. Carries warmup_center (final crop center from
 the previous scene) into smooth_cx/smooth_cy so the camera doesn't snap
 back to frame center at scene boundaries. Subject identity is NOT
-carried across scenes â€” each scene re-locks independently.
+carried across scenes — each scene re-locks independently.
 
 State machine per frame:
-  predict (_ByteTrackSubject) â†’ tracker.update â†’ re-detect every
-  detect_interval frames â†’ confirm lock (with trackerless confidence
-  gating when no tracker) â†’ switch-subject arbitration
-  (cfg.subject_switch_margin) â†’ eye-anchor refinement â†’ EMA smoothing
-  (with dead-zone gating + post-switch cooldown) â†’ safety clamping â†’
-  lookahead pass â†’ adaptive Gaussian smoothing (window scales with
-  avg_motion + scene length) â†’ velocity limiter.
+  predict (_ByteTrackSubject) → tracker.update → re-detect every
+  detect_interval frames → confirm lock (with trackerless confidence
+  gating when no tracker) → switch-subject arbitration
+  (cfg.subject_switch_margin) → eye-anchor refinement → EMA smoothing
+  (with dead-zone gating + post-switch cooldown) → safety clamping →
+  lookahead pass → adaptive Gaussian smoothing (window scales with
+  avg_motion + scene length) → velocity limiter.
 
 Deferred-import strategy:
   _subject_to_crop_center, _apply_velocity_limiter,
@@ -437,7 +437,7 @@ def build_subject_path_scene(
             elif locked_subject is not None and lost_frames <= hold_frames:
                 target_cx, target_cy = last_good_center
             else:
-                # Smoothstep return: slow start â†’ faster mid â†’ soft landing at center.
+                # Smoothstep return: slow start → faster mid → soft landing at center.
                 # Ramps over 1.0 s instead of 0.75 s to feel less abrupt.
                 t_return = min(1.0, (lost_frames - hold_frames) / max(1.0, fps * 1.0))
                 return_alpha_cap = 0.16 if (not tracker_available and trackerless_confidence < 0.78) else 0.10
@@ -574,7 +574,7 @@ def build_subject_path_scene(
         )
 
         # Log the final rendered crop center so the caller can pass it as warmup
-        # to the next scene â€” enables scene-boundary camera continuity.
+        # to the next scene — enables scene-boundary camera continuity.
         if final_centers:
             _fc_x, _fc_y = final_centers[-1]
             _final_cx = _fc_x + crop_w / 2.0

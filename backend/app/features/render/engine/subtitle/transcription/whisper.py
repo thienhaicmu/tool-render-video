@@ -25,7 +25,7 @@ WORD_MIN_DURATION_SEC = 0.12
 WORD_MERGE_SHORTER_THAN_SEC = 0.11
 
 # Redirect Whisper model cache to project dir so models stay on D: not C:
-# File is at backend/app/services/subtitles/transcription.py â†’ parents[4] = project root
+# File is at backend/app/services/subtitles/transcription.py → parents[4] = project root
 _WHISPER_CACHE_DIR: Path = Path(__file__).resolve().parents[4] / "data" / "whisper_cache"
 _WHISPER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -115,7 +115,7 @@ def _ensure_ffmpeg_in_path_for_whisper():
 def has_audio_stream(video_path: str) -> bool:
     """Return True when the file has at least one audio stream (uses cached probe).
 
-    Imports directly from render.ffmpeg_helpers (Phase 4G.6 coupling fix â€” no longer
+    Imports directly from render.ffmpeg_helpers (Phase 4G.6 coupling fix — no longer
     routes through the render_engine shim).
     """
     from app.features.render.engine.encoder.ffmpeg_helpers import _has_audio_stream
@@ -149,10 +149,10 @@ def transcribe_to_srt(
     """Transcribe audio to SRT.
 
     When highlight_per_word=True, uses Whisper word_timestamps to produce
-    one SRT entry per word â€” required for word-by-word pop animation.
+    one SRT entry per word — required for word-by-word pop animation.
     Falls back to segment-level if word timestamps are unavailable.
 
-    Fallback chain: primary model â†’ "tiny" model â†’ raises TranscriptionError.
+    Fallback chain: primary model → "tiny" model → raises TranscriptionError.
     Caller is responsible for catching and handling gracefully.
     """
     audio_path = str(Path(srt_path).with_suffix(".wav"))
@@ -176,7 +176,7 @@ def transcribe_to_srt(
             )
             raise
         logger.warning(
-            "transcription_primary_failed model=%s error=%s â€” retrying with %s",
+            "transcription_primary_failed model=%s error=%s — retrying with %s",
             model_name, primary_exc, fallback,
         )
         try:
@@ -280,7 +280,7 @@ def _write_word_level_srt(result: dict, srt_path: str):
                     )
                     idx += 1
             else:
-                # No word timestamps for this segment â€” fall back to full segment text
+                # No word timestamps for this segment — fall back to full segment text
                 text = seg.get("text", "").strip()
                 if text:
                     f.write(
