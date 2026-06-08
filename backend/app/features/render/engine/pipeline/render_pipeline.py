@@ -1348,6 +1348,12 @@ def run_render_pipeline(
             ai_influence_report=_ai_influence_report,
             ai_beat_report=_ai_beat_report,
             render_plan=_render_plan,
+            # Strategic-4 — Audit 2026-06-08 closure. The rank-source tag
+            # was already computed at line 1160 and surfaced in per-entry
+            # WS events; threading it through here gates the result_json
+            # ranking_metadata block. See pipeline_finalize.py for the
+            # persisted shape.
+            rank_source=_rank_source_tag,
         ))
     except Exception as e:
         fail_message = f"Failed at step '{current_stage}': {e}"

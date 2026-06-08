@@ -73,6 +73,18 @@ class FinalizeContext:
     ai_influence_report: dict
     ai_beat_report: dict
     render_plan: Optional[RenderPlan] = None
+    # Strategic-4 — Audit 2026-06-08 closure (Batch A V8-D1/V8-D2).
+    # The rank-source tag returned by _resolve_rank_from_plan(). One of:
+    #   "render_plan"          — plan-derived ranks consumed (AI's intent)
+    #   "fallback"             — LLM_EMIT_RENDER_PLAN env != "1" (operator opted out)
+    #   "fallback_no_plan_rank"— RenderPlan missing or empty
+    #   "fallback_rank_invalid"— AI emitted invalid rank values
+    #   "fallback_rank_collision" — duplicate rank values across clips
+    # Persisted into result_json["ranking_metadata"] so post-render
+    # consumers (FE, AI Director, ops) can attribute the rank choice.
+    # Default "" matches the pre-Strategic-4 absence so the dataclass
+    # remains backward-compat for callers that don't set it.
+    rank_source: str = ""
 
 
 def run_render_finalize(ctx: FinalizeContext) -> str:
@@ -182,6 +194,34 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
     _ai_render_quality: dict = {"available": False, "evaluation_mode": "evaluation_only"}
     _ai_ux_metadata: dict = {"available": False}
 
+    # Strategic-4 — Audit 2026-06-08 closure (Batch A V8-D1/V8-D2).
+    # Surface the rank-source attribution AND the local-recompute
+    # formula so post-render consumers can see (a) whether AI ranks
+    # were honoured or a fallback fired, and (b) the weighted formula
+    # used when local recompute applied. The formula coefficients
+    # mirror pipeline_ranking.py:204-211 verbatim — if those weights
+    # change, this block must be updated in lockstep.
+    _ranking_metadata: dict = {
+        "rank_source": ctx.rank_source or "fallback",
+        "ai_rank_consumed": (ctx.rank_source == "render_plan"),
+        "local_recompute_active": (ctx.rank_source != "render_plan"),
+        "formula": {
+            "viral_score":        0.35,
+            "hook_score":         0.20,
+            "retention_score":    0.20,
+            "speech_density":     0.10,
+            "market_score":       0.10,
+            "duration_fit":       0.05,
+        },
+        "formula_source": "pipeline_ranking.py:_compute_output_ranking_entry",
+        "fallback_reasons_documented": [
+            "fallback",                  # LLM_EMIT_RENDER_PLAN env != "1"
+            "fallback_no_plan_rank",     # RenderPlan missing or empty
+            "fallback_rank_invalid",     # AI emitted invalid rank values
+            "fallback_rank_collision",   # duplicate rank values across clips
+        ],
+    }
+
     _result_payload = {
         "outputs": outputs,
         "render_preset": _preset_name,
@@ -191,6 +231,7 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
         "market_viral_parts": _mv_parts,
         "output_ranking": _rank_entries_ordered,
         "output_ranking_warning": _partial_warning,
+        "ranking_metadata": _ranking_metadata,
         "best_clip": _best_rank_entry,
         "best_exports": _best_exports_list,
         "voice_summary": _voice_summary,
