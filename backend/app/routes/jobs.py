@@ -155,7 +155,19 @@ def _render_status_and_summary(base_status: str, completed: int, failed: int) ->
     if completed > 0 and failed == 0:
         return "completed", f"{completed} clip{'s' if completed != 1 else ''} completed"
     if completed > 0 and failed > 0:
-        return "partial", f"{completed} clips completed, {failed} failed"
+        # T3.2 — Audit 2026-06-08 closure (Batch B B-10-B). Pre-T3.2 the
+        # history endpoint synthesized a "partial" status here, but
+        # nothing in app.db ever wrote it: jobs_repo._VALID_JOB_STATUSES
+        # only enumerates {queued, running, completed,
+        # completed_with_errors, failed, interrupted, cancelled}, and
+        # pipeline_finalize writes "completed_with_errors" for this
+        # exact case. The WS handler and the single-job /api/jobs/{id}
+        # endpoint surfaced the canonical "completed_with_errors"
+        # while the history list surfaced "partial" — same DB row,
+        # two different wire strings. FE supported both because of
+        # this asymmetry; now the wire is unified on the canonical
+        # status name.
+        return "completed_with_errors", f"{completed} clips completed, {failed} failed"
     return "failed", (f"{failed} clip{'s' if failed != 1 else ''} failed" if failed else "Render failed")
 
 
@@ -792,6 +804,19 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
                 await websocket.send_json({"error": "not_found"})
                 break
             parts   = list_job_parts(job_id)
+            # T1.4-followup / VW-3 — Audit 2026-06-08 closure (Batch A
+            # V8-C2). The /api/jobs/{id}/parts HTTP endpoint at line
+            # 459 enriches parts with clip_name / ai_title / ai_reason
+            # / source pulled from result_json.segments (FINDING-C03
+            # closure). The WS handler must do the same, otherwise FE
+            # consumers that only see the WS stream get blank AI
+            # metadata even after terminal frame arrives. The
+            # enrichment is defensive and a no-op when result_json is
+            # absent (mid-render), so the cost during long renders is
+            # one defensive None check per tick.
+            parts = _enrich_parts_with_segment_ai_fields(
+                parts, job.get("result_json")
+            )
             summary = _compute_progress_summary(parts)
             is_terminal = job.get("status") in _TERMINAL_STATUSES
             fp = _ws_fingerprint(job, parts, summary)
