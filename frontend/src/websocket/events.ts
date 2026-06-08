@@ -35,6 +35,12 @@ export enum RenderStage {
  * three top-level keys job, parts, summary. A regression that drops any
  * one of them must NOT pass this guard, or the UI will read stale/empty
  * values silently.
+ *
+ * T3.1 — Audit 2026-06-08 closure (Batch A V8-C1): progress frames
+ * now also carry a ``type: "snapshot"`` discriminator. The check
+ * stays on the three Sacred Contract keys (subset semantics), so the
+ * additional ``type`` field does not break this guard for old or new
+ * consumers.
  */
 export function isProgressEvent(msg: unknown): msg is WebSocketEvent {
   return (
@@ -51,4 +57,43 @@ export function isProgressEvent(msg: unknown): msg is WebSocketEvent {
  */
 export function isErrorEvent(msg: unknown): msg is WebSocketErrorEvent {
   return typeof msg === 'object' && msg !== null && 'error' in msg
+}
+
+/**
+ * T3.1 — Audit 2026-06-08 closure (Batch A V8-C1).
+ *
+ * A live log/structured event bridged from the backend's
+ * ``_emit_render_event`` JSONL stream via the EVENT_BROADCASTER. Carries
+ * the event metadata the UI uses to render an "AI activity panel" or
+ * a live log view alongside the snapshot-derived progress UI.
+ *
+ * The shape mirrors the dict appended to `<job_id>.log` by
+ * `_emit_render_event`. Most fields are best-effort; consumers should
+ * treat missing/null entries defensively.
+ */
+export interface WsLogEvent {
+  timestamp: string
+  level: string
+  event: string
+  module?: string
+  message?: string
+  job_id?: string
+  step?: string
+  error_code?: string
+  context?: Record<string, unknown>
+  exception?: string
+  traceback?: string
+  duration_ms?: number
+}
+
+/**
+ * Type guard: incoming WS message is a T3.1 log/event message
+ * (``{"type": "event", "event": {...}}``). The event channel is
+ * additive — pre-T3.1 consumers don't dispatch on ``type`` and
+ * silently ignore these messages.
+ */
+export function isLogEvent(msg: unknown): msg is { type: 'event'; event: WsLogEvent } {
+  if (typeof msg !== 'object' || msg === null) return false
+  const m = msg as Record<string, unknown>
+  return m.type === 'event' && typeof m.event === 'object' && m.event !== null
 }

@@ -113,3 +113,128 @@ P0/P1 work into 9 commits.
 | Post-T2.3 + T2.1 | 782 | 782 | ✅ |
 
 All edits preserved or improved the test count. Zero regressions.
+
+---
+
+## Addendum 2026-06-08 EOD — Final closure status
+
+The body of this file (rows above) reflects the in-session plan as
+drafted at the start of the audit sprint. Most "DEFERRED" /
+"PENDING" rows shipped before EOD on the same day. This addendum
+is append-only per the audit-folder rule (existing rows in the
+body are NOT edited — they record what was true at draft time).
+
+### Sprint 4 — Test Suite Closure (now FULL, not partial)
+
+| ID | Title | Status | Commit |
+|----|-------|--------|--------|
+| Sprint 4 d | `test_cancel_interrupts_whisper.py` — T2.1 guard | ✅ DONE | `1c8635b` |
+| Sprint 4 e | `test_cancel_interrupts_motion_crop.py` — T2.2 guard | ✅ DONE | `2c2c201` |
+| Sprint 4 f | `test_stages_analyzing_scene_detection_emitted.py` — T2.3 guard | ✅ DONE | `1c8635b` |
+| Sprint 4 g | FE `use-render-socket-polling-fallback.test.ts` — T1.3 guard | ✅ DONE | `a32833e` |
+| Sprint 4 h | FE `render-workflow-payload.test.ts` — T1.4 dead-field absence | ✅ DONE | `f2b035f` |
+
+### Sprint 3 — Observability Bridge (now FULL, not partial)
+
+| ID | Title | Status | Commit |
+|----|-------|--------|--------|
+| T3.1 | Event-bus → FE WS bridge | ✅ DONE | `d97f40b` |
+| T3.2 | partial → completed_with_errors | ✅ DONE (already noted above) | `7d15005` |
+
+### Bậc 3 — Strategic / 90-Day Roadmap (all shipped same day)
+
+| ID | Title | Status | Commit |
+|----|-------|--------|--------|
+| Strategic-1 | UP26 clip_lock/exclude wired to LLM prompt | ✅ DONE | `eecc95f` |
+| Strategic-1b | UP26 clip_lock/exclude local-side filter | ✅ DONE | `a803973` |
+| Strategic-1c | UP26 structure_bias + subtitle_emphasis wired | ✅ DONE | `0130bae` |
+| Strategic-2 | AI clip title rendered as hook overlay | ✅ DONE | `b9ac312` |
+| Strategic-3 | overlays[kind=cta].type → CTA library bias | ✅ DONE | `11f9c16` |
+| Strategic-4 | Ranking source attribution in result_json | ✅ DONE | `3de0161` |
+| Strategic-5 | NVENC_SEMAPHORE caller-acquires contract pinned | ✅ DONE | `d67d11c` |
+| Strategic-6 | Persistent cancel intent across server restarts | ✅ DONE | `3b3cb53` |
+| Strategic-7 | routes/jobs.py history helpers → jobs_history.py | ✅ DONE | `799b068` |
+| Strategic-8 | part_asset_planner.py resolvers → part_render_plan_resolvers.py | ✅ DONE | `799b068` |
+
+### Open items remaining
+
+(none — see V8-A7 closure addendum below)
+
+### V8-A7 closure addendum
+
+| ID | Title | Status | Commit |
+|----|-------|--------|--------|
+| V8-A7 | `playback_speed=1.07` silent default → 1.0 | ✅ DONE | (see commit log) |
+
+Approach chosen: Option A (change default 1.07 → 1.0). Eight modules
+updated to keep the fallback literal consistent end-to-end:
+`models/render.py`, `pipeline_segment_selection.py`, `clip_renderer.py`,
+`motion/crop.py`, `part_asset_planner.py`, `part_cut.py`,
+`part_render_encode.py`, `part_render_setup.py`. Sacred Contract #2
+replay safety verified: stored payloads with explicit
+`playback_speed=1.07` still decode to 1.07 because Pydantic preserves
+explicit field values during `model_dump` round-trip
+(`tests/test_v8a7_playback_speed_default.py`).
+
+### UP26 FE widgets follow-up
+
+| ID | Title | Status | Commit |
+|----|-------|--------|--------|
+| UP26-FE | FE form widgets for `structure_bias` + `subtitle_emphasis` | ✅ DONE | (see commit log) |
+
+Approach: minimum-viable widgets. Two segmented-button controls added
+to `StepConfigure.tsx` (advanced mode), matching the `hookStrength` /
+`outputLanguage` pattern. Each has 4 buttons: `AI auto` (null payload)
+plus the 3 enum values. `buildPayload` in `RenderWorkflow.tsx` sends
+`structure_bias` / `subtitle_emphasis` when set, omits the key when
+`null` (Sacred Contract #2 spirit — null = inherit).
+
+`clip_lock` / `clip_exclude` stay API-only. The FE state schema
+(`types.ts:23-24`) still carries them but no UI widget — the
+TimeRange editor is a separate task. Operators using clip_lock or
+clip_exclude continue to set them via the API. They are accepted by
+the BE Public surface (`models/render_public.py:FE_FACING_FIELDS`)
+and wired through to the LLM prompt + local filter
+(Strategic-1/Strategic-1b).
+
+Test guards
+  - `frontend/tests/render-workflow-payload.test.ts` — 2 new positive
+    assertions pin `structure_bias` / `subtitle_emphasis` in
+    buildPayload.
+  - Existing BE guards in `tests/test_strategic_1c_*` pin the
+    consumer side.
+
+### Verification log addendum
+
+| Step | Tests before | Tests after | Status |
+|------|-------------|-------------|--------|
+| Post-T2.3 + T2.1 (last row above) | 782 | 782 | ✅ |
+| Post-T3.1 + Sprint 4 d-h regression tests | 782 | ~900+ | ✅ (+118 tests, validates V8-C1 closure end-to-end) |
+| Post-Strategic-1/1b/1c + Strategic-2/3/4/6 | 900+ | 935 | ✅ |
+| Post-Strategic-7/8 god-module refactor | 935 | 941 | ✅ (BE), 476 (FE) — 1417 total, zero regressions |
+
+### Branch state
+
+- Branch: `feature/audit-2026-06-08-fixes`
+- 22 commits ahead of `main`
+- All 1417 tests pass (BE 941 + FE 476)
+- Ready for PR. Comparison: https://github.com/thienhaicmu/tool-render-video/compare/main...feature/audit-2026-06-08-fixes
+
+### One remaining decision
+
+V8-A7 `playback_speed` default 1.07 — silent 7% acceleration on every
+render with no UI control. The fix needs a product call, not engineering:
+
+- **Option A** — change BE default `1.07 → 1.00`. Removes silent
+  acceleration. Sacred Contract #2 trade-off: replay of any pre-fix
+  stored job will now run at 1.00x instead of 1.07x (behaviour shift on
+  replay). Mitigation: stored RenderRequest payloads explicitly carry
+  the field, so replay is bit-identical for jobs created after the
+  RenderRequest field was added. Only pre-field jobs would shift.
+
+- **Option B** — keep default 1.07, add FE UI slider on
+  `RenderWorkflow.tsx` so the user can see + adjust. FE work
+  (~2-3h) + Sacred Contract #2 unchanged. Default behaviour preserved.
+
+Both options close V8-A7. The audit doesn't prescribe one.
+

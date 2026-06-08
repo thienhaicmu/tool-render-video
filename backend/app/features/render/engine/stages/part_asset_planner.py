@@ -130,74 +130,21 @@ logger = logging.getLogger("app.render")
 # (viral/clean/story/gaming) plus the registered preset_ids already
 # wired into subtitle_engine. Anything outside the set soft-falls
 # back to the legacy 5-tier resolution.
-_RENDER_PLAN_ALLOWED_SUBTITLE_STYLES: frozenset[str] = frozenset({
-    "viral", "clean", "story", "gaming",
-    "tiktok_bounce_v1", "viral_bold", "story_clean_01",
-    "clean_pro", "boxed_caption", "pro_karaoke",
-})
-
-
-def _resolve_subtitle_style_from_plan(
-    ctx: PartRenderContext, fallback_value: str, part_no: int = 0
-) -> tuple[str, str]:
-    """Return ``(effective_subtitle_style, source_tag)``.
-
-    Resolution order (highest to lowest priority):
-      1. Per-clip: ``render_plan.clips[part_no-1].subtitle_style`` when
-         ``part_no > 0`` and in bounds — source tag ``"render_plan_clip"``.
-      2. Global: ``render_plan.subtitle_policy.style`` — source tag ``"render_plan"``.
-      3. Fallback: caller-supplied legacy value — source tag ``"fallback"``
-         or ``"fallback_invalid_style"`` when a plan style failed validation.
-
-    Empty string in either plan field means “inherit from next levelâ€
-    (the same semantic as SubtitlePolicy). Invalid style values soft-fall
-    back to the caller's legacy resolution (Sacred Contract #3).
-    """
-    rp = getattr(ctx, "render_plan", None)
-    if rp is None:
-        return fallback_value, "fallback"
-    # Per-clip override (Sprint 4.E extension)
-    if part_no > 0:
-        try:
-            clips = rp.clips
-            if clips and part_no - 1 < len(clips):
-                clip_style = (getattr(clips[part_no - 1], "subtitle_style", "") or "").strip()
-                if clip_style and clip_style in _RENDER_PLAN_ALLOWED_SUBTITLE_STYLES:
-                    return clip_style, "render_plan_clip"
-        except Exception:
-            pass
-    # Global subtitle_policy fallback
-    plan_style = (rp.subtitle_policy.style or "").strip()
-    if not plan_style:
-        return fallback_value, "fallback"
-    if plan_style not in _RENDER_PLAN_ALLOWED_SUBTITLE_STYLES:
-        return fallback_value, "fallback_invalid_style"
-    return plan_style, "render_plan"
-
-
-def _resolve_market_from_plan(ctx: PartRenderContext) -> str:
-    """Return the plan-supplied market override or empty string.
-
-    Caller ``or``s the result with the upstream-derived market value
-    (``ctx.mv_market``) so empty-from-plan means "inherit from the
-    upstream resolver" rather than "force empty".
-    """
-    rp = getattr(ctx, "render_plan", None)
-    if rp is None:
-        return ""
-    return (rp.subtitle_policy.market or "").strip()
-
-
-def _resolve_cta_audio_from_plan(ctx: PartRenderContext) -> str:
-    """Return AI-specified CTA text from render_plan.audio_plan.cta_audio.
-
-    Empty string means no override -- caller falls back to the CTA library.
-    """
-    rp = getattr(ctx, "render_plan", None)
-    if rp is None:
-        return ""
-    return (getattr(rp.audio_plan, "cta_audio", "") or "").strip()
-
+# Strategic-8 — Audit 2026-06-08 refactor. The 5 RenderPlan resolvers +
+# 3 supporting constants moved to stages/part_render_plan_resolvers.py.
+# Pure re-import keeps the bare reference style at the call sites inside
+# prepare_part_assets and preserves the existing source-level test
+# guards (which grep this file's text for the resolver call patterns).
+from app.features.render.engine.stages.part_render_plan_resolvers import (  # noqa: E402
+    _RENDER_PLAN_ALLOWED_SUBTITLE_STYLES,
+    _resolve_subtitle_style_from_plan,
+    _resolve_market_from_plan,
+    _SUBTITLE_EMPHASIS_MULTIPLIERS,
+    _apply_subtitle_emphasis,
+    _resolve_cta_audio_from_plan,
+    _ALLOWED_CTA_TYPES_FROM_PLAN,
+    _resolve_cta_type_from_plan,
+)
 
 def prepare_part_assets(
     ctx: PartRenderContext,
@@ -220,6 +167,17 @@ def prepare_part_assets(
     _srt_meta: dict = {}
     _subtitle_ass_ms = 0
     _effective_subtitle_style = ""
+
+    # Strategic-1c — Audit 2026-06-08 closure (UP26 subtitle_emphasis).
+    # Resolve the effective subtitle font size ONCE by applying the
+    # operator's emphasis multiplier (subtle 0.85× / balanced 1.0× /
+    # aggressive 1.20×) to payload.sub_font_size. Used by the ASS
+    # cache key, both ASS writers, the log line, and the report dict.
+    # None / "balanced" / unknown emphasis is a byte-for-byte
+    # no-op vs pre-Strategic-1c.
+    _raw_sub_font_size = int(getattr(ctx.payload, "sub_font_size", 0) or 0)
+    _emphasis = getattr(ctx.payload, "subtitle_emphasis", None)
+    _effective_sub_font_size = _apply_subtitle_emphasis(_raw_sub_font_size, _emphasis)
 
     subtitle_selected_by_rule = ctx.subtitle_enabled_by_idx.get(idx, False)
     part_subtitle_enabled = subtitle_selected_by_rule
@@ -624,11 +582,28 @@ def prepare_part_assets(
                 _cta_type    = str(getattr(ctx.payload, "cta_type", "auto") or "auto").strip().lower()
                 _ct_hint     = str(seg.get("content_type_hint") or "vlog")
                 _cta_vt      = str(seg.get("variant_type") or "")
+                # Strategic-3 — Audit 2026-06-08 closure. Capture AI's
+                # CTA-type hint from RenderPlan.overlays[kind=cta].type.
+                # Used below when the operator's _cta_type is "auto"
+                # AND the AI didn't supply an exact text via
+                # cta_audio. Pre-Strategic-3 the overlays[kind=cta]
+                # entry was silently dropped at render_pipeline.py
+                # :679-684 — Batch A Phase 6.2 finding.
+                _plan_cta_type = _resolve_cta_type_from_plan(ctx)
                 # Option B: AI-specified exact CTA text overrides library lookup.
                 _plan_cta_audio = _resolve_cta_audio_from_plan(ctx)
                 if _plan_cta_audio:
                     _cta_text = _plan_cta_audio
                 else:
+                    # Strategic-3: AI's overlays[kind=cta].type biases
+                    # _cta_type BEFORE the hook_type bias. The
+                    # priority order is now:
+                    #   1. Operator-explicit _cta_type (non-"auto").
+                    #   2. AI's overlays[kind=cta].type (NEW).
+                    #   3. Hook-type bias derived from seg["hook_type"].
+                    #   4. Library default ("auto" → content-type fallback).
+                    if _cta_type == "auto" and _plan_cta_type and _plan_cta_type != "auto":
+                        _cta_type = _plan_cta_type
                     # Option C: AI hook_type biases auto cta_type before library lookup.
                     _hook_type_hint = str(seg.get("hook_type") or "").strip().lower()
                     if _cta_type == "auto" and _hook_type_hint:
@@ -643,8 +618,8 @@ def prepare_part_assets(
                 _last_sub_end = float(_srt_meta.get("last_end") or 0)
                 _eff_speed    = float(
                     seg.get("variant_playback_speed")
-                    or getattr(ctx.payload, "playback_speed", 1.07)
-                    or 1.07
+                    or getattr(ctx.payload, "playback_speed", 1.0)
+                    or 1.0
                 )
                 _raw_dur  = float(seg.get("duration") or 0)
                 _eff_dur  = max(5.0, _raw_dur / _eff_speed) - 0.5
@@ -701,7 +676,7 @@ def prepare_part_assets(
                 style=_effective_subtitle_style or "",
                 scale_y=int(ctx.payload.frame_scale_y or 0),
                 font_name=getattr(ctx.payload, "sub_font", "Bungee") or "Bungee",
-                font_size=int(getattr(ctx.payload, "sub_font_size", 0) or 0),
+                font_size=_effective_sub_font_size,
                 margin_v=int(_margin_v),
                 play_res_y=int(_play_res_y),
                 play_res_x=1080,
@@ -734,7 +709,7 @@ def prepare_part_assets(
                     srt_to_ass_karaoke(
                         str(_ass_srt_source), str(ass_part),
                         scale_y=ctx.payload.frame_scale_y,
-                        font_size=getattr(ctx.payload, "sub_font_size", 46),
+                        font_size=_effective_sub_font_size or 46,
                         font_name=getattr(ctx.payload, "sub_font", "Bungee"),
                         margin_v=_margin_v,
                         play_res_y=_play_res_y,
@@ -754,7 +729,7 @@ def prepare_part_assets(
                         margin_v=_margin_v,
                         play_res_y=_play_res_y,
                         x_percent=getattr(ctx.payload, "sub_x_percent", 50.0),
-                        font_size=getattr(ctx.payload, "sub_font_size", 0),
+                        font_size=_effective_sub_font_size,
                     )
                 # Sprint 7.3 — after a successful generation, put the
                 # produced ASS into the cache for future re-renders.
@@ -800,7 +775,9 @@ def prepare_part_assets(
                 ctx.effective_channel, ctx.job_id,
                 f"Part {idx} subtitle: style={_effective_subtitle_style} "
                 f"(payload={ctx.payload.subtitle_style or 'auto'}) "
-                f"font_size={getattr(ctx.payload, 'sub_font_size', 0)} "
+                f"font_size={_effective_sub_font_size} "
+                f"raw_font_size={_raw_sub_font_size} "
+                f"emphasis={_emphasis or 'balanced'} "
                 f"margin_v={_margin_v} x_pct={getattr(ctx.payload, 'sub_x_percent', 50.0):.1f} "
                 f"play_res_y={_play_res_y} aspect={ctx.payload.aspect_ratio}",
                 kind="info",
@@ -827,7 +804,9 @@ def prepare_part_assets(
                         else ("auto" if not _raw_sub_style else "explicit")
                     ),
                     "content_type_hint": seg.get("content_type_hint", ""),
-                    "font_size": getattr(ctx.payload, "sub_font_size", 0),
+                    "font_size": _effective_sub_font_size,
+                    "raw_font_size": _raw_sub_font_size,
+                    "subtitle_emphasis": (str(_emphasis).lower() if _emphasis else "balanced"),
                     "margin_v": _margin_v,
                     "play_res_y": _play_res_y,
                     "aspect_ratio": ctx.payload.aspect_ratio,
@@ -849,13 +828,23 @@ def prepare_part_assets(
     _part_text_layers_overlay = list(ctx.normalized_text_layers)
     if ctx.hook_overlay_enabled and len(_part_text_layers) < MAX_TEXT_LAYERS:
         _hook_srt_path = str(srt_part) if srt_part.exists() and srt_part.stat().st_size > 0 else None
+        # Strategic-2 — Audit 2026-06-08 closure. The LLM's per-clip
+        # ``RenderPlan.clips[i].title`` (surfaced into ``seg["ai_title"]``
+        # by ``_scored_from_render_plan`` at render_pipeline.py:267) now
+        # serves as the hook-overlay text source when the operator has
+        # not set an explicit ``hook_applied_text``. Pre-Strategic-2
+        # this field was display-only (visible in the parts API but
+        # never rendered into the video). resolve_hook_overlay_text
+        # implements the priority: explicit > ai_title > SRT-first-block.
+        _ai_title = str(seg.get("ai_title") or "").strip()
         _hook_text, _hook_source = resolve_hook_overlay_text(
             ctx.hook_applied_text if ctx.hook_applied_text else None,
             _hook_srt_path,
+            ai_title=_ai_title or None,
         )
         if _hook_text:
             _hook_overlay_applied_for_part = True
-            _hook_spd = max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.07)))
+            _hook_spd = max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.0)))
             _hook_end_t = round(min(2.5, 1.5 * _hook_spd), 3)
             _part_text_layers = [
                 {

@@ -19,6 +19,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { RenderSocketClient } from '../websocket/RenderSocketClient'
+import type { WsLogEvent } from '../websocket/events'
 import { isTerminalStatus } from '../types/enums'
 import { useRenderStore } from '../stores/renderStore'
 import { getJob, getJobParts } from '../api/jobs'
@@ -26,6 +27,13 @@ import type { JobStatus, WsProgressSummary, JobPart, JobErrorKind } from '../typ
 
 const POLLING_FALLBACK_INTERVAL_MS = 5_000
 const PART_IN_PROGRESS_STATUSES = ['cutting', 'transcribing', 'rendering', 'waiting'] as const
+// T3.1 — Audit 2026-06-08 closure (Batch A V8-C1). Cap the live-event
+// buffer at a small number — the UI consumes the latest events and
+// older ones drop off. The BE side already drops oldest under
+// backpressure (asyncio.Queue(maxsize=200) on the broadcaster); this
+// cap is the FE-side equivalent for memory boundedness during long
+// renders that emit hundreds of events.
+const LIVE_EVENTS_CAP = 50
 
 /**
  * Derive an approximate WsProgressSummary from parts + job. Used when
@@ -74,6 +82,11 @@ export interface RenderSocketState {
   isTerminal: boolean           // derived from jobStatus
   error: string | null
   errorKind: JobErrorKind | null  // structured error classification, set on FAILED
+  // T3.1 — Audit 2026-06-08 closure (Batch A V8-C1). Live log /
+  // structured events bridged from the backend's _emit_render_event
+  // stream. Newest event at index 0; older events drop off the end
+  // when the buffer reaches LIVE_EVENTS_CAP.
+  liveEvents: WsLogEvent[]
 }
 
 export function useRenderSocket(jobId: string | null, wsPathOverride?: string): RenderSocketState {
@@ -95,6 +108,8 @@ export function useRenderSocket(jobId: string | null, wsPathOverride?: string): 
   const [isPolling, setIsPolling]           = useState(false)
   const [error, setError]                   = useState<string | null>(null)
   const [errorKind, setErrorKind]           = useState<JobErrorKind | null>(null)
+  // T3.1 — live events bridged from backend EVENT_BROADCASTER.
+  const [liveEvents, setLiveEvents] = useState<WsLogEvent[]>([])
 
   const updateJobStatus = useRenderStore((s) => s.updateJobStatus)
 
@@ -211,6 +226,17 @@ export function useRenderSocket(jobId: string | null, wsPathOverride?: string): 
       setIsReconnecting(true)
     })
 
+    // T3.1 — push live structured events into the bounded buffer.
+    // Newest event at index 0; older events drop off the tail when
+    // the cap is reached. Use functional setState so concurrent
+    // pushes don't lose entries between re-renders.
+    client.onLogEvent((evt) => {
+      setLiveEvents((prev) => {
+        const next = [evt, ...prev]
+        return next.length > LIVE_EVENTS_CAP ? next.slice(0, LIVE_EVENTS_CAP) : next
+      })
+    })
+
     client.onError((err) => {
       setError(err)
       setIsConnected(false)
@@ -245,5 +271,6 @@ export function useRenderSocket(jobId: string | null, wsPathOverride?: string): 
     isTerminal: isTerminalStatus(jobStatus ?? ''),
     error,
     errorKind,
+    liveEvents,
   }
 }

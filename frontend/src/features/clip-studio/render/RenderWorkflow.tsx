@@ -220,12 +220,16 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       // cfg.partOrder`. The BE validator at models/render.py:451-463
       // coerces the value to "viral" then no engine consumer reads it
       // (FINDING-C01 closure). Pure UI deceit on the wire.
-      // T1.4 — Audit 2026-06-08 closure: removed `subtitle_emphasis`,
-      // `structure_bias`, `clip_lock`, `clip_exclude` from the wire
-      // (UP26 Pro Timeline Steering — never reach LLM nor local
-      // filter). UI form state still collects cfg.subEmphasis /
-      // cfg.structureBias / cfg.clipLock / cfg.clipExclude; cleanup of
-      // the form widgets themselves is a follow-up task.
+      // UP26 Pro Timeline Steering — audit-2026-06-08 closures.
+      //   structure_bias    — Strategic-1c (ranking formula re-weight).
+      //   subtitle_emphasis — Strategic-1c (sub_font_size multiplier).
+      //   clip_lock / clip_exclude — Strategic-1/1b (LLM prompt + local
+      //     filter). FE state vars `clipLock` / `clipExclude` carry the
+      //     ranges but the FE has no TimeRange editor yet; they remain
+      //     API-only until a TimeRange editor lands. `[]` is the
+      //     no-op default — sending it has no effect on selection.
+      structure_bias:    cfg.structureBias ?? undefined,
+      subtitle_emphasis: cfg.subEmphasis ?? undefined,
       voice_enabled:               cfg.narrEnabled,
       voice_source:        cfg.narrEnabled ? cfg.voiceSource : undefined,
       voice_text:          cfg.narrEnabled && cfg.voiceSource === 'manual' ? cfg.voiceText : undefined,

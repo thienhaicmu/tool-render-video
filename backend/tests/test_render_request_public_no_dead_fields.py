@@ -169,21 +169,29 @@ def test_known_phase_g_zombies_NOT_in_public_surface():
 
 
 def test_known_up26_dead_NOT_in_public_surface():
-    """Same defence-in-depth for the UP26 Pro Timeline Steering
-    fields. These were sent by the FE with zero downstream effect —
-    the LLM prompt never saw them, the local segment filter never
-    consulted them."""
+    """Post-Strategic-1c (commit landing after Strategic-1b): ALL four
+    UP26 Pro Timeline Steering fields are wired and present in the
+    Public surface:
+      - clip_lock + clip_exclude: LLM prompt sections + BE local
+        filter (Strategic-1 + Strategic-1b).
+      - structure_bias: ranking-formula re-weight (Strategic-1c).
+      - subtitle_emphasis: font-size multiplier (Strategic-1c).
+
+    The dead UP26 set is EMPTY post-Strategic-1c. This test guards
+    that all four fields STAY in the Public surface; a refactor
+    that drops any of them reverts the corresponding closure."""
     from app.models.render_public import FE_FACING_FIELDS
 
-    up26_dead = frozenset({
-        "clip_lock", "clip_exclude", "structure_bias", "subtitle_emphasis",
+    up26_all_wired = frozenset({
+        "clip_lock", "clip_exclude",
+        "structure_bias", "subtitle_emphasis",
     })
-    leaked = up26_dead & FE_FACING_FIELDS
-    assert not leaked, (
-        f"T1.4 regression — UP26 dead field(s) reappeared in "
-        f"FE_FACING_FIELDS: {sorted(leaked)}. None reach the LLM "
-        f"prompt or local-side filter. Re-introducing them would "
-        f"restore the UI deceit."
+    missing = up26_all_wired - FE_FACING_FIELDS
+    assert not missing, (
+        f"Strategic-1/1c regression — UP26 wired field(s) disappeared "
+        f"from FE_FACING_FIELDS: {sorted(missing)}. Each field has a "
+        f"specific consumer (see the test docstring); removing any "
+        f"breaks the wire even though the consumer code still exists."
     )
 
 

@@ -165,6 +165,20 @@ export interface RenderRequest {
   llm_mode?: string | null
   ai_provider?: string | null
 
+  // Strategic-1 + Strategic-1c — Audit 2026-06-08 closure. UP26 Pro
+  // Timeline Steering — fully wired in Strategic-1c:
+  //   clip_lock / clip_exclude — TimeRange arrays, wired through
+  //     the LLM prompt (Strategic-1) and BE local filter
+  //     (Strategic-1b).
+  //   structure_bias — 'hook' | 'balanced' | 'story' — re-weights
+  //     the ranking formula in pipeline_ranking.
+  //   subtitle_emphasis — 'subtle' | 'balanced' | 'aggressive' —
+  //     subtitle font-size multiplier applied at ASS generation.
+  clip_lock?: TimeRange[] | null
+  clip_exclude?: TimeRange[] | null
+  structure_bias?: 'hook' | 'balanced' | 'story' | null
+  subtitle_emphasis?: 'subtle' | 'balanced' | 'aggressive' | null
+
   // Creator Asset Intelligence (UP27) — surviving wired fields
   asset_logo_path?: string | null
   asset_intro_path?: string | null

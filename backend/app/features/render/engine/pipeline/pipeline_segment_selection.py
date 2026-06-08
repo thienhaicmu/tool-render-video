@@ -25,7 +25,7 @@ logger = logging.getLogger("app.render")
 _PLATFORM_PROFILES: dict[str, dict] = {
     "tiktok": {
         # P4 hardening: increased from 0.04 → 0.08 so pacing difference is perceptible.
-        # At 1.07 base: 1.15x output. On 30s clip: ~26s. On 60s clip: ~52s.
+        # At 1.0 base: 1.08x output (V8-A7: was 1.15x at the legacy 1.07 base).
         "speed_delta":     0.08,
         "hook_sort_bonus": 6,      # adds up to 6pts to hook-strong clips in initial sort
         "sub_bias": {
@@ -40,7 +40,7 @@ _PLATFORM_PROFILES: dict[str, dict] = {
     },
     "instagram_reels": {
         # P4 hardening: increased from -0.03 → -0.06 so polished-pace difference is perceptible.
-        # At 1.07 base: 1.01x output. On 30s clip: ~30s. On 60s clip: ~59s.
+        # At 1.0 base: 0.94x output (V8-A7: was 1.01x at the legacy 1.07 base).
         "speed_delta":    -0.06,
         "hook_sort_bonus": 0,
         "sub_bias": {
@@ -275,7 +275,11 @@ def _build_variant_segments(scored: list[dict], payload) -> list[dict]:
     """
     if not scored:
         return scored
-    base_speed = float(getattr(payload, "playback_speed", None) or 1.07)
+    # V8-A7 (audit 2026-06-08) — fallback aligned with the new model
+    # default. payload.playback_speed is always set by Pydantic (defaults
+    # to 1.0 post-V8-A7), so this fallback only fires for legacy stored
+    # payloads that omit the key entirely.
+    base_speed = float(getattr(payload, "playback_speed", None) or 1.0)
     base_sub = (getattr(payload, "subtitle_style", "") or "").strip()
 
     def _ct(s: dict) -> str:

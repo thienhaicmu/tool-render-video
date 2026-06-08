@@ -46,6 +46,8 @@ def select_render_plan(
     language: str = "auto",
     editorial_hint: str = "",
     target_duration: int = 0,
+    clip_lock: list[dict] | None = None,
+    clip_exclude: list[dict] | None = None,
 ) -> Optional[RenderPlan]:
     """Send SRT to OpenAI and return a RenderPlan emitted in one pass.
 
@@ -53,7 +55,9 @@ def select_render_plan(
     json_object). The editorial_hint parameter mirrors Gemini/Claude so
     the ``ai.llm.select_render_plan`` dispatcher can forward it uniformly.
     ``target_duration`` is the creator's soft total-duration target in
-    seconds (T2.4); 0 = disabled. Returns None on any failure
+    seconds (T2.4); 0 = disabled. ``clip_lock`` / ``clip_exclude`` are
+    UP26 Pro Timeline Steering hard constraints (Strategic-1); None /
+    empty disables the prompt sections. Returns None on any failure
     (Sacred Contract #3).
     """
     try:
@@ -68,6 +72,8 @@ def select_render_plan(
             language=language,
             editorial_hint=editorial_hint,
             target_duration=target_duration,
+            clip_lock=clip_lock,
+            clip_exclude=clip_exclude,
         )
     except Exception as exc:
         logger.warning("openai_client: select_render_plan unexpected error — %s", exc, exc_info=True)
@@ -85,6 +91,8 @@ def _run_render_plan(
     language: str,
     editorial_hint: str,
     target_duration: int = 0,
+    clip_lock: list[dict] | None = None,
+    clip_exclude: list[dict] | None = None,
 ) -> Optional[RenderPlan]:
     if not _OPENAI_SDK:
         logger.warning("openai_client: openai SDK not installed (render_plan path)")
@@ -105,6 +113,8 @@ def _run_render_plan(
         max_srt_chars=_MAX_SRT_CHARS,
         editorial_hint=editorial_hint,
         target_duration=target_duration,
+        clip_lock=clip_lock,
+        clip_exclude=clip_exclude,
     )
 
     resolved_model = model or _DEFAULT_MODEL

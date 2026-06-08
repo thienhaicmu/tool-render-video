@@ -73,6 +73,18 @@ class FinalizeContext:
     ai_influence_report: dict
     ai_beat_report: dict
     render_plan: Optional[RenderPlan] = None
+    # Strategic-4 — Audit 2026-06-08 closure (Batch A V8-D1/V8-D2).
+    # The rank-source tag returned by _resolve_rank_from_plan(). One of:
+    #   "render_plan"          — plan-derived ranks consumed (AI's intent)
+    #   "fallback"             — LLM_EMIT_RENDER_PLAN env != "1" (operator opted out)
+    #   "fallback_no_plan_rank"— RenderPlan missing or empty
+    #   "fallback_rank_invalid"— AI emitted invalid rank values
+    #   "fallback_rank_collision" — duplicate rank values across clips
+    # Persisted into result_json["ranking_metadata"] so post-render
+    # consumers (FE, AI Director, ops) can attribute the rank choice.
+    # Default "" matches the pre-Strategic-4 absence so the dataclass
+    # remains backward-compat for callers that don't set it.
+    rank_source: str = ""
 
 
 def run_render_finalize(ctx: FinalizeContext) -> str:
@@ -182,6 +194,67 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
     _ai_render_quality: dict = {"available": False, "evaluation_mode": "evaluation_only"}
     _ai_ux_metadata: dict = {"available": False}
 
+    # Strategic-4 — Audit 2026-06-08 closure (Batch A V8-D1/V8-D2).
+    # Surface the rank-source attribution AND the local-recompute
+    # formula so post-render consumers can see (a) whether AI ranks
+    # were honoured or a fallback fired, and (b) the weighted formula
+    # used when local recompute applied.
+    #
+    # Strategic-1c — UP26 structure_bias closure. The `formula` field
+    # shows the BALANCED (default) weights; the new
+    # `applied_structure_bias` field records which weight SET was
+    # actually used for the local recompute (one of "hook",
+    # "balanced", "story"). When applied != "balanced" the operator
+    # picked a non-default bias and `effective_formula` shows the
+    # actual weights consumed.
+    from app.features.render.engine.pipeline.pipeline_ranking import (
+        resolve_structure_bias_weights, resolve_structure_bias_label,
+        STRUCTURE_BIAS_WEIGHTS,
+    )
+    _structure_bias_label = resolve_structure_bias_label(
+        getattr(payload, "structure_bias", None)
+    )
+    _effective_weights_dict = resolve_structure_bias_weights(_structure_bias_label)
+    # Translate internal short keys to the full metadata key names.
+    _effective_formula = {
+        "viral_score":        _effective_weights_dict["viral"],
+        "hook_score":         _effective_weights_dict["hook"],
+        "retention_score":    _effective_weights_dict["retention"],
+        "speech_density":     _effective_weights_dict["speech_density"],
+        "market_score":       _effective_weights_dict["market"],
+        "duration_fit":       _effective_weights_dict["duration_fit"],
+    }
+    _balanced_weights_dict = STRUCTURE_BIAS_WEIGHTS["balanced"]
+    _balanced_formula = {
+        "viral_score":        _balanced_weights_dict["viral"],
+        "hook_score":         _balanced_weights_dict["hook"],
+        "retention_score":    _balanced_weights_dict["retention"],
+        "speech_density":     _balanced_weights_dict["speech_density"],
+        "market_score":       _balanced_weights_dict["market"],
+        "duration_fit":       _balanced_weights_dict["duration_fit"],
+    }
+
+    _ranking_metadata: dict = {
+        "rank_source": ctx.rank_source or "fallback",
+        "ai_rank_consumed": (ctx.rank_source == "render_plan"),
+        "local_recompute_active": (ctx.rank_source != "render_plan"),
+        # Strategic-4: `formula` field preserved with the canonical
+        # 'balanced' weight set so existing consumers keep working.
+        "formula": _balanced_formula,
+        # Strategic-1c: applied_structure_bias + effective_formula
+        # surface the actual weights used.
+        "applied_structure_bias": _structure_bias_label,
+        "effective_formula": _effective_formula,
+        "formula_source": "pipeline_ranking.py:_compute_output_ranking_entry",
+        "fallback_reasons_documented": [
+            "fallback",                  # LLM_EMIT_RENDER_PLAN env != "1"
+            "fallback_no_plan_rank",     # RenderPlan missing or empty
+            "fallback_rank_invalid",     # AI emitted invalid rank values
+            "fallback_rank_collision",   # duplicate rank values across clips
+        ],
+        "structure_bias_documented": list(STRUCTURE_BIAS_WEIGHTS.keys()),
+    }
+
     _result_payload = {
         "outputs": outputs,
         "render_preset": _preset_name,
@@ -191,6 +264,7 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
         "market_viral_parts": _mv_parts,
         "output_ranking": _rank_entries_ordered,
         "output_ranking_warning": _partial_warning,
+        "ranking_metadata": _ranking_metadata,
         "best_clip": _best_rank_entry,
         "best_exports": _best_exports_list,
         "voice_summary": _voice_summary,

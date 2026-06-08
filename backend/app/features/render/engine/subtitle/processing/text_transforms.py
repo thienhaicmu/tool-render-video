@@ -11,17 +11,29 @@ def resolve_hook_overlay_text(
     hook_applied_text: str | None,
     srt_path: str | None,
     max_words: int = 10,
+    ai_title: str | None = None,
 ) -> tuple[str, str]:
     """Resolve hook overlay text for the opening visual overlay.
 
     Priority:
-    1. hook_applied_text — explicit user-supplied hook string.
-    2. First meaningful subtitle block from srt_path (â‰¥2 words).
-    3. Return ("", reason) when nothing suitable is found.
+    1. ``hook_applied_text`` — explicit user-supplied hook string.
+       This is the operator override and always wins.
+    2. ``ai_title`` — Strategic-2 (Audit 2026-06-08 closure). The
+       per-clip title text emitted by the LLM as
+       ``RenderPlan.clips[i].title``. Pre-Strategic-2 this field was
+       display-only (flowed to ``result_json[segments].ai_title`` and
+       the parts HTTP endpoint but never rendered into the video).
+       Now it serves as the hook-overlay text source when no explicit
+       override is set — the AI's per-clip creative is finally
+       visible on the rendered output.
+    3. First meaningful subtitle block from ``srt_path`` (>= 2 words).
+    4. Return ("", reason) when nothing suitable is found.
 
-    Returns (text, source_reason).
-    Cleans: collapses whitespace, strips ASS tags, truncates to max_words,
-    converts all-caps (>3 words) to title-case.
+    Returns ``(text, source_reason)`` where source_reason is one of
+    ``"explicit" | "ai_title" | "subtitle_first_block" | "no_suitable_text"``.
+
+    Cleans: collapses whitespace, strips ASS tags, truncates to
+    ``max_words``, converts all-caps (>3 words) to title-case.
     """
     def _clean(raw: str) -> str:
         t = re.sub(r"\s+", " ", str(raw or "").replace("\n", " ").strip())
@@ -39,6 +51,17 @@ def resolve_hook_overlay_text(
         cleaned = _clean(explicit)
         if cleaned:
             return cleaned, "explicit"
+
+    # Strategic-2 — Audit 2026-06-08 closure. ai_title comes from the
+    # LLM's RenderPlan.clips[i].title and is per-clip. Slot priority 2:
+    # below the operator override (so explicit user intent always
+    # wins) but above the SRT-derived fallback (so the AI's creative
+    # text is preferred over a generic first-line lift).
+    ai = str(ai_title or "").strip()
+    if ai:
+        cleaned = _clean(ai)
+        if cleaned:
+            return cleaned, "ai_title"
 
     if srt_path:
         try:

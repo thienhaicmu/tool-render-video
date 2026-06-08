@@ -34,6 +34,8 @@ def select_render_plan(
     language: str = "auto",
     editorial_hint: str = "",
     target_duration: int = 0,
+    clip_lock: list[dict] | None = None,
+    clip_exclude: list[dict] | None = None,
 ) -> Optional["RenderPlan"]:
     """Dispatch RenderPlan emission to the named LLM provider.
 
@@ -44,6 +46,11 @@ def select_render_plan(
     V8-A1) is the creator's soft total-duration target in seconds, 0 =
     disabled (backward-compat default — callers that don't pass it
     behave exactly as pre-T2.4).
+
+    ``clip_lock`` / ``clip_exclude`` (Strategic-1 — Audit 2026-06-08
+    closure, Batch A V8-A12) are UP26 Pro Timeline Steering hard
+    constraints — lists of {start_sec, end_sec} dicts. None / empty
+    disables each prompt section (backward-compat default).
 
     Returns None on any failure. Sacred Contract #3 — provider modules
     catch all exceptions and surface None at the wire.
@@ -72,5 +79,7 @@ def select_render_plan(
         language=language,
         editorial_hint=editorial_hint,
         target_duration=target_duration,
+        clip_lock=clip_lock,
+        clip_exclude=clip_exclude,
     )
 
