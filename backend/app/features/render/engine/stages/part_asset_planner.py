@@ -1,6 +1,6 @@
-"""Per-part asset planner â€” Layer 7 of the render pipeline.
+"""Per-part asset planner — Layer 7 of the render pipeline.
 
-Sprint 6.D-2.2 â€” extracted verbatim from stages/part_renderer.py
+Sprint 6.D-2.2 — extracted verbatim from stages/part_renderer.py
 (lines 107-716 of the pre-2.2 file). No logic changes; pure relocation.
 
 `prepare_part_assets(ctx, idx, seg, srt_part, ass_part,
@@ -35,7 +35,7 @@ Public re-export contract:
   Re-exported from stages/part_renderer.py so the existing internal
   caller (process_one_part) keeps using `prepare_part_assets(...)`
   via the bare reference. No external module imports
-  prepare_part_assets directly â€” only process_one_part does.
+  prepare_part_assets directly — only process_one_part does.
 
 Sacred Contracts touched:
   - #5 Frozen part-stage names: uses JobPartStage.TRANSCRIBING via
@@ -47,7 +47,7 @@ Sacred Contracts touched:
        app.services.db unchanged.
 
 LOC budget note (Sprint 6.D-3.6b pattern):
-  ~610 LOC single commit â€” 2Ã— the Â§7 advisory cap of 300. The
+  ~610 LOC single commit — 2Ã— the Â§7 advisory cap of 300. The
   function is a single internally-cohesive Layer-7 sequence with
   30+ mutable state vars flowing across all sections; no clean
   interior seam exists. Cohesion preferred over the LOC guideline.
@@ -101,16 +101,16 @@ from app.features.render.engine.subtitle.transcription.adapters import transcrib
 from app.features.render.engine.overlay.text_overlay import MAX_TEXT_LAYERS
 from app.features.render.engine.subtitle.translation_service import translate_srt_file
 
-# Preserve original logger name (Sprint 6.D-2.1 pattern) â€” used by the
+# Preserve original logger name (Sprint 6.D-2.1 pattern) — used by the
 # original code in stages/part_renderer.py and by downstream filters.
 logger = logging.getLogger("app.render")
 
 
 # â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-# Sprint 4.E â€” RenderPlan.subtitle_policy consume helpers.
+# Sprint 4.E — RenderPlan.subtitle_policy consume helpers.
 #
 # When ctx.render_plan is None (flag OFF, no AI emission), both
-# resolvers fall through to the caller's fallback â€” Sacred Contract
+# resolvers fall through to the caller's fallback — Sacred Contract
 # #2 (default behaviour identical baseline). When ctx.render_plan is
 # set, per-field merge applies: empty fields stay at fallback (the
 # "empty = inherit" semantic documented at render_plan.py SubtitlePolicy);
@@ -118,7 +118,7 @@ logger = logging.getLogger("app.render")
 # Contract #3.
 #
 # Scope of Sprint 4.E: style + market only. emphasis_pass and
-# line_break_rule are deferred â€” emphasis because SubtitlePolicy can't
+# line_break_rule are deferred — emphasis because SubtitlePolicy can't
 # disambiguate "default False" from "explicit False" without flipping
 # baseline behaviour, line_break_rule because consuming it requires
 # extending apply_market_line_break_to_srt's signature (cross-file).
@@ -143,12 +143,12 @@ def _resolve_subtitle_style_from_plan(
 
     Resolution order (highest to lowest priority):
       1. Per-clip: ``render_plan.clips[part_no-1].subtitle_style`` when
-         ``part_no > 0`` and in bounds â€” source tag ``"render_plan_clip"``.
-      2. Global: ``render_plan.subtitle_policy.style`` â€” source tag ``"render_plan"``.
-      3. Fallback: caller-supplied legacy value â€” source tag ``"fallback"``
+         ``part_no > 0`` and in bounds — source tag ``"render_plan_clip"``.
+      2. Global: ``render_plan.subtitle_policy.style`` — source tag ``"render_plan"``.
+      3. Fallback: caller-supplied legacy value — source tag ``"fallback"``
          or ``"fallback_invalid_style"`` when a plan style failed validation.
 
-    Empty string in either plan field means â€œinherit from next levelâ€
+    Empty string in either plan field means “inherit from next levelâ€
     (the same semantic as SubtitlePolicy). Invalid style values soft-fall
     back to the caller's legacy resolution (Sacred Contract #3).
     """
@@ -211,7 +211,7 @@ def prepare_part_assets(
     final_part,
     raw_part,
 ):
-    # Layer 7: Overlay Asset Prep â€” subtitle slicing, ASS conversion, hook formatting,
+    # Layer 7: Overlay Asset Prep — subtitle slicing, ASS conversion, hook formatting,
     # text-layer assembly. Returns PartAssets + raw timing/meta for Layer 8 callers.
     _sub_target_lang = getattr(ctx.payload, "subtitle_target_language", "en")
     _srt_count = 0
@@ -365,7 +365,7 @@ def prepare_part_assets(
                         ctx.sub_translate_partial.append(idx)
                         _job_log(
                             ctx.effective_channel, ctx.job_id,
-                            f"Translation partially failed for {_sub_target_lang} export â€” "
+                            f"Translation partially failed for {_sub_target_lang} export — "
                             f"{len(_block_failures)} subtitle block(s) could not be translated. "
                             f"Original text preserved for those blocks.",
                             kind="warning",
@@ -526,7 +526,7 @@ def prepare_part_assets(
                 f"dna_sub_suppressed: reason={_sub_suppress_reason} part={idx}",
                 kind="debug",
             )
-        # Sprint 4.E â€” legacy 5-tier resolution remains the source of
+        # Sprint 4.E — legacy 5-tier resolution remains the source of
         # truth when ctx.render_plan is None. When the plan IS set we
         # let the resolver override per F.1/F.2 decisions.
         _legacy_subtitle_style = (
@@ -553,7 +553,7 @@ def prepare_part_assets(
                         )
                         else None
                     )
-                    # Sprint 4.E â€” RenderPlan.subtitle_policy.market
+                    # Sprint 4.E — RenderPlan.subtitle_policy.market
                     # overrides ctx.mv_market at this functional call
                     # site only. Log fields (L319/L335/L350) keep
                     # ctx.mv_market so upstream identity is preserved.
@@ -586,7 +586,7 @@ def prepare_part_assets(
                 _job_log(
                     ctx.effective_channel, ctx.job_id,
                     f"subtitle_emphasis_error part={idx} style={_effective_subtitle_style} "
-                    f"market={ctx.mv_market} â€” emphasis pass skipped, render continues",
+                    f"market={ctx.mv_market} — emphasis pass skipped, render continues",
                     kind="warning",
                 )
 
@@ -648,7 +648,7 @@ def prepare_part_assets(
             except Exception as _cta_exc:
                 logger.warning("cta_append_failed part=%d: %s", idx, _cta_exc)
 
-        # Sprint 7.3 â€” default cache-hit state for the subtitle_style_applied
+        # Sprint 7.3 — default cache-hit state for the subtitle_style_applied
         # event context (additive key, Sacred Contract #6 compliant).
         _ass_cache_hit = False
         if needs_ass:
@@ -658,10 +658,10 @@ def prepare_part_assets(
                 _margin_v += 40
             _t_sub = time.perf_counter()
 
-            # Sprint 7.3 â€” content-addressable ASS cache. Compute a SHA-256
+            # Sprint 7.3 — content-addressable ASS cache. Compute a SHA-256
             # key from the 13 inputs that determine the ASS body and try a
             # cache hit before the writer call. Cache hits skip both the
-            # 5-20 ms srt_to_ass_* generation and the file write â€” the
+            # 5-20 ms srt_to_ass_* generation and the file write — the
             # cached file is shutil.copy2'd to ass_part so the existing
             # downstream contract (ass_part as a file path consumed by
             # base_clip_renderer/overlay_compositor/motion_crop) is preserved.
@@ -696,7 +696,7 @@ def prepare_part_assets(
                     # acts purely as a best-effort optimisation, never the
                     # critical path.
                     logger.debug(
-                        "ass_cache_copy_failed part=%d key=%s err=%s â€” falling through to generation",
+                        "ass_cache_copy_failed part=%d key=%s err=%s — falling through to generation",
                         idx, (_ass_cache_k[:8] if _ass_cache_k else "?"), _ass_copy_exc,
                     )
 
@@ -728,7 +728,7 @@ def prepare_part_assets(
                         x_percent=getattr(ctx.payload, "sub_x_percent", 50.0),
                         font_size=getattr(ctx.payload, "sub_font_size", 0),
                     )
-                # Sprint 7.3 â€” after a successful generation, put the
+                # Sprint 7.3 — after a successful generation, put the
                 # produced ASS into the cache for future re-renders.
                 if _ass_cache_k:
                     _ass_cache_put(_ass_cache_k, ass_part)
@@ -787,7 +787,7 @@ def prepare_part_assets(
                 context={
                     "part_no": idx,
                     "subtitle_style": _effective_subtitle_style,
-                    # Sprint 4.E â€” when a plan overrides the legacy
+                    # Sprint 4.E — when a plan overrides the legacy
                     # 5-tier value we surface `"render_plan"` (or the
                     # `"fallback_invalid_style"` recovery tag) so
                     # operators can attribute the decision. Pre-4.E
@@ -803,7 +803,7 @@ def prepare_part_assets(
                     "margin_v": _margin_v,
                     "play_res_y": _play_res_y,
                     "aspect_ratio": ctx.payload.aspect_ratio,
-                    # Sprint 7.3 â€” additive only. Sibling to existing
+                    # Sprint 7.3 — additive only. Sibling to existing
                     # resume_cache_hit_srt / resume_cache_hit_ass keys in
                     # subtitle_part_sync. False on generation, True on
                     # content-cache hit. Sacred Contract #6 compliant

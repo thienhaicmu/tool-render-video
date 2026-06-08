@@ -1,30 +1,30 @@
-﻿"""Motion-crop pixel-diff path â€” frame-pair pixel-difference motion
+﻿"""Motion-crop pixel-diff path — frame-pair pixel-difference motion
 tracking + scene-cut detection. Used as the fallback path when the
 subject-tracker pipeline cannot find or hold a subject lock.
 
-Sprint 7.1 (2026-06-05) â€” renamed from ``legacy.py`` to
+Sprint 7.1 (2026-06-05) — renamed from ``legacy.py`` to
 ``motion_pixel_diff.py``. The "legacy" name historically misled
-auditors into thinking the module was dead code (it is NOT â€” three
+auditors into thinking the module was dead code (it is NOT — three
 live render-path callers depend on it; see
 ``docs/review/SPRINT_7_1_MOTION_RENAME_2026-06-05.md`` and
 ``docs/review/DEAD_CODE_PURGE_BLOCKERS_2026-06-05.md`` Â§4).
-File contents unchanged â€” pure rename + comment refresh.
+File contents unchanged — pure rename + comment refresh.
 
-Sprint 6.D-3.7 â€” extracted verbatim from motion_crop.py
+Sprint 6.D-3.7 — extracted verbatim from motion_crop.py
 (lines 1162-1363 of the post-3.5c file). No logic changes; pure relocation.
 
 Contents (preserved in original source order):
 
   detect_motion_center(prev_gray, gray, frame_width, frame_height, cfg)
-    Frame-pair motion centroid via cv2.absdiff â†’ threshold â†’
-    Gaussian blur â†’ dilate â†’ contours. Weighted by area + center
+    Frame-pair motion centroid via cv2.absdiff → threshold →
+    Gaussian blur → dilate → contours. Weighted by area + center
     preference (cfg.prefer_center_bias). Returns frame center when
     no motion contour exceeds cfg.min_contour_area_ratio.
 
   _build_motion_path_legacy(video_path, crop_w, crop_h, cfg)
     Full-video pixel-diff motion tracker (legacy fallback).
-    Per-frame: detect_motion_center â†’ dead-zone gate â†’ EMA-smoothed
-    target â†’ pan-speed clamp â†’ pan-accel clamp. Then two post-passes:
+    Per-frame: detect_motion_center → dead-zone gate → EMA-smoothed
+    target → pan-speed clamp → pan-accel clamp. Then two post-passes:
     temporal smoothing window (cfg.temporal_smooth_window), and
     jerk limiter (max_step = src_w * 0.006, max_accel = src_w * 0.0022).
     Returns (list of (x, y) top-left tuples, fps).
@@ -43,7 +43,7 @@ Out of scope (stays in motion_crop.py):
   need to import_back build_subject_path from motion_crop, which
   hasn't finished loading when this module is parsed).
 
-Internal-only â€” no external imports of these 3 symbols today. The
+Internal-only — no external imports of these 3 symbols today. The
 module is re-exported from motion_crop/__init__.py so existing
 internal call sites (build_motion_path dispatcher,
 render_motion_aware_crop, build_subject_path_scene fallback) keep
@@ -51,7 +51,7 @@ their bare references.
 
 Dependency-import strategy (same pattern as 6.D-3.5c):
   Imports MotionCropConfig from motion_crop_config and clamp/ema from
-  motion_crop_utils **directly** â€” not via motion_crop, which would
+  motion_crop_utils **directly** — not via motion_crop, which would
   hit a load-time cycle.
 """
 from __future__ import annotations

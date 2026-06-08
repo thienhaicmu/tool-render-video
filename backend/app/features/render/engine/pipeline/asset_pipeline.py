@@ -34,7 +34,7 @@ def _maybe_prepend_remotion_hook_intro(
         content_type,
         override=str(getattr(payload, "intro_preset", "") or "").strip() or None,
     )
-    # Per-preset duration â€” drives both the intro clip length and the return value
+    # Per-preset duration — drives both the intro clip length and the return value
     # which feeds _expected_final_duration in the part timing calculation.
     _preset_durations = {
         "viral_pop": 1.0,
@@ -100,8 +100,8 @@ def _maybe_prepend_remotion_hook_intro(
         _safe_unlink(concat_path)
 
 
-# â”€â”€ UP27: Creator Asset Intelligence helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# All three are safe-skip: missing file â†’ log asset_missing_skip, continue.
+# ── UP27: Creator Asset Intelligence helpers ──────────────────────────────────
+# All three are safe-skip: missing file → log asset_missing_skip, continue.
 # Never raise. Never fail the render.
 
 def _maybe_prepend_asset_intro(

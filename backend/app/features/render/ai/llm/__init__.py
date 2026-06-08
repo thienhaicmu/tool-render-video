@@ -1,5 +1,5 @@
 ﻿"""
-llm â€” multi-provider LLM dispatch for RenderPlan emission.
+llm — multi-provider LLM dispatch for RenderPlan emission.
 
 Routes select_render_plan() to the right provider implementation by name.
 Each provider module exposes select_render_plan(...) returning a RenderPlan.
@@ -39,7 +39,7 @@ def select_render_plan(
     The provider is asked to emit a full RenderPlan (clips + subtitle_policy +
     camera_strategy + audio_plan + overlays) in a single call.
 
-    Returns None on any failure. Sacred Contract #3 â€” provider modules
+    Returns None on any failure. Sacred Contract #3 — provider modules
     catch all exceptions and surface None at the wire.
     """
     p = (provider or DEFAULT_PROVIDER).strip().lower()
@@ -51,7 +51,7 @@ def select_render_plan(
         from app.features.render.ai.llm.providers.claude import select_render_plan as _impl
     else:
         logger.warning(
-            "llm: provider %r not in SUPPORTED_PROVIDERS=%s â€” render_plan falling back to gemini",
+            "llm: provider %r not in SUPPORTED_PROVIDERS=%s — render_plan falling back to gemini",
             provider, SUPPORTED_PROVIDERS,
         )
         from app.features.render.ai.llm.providers.gemini import select_render_plan as _impl

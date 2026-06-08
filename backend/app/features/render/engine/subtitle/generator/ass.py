@@ -37,8 +37,8 @@ def _ass_escape_text(text: str) -> str:
     Python `\\n` newlines are converted to ASS soft-wrap (`\\N`).
     """
     text = text.replace("\\", "\\\\ ")   # escape existing backslashes
-    text = text.replace("{", "(").replace("}", ")")   # braces â†’ parens (ASS override guard)
-    text = text.replace("\n", r"\N")     # Python newline â†’ ASS hard-newline
+    text = text.replace("{", "(").replace("}", ")")   # braces → parens (ASS override guard)
+    text = text.replace("\n", r"\N")     # Python newline → ASS hard-newline
     text = re.sub(
         f"{_HL_OPEN}([A-Z]{{2}}):(.*?){_HL_CLOSE}",
         lambda m: f"{_ass_highlight_tags(m.group(1))[0]}{m.group(2)}{_ass_highlight_tags(m.group(1))[1]}",
@@ -88,7 +88,7 @@ def srt_to_ass_bounce(
     if text_overlay_margin_v is None and effective_margin_v <= 180 and play_res_y > 1200:
         effective_margin_v = _compute_margin_v(play_res_x, play_res_y)
 
-    # Preset-specific margin override â€” some presets (viral_bold, bold_cap) push captions
+    # Preset-specific margin override — some presets (viral_bold, bold_cap) push captions
     # higher than the safe-zone default to clear platform UI chrome.
     if preset.margin_v_ratio > 0 and text_overlay_margin_v is None:
         effective_margin_v = int(play_res_y * preset.margin_v_ratio)
@@ -193,10 +193,10 @@ def srt_to_ass_karaoke(
 ):
     """Pro karaoke-style subtitle.
 
-    Hiá»ƒn thá»‹ nhÃ³m tá»« cÃ¹ng lÃºc, tá»« Ä‘ang nÃ³i Ä‘Æ°á»£c highlight mÃ u vÃ ng.
-    Style giá»‘ng MrBeast / viral TikTok.
+    Hiển thị nhóm từ cùng lúc, từ đang nói được highlight màu vàng.
+    Style giống MrBeast / viral TikTok.
 
-    YÃªu cáº§u: srt_path lÃ  word-level SRT (má»—i entry = 1 tá»«).
+    Yêu cầu: srt_path là word-level SRT (mỗi entry = 1 từ).
     """
     effective_margin_v = text_overlay_margin_v if text_overlay_margin_v is not None else margin_v
 
@@ -208,13 +208,13 @@ def srt_to_ass_karaoke(
     if not blocks:
         return srt_to_ass_bounce(srt_path, ass_path, scale_y=scale_y, margin_v=effective_margin_v, play_res_y=play_res_y)
 
-    # Guard: segment-level SRT produces meaningless \k tags â€” fallback to bounce
+    # Guard: segment-level SRT produces meaningless \k tags — fallback to bounce
     if len(blocks) > 1:
         avg_words = sum(len(b["text"].split()) for b in blocks) / len(blocks)
         if avg_words > 1.5:
             logger.warning(
                 "srt_to_ass_karaoke: segment-level SRT detected (avg %.1f words/block) "
-                "â€” \\k tags would be meaningless; falling back to bounce. "
+                "— \\k tags would be meaningless; falling back to bounce. "
                 "Set highlight_per_word=True for word-level transcription.",
                 avg_words,
             )
@@ -227,13 +227,13 @@ def srt_to_ass_karaoke(
         if chunk:
             groups.append(chunk)
 
-    # Resolution-aware effective values â€” scale default 1080p values to actual resolution
+    # Resolution-aware effective values — scale default 1080p values to actual resolution
     _scale = _compute_subtitle_scale(play_res_x, play_res_y)
     _eff_font_size = font_size if font_size != 46 else _scale["font_size"]
     _eff_outline   = outline_size if outline_size != 3 else _scale["outline"]
     _eff_shadow    = shadow_size  if shadow_size  != 1 else _scale["shadow"]
 
-    # ASS style â€” 2 colours: primary (base) + secondary (highlight during karaoke)
+    # ASS style — 2 colours: primary (base) + secondary (highlight during karaoke)
     style_line = (
         f"Style: Default,{font_name},{_eff_font_size},"
         f"{base_color},{highlight_color},"
@@ -242,7 +242,7 @@ def srt_to_ass_karaoke(
         f"2,30,30,{effective_margin_v},1"
     )
 
-    # Context style â€” smaller font above the active line, static white text
+    # Context style — smaller font above the active line, static white text
     _ctx_font_size  = max(20, round(_eff_font_size * 0.65))
     _ctx_outline    = max(1, round(_eff_outline * 0.75))
     _ctx_shadow     = max(0, round(_eff_shadow  * 0.75))
@@ -272,7 +272,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-    # Inject \pos(x,y) when subtitle is not centered. Default 50 â†’ no tag.
+    # Inject \pos(x,y) when subtitle is not centered. Default 50 → no tag.
     _pos_tag = ""
     _ctx_pos_tag = ""
     if abs(x_percent - 50.0) > 0.5:
@@ -361,7 +361,7 @@ def burn_subtitle_onto_video(
     _run_with_retry(cmd, retries=retry_count)
 
 
-# Half-resolution preview frames â€” same aspect ratio, smaller PNG for fast transfer.
+# Half-resolution preview frames — same aspect ratio, smaller PNG for fast transfer.
 _PREVIEW_ASPECT_RES: dict[str, tuple[int, int]] = {
     "9:16": (540, 960),
     "3:4":  (540, 720),
@@ -401,7 +401,7 @@ def render_subtitle_preview(
         ass_path = tmp / "prev.ass"
         img_path = tmp / "prev.png"
 
-        # Single SRT block at t=0 â€” visible in the first extracted frame.
+        # Single SRT block at t=0 — visible in the first extracted frame.
         srt_path.write_text(
             f"1\n00:00:00,000 --> 00:00:02,000\n{clean_text}\n\n",
             encoding="utf-8",
@@ -429,8 +429,8 @@ def render_subtitle_preview(
         else:
             vf = f"ass='{safe_ass}'"
 
-        # Dark background (0x111827 â‰ˆ slate-900) â€” mimics a video frame.
-        # r=1 â†’ one frame at PTS=0, subtitle at t=0 is visible.
+        # Dark background (0x111827 â‰ˆ slate-900) — mimics a video frame.
+        # r=1 → one frame at PTS=0, subtitle at t=0 is visible.
         cmd = [
             get_ffmpeg_bin(), "-y",
             "-f", "lavfi",

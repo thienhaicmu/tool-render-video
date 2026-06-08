@@ -1,4 +1,4 @@
-﻿"""Motion-crop subject-path entry point â€” CapCut-style Auto Reframe.
+﻿"""Motion-crop subject-path entry point — CapCut-style Auto Reframe.
 
 Sprint 5.2 split (from 977-LOC path.py):
   - build_subject_path stays here (~340 LOC including the multi-scene
@@ -10,10 +10,10 @@ Sprint 5.2 split (from 977-LOC path.py):
 
 Historical lineage (preserved from Sprint 6.D-3.6a):
   build_subject_path is the CapCut Auto Reframe equivalent. Every
-  cfg.subject_detect_interval frames it runs face â†’ body detection on
+  cfg.subject_detect_interval frames it runs face → body detection on
   a half-size frame; between detections a CSRT tracker plus
   _ByteTrackSubject (velocity-predicted IoU gate) keeps the lock.
-  Raw (cx, cy) â†’ Gaussian smooth â†’ velocity limit. Falls back to
+  Raw (cx, cy) → Gaussian smooth → velocity limit. Falls back to
   _build_motion_path_legacy when no subject is ever found and
   cfg.motion_fallback is True.
 
@@ -78,7 +78,7 @@ def build_subject_path(
     CapCut Auto Reframe equivalent.
 
     Algorithm:
-    1. Every `subject_detect_interval` frames: run face â†’ body detection on a
+    1. Every `subject_detect_interval` frames: run face → body detection on a
        half-size frame (4Ã— faster), pick the best subject.
     2. Between detections: use CSRT tracker (fast, robust to occlusion).
     3. If tracker drifts or loses target, re-detect on next interval.
@@ -142,7 +142,7 @@ def build_subject_path(
                 )
 
             # Capture final rendered crop center for next scene warmup.
-            # Converts top-left (x, y) â†’ crop center (cx, cy) in source coords.
+            # Converts top-left (x, y) → crop center (cx, cy) in source coords.
             if scene_centers:
                 _last_x, _last_y = scene_centers[-1]
                 _warmup_center = (_last_x + crop_w / 2.0, _last_y + crop_h / 2.0)
@@ -381,7 +381,7 @@ def build_subject_path(
     if subjects_found_total == 0 and cfg.motion_fallback:
         logger.warning(
             "motion_fallback_triggered input=%s content_type=%s reason=no_subject_detected "
-            "frames_scanned=%d detect_interval=%d â†’ switching to legacy pixel-diff",
+            "frames_scanned=%d detect_interval=%d → switching to legacy pixel-diff",
             Path(video_path).name, content_type, frame_idx, detect_interval,
         )
         return _build_motion_path_legacy(video_path, crop_w, crop_h, cfg)
@@ -399,7 +399,7 @@ def build_subject_path(
     ys = _gaussian_smooth_1d(ys, window)
     smoothed = list(zip(xs.tolist(), ys.tolist()))
 
-    # --- Step 5: velocity limiter â†’ integer top-left coords ---
+    # --- Step 5: velocity limiter → integer top-left coords ---
     centers = _apply_velocity_limiter(smoothed, src_w, src_h, crop_w, crop_h, cfg)
 
     return centers, fps

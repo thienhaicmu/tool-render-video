@@ -1,10 +1,10 @@
 ﻿"""
-gemini_provider.py â€” Google Gemini implementation of segment selection.
+gemini_provider.py — Google Gemini implementation of segment selection.
 
 Uses the unified google-genai SDK (Gemini 2.0 Flash by default).
 Free tier: 1M tokens/day, 15 RPM. Context window: 1M tokens.
 
-AI Safety (Contract 3): never raises â€” returns None on any error.
+AI Safety (Contract 3): never raises — returns None on any error.
 """
 from __future__ import annotations
 
@@ -31,10 +31,10 @@ logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)
 # where ``gemini-2.5-pro`` doesn't — almost certainly a typo for Flash.
 _DEFAULT_MODEL = os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 
-# 60K chars â‰ˆ 15K tokens â€” captures ~30 min of dense Vietnamese speech.
+# 60K chars â‰ˆ 15K tokens — captures ~30 min of dense Vietnamese speech.
 _MAX_SRT_CHARS = int(os.getenv("GEMINI_MAX_SRT_CHARS", "60000"))
 
-# Hard upper bound on a single Gemini request â€” prevents the SDK from
+# Hard upper bound on a single Gemini request — prevents the SDK from
 # blocking the render pipeline on its built-in ~10 min default timeout.
 _REQUEST_TIMEOUT_SEC = int(os.getenv("GEMINI_REQUEST_TIMEOUT", "120"))
 
@@ -67,12 +67,12 @@ def select_render_plan(
 ) -> Optional[RenderPlan]:
     """Send SRT to Gemini and return a RenderPlan emitted in one pass.
 
-    Sprint 4.C â€” additive partner of select_segments. Uses the same
+    Sprint 4.C — additive partner of select_segments. Uses the same
     Gemini API call helper; only the prompt builder and the parser
     differ. Sprint 4.D will gate which entry point the orchestrator
     invokes behind a feature flag.
 
-    Returns None on any failure â€” caller falls back to the segment-only
+    Returns None on any failure — caller falls back to the segment-only
     path (Sprint 2.2 builder shim).
     """
     try:
@@ -88,7 +88,7 @@ def select_render_plan(
             editorial_hint=editorial_hint,
         )
     except Exception as exc:
-        logger.warning("gemini_client: select_render_plan unexpected error â€” %s", exc, exc_info=True)
+        logger.warning("gemini_client: select_render_plan unexpected error — %s", exc, exc_info=True)
         return None
 
 
@@ -161,7 +161,7 @@ def _call_gemini_once(api_key: str, model: str, system_prompt: str, user_prompt:
 
     Timeout is enforced via http_options on the Client. google-genai accepts
     a plain dict for http_options (Client converts to HttpOptions internally
-    â€” see client.py:448-449 in the installed SDK). Timeout value is in
+    — see client.py:448-449 in the installed SDK). Timeout value is in
     MILLISECONDS (client.py:178: `http_opts.timeout / 1000`). The 30s default
     Override via GEMINI_REQUEST_TIMEOUT env.
     """

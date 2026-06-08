@@ -24,7 +24,7 @@ def _resume_output_valid(path: "Path") -> bool:
             "-of", "default=noprint_wrappers=1:nokey=1",
             str(path),
         ]
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=10)
         val = (out.stdout or "").strip()
         return bool(val) and float(val) > 0.0
     except Exception:
@@ -109,7 +109,7 @@ def _validate_render_output(
             "-show_streams",
             str(output_path),
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=30)
         if proc.returncode != 0:
             result["error"] = (
                 f"ffprobe could not read output "
@@ -224,7 +224,7 @@ def _assess_output_quality(
             "-vf", "blackdetect=d=0.0:pix_th=0.10",
             "-an", "-f", "null", "-",
         ]
-        _bdet_r = subprocess.run(_bdet_cmd, capture_output=True, text=True, timeout=10)
+        _bdet_r = subprocess.run(_bdet_cmd, capture_output=True, text=True, encoding="utf-8", timeout=10)
         for _bd_line in (_bdet_r.stderr or "").splitlines():
             if "black_start:" not in _bd_line or "black_end:" not in _bd_line:
                 continue
@@ -254,7 +254,7 @@ def _assess_output_quality(
             "-vf", "blurdetect=high=0.35:low=0.25",
             "-an", "-f", "null", "-",
         ]
-        _blur_r = subprocess.run(_blur_cmd, capture_output=True, text=True, timeout=10)
+        _blur_r = subprocess.run(_blur_cmd, capture_output=True, text=True, encoding="utf-8", timeout=10)
         _blur_vals: list[float] = []
         for _bl_line in (_blur_r.stderr or "").splitlines():
             if "blur:" not in _bl_line.lower():

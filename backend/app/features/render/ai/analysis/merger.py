@@ -1,5 +1,5 @@
 ﻿"""
-merger.py â€” Merge strategy for combining local and cloud AnalysisSignals.
+merger.py — Merge strategy for combining local and cloud AnalysisSignals.
 
 Configurable weights per signal type. Cloud generally wins on semantic signals;
 local wins on technical signals. If cloud is None, local is returned unchanged.
@@ -10,8 +10,8 @@ from app.features.render.ai.analysis.signals import (
     AnalysisSignals, ClipSignal, EmotionSignal,
 )
 
-# â”€â”€ Blend weights â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# cloud=1.0 â†’ use cloud exclusively; cloud=0.0 â†’ use local exclusively
+# ── Blend weights ─────────────────────────────────────────────────────────────
+# cloud=1.0 → use cloud exclusively; cloud=0.0 → use local exclusively
 _WEIGHTS: dict[str, float] = {
     "clip_hook_score":  0.70,   # cloud better at semantic hook detection
     "clip_relevance":   0.70,
@@ -43,7 +43,7 @@ def merge(local: AnalysisSignals, cloud: AnalysisSignals | None) -> AnalysisSign
     )
 
 
-# â”€â”€ Clip merging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Clip merging ───────────────────────────────────────────────────────────────
 
 def _merge_clips(
     local: list[ClipSignal],

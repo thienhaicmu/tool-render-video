@@ -46,7 +46,7 @@ def composite_overlays_on_base_clip(
 
     All start_time / end_time values in text_layers must be output-timeline seconds.
     On base_clip.mp4 the frame PTS is already output-timeline; no speed conversion
-    is applied here â€” the caller builds output-timeline layers before calling.
+    is applied here — the caller builds output-timeline layers before calling.
 
     Invariants: no setpts, no atempo, no crop, no scale, no color/effect filters.
     Audio is always copied; the base_clip audio is already speed-adjusted and
@@ -63,7 +63,7 @@ def composite_overlays_on_base_clip(
     _needs_encode = _has_subtitle or _has_title or _has_text_layers
 
     if not _needs_encode:
-        # No overlay â€” stream copy preserves all base_clip quality.
+        # No overlay — stream copy preserves all base_clip quality.
         cmd = [
             get_ffmpeg_bin(), "-y",
             "-i", base_clip_path,
@@ -80,7 +80,7 @@ def composite_overlays_on_base_clip(
         _base_fps = int(probe_video_metadata(base_clip_path).get("fps") or 60)
         vf_parts: list = []
 
-        # 1. Subtitle burn-in â€” output-timeline ASS; base_clip PTS already matches.
+        # 1. Subtitle burn-in — output-timeline ASS; base_clip PTS already matches.
         if _has_subtitle:
             safe_ass = _safe_filter_path(str(Path(subtitle_ass).resolve()))
             fonts_dir = _get_custom_fonts_dir() or _detect_windows_fonts_dir()
@@ -89,7 +89,7 @@ def composite_overlays_on_base_clip(
             else:
                 vf_parts.append(f"ass='{safe_ass}'")
 
-        # 2. Title drawtext â€” enable='lt(t,3)' means first 3 output seconds on base_clip PTS.
+        # 2. Title drawtext — enable='lt(t,3)' means first 3 output seconds on base_clip PTS.
         if _has_title:
             fontfile = _detect_windows_fontfile()
             safe_title = str(title_text).replace("\\", "\\\\").replace(":", r"\:").replace("'", r"\'")[:120]
@@ -98,11 +98,11 @@ def composite_overlays_on_base_clip(
                 drawtext += f":fontfile='{_safe_filter_path(fontfile)}'"
             vf_parts.append(drawtext)
 
-        # 3. User/hook text_layers â€” start_time/end_time are output-timeline seconds (caller contract).
+        # 3. User/hook text_layers — start_time/end_time are output-timeline seconds (caller contract).
         if _has_text_layers:
             append_text_layer_filters(vf_parts, text_layers)
 
-        # 4. fps= always last â€” guarantees CFR output for platform compatibility.
+        # 4. fps= always last — guarantees CFR output for platform compatibility.
         vf_parts.append(f"fps={_base_fps}")
 
         vf_chain = ",".join(vf_parts)
@@ -131,7 +131,7 @@ def composite_overlays_on_base_clip(
         if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
             try:
                 with NVENC_SEMAPHORE:
-                    # nvenc_externally_held=True â€” see Sprint 4.2 note in
+                    # nvenc_externally_held=True — see Sprint 4.2 note in
                     # base_clip_renderer; avoids semaphore double-acquire.
                     _run_ffmpeg_with_retry(cmd, retry_count=retry_count, nvenc_externally_held=True)
             except Exception as _nvenc_err:

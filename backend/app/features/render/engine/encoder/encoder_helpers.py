@@ -25,7 +25,7 @@ def ffmpeg_encoders_text() -> str:
     try:
         r = subprocess.run(
             [get_ffmpeg_bin(), "-hide_banner", "-encoders"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, encoding="utf-8", check=True,
         )
         return (r.stdout or "") + "\n" + (r.stderr or "")
     except Exception:
@@ -45,7 +45,7 @@ def nvenc_runtime_ready(codec_name: str) -> bool:
             "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.1",
             "-an", "-c:v", codec_name, "-f", "null", "-",
         ]
-        proc = subprocess.run(probe_cmd, capture_output=True, text=True)
+        proc = subprocess.run(probe_cmd, capture_output=True, text=True, encoding="utf-8")
         text = ((proc.stdout or "") + "\n" + (proc.stderr or "")).lower()
         if proc.returncode == 0:
             return True

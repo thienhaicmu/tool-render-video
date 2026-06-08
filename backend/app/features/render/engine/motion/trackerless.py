@@ -1,7 +1,7 @@
-﻿"""Motion-crop trackerless guard â€” confidence scoring + center-guard
+﻿"""Motion-crop trackerless guard — confidence scoring + center-guard
 clamping for the no-tracker (detection-only) path.
 
-Sprint 6.D-3.5c â€” extracted verbatim from motion_crop.py
+Sprint 6.D-3.5c — extracted verbatim from motion_crop.py
 (lines 183-296 of the post-3.5b file). No logic changes; pure relocation.
 
 When OpenCV trackers are unavailable (or skipped by config), the
@@ -22,8 +22,8 @@ spurious detections. This module provides the safety net:
     same-as-previous bonus, plus penalties for extreme offcenter/edge.
 
   _trackerless_hold_frames_for_confidence(base_hold_frames, confidence)
-    Reduce hold-frame budget when confidence is low. <0.55 â†’ âˆ’4 frames
-    (floor 3), <0.78 â†’ âˆ’2 frames (floor 4), else base.
+    Reduce hold-frame budget when confidence is low. <0.55 → âˆ’4 frames
+    (floor 3), <0.78 → âˆ’2 frames (floor 4), else base.
 
   _trackerless_crop_side_fill_ratio(target_cx, frame_w, crop_w,
                                     band_ratio=0.28)
@@ -40,14 +40,14 @@ spurious detections. This module provides the safety net:
       "none", "weak_trackerless_guard", "medium_trackerless_guard",
       "edge_fill_guard".
 
-Internal-only â€” no external imports of these 5 symbols today. The
+Internal-only — no external imports of these 5 symbols today. The
 module is re-exported from motion_crop.py so existing internal call
 sites (build_subject_path, build_subject_path_scene) keep their bare
 references unchanged.
 
 Dependency-import note:
   Imports `_subject_*`, `_same_subject` from motion_crop_scoring and
-  `clamp` from motion_crop_utils directly â€” not via motion_crop, which
+  `clamp` from motion_crop_utils directly — not via motion_crop, which
   would create a load-time cycle (motion_crop.py imports this module
   at its top, so motion_crop hasn't finished loading yet when we run).
 """

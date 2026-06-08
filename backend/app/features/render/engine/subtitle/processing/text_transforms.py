@@ -15,7 +15,7 @@ def resolve_hook_overlay_text(
     """Resolve hook overlay text for the opening visual overlay.
 
     Priority:
-    1. hook_applied_text â€” explicit user-supplied hook string.
+    1. hook_applied_text — explicit user-supplied hook string.
     2. First meaningful subtitle block from srt_path (â‰¥2 words).
     3. Return ("", reason) when nothing suitable is found.
 
@@ -135,7 +135,7 @@ def apply_market_line_break_to_srt(srt_path: str, market_payload: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# P4-2 â€” Hook subtitle impact formatting
+# P4-2 — Hook subtitle impact formatting
 # ---------------------------------------------------------------------------
 
 def apply_market_hook_text_to_srt(
@@ -242,7 +242,7 @@ def format_hook_subtitle(text: str) -> str:
         if _is_emphasis(words[i]):
             split_at = i + 1
 
-    # Clamp: line 1 = 2â€“6 words, line 2 always has â‰¥ 1 word
+    # Clamp: line 1 = 2–6 words, line 2 always has â‰¥ 1 word
     split_at = max(2, min(split_at, 6, total - 1))
 
     line1 = " ".join(words[:split_at]).upper()
@@ -256,7 +256,7 @@ def apply_hook_subtitle_format(srt_path: str, max_hook_blocks: int = 2) -> int:
     Only the first `max_hook_blocks` entries receive impact formatting; the rest
     are written back unchanged.  Returns the number of formatted blocks on success,
     0 on empty file or error.
-    Safe no-op on any exception â€” original file is left untouched if writing fails.
+    Safe no-op on any exception — original file is left untouched if writing fails.
     """
     try:
         blocks = _parse_srt_blocks(srt_path)
@@ -281,7 +281,7 @@ def apply_hook_subtitle_format(srt_path: str, max_hook_blocks: int = 2) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Phase 17 â€” AI subtitle execution metadata integration
+# Phase 17 — AI subtitle execution metadata integration
 # ---------------------------------------------------------------------------
 
 def apply_subtitle_execution_hints(

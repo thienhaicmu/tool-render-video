@@ -1,7 +1,7 @@
-"""Render-pipeline narration stage â€” manual-mode AI voice TTS.
+"""Render-pipeline narration stage — manual-mode AI voice TTS.
 
-Sprint 6.D-1.4 â€” extracted verbatim from render_pipeline.py
-(lines 406â€“483 of the pre-1.4 file). No logic changes; pure relocation.
+Sprint 6.D-1.4 — extracted verbatim from render_pipeline.py
+(lines 406–483 of the pre-1.4 file). No logic changes; pure relocation.
 
 Responsibilities:
   - When voice_enabled is True AND voice_source == "manual":
@@ -24,7 +24,7 @@ Why state-init stays in the caller:
 Sacred Contracts honored:
   - #3 AI module return-None contract: TTS module is a service, not under
        backend/app/ai/**. The try/except here swallows all exceptions and
-       converts them to (None, voice_tts_failed=True) â€” equivalent guarantee.
+       converts them to (None, voice_tts_failed=True) — equivalent guarantee.
   - #6 _emit_render_event signature: 3 call sites preserved verbatim
        (voice_tts_started, voice_tts_completed | voice_failed + recovery_success).
 """
@@ -53,7 +53,7 @@ def run_manual_voice_tts(
     """Run the manual-source AI voice TTS pass.
 
     Args:
-        recovery_notes: mutable list â€” appended on failure so the caller
+        recovery_notes: mutable list — appended on failure so the caller
             sees the recovery note in the result_json payload.
 
     Returns:
@@ -62,7 +62,7 @@ def run_manual_voice_tts(
         - voice_tts_failed is True if TTS raised, False otherwise
 
     Raises:
-        cancel_registry.JobCancelledError â€” propagated to caller's outer
+        cancel_registry.JobCancelledError — propagated to caller's outer
         try/except so the existing cancellation handling fires.
     """
     if not (
@@ -140,8 +140,8 @@ def run_manual_voice_tts(
             traceback_text=traceback.format_exc(),
             context={"error_code": "VOICE001"},
         )
-        # UP24: recovery â€” voice is optional, render continues without it
-        recovery_notes.append("AI narration failed â€” rendered without voice")
+        # UP24: recovery — voice is optional, render continues without it
+        recovery_notes.append("AI narration failed — rendered without voice")
         _emit_render_event(
             channel_code=effective_channel,
             job_id=job_id,

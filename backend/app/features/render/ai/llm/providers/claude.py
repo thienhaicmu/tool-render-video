@@ -1,7 +1,7 @@
 ﻿"""
-claude_provider.py â€” Anthropic Claude implementation of segment selection.
+claude_provider.py — Anthropic Claude implementation of segment selection.
 
-Uses the anthropic SDK. Default: claude-haiku-4-5 â€” fast, cheap, and
+Uses the anthropic SDK. Default: claude-haiku-4-5 — fast, cheap, and
 follows JSON instructions reliably (Haiku 4.5 has near-Sonnet quality
 on structured output tasks at ~1/5 the cost).
 
@@ -11,7 +11,7 @@ Claude does not have a native JSON mode flag like OpenAI/Gemini, but the
 shared prompt template explicitly asks for a single JSON object and
 Haiku 4.5 honours that. The parser tolerates surrounding text just in case.
 
-AI Safety (Contract 3): never raises â€” returns None on any error.
+AI Safety (Contract 3): never raises — returns None on any error.
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def select_render_plan(
 ) -> Optional[RenderPlan]:
     """Send SRT to Claude and return a RenderPlan emitted in one pass.
 
-    Sprint 4.C â€” additive partner of select_segments. Same Anthropic
+    Sprint 4.C — additive partner of select_segments. Same Anthropic
     API call helper underneath; only the prompt builder and parser
     swap out. The editorial_hint parameter mirrors the Gemini provider
     so the Sprint 4.D dispatcher can forward it uniformly.
@@ -72,7 +72,7 @@ def select_render_plan(
             editorial_hint=editorial_hint,
         )
     except Exception as exc:
-        logger.warning("claude_client: select_render_plan unexpected error â€” %s", exc, exc_info=True)
+        logger.warning("claude_client: select_render_plan unexpected error — %s", exc, exc_info=True)
         return None
 
 

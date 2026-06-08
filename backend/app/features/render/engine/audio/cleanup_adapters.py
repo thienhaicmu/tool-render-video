@@ -155,6 +155,7 @@ def _run_command(command: list[str], *, timeout_sec: int = _DEEPFILTERNET_TIMEOU
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=timeout_sec,
     )
 
@@ -199,6 +200,7 @@ def _probe_audio_duration(path: str) -> float:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
     )
     return float(str(proc.stdout or "").strip())

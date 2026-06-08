@@ -1,6 +1,6 @@
-﻿"""Per-part render context â€” state-holder dataclass for part_renderer.
+﻿"""Per-part render context — state-holder dataclass for part_renderer.
 
-Sprint 6.D-2.1 â€” extracted verbatim from stages/part_renderer.py
+Sprint 6.D-2.1 — extracted verbatim from stages/part_renderer.py
 (lines 100-154 of the pre-extraction file). No logic changes; pure relocation.
 
 `PartRenderContext` bundles all closure-captured state that the
@@ -25,14 +25,14 @@ Field grouping (preserved verbatim from the original):
     hook_applied_text, hook_score, hook_overlay_enabled.
   - AI subtitle: dna_clean_visual, ai_subtitle_emphasis_config.
   - Text layers: normalized_text_layers.
-  - Mutable shared lists (passed by reference â€” same list object as
+  - Mutable shared lists (passed by reference — same list object as
     outer scope): voice_part_tts_attempts, voice_mix_ok,
     sub_translate_attempts, sub_translate_partial, sub_translate_clean,
     sub_translate_failed_parts, recovery_notes.
 
 The 7 mutable-list fields use `field(default_factory=list)` and are
 ALSO populated by the caller via constructor kwargs with the outer
-list references â€” appends inside per-part workers mutate the same
+list references — appends inside per-part workers mutate the same
 list objects that run_render_pipeline reads later for the
 result_json payload. Do not change the field types or replace them
 with tuples; the by-reference contract is load-bearing.
@@ -100,7 +100,7 @@ class PartRenderContext:
     ai_subtitle_emphasis_config: Any
     # Text layers
     normalized_text_layers: Any
-    # Mutable shared lists (passed by reference â€” same list object as outer scope)
+    # Mutable shared lists (passed by reference — same list object as outer scope)
     voice_part_tts_attempts: list = field(default_factory=list)
     voice_mix_ok: list = field(default_factory=list)
     sub_translate_attempts: list = field(default_factory=list)
@@ -108,9 +108,9 @@ class PartRenderContext:
     sub_translate_clean: list = field(default_factory=list)
     sub_translate_failed_parts: list = field(default_factory=list)
     recovery_notes: list = field(default_factory=list)
-    # Sprint 2.3 â€” RenderPlan threaded from orchestration after the LLM stage.
+    # Sprint 2.3 — RenderPlan threaded from orchestration after the LLM stage.
     # Optional + default None to honor Sacred Contract #2 (new field defaults
-    # to disabled equivalent â€” legacy contexts that don't set it work
+    # to disabled equivalent — legacy contexts that don't set it work
     # unchanged). part_renderer.py does NOT consume this field in Sprint 2.3;
     # Sprint 4 will migrate decision logic to read it.
     render_plan: Optional[RenderPlan] = None

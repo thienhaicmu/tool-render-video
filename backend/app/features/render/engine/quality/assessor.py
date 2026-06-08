@@ -264,7 +264,7 @@ def assess_rendered_part_quality(
             "-vf", "blackdetect=d=0.0:pix_th=0.10",
             "-an", "-f", "null", "-",
         ]
-        _bdet_r = subprocess.run(_bdet_cmd, capture_output=True, text=True, timeout=10)
+        _bdet_r = subprocess.run(_bdet_cmd, capture_output=True, text=True, encoding="utf-8", timeout=10)
         _dark_detected = False
         for _line in (_bdet_r.stderr or "").splitlines():
             if "black_start:" not in _line or "black_end:" not in _line:
@@ -300,7 +300,7 @@ def assess_rendered_part_quality(
             "-vf", "blurdetect=high=0.35:low=0.25",
             "-an", "-f", "null", "-",
         ]
-        _blur_r = subprocess.run(_blur_cmd, capture_output=True, text=True, timeout=10)
+        _blur_r = subprocess.run(_blur_cmd, capture_output=True, text=True, encoding="utf-8", timeout=10)
         _blur_vals: list[float] = []
         for _bl_line in (_blur_r.stderr or "").splitlines():
             if "blur:" not in _bl_line.lower():

@@ -1,5 +1,5 @@
 ﻿"""
-signals.py â€” Unified analysis output schema for the AI analysis layer.
+signals.py — Unified analysis output schema for the AI analysis layer.
 
 All analyzers (local and cloud) return AnalysisSignals.
 This is the single contract between the analysis layer and the AI Director.
@@ -45,8 +45,8 @@ class SubtitleHints:
 class CameraHints:
     """Camera behavior recommendations from the analysis layer."""
     behavior: str = "none"            # "dramatic_push" | "fast_follow" | "slow_reveal" | "subject_lock" | "none"
-    zoom_strength: float = 1.0        # 1.0 â€“ 1.18
-    follow_strength: float = 0.5      # 0.0 â€“ 0.85
+    zoom_strength: float = 1.0        # 1.0 – 1.18
+    follow_strength: float = 0.5      # 0.0 – 0.85
     source: str = "local"
 
 

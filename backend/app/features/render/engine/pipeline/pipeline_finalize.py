@@ -1,7 +1,7 @@
-"""Render-pipeline finalize stage â€” success-path terminal block.
+"""Render-pipeline finalize stage — success-path terminal block.
 
-Sprint 6.D-1.5 â€” extracted verbatim from render_pipeline.py
-(lines 1295â€“1455 of the pre-extraction file). No logic changes;
+Sprint 6.D-1.5 — extracted verbatim from render_pipeline.py
+(lines 1295–1455 of the pre-extraction file). No logic changes;
 pure relocation. The block runs only after a successful render loop
 and is responsible for:
 
@@ -17,7 +17,7 @@ Sacred Contracts honored (CLAUDE.md):
   - #4: terminal job stage emitted is JobStage.DONE.
   - #6: _emit_render_event signature/shape unchanged.
   - #7: only DB writer is upsert_job (db/jobs_repo).
-  - #8: qa_pipeline not bypassed â€” this block fires only after the
+  - #8: qa_pipeline not bypassed — this block fires only after the
         success path already cleared qa_pipeline upstream.
 """
 from __future__ import annotations
@@ -41,7 +41,7 @@ class FinalizeContext:
 
     Every field corresponds to a local variable in run_render_pipeline at
     the moment finalize is entered. Field names mirror the originals with
-    leading underscores dropped (e.g. _output_stem â†’ output_stem) so the
+    leading underscores dropped (e.g. _output_stem → output_stem) so the
     dataclass surface reads naturally; the orchestrator binds each field
     explicitly when constructing the context.
     """
@@ -107,7 +107,7 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
     _ai_influence_report = ctx.ai_influence_report
     _ai_beat_report     = ctx.ai_beat_report
 
-    # â”€â”€ P5-2 Auto Best Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── P5-2 Auto Best Export ─────────────────────────────────────────────
     _best_exports_list: list[dict] = []
     if getattr(payload, "auto_best_export_enabled", False):
         if _rank_entries:
@@ -141,7 +141,7 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
                     job_id=job_id,
                     event="best_export_completed",
                     level="INFO",
-                    message=f"Best export: {len(_best_exports_list)}/{len(_abe_top)} files â†’ {_best_dir}",
+                    message=f"Best export: {len(_best_exports_list)}/{len(_abe_top)} files → {_best_dir}",
                     step="render.best_export",
                     context={
                         "count":          len(_best_exports_list),
@@ -224,7 +224,7 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
         progress_percent=100,
         message=_final_message,
     )
-    # AI Memory write (Phase 3) removed in Phase G â€” consumed _ai_edit_plan (None after E3).
+    # AI Memory write (Phase 3) removed in Phase G — consumed _ai_edit_plan (None after E3).
     # Sprint 6.A: opportunistic db backup after a completed render. Wrapped
     # so any backup failure CANNOT propagate into the render pipeline.
     # Triggers every Nth job or after the configured time interval (see

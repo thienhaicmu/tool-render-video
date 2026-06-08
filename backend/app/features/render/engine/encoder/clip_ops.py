@@ -68,7 +68,7 @@ def cut_video(
                     )
                     logger.warning(
                         "cut_video: keyframe_drift_detected output=%s "
-                        "intended=%.3f raw=%.3f drift=%.3f â†’ retrying with accurate cut",
+                        "intended=%.3f raw=%.3f drift=%.3f → retrying with accurate cut",
                         Path(output_path).name, intended_duration,
                         float(raw_duration or 0.0), _drift,
                     )
@@ -139,7 +139,7 @@ def detect_silence_trim_offset(
         "-f", "null", "-",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=20)
         for line in result.stderr.splitlines():
             if "silence_end:" in line:
                 # "silence_end: 0.858333 | silence_duration: 0.858333"
@@ -186,7 +186,7 @@ def detect_bad_first_frame(
         "-an", "-f", "null", "-",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=15)
         # blackdetect writes to stderr:
         # [blackdetect @ 0x...] black_start:0 black_end:0.458 black_duration:0.458
         for line in (result.stderr or "").splitlines():
@@ -234,7 +234,7 @@ def _detect_silence_segments(
         cancel_ev = getattr(_tls, 'cancel_event', None)
         if cancel_ev is not None and cancel_ev.is_set():
             return []
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=60)
         segments: list[tuple[float, float]] = []
         pending_start: float | None = None
         for line in result.stderr.splitlines():
@@ -296,20 +296,20 @@ def apply_micro_pacing(
     effective_max_trim: float = _p["max_trim"]
 
     silences = _detect_silence_segments(input_path, noise_db=effective_noise_db, min_dur=effective_min_dur)
-    # PART A: protect clip boundaries â€” 0.6s start buffer (was 0.5s), 0.3s end buffer
+    # PART A: protect clip boundaries — 0.6s start buffer (was 0.5s), 0.3s end buffer
     silences = [(s, e) for s, e in silences if s >= 0.6 and e <= clip_dur - 0.3]
     if not silences:
         return _NO_OP
 
-    # PART E: payoff zone â€” last 2s may contain a reaction/reveal; trim more gently there
+    # PART E: payoff zone — last 2s may contain a reaction/reveal; trim more gently there
     _payoff_zone_start = max(0.0, clip_dur - 2.0)
 
     def _target_dur(dur: float, mul: float = 1.0) -> float:
-        # PART A+B: preserve more of medium/long silences â€” they are more likely intentional.
-        # Short (â‰¤0.5s): breath pause     â†’ keep 0.20s  (was 0.15s for â‰¤0.7s)
-        # Medium (â‰¤0.9s): rhythm pause    â†’ keep 0.30s  (was 0.25s for â‰¤1.2s)
-        # Long (â‰¤1.5s): emphasis/sentence â†’ keep 0.45s  (was 0.40s for >1.2s)
-        # Dead air (>1.5s): genuine gap   â†’ keep 0.50s
+        # PART A+B: preserve more of medium/long silences — they are more likely intentional.
+        # Short (â‰¤0.5s): breath pause     → keep 0.20s  (was 0.15s for â‰¤0.7s)
+        # Medium (â‰¤0.9s): rhythm pause    → keep 0.30s  (was 0.25s for â‰¤1.2s)
+        # Long (â‰¤1.5s): emphasis/sentence → keep 0.45s  (was 0.40s for >1.2s)
+        # Dead air (>1.5s): genuine gap   → keep 0.50s
         if dur <= 0.5:
             base = 0.20
         elif dur <= 0.9:

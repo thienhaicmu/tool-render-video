@@ -66,7 +66,7 @@ def render_base_clip(
 ) -> dict:
     """Render a base clip with no subtitle, title, or text overlay filters.
 
-    Uses timeline.effective_speed for setpts/atempo â€” no speed re-derivation.
+    Uses timeline.effective_speed for setpts/atempo — no speed re-derivation.
     Returns a metadata dict: path, duration, fps, width, height, has_audio, created_at.
 
     When FEATURE_BASE_CLIP_FIRST=1 only: base_clip.mp4 is a parallel validation artifact;
@@ -297,7 +297,7 @@ def render_part(
     ffmpeg_threads: int | None = None,
     content_type: str = "vlog",
     visual_intensity_hint: str | None = None,
-    # Sprint 7.4 (2026-06-05) â€” fuse mode: when both _source_seek_start and
+    # Sprint 7.4 (2026-06-05) — fuse mode: when both _source_seek_start and
     # _source_seek_duration are provided, input_path is treated as a full
     # source (not a pre-cut raw_part). The seek args are prepended (input-
     # side, fast) before -i for speed, or appended (output-side, frame-
@@ -309,7 +309,7 @@ def render_part(
     _source_seek_duration: float | None = None,
     _source_seek_force_accurate: bool = False,
 ):
-    # Sprint 7.4 â€” pre-build input args once so both the NVENC main cmd
+    # Sprint 7.4 — pre-build input args once so both the NVENC main cmd
     # and the CPU fallback cmd use the same shape.
     if _source_seek_start is not None and _source_seek_duration is not None:
         if _source_seek_force_accurate:
@@ -331,7 +331,7 @@ def render_part(
         logger.info("cinematic_pass_reduced_for_low_quality_source src=%dx%d", _src_w, _src_h)
     if loudnorm_enabled and not reup_mode:
         logger.info("audio_polish_enabled audio_loudnorm_applied=True")
-    # Part E: content-type bitrate profile â€” montage needs more budget; interview/tutorial less
+    # Part E: content-type bitrate profile — montage needs more budget; interview/tutorial less
     _mr_m, _bs_m = {"montage": (25, 50), "interview": (15, 30), "tutorial": (15, 30)}.get(
         content_type, (20, 40)
     )
@@ -364,7 +364,7 @@ def render_part(
     _effective_effect_preset = resolve_effect_preset_with_intensity(
         effect_preset, visual_intensity_hint, _user_effect_explicit
     )
-    # Part C: smart denoise â€” content-type and source-quality gated (replaces preset-only gate)
+    # Part C: smart denoise — content-type and source-quality gated (replaces preset-only gate)
     _denoise = _smart_denoise_filter(content_type, preset_low, _src_h)
     if _denoise:
         vf_parts.append(_denoise)
@@ -397,7 +397,7 @@ def render_part(
     vf_parts.append("format=yuv420p")
     if transition_sec and transition_sec > 0:
         # Content-type-aware fade cap.
-        # Montage/vlog: keep 0.08 s â€” hard cuts are intentional in fast-paced content.
+        # Montage/vlog: keep 0.08 s — hard cuts are intentional in fast-paced content.
         # Speech-heavy (interview/commentary/tutorial): allow up to 0.20 s so the
         # edit feels less jarring when the subject is talking continuously.
         # Floor at 0.03 s (â‰ˆ 1 frame at 30fps) prevents pure hard cuts.
@@ -436,7 +436,7 @@ def render_part(
         # timestamps and outputs a constant cadence at exactly target_fps.
         vf_parts.append(f"setpts=PTS/{speed:.4f}")
 
-    # fps filter is always the last video filter â€” it guarantees CFR output
+    # fps filter is always the last video filter — it guarantees CFR output
     # regardless of what setpts or upstream filters did to the timestamps.
     target_fps, fps_policy = _resolve_fps(input_path, int(output_fps or 0))
     logger.info("render_part: %s | input=%s", fps_policy, Path(input_path).name)
@@ -484,7 +484,7 @@ def render_part(
                   f"{_build_audio_mix_filter('a0', 'a1', 'aout')}")
             cmd += ["-filter_complex", fc, "-map", "[vout]", "-map", "[aout]"]
         else:
-            # No source audio â€” use video filter_complex + map BGM directly
+            # No source audio — use video filter_complex + map BGM directly
             fc = f"[0:v]{vf_chain}[vout]"
             af = f"volume={gain}"
             if abs(speed - 1.0) > 1e-4:
@@ -515,10 +515,10 @@ def render_part(
     if resolved_codec in ("h264_nvenc", "hevc_nvenc"):
         # GPU encode: hold one NVENC session slot for the duration of the subprocess.
         # NVENC_SEMAPHORE is released on any exit (success OR exception) before the
-        # CPU fallback runs â€” so the fallback never competes with other GPU sessions.
+        # CPU fallback runs — so the fallback never competes with other GPU sessions.
         try:
             with NVENC_SEMAPHORE:
-                # nvenc_externally_held=True â€” see Sprint 4.2 note in
+                # nvenc_externally_held=True — see Sprint 4.2 note in
                 # render_base_clip above; avoids semaphore double-acquire.
                 _run_ffmpeg_with_retry(cmd, retry_count=retry_count, nvenc_externally_held=True)
             return
@@ -528,7 +528,7 @@ def render_part(
                 _nvenc_err, Path(output_path).name,
             )
             logger.info("recovery_attempted strategy=cpu_encoder reason=%s output=%s", _nvenc_err, Path(output_path).name)
-        # CPU fallback â€” NVENC_SEMAPHORE already released by the `with` block above.
+        # CPU fallback — NVENC_SEMAPHORE already released by the `with` block above.
         cpu_codec = "libx265" if str(video_codec).lower() == "h265" else "libx264"
         cpu_preset = _map_preset_for_encoder(video_preset, cpu_codec)
         cpu_flags = ["-c:v", cpu_codec, "-preset", cpu_preset,
@@ -569,7 +569,7 @@ def render_part(
         _run_ffmpeg_with_retry(cpu_cmd, retry_count=retry_count)
         logger.info("recovery_success strategy=cpu_encoder output=%s", Path(output_path).name)
     else:
-        # CPU-only encode â€” no GPU semaphore needed.
+        # CPU-only encode — no GPU semaphore needed.
         _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
 
 
@@ -782,7 +782,7 @@ def render_part_from_source(
     content_type: str = "vlog",
     visual_intensity_hint: str | None = None,
     force_accurate_cut: bool = False,
-    # Sprint 7.8 (2026-06-05) â€” motion-aware fused cut+render branch.
+    # Sprint 7.8 (2026-06-05) — motion-aware fused cut+render branch.
     # When motion_aware_crop=True, delegates to render_motion_aware_crop
     # with source_start_sec/source_duration_sec window kwargs instead of
     # passing through render_part. Defaults preserve Sprint 7.4 behaviour.
@@ -791,7 +791,7 @@ def render_part_from_source(
     _motion_cache_key: str | None = None,
     _fallback_flag: list | None = None,
 ) -> None:
-    """Sprint 7.4 (2026-06-05) â€” fused cut+render for the raw_part skip path.
+    """Sprint 7.4 (2026-06-05) — fused cut+render for the raw_part skip path.
 
     Combines the cut_video stream-copy + render_part_smart final encode into
     a single FFmpeg invocation by passing source_start / source_duration
@@ -812,7 +812,7 @@ def render_part_from_source(
     docs/review/SPRINT_7_8_MOTION_AWARE_FUSE_PLAN_2026-06-05.md.
     """
     if motion_aware_crop:
-        # Sprint 7.8 â€” fused cut + motion-aware-crop. NVENC semaphore
+        # Sprint 7.8 — fused cut + motion-aware-crop. NVENC semaphore
         # acquired here (same pattern as render_part_smart lines 633-640)
         # so total acquires per part stays at 1.
         from app.features.render.engine.motion import render_motion_aware_crop

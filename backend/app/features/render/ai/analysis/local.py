@@ -1,9 +1,9 @@
 ﻿"""
-local_analyzer.py â€” Wraps existing local analyzers into the AnalyzerContract.
+local_analyzer.py — Wraps existing local analyzers into the AnalyzerContract.
 
 Does NOT modify hook_analyzer.py or emotion_analyzer.py.
 Bridges their outputs into AnalysisSignals schema.
-Always succeeds (catches all exceptions â†’ returns None for HybridAnalyzer fallback).
+Always succeeds (catches all exceptions → returns None for HybridAnalyzer fallback).
 """
 from __future__ import annotations
 

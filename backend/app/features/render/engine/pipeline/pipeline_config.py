@@ -53,7 +53,7 @@ def _probe_video_duration(video_path: Path) -> int:
         str(video_path),
     ]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True)
         return max(0, int(float((r.stdout or "0").strip() or 0)))
     except Exception:
         return 0

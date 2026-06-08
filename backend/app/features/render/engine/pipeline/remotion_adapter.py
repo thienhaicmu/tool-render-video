@@ -257,7 +257,7 @@ def generate_hook_intro(
     ]
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=30)
         if proc.returncode != 0 or not out.exists() or out.stat().st_size <= 0:
             return None
         return str(out)
@@ -315,7 +315,7 @@ def prepend_intro_clip(
         str(out),
     ]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=timeout_sec)
         if proc.returncode != 0 or not out.exists() or out.stat().st_size <= 0:
             _summarize_ffmpeg_stderr(proc.stderr or "")
             return None
@@ -356,7 +356,7 @@ def append_outro_clip(
         str(out),
     ]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=timeout_sec)
         if proc.returncode != 0 or not out.exists() or out.stat().st_size <= 0:
             _summarize_ffmpeg_stderr(proc.stderr or "")
             return None
@@ -409,7 +409,7 @@ def apply_logo_watermark(
         str(out),
     ]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=timeout_sec)
         if proc.returncode != 0 or not out.exists() or out.stat().st_size <= 0:
             _summarize_ffmpeg_stderr(proc.stderr or "")
             return None

@@ -16,7 +16,7 @@ logger = logging.getLogger("app.render")
 # Maps job_id -> log directory for the active render. Read by _job_log()
 # and _emit_render_event() to route per-job log lines. Cleaned up by
 # unregister_job_log_dir() at job completion (see render_pipeline.py finally
-# block). Mutations guarded by _JOB_LOG_DIRS_LOCK â€” Sprint 4.3, audit 2026-06-02.
+# block). Mutations guarded by _JOB_LOG_DIRS_LOCK — Sprint 4.3, audit 2026-06-02.
 _JOB_LOG_DIRS: dict[str, Path] = {}
 _JOB_LOG_DIRS_LOCK = threading.Lock()
 
@@ -135,7 +135,7 @@ def _emit_render_event(
     _append_json_line(LOGS_DIR / "app.log", entry)
     if lvl in {"ERROR", "CRITICAL", "FATAL"}:
         _append_json_line(LOGS_DIR / "error.log", entry)
-    # Feed workflow trace â€” swallowed, never raises
+    # Feed workflow trace — swallowed, never raises
     try:
         from app.core.tracing import _feed_render_event
         _feed_render_event(
@@ -184,12 +184,12 @@ def _render_progress_timer(
     """Background thread that emits linear progress estimates while FFmpeg runs.
 
     Wakes every _PROGRESS_TICK_SEC seconds and writes an interpolated progress
-    value in the 70â€“99% band to the DB.  Exits cleanly when stop_event is set.
+    value in the 70–99% band to the DB.  Exits cleanly when stop_event is set.
 
     Design notes:
     - Uses stop_event.wait(timeout) rather than time.sleep so it wakes
       immediately when stop_event.set() is called (no lingering sleep).
-    - Clamps at 99% â€” the caller always writes the authoritative 100% after
+    - Clamps at 99% — the caller always writes the authoritative 100% after
       render_part_smart() returns, guaranteeing that the final DB write wins.
     - All exceptions are swallowed; a noisy timer must never crash a render thread.
     """
@@ -201,7 +201,7 @@ def _render_progress_timer(
         if expected_duration > 0:
             progress = min(99, 70 + int(30 * elapsed / expected_duration))
         else:
-            progress = 85  # unknown duration â€” park at midpoint
+            progress = 85  # unknown duration — park at midpoint
 
         # Warn once when duration is unknown and render has run for >300 s
         if expected_duration <= 0 and elapsed > 300 and not _stall_suspected_emitted:
@@ -219,7 +219,7 @@ def _render_progress_timer(
             except Exception:
                 pass
 
-        # Hard stall guard: wall-clock deadline exceeded â€” fail the part and exit
+        # Hard stall guard: wall-clock deadline exceeded — fail the part and exit
         if not stop_event.is_set() and time.monotonic() > stall_deadline:
             try:
                 if channel_code:

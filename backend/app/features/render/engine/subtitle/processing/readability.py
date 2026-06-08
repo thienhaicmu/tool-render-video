@@ -87,7 +87,7 @@ def _break_by_visual_width(text: str, max_em: float = 18.0, max_lines: int = 2) 
 
 
 # ---------------------------------------------------------------------------
-# Hook emphasis vocabulary â€” shared by text_transforms and emphasis engine
+# Hook emphasis vocabulary — shared by text_transforms and emphasis engine
 # ---------------------------------------------------------------------------
 
 _HOOK_EMPHASIS_WORDS = frozenset({
@@ -103,7 +103,7 @@ _HOOK_EMPHASIS_WORDS = frozenset({
 
 
 # ---------------------------------------------------------------------------
-# S4 â€” Subtitle Emphasis Engine
+# S4 — Subtitle Emphasis Engine
 # ---------------------------------------------------------------------------
 
 def _is_cjk(text: str) -> bool:
@@ -177,7 +177,7 @@ def _should_emphasize(token: str, level: str) -> bool:
         )
     if level == "medium":
         return lw in _EMPH_CONTRAST or lw in _EMPH_EMOTIONAL or lw in _HOOK_EMPHASIS_WORDS
-    return False  # subtle â†’ numbers only (handled above); minimal/word_only â†’ never reaches here
+    return False  # subtle → numbers only (handled above); minimal/word_only → never reaches here
 
 
 def _uppercase_emphasis_words(text: str) -> str:
@@ -204,7 +204,7 @@ def _uppercase_emphasis_words(text: str) -> str:
 def _insert_emphasis_markers(text: str, market: str, level: str) -> str:
     """Wrap emphasis tokens with _HL_OPEN/_HL_CLOSE markers for later ASS resolution.
 
-    Skips any token that already contains a marker â€” prevents double-wrapping
+    Skips any token that already contains a marker — prevents double-wrapping
     when apply_market_line_break_to_srt() has already marked keywords.
     """
     mkt = str(market or "US").upper()[:2]
@@ -227,8 +227,8 @@ def _semantic_wrap_block(text: str, max_em: float) -> str:
     """Midpoint line-wrap with orphan/widow avoidance.
 
     Avoids:
-    - Orphan: a single word stranded alone on line 2 â†’ skip split entirely
-    - Widow: a very short trailing word (â‰¤ 3 chars) on line 2 â†’ shift split right
+    - Orphan: a single word stranded alone on line 2 → skip split entirely
+    - Widow: a very short trailing word (â‰¤ 3 chars) on line 2 → shift split right
     """
     if "\n" in text or _approx_visual_width(text) <= max_em:
         return text
@@ -250,11 +250,11 @@ def _semantic_wrap_block(text: str, max_em: float) -> str:
             best_dist = dist
             best_idx = i + 1
 
-    # Orphan avoidance: exactly 1 word on line 2 â€” return unsplit
+    # Orphan avoidance: exactly 1 word on line 2 — return unsplit
     if n - best_idx == 1:
         return text
 
-    # Widow avoidance: last word of line 2 is very short â†’ shift split right by 1
+    # Widow avoidance: last word of line 2 is very short → shift split right by 1
     last_clean = re.sub(r"\W", "", words[-1])
     if len(last_clean) <= 3 and (n - best_idx) >= 2 and best_idx + 1 < n:
         candidate = best_idx + 1
@@ -277,24 +277,24 @@ def subtitle_emphasis_pass(
     Operates on a list of blocks (dicts with 'start', 'end', 'text' keys).
     Modifies 'text' in-place and returns the same list.
 
-    Per-block pipeline (segment-level only â€” word-level SRT skips all transforms):
-      1. CJK script detection â€” skips uppercase and markers for CJK text
+    Per-block pipeline (segment-level only — word-level SRT skips all transforms):
+      1. CJK script detection — skips uppercase and markers for CJK text
       2. Semantic line wrap with orphan/widow avoidance
       3. Uppercase transform on emphasis-class words (strong level, Latin only)
       4. Emphasis highlight markers (_HL_OPEN/_HL_CLOSE, resolved by _ass_escape_text)
 
     Emphasis intensity per preset:
-      tiktok_bounce_v1 / viral_bold / bold_cap â†’ strong  (numbers, contrast, urgency, hook words)
-      story_clean_01                           â†’ medium  (numbers, contrast, emotional, hook words)
-      clean_pro                                â†’ subtle  (numbers only)
-      boxed_caption                            â†’ minimal (no emphasis transforms)
-      pro_karaoke                              â†’ word_only (no transforms â€” karaoke handles timing)
+      tiktok_bounce_v1 / viral_bold / bold_cap → strong  (numbers, contrast, urgency, hook words)
+      story_clean_01                           → medium  (numbers, contrast, emotional, hook words)
+      clean_pro                                → subtle  (numbers only)
+      boxed_caption                            → minimal (no emphasis transforms)
+      pro_karaoke                              → word_only (no transforms — karaoke handles timing)
 
-    Phase 5.5 â€” emphasis_level_override:
+    Phase 5.5 — emphasis_level_override:
       When provided by the AI subtitle hint system, overrides the level derived
       from preset_id. Must be one of "subtle"/"medium"/"strong"/"word_only".
-      When None (default): existing behavior exactly preserved â€” level from preset_id.
-      preset_id is NEVER changed â€” ASS generation style is unaffected.
+      When None (default): existing behavior exactly preserved — level from preset_id.
+      preset_id is NEVER changed — ASS generation style is unaffected.
       Subtitle timing (start/end) is never touched by this function.
     """
     if not blocks:
@@ -309,7 +309,7 @@ def subtitle_emphasis_pass(
         level = _emphasis_level(preset_id)
     mkt = str(market or "US").upper()
 
-    # Word-level SRT detection â€” skip all text transforms for per-word transcription
+    # Word-level SRT detection — skip all text transforms for per-word transcription
     avg_words = sum(len(str(b.get("text") or "").split()) for b in blocks) / max(1, len(blocks))
     is_word_level = len(blocks) >= 6 and avg_words <= 1.5
 
@@ -348,7 +348,7 @@ def subtitle_emphasis_pass(
 
 
 # ---------------------------------------------------------------------------
-# OQ-1.2 â€” Subtitle Intelligence: readability resegmentation
+# OQ-1.2 — Subtitle Intelligence: readability resegmentation
 # ---------------------------------------------------------------------------
 
 # Reading-speed targets (env-overridable for tuning without code changes).
@@ -358,24 +358,24 @@ _INTEL_MIN_DISPLAY_SEC: float = 0.7
 _INTEL_GAP_FILL_SEC: float = 0.04
 
 # Punctuation that marks a natural speech pause inside a subtitle block.
-_PUNCT_PAUSE_RE = re.compile(r"[,;:â€”â€“]$")
+_PUNCT_PAUSE_RE = re.compile(r"[,;:—–]$")
 
-# Words that naturally begin a new clause â€” strong split candidates.
+# Words that naturally begin a new clause — strong split candidates.
 _CLAUSE_STARTERS = frozenset({
     "and", "but", "or", "so", "yet", "nor",
     "because", "although", "though", "since", "until", "unless",
     "when", "where", "while", "if", "that", "which", "who",
     "however", "therefore", "then", "also", "plus",
     # Vietnamese common connectives
-    "nhÆ°ng", "vÃ ", "mÃ ", "rá»“i", "thÃ¬", "nÃªn", "vÃ¬",
+    "nhÆ°ng", "và", "mà", "rá»“i", "thÃ¬", "nÃªn", "vÃ¬",
 })
 
 
 def _find_phrase_split(words: list[str], max_words: int) -> int:
-    """Return split index for *words* â†’ two phrase-balanced chunks.
+    """Return split index for *words* → two phrase-balanced chunks.
 
     Priority:
-      1. After a word ending in pause-punctuation (, ; : â€” â€“), scanning up to
+      1. After a word ending in pause-punctuation (, ; : — –), scanning up to
          max_words positions.
       2. Before a clause-starting conjunction nearest the midpoint.
       3. Visual-weight midpoint fallback.
@@ -464,7 +464,7 @@ def resegment_srt_for_readability(
     """Re-segment a clip SRT for CapCut-style reading comfort.
 
     Targets segment-level SRT only (avg words/block > 1.5). Word-level SRT
-    (highlight_per_word=True path) is returned immediately â€” timing there is
+    (highlight_per_word=True path) is returned immediately — timing there is
     managed by the bounce/karaoke renderer.
 
     Operations (in order):
@@ -475,7 +475,7 @@ def resegment_srt_for_readability(
       5. Gap-fill: sub-gap-fill-sec gaps between consecutive blocks are closed
       6. Clamp: ensure no block extends past its successor's start
 
-    In-place â€” overwrites srt_path on success.
+    In-place — overwrites srt_path on success.
     Returns number of output blocks (0 on error or skip).
     Safe no-op on any exception.
     """
@@ -517,7 +517,7 @@ def resegment_srt_for_readability(
         if 0 < gap <= gap_fill_sec:
             out[i]["end"] = out[i + 1]["start"]
 
-    # Clamp pass â€” no block may extend past its successor's start
+    # Clamp pass — no block may extend past its successor's start
     for i in range(len(out) - 1):
         if out[i]["end"] > out[i + 1]["start"]:
             out[i]["end"] = out[i + 1]["start"]

@@ -30,7 +30,7 @@ def _probe_duration_s(path: str) -> float:
                 "-of", "default=noprint_wrappers=1:nokey=1",
                 str(path),
             ],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True, text=True, encoding="utf-8", timeout=15,
         )
         return float(result.stdout.strip())
     except Exception:
@@ -146,7 +146,7 @@ def mix_narration_audio(
         raise RuntimeError("Unsupported narration audio mix mode")
 
     try:
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()
         raise RuntimeError(f"Narration audio mix failed: {detail or exc}") from exc

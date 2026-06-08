@@ -1,6 +1,6 @@
-"""Per-part CUT stage â€” post-WAITING / pre-RENDERING block.
+"""Per-part CUT stage — post-WAITING / pre-RENDERING block.
 
-Sprint 6.D-2.3 â€” extracted verbatim from stages/part_renderer.py
+Sprint 6.D-2.3 — extracted verbatim from stages/part_renderer.py
 (lines 182-349 of the pre-2.3 file). No logic changes; pure relocation.
 
 run_cut_stage() runs once per part during process_one_part, immediately
@@ -20,8 +20,8 @@ Block responsibilities (in order):
      applied_mutations. Each delta is bounded so the clip stays
      â‰¥ payload.min_part_sec after trim.
   5. TimelineMap + BaseClipManifest construction (timeline manifest
-     pre-cut snapshot â€” written to disk).
-  6. JobPartStage.CUTTING upsert (Sacred Contract #5 â€” frozen
+     pre-cut snapshot — written to disk).
+  6. JobPartStage.CUTTING upsert (Sacred Contract #5 — frozen
      state-machine transition, line 328 of original).
   7. cut_video() call when not resuming a valid cached raw clip;
      emits `accurate_cut_forced` when force_accurate_cut is True.
@@ -77,18 +77,18 @@ from app.features.render.engine.encoder.clip_ops import (
 # Preserve original logger name (same pattern as 6.D-2.1 / 6.D-2.2).
 logger = logging.getLogger("app.render")
 
-# Sprint 6 O-4 Commit 1 â€” feature-flag mirror reads.
+# Sprint 6 O-4 Commit 1 — feature-flag mirror reads.
 # Same pattern as part_renderer.py / part_render_setup.py /
 # part_render_encode.py / render_pipeline.py (four-site read drift-
-# prevention). No drift possible â€” every site reads the same env vars
+# prevention). No drift possible — every site reads the same env vars
 # deterministically at import time.
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
-# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed â€”
+# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
 # see render_pipeline.py for the closure rationale.
-# Sprint 7.4 (2026-06-05): raw_part skip flag â€” see render_pipeline.py.
+# Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
-# Sprint 7.8 (2026-06-05): motion-aware extension flag â€” see render_pipeline.py.
+# Sprint 7.8 (2026-06-05): motion-aware extension flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
 
 
@@ -98,7 +98,7 @@ def _should_skip_raw_part_write(
     feature_base_clip_first: bool,
     feature_overlay_after_base_clip: bool,
 ) -> bool:
-    """Sprint 6 audit O-4 predicate â€” Commit 1 (telemetry-only).
+    """Sprint 6 audit O-4 predicate — Commit 1 (telemetry-only).
 
     Returns True when ``raw_part`` has zero downstream readers and
     ``cut_video`` could be fused into the final render encode. Three
@@ -110,7 +110,7 @@ def _should_skip_raw_part_write(
 
     C1 is gated by ``part_subtitle_enabled``. C2 is gated by the same
     boolean ``_base_clip_consumer_active`` introduced in Sprint 6 P0
-    HIGH. C3 is the only consumer the fuse would replace â€” its argv
+    HIGH. C3 is the only consumer the fuse would replace — its argv
     would change from ``-i raw_part`` to ``-ss start -t duration -i source``.
 
     The predicate is pure (no I/O, no side effects) so the truth-table
@@ -118,7 +118,7 @@ def _should_skip_raw_part_write(
     without constructing a PartRenderContext.
 
     Sprint 6 audit O-4 Commit 1 ships this predicate AS TELEMETRY ONLY.
-    No skip is wired yet â€” ``run_cut_stage`` still calls ``cut_video``
+    No skip is wired yet — ``run_cut_stage`` still calls ``cut_video``
     on every part. A future sprint commit will gate the actual skip on
     a feature flag (``FEATURE_RAW_PART_SKIP=0`` default) after manual
     visual review on 3-5 sample renders per SPRINT_PLAN risk register
@@ -130,7 +130,7 @@ def _should_skip_raw_part_write(
 
 @dataclass
 class CutStageResult:
-    """Bundle of values produced by run_cut_stage â€” caller aliases each
+    """Bundle of values produced by run_cut_stage — caller aliases each
     field back to its original local-variable name so the rest of
     process_one_part is byte-for-byte unchanged."""
     trim_offset: float
@@ -155,7 +155,7 @@ def run_cut_stage(
     """Execute the CUT stage of one part. See module docstring for the
     8-step responsibility breakdown.
 
-    Raises whatever cut_video() raises on cut failure â€” the caller's
+    Raises whatever cut_video() raises on cut failure — the caller's
     outer try/except (in process_one_part) classifies the failure.
     """
     _trim_offset = 0.0
@@ -303,11 +303,11 @@ def run_cut_stage(
 
     upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
 
-    # Sprint 6 audit O-4 Commit 1 â€” telemetry-only predicate evaluation.
-    # Sprint 7.4 (this commit) â€” actually skip cut_video when:
+    # Sprint 6 audit O-4 Commit 1 — telemetry-only predicate evaluation.
+    # Sprint 7.4 (this commit) — actually skip cut_video when:
     #   1. The predicate fires (subtitle off + no base_clip consumer); AND
     #   2. FEATURE_RAW_PART_SKIP=1 (30-day settling opt-in); AND
-    #   3. payload.motion_aware_crop=False (Option E scope â€” Sprint 7.8
+    #   3. payload.motion_aware_crop=False (Option E scope — Sprint 7.8
     #      will add the motion-aware branch).
     # The fused render runs in run_render_encode via render_part_from_source
     # when raw_part.exists() is False (this skip leaves the file absent
@@ -319,7 +319,7 @@ def run_cut_stage(
         feature_overlay_after_base_clip=_FEATURE_OVERLAY_AFTER_BASE_CLIP,
     )
     _payload_motion_aware = bool(getattr(ctx.payload, "motion_aware_crop", False))
-    # Sprint 7.8 â€” motion-aware extension. Both FEATURE_RAW_PART_SKIP=1 AND
+    # Sprint 7.8 — motion-aware extension. Both FEATURE_RAW_PART_SKIP=1 AND
     # FEATURE_RAW_PART_SKIP_MOTION_AWARE=1 are required to engage the
     # motion-aware-crop fuse path. Sprint 7.4 case (motion_aware=False)
     # gate-state preserved when 7.8 flag is OFF.
@@ -347,16 +347,16 @@ def run_cut_stage(
         _job_log(
             ctx.effective_channel,
             ctx.job_id,
-            f"raw_part_skip_active part={idx} cut_video bypassed â€” "
+            f"raw_part_skip_active part={idx} cut_video bypassed — "
             f"render_part_from_source will fuse cut+render in render_encode",
             kind="info",
         )
 
     if _skip_active:
-        # Sprint 7.4 â€” cut_video bypassed. raw_part stays absent; the
+        # Sprint 7.4 — cut_video bypassed. raw_part stays absent; the
         # encode stage detects this via raw_part.exists() and routes to
         # render_part_from_source (input-side -ss/-t fused with the
-        # final encode). _cut_ms stays 0 â€” the time shows up in the
+        # final encode). _cut_ms stays 0 — the time shows up in the
         # encode stage timing instead.
         logger.info("cut_video_skipped_sprint_7_4 part=%d", idx)
     elif not (ctx.payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):

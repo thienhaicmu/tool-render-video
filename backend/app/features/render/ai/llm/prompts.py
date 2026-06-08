@@ -1,5 +1,5 @@
 ﻿"""
-prompts.py â€” Shared prompt template for LLM segment selection.
+prompts.py — Shared prompt template for LLM segment selection.
 
 All providers (Gemini, OpenAI, Claude) use this same template.
 The LLM is called in JSON mode (or equivalent), so the response must be a
@@ -20,7 +20,7 @@ _SRT_BLOCK_NUM_RE = _re.compile(r"^\d+\s*$")
 def _srt_to_seconds_format(srt_content: str) -> str:
     """Convert SRT timestamps to [start_sec - end_sec] format.
 
-    00:01:23,456 --> 00:02:03,100  â†’  [83.5 - 123.1]
+    00:01:23,456 --> 00:02:03,100  →  [83.5 - 123.1]
 
     Drops block numbers and blank separator lines (saves ~50% tokens).
     Text lines are preserved verbatim.
@@ -39,7 +39,7 @@ def _srt_to_seconds_format(srt_content: str) -> str:
             pass  # drop block sequence numbers
         elif stripped:
             out.append(line)
-        # blank separator lines dropped â€” saves tokens, AI doesn't need them
+        # blank separator lines dropped — saves tokens, AI doesn't need them
     return "\n".join(out)
 
 
@@ -47,12 +47,12 @@ _SYSTEM_RP = (
     "You are a viral video editor AI. Your job is to emit a complete RenderPlan "
     "as a single JSON object describing both WHICH clips to extract and HOW each "
     "one should be subtitled, framed, mixed, and overlaid. "
-    "Return one JSON object only â€” no prose, no markdown fences, no explanation."
+    "Return one JSON object only — no prose, no markdown fences, no explanation."
 )
 
 # The literal {{ and }} pairs in the JSON example resolve to single { and }
 # after .format(). The pre-flight {end}/{start} bug class is the reason every
-# literal brace in the prose body below is doubled â€” only the named
+# literal brace in the prose body below is doubled — only the named
 # placeholders ({language}, {min_sec}, {max_sec}, {output_count},
 # {srt_content}, {example_end}, {editorial_section}) are substituted.
 _USER_TEMPLATE_RP = """Build a RenderPlan from this transcript ({language}) — pick up to {output_count} clips

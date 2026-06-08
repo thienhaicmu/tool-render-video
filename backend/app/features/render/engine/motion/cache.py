@@ -1,6 +1,6 @@
-﻿"""Motion-path cache helpers â€” filesystem-backed lookup keyed by source video.
+﻿"""Motion-path cache helpers — filesystem-backed lookup keyed by source video.
 
-Sprint 6.D-3.1 â€” extracted verbatim from motion_crop.py (lines 16â€“46 of the
+Sprint 6.D-3.1 — extracted verbatim from motion_crop.py (lines 16–46 of the
 pre-extraction file). No logic changes; pure relocation. The cache stores
 the result of motion-detection passes so a re-render against the same
 source skips the expensive OpenCV+MediaPipe per-frame scan.
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from app.core.config import APP_DATA_DIR
 
-# UP28.1 â€” Motion path cache
+# UP28.1 — Motion path cache
 _MOTION_CACHE_TTL_SEC = 72 * 3600
 
 

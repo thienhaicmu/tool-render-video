@@ -1,11 +1,11 @@
-﻿"""Per-part finalize stage â€” Layer 8â†’9 boundary.
+﻿"""Per-part finalize stage — Layer 8→9 boundary.
 
-Sprint 6.D-2.5c â€” extracted verbatim from stages/part_renderer.py
+Sprint 6.D-2.5c — extracted verbatim from stages/part_renderer.py
 (lines 298-728 of the post-2.5b file). No logic changes; pure relocation.
 
 âš ï¸  CRITICAL TIER per docs/SPRINT_6D_PLAN.md Â§10 and CLAUDE.md
    Blast Radius. This module contains the Sacred Contract #8
-   (qa_pipeline never bypassed) surface â€” `_validate_render_output`
+   (qa_pipeline never bypassed) surface — `_validate_render_output`
    and `_assess_output_quality` calls must remain verbatim with
    their original kwargs.
 
@@ -15,7 +15,7 @@ run_part_voice_mix) and before the DONE block (Sprint 6.D-2.5d's
 run_part_done).
 
 Block responsibilities (in order):
-  1. Micro-pacing pass via apply_micro_pacing() â€” trims silence within
+  1. Micro-pacing pass via apply_micro_pacing() — trims silence within
      the rendered clip and atomically swaps the file. Emits
      micro_pacing_applied or micro_pacing_skipped (or logs
      micro_pacing_timeout / micro_pacing_failed warnings on error).
@@ -28,22 +28,22 @@ Block responsibilities (in order):
   4. Duration math: _expected_final_duration + _speed_ratio +
      playback_speed_resolution debug log + total_part_render_ms log +
      per-part-done info log with encode_ms/expected/speed_ratio.
-  5. Market viral scoring (_mv_score_part) â€” wrapped in try/except
+  5. Market viral scoring (_mv_score_part) — wrapped in try/except
      (see "Known-bug preservation" below).
   6. Combined score computation (viral Ã— market Ã— hook weighted).
-  7. RenderOutputResult construction â€” Layer 8â†’9 boundary dataclass
+  7. RenderOutputResult construction — Layer 8→9 boundary dataclass
      per docs/RENDER_PIPELINE.md.
-  8. Sacred Contract #8 surface â€” `_validate_render_output`:
+  8. Sacred Contract #8 surface — `_validate_render_output`:
        - Computes expect_audio flag from voice_enabled / reup_bgm_enable.
        - Calls _validate_render_output(final_part, expected_duration,
          expect_audio).
        - On NOT _qa["ok"]: raises RuntimeError(output_validation_failed
-         [code]) â€” propagates up to the caller's outer try/except in
+         [code]) — propagates up to the caller's outer try/except in
          pipeline_render_loop (the per-part worker catches it and
          records the failure in result_json[failed_parts]).
        - On warnings: emits output_validation_warning.
        - On clean pass: emits output_validation_passed.
-  9. Sacred Contract #8 surface â€” `_assess_output_quality`:
+  9. Sacred Contract #8 surface — `_assess_output_quality`:
        - Quality assessment (non-blocking, score_penalty only).
        - Emits output_quality_validation_started + _passed/_warning/_failed.
        - Sets seg["quality_penalty"] for downstream ranking.
@@ -52,7 +52,7 @@ Block responsibilities (in order):
 
 Returns:
   None. All state mutations are by-reference (seg dict, final_part
-  on disk, ctx fields). No new dataclass return â€” keeps the helper
+  on disk, ctx fields). No new dataclass return — keeps the helper
   surface narrow.
 
 Sacred Contracts honored:
@@ -70,7 +70,7 @@ Sacred Contracts honored:
   - #8 qa_pipeline NEVER bypassed:
        * _validate_render_output called with kwargs preserved verbatim
          (expected_duration, expect_audio).
-       * Raise on `not _qa["ok"]` preserved exactly â€” no fallback
+       * Raise on `not _qa["ok"]` preserved exactly — no fallback
          path that catches the validation exception.
        * _assess_output_quality called with kwargs preserved verbatim
          (expect_subtitle, subtitle_file, expect_hook, hook_applied).
@@ -83,7 +83,7 @@ Bug fix history (Track C C2, 2026-06-03):
   the `from app.services.viral_scoring import score_part_for_market
   as _mv_score_part` line. The call site below kept working
   syntactically but raised a silent NameError caught by the
-  surrounding try/except â€” making market_viral_scored emit a no-op
+  surrounding try/except — making market_viral_scored emit a no-op
   for 6 days. Sprint 6.D-2.5c preserved the bug verbatim during the
   finalize extraction. Track C bug fix C2 restores the missing
   import on 2026-06-03. See ledger entry
@@ -99,9 +99,9 @@ Cycle risk: NONE.
   domain.timeline, services.manifest_writer, services.render_engine).
 
 LOC budget note:
-  ~431 LOC moved â€” 43% over the Â§7 advisory cap of 300. Justified by:
-  (a) cohesion â€” Layer 8â†’9 boundary is one logical sequence;
-  (b) Sacred Contract #8 concentration â€” splitting would create
+  ~431 LOC moved — 43% over the Â§7 advisory cap of 300. Justified by:
+  (a) cohesion — Layer 8→9 boundary is one logical sequence;
+  (b) Sacred Contract #8 concentration — splitting would create
       artificial seams through the qa_pipeline validation surface;
   (c) plan Â§11 changelog entry 3 explicitly approved this scope.
 
@@ -184,7 +184,7 @@ def run_part_finalize(
     Raises:
         RuntimeError: when Sacred Contract #8 `_validate_render_output`
         returns ok=False. The caller (process_one_part) does NOT catch
-        this â€” it propagates up to pipeline_render_loop.run_render_loop's
+        this — it propagates up to pipeline_render_loop.run_render_loop's
         per-part try/except, which records the failure in the per-part
         failed_parts list. This is the load-bearing failure path.
     """
@@ -262,7 +262,7 @@ def run_part_finalize(
             _micro_pacing_ms = int((time.perf_counter() - _t_mp) * 1000)
             _job_log(
                 ctx.effective_channel, ctx.job_id,
-                f"micro_pacing_timeout part_no={idx} elapsed_ms={_micro_pacing_ms} â€” skipped, original kept",
+                f"micro_pacing_timeout part_no={idx} elapsed_ms={_micro_pacing_ms} — skipped, original kept",
                 kind="warning",
             )
         except Exception as _pace_exc:

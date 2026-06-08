@@ -1,6 +1,6 @@
-﻿"""Per-part FFmpeg encode core â€” Layer 8 of the render pipeline.
+﻿"""Per-part FFmpeg encode core — Layer 8 of the render pipeline.
 
-Sprint 6.D-2.5a â€” extracted verbatim from stages/part_renderer.py
+Sprint 6.D-2.5a — extracted verbatim from stages/part_renderer.py
 (lines 254-469 of the post-2.4 file). No logic changes; pure relocation.
 
 run_render_encode() runs once per part during process_one_part,
@@ -11,18 +11,18 @@ Block responsibilities (in order):
   1. Optional base-clip rendering via render_base_clip() when
      FEATURE_BASE_CLIP_FIRST=1 AND a consumer is active (either
      FEATURE_OVERLAY_AFTER_BASE_CLIP=1 OR
-     FEATURE_BASE_CLIP_VALIDATION_ARTIFACT=1 â€” Sprint 6 P0 HIGH).
+     FEATURE_BASE_CLIP_VALIDATION_ARTIFACT=1 — Sprint 6 P0 HIGH).
      Writes base_clip manifest fields (base_clip_path, duration, fps,
      width, height, has_audio, created_at, bgm_applied). Failure is
-     caught locally â€” falls through to render_part_smart.
+     caught locally — falls through to render_part_smart.
   2. Optional overlay composite via composite_overlays_on_base_clip()
      when FEATURE_BASE_CLIP_FIRST=1 AND FEATURE_OVERLAY_AFTER_BASE_CLIP=1
      AND base_clip_path was produced. Slices output-timeline SRT and
      generates a per-output-timeline ASS file before compositing.
-     Failure is caught locally â€” falls through to render_part_smart.
-  3. render_part_smart() fallback (the default render path) â€” runs
+     Failure is caught locally — falls through to render_part_smart.
+  3. render_part_smart() fallback (the default render path) — runs
      when overlay composite did not succeed.
-  4. `finally:` block â€” signals the encode-progress monitor thread
+  4. `finally:` block — signals the encode-progress monitor thread
      (preflight.encode_stop.set()) and joins it (timeout=5.0). This
      pairs with the .start() in run_render_preflight (Sprint 2.4).
   5. _render_ms metric + render_part_ms log + manifest rendered_path
@@ -33,18 +33,18 @@ Block responsibilities (in order):
   7. visual_finish_applied emit with full encoding params context.
 
 Returns:
-  RenderEncodeResult(render_ms: int) â€” used downstream by 2.5c
+  RenderEncodeResult(render_ms: int) — used downstream by 2.5c
   (total_part_render_ms log + RenderOutputResult construction).
 
 Other outputs (mutated in place, not returned):
-  - preflight.motion_crop_fallback: list â€” mutated by render_part_smart
+  - preflight.motion_crop_fallback: list — mutated by render_part_smart
     and composite_overlays_on_base_clip via `_fallback_flag=` kwarg.
     Same list reference the caller already holds.
-  - part_manifest: BaseClipManifest â€” mutated for base_clip_*, overlay_*,
+  - part_manifest: BaseClipManifest — mutated for base_clip_*, overlay_*,
     rendered_path, overlay_text_layers_applied fields. Same reference
     the caller already holds.
-  - final_part on disk â€” the FFmpeg encode writes the final mp4.
-  - preflight.encode_stop / encode_timer â€” signaled and joined inside
+  - final_part on disk — the FFmpeg encode writes the final mp4.
+  - preflight.encode_stop / encode_timer — signaled and joined inside
     this helper's finally block. After return, the thread is dead.
 
 Sacred Contracts honored:
@@ -59,7 +59,7 @@ Sacred Contracts honored:
 
 NVENC semaphore (Sprint 4.2 contract): acquired INSIDE the
 render_engine helpers (render_base_clip / render_part_smart /
-composite_overlays_on_base_clip â€” each one acquires
+composite_overlays_on_base_clip — each one acquires
 NVENC_SEMAPHORE before invoking ffmpeg with NVENC encoder).
 This block does NOT acquire the semaphore directly. No change
 to the semaphore surface from this extraction.
@@ -72,7 +72,7 @@ Feature-flag env-var triple-read note:
   _FEATURE_BASE_CLIP_FIRST + _FEATURE_OVERLAY_AFTER_BASE_CLIP are now
   read at module-load time in THREE modules: part_renderer.py,
   part_render_setup.py (Sprint 2.4), and this module. All three reads
-  happen at import time on the same deterministic env vars â€” behavior
+  happen at import time on the same deterministic env vars — behavior
   is identical. No drift possible.
 """
 from __future__ import annotations
@@ -103,15 +103,15 @@ from app.features.render.engine.subtitle.generator.timeline import slice_srt_to_
 # Preserve original logger name (same pattern as 6.D-2.1 / 2.2 / 2.3 / 2.4).
 logger = logging.getLogger("app.render")
 
-# Feature-flag env reads (third read in the chain â€” identical to
+# Feature-flag env reads (third read in the chain — identical to
 # part_renderer.py and part_render_setup.py reads; no drift possible).
 _FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 _FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
-# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed â€”
+# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
 # see render_pipeline.py for the closure rationale.
-# Sprint 7.4 (2026-06-05): raw_part skip flag â€” see render_pipeline.py.
+# Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
-# Sprint 7.8 (2026-06-05): motion-aware extension flag â€” see render_pipeline.py.
+# Sprint 7.8 (2026-06-05): motion-aware extension flag — see render_pipeline.py.
 _FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
 
 
@@ -150,7 +150,7 @@ def run_render_encode(
     (preflight.encode_timer) is signaled and joined inside this
     function's `finally:` block.
     """
-    # Local alias the preflight fields used multiple times â€” keeps
+    # Local alias the preflight fields used multiple times — keeps
     # the relocated code byte-for-byte identical to the pre-2.5a
     # variable names (which used the underscore-prefixed locals).
     _part_video_crf = preflight.part_video_crf
@@ -159,11 +159,11 @@ def run_render_encode(
 
     # Sprint 6 P0 HIGH gate (post Sprint 7.2 simplification): the
     # base_clip render only fires when its single downstream consumer is
-    # active â€” the overlay composite block below. Sprint 7.2 removed the
+    # active — the overlay composite block below. Sprint 7.2 removed the
     # FEATURE_BASE_CLIP_VALIDATION_ARTIFACT opt-in (zero usage observed
     # during 30-day settling). The gate is now a plain AND.
     # When FEATURE_BASE_CLIP_FIRST is OFF the whole block is skipped as
-    # before â€” Sacred Contract #2 default-behaviour preservation.
+    # before — Sacred Contract #2 default-behaviour preservation.
     if _FEATURE_BASE_CLIP_FIRST and _FEATURE_OVERLAY_AFTER_BASE_CLIP:
         _base_clip_out = ctx.work_dir / f"part_{idx}" / "base_clip.mp4"
         try:
@@ -216,7 +216,7 @@ def run_render_encode(
             )
         except Exception as _bc_err:
             logger.warning(
-                "base_clip_render_failed part=%d err=%s â€” render_part_smart continues",
+                "base_clip_render_failed part=%d err=%s — render_part_smart continues",
                 idx, _bc_err,
             )
 
@@ -291,11 +291,11 @@ def run_render_encode(
         except Exception as _oc_err:
             logger.warning(
                 "overlay_composite_failed job_id=%s part=%d base_clip=%s err=%s "
-                "â€” falling back to render_part_smart",
+                "— falling back to render_part_smart",
                 ctx.job_id, idx, part_manifest.base_clip_path, _oc_err,
             )
 
-    # Sprint 7.4 â€” fused-cut+render path detection. When run_cut_stage
+    # Sprint 7.4 — fused-cut+render path detection. When run_cut_stage
     # skipped cut_video (predicate fired + FEATURE_RAW_PART_SKIP=1 +
     # motion_aware_crop=False), raw_part stays absent on disk. Route to
     # render_part_from_source instead of render_part_smart so the input-
@@ -309,9 +309,9 @@ def run_render_encode(
     try:
         if not _overlay_composite_succeeded:
             if _raw_part_absent:
-                # Sprint 7.4 â€” fused cut+render: read source with input-side
+                # Sprint 7.4 — fused cut+render: read source with input-side
                 # -ss/-t instead of from a pre-cut raw_part.mp4.
-                # Sprint 7.8 â€” extended to motion-aware case. Motion-aware
+                # Sprint 7.8 — extended to motion-aware case. Motion-aware
                 # branch is selected by motion_aware_crop kwarg INSIDE
                 # render_part_from_source. Windowed motion cache key
                 # prevents stale hits across different windows of the
@@ -408,7 +408,7 @@ def run_render_encode(
     if _motion_ck:
         _job_log(ctx.effective_channel, ctx.job_id, f"rerender_fast_path part={idx} motion_cache_key={_motion_ck[:8]} render_ms={_render_ms}")
     if _motion_crop_fallback:
-        ctx.recovery_notes.append("Motion crop unavailable â€” used standard crop")
+        ctx.recovery_notes.append("Motion crop unavailable — used standard crop")
         _emit_render_event(
             channel_code=ctx.effective_channel,
             job_id=ctx.job_id,

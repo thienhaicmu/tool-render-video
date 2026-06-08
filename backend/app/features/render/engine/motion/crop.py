@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 # Sprint 6.D dead-import cleanup: this file is now a thin skeleton
 # (build_motion_path dispatcher + render_motion_aware_crop + a few
 # small helpers). Almost all imports below are intentional re-exports
-# for the Sprint 6.D-3.x extracted modules â€” external consumers
+# for the Sprint 6.D-3.x extracted modules — external consumers
 # (render_engine.py, render/legacy_renderer.py, base_clip_renderer.py,
 # tests/test_probe_unification.py, tests/test_motion_crop_guards.py,
 # tests/test_render_audit_p0_fixes.py, tests/test_encoder_helpers.py,
@@ -34,7 +34,7 @@ from app.features.render.engine.motion.config import (
 )
 # Sprint 6.D-3.3: generic helpers (codec flags, font detection, ffprobe,
 # math primitives, OpenCV cascade/IoU). Many symbols here ARE used in
-# body â€” _safe_filter_path / _detect_windows_fontfile / fonts_dir
+# body — _safe_filter_path / _detect_windows_fontfile / fonts_dir
 # helpers are called by render_motion_aware_crop.
 from app.features.render.engine.motion.utils import (
     _codec_flags,  # noqa: F401 (re-exported for tests)
@@ -86,7 +86,7 @@ from app.features.render.engine.motion.trackerless import (  # noqa: F401 (re-ex
     _apply_trackerless_center_guard,
 )
 # Sprint 6.D-3.7: pixel-diff motion-path implementation.
-# Sprint 7.1 (2026-06-05): module renamed legacy.py â†’ motion_pixel_diff.py
+# Sprint 7.1 (2026-06-05): module renamed legacy.py → motion_pixel_diff.py
 # to stop misleading auditors. Symbols + behaviour unchanged.
 from app.features.render.engine.motion.pixel_diff import (  # noqa: F401 (re-exported)
     detect_motion_center,
@@ -99,7 +99,7 @@ from app.features.render.engine.motion.pixel_diff import (  # noqa: F401 (re-exp
 #   path_scene.py (per-scene state machine, ~530 LOC).
 # build_motion_path dispatcher (defined below) calls build_subject_path.
 # build_subject_path_scene is re-exported even though it is only used by
-# build_subject_path's multi-scene dispatch loop â€” the re-export contract
+# build_subject_path's multi-scene dispatch loop — the re-export contract
 # is what keeps the deferred-import in path.py resolving cleanly across
 # the split.
 from app.features.render.engine.motion.path import build_subject_path
@@ -116,7 +116,7 @@ from app.features.render.engine.encoder.encoder_helpers import (
     map_preset_for_encoder as _map_preset_for_encoder,
     reup_video_filters as _reup_video_filters,
     reup_audio_filter as _reup_audio_filter,  # noqa: F401 (re-exported for tests/test_encoder_helpers.py via `mc._reup_audio_filter`)
-    safe_filter_path as _safe_filter_path,  # noqa: F811 â€” intentionally shadows motion_crop_utils re-export (same function)
+    safe_filter_path as _safe_filter_path,  # noqa: F811 — intentionally shadows motion_crop_utils re-export (same function)
     detect_windows_fontfile as _detect_windows_fontfile,  # noqa: F811
     detect_windows_fonts_dir as _detect_windows_fonts_dir,  # noqa: F811
     get_custom_fonts_dir as _get_custom_fonts_dir,  # noqa: F811
@@ -124,25 +124,25 @@ from app.features.render.engine.encoder.encoder_helpers import (
 
 logger = logging.getLogger(__name__)
 # `_TRACKER_CAPABILITY_LOGGED` moved to motion_crop_tracker.py with
-# _create_tracker (Sprint 6.D-3.4) â€” it's the function's per-process guard.
+# _create_tracker (Sprint 6.D-3.4) — it's the function's per-process guard.
 
 # Sprint 6.D-3.5a: MediaPipe face block (_get_mp_detector,
 # _detect_mediapipe_faces, _has_subject_in_sample) + MediaPipe pose block
 # (_get_mp_pose, _get_eye_anchor_rel) + per-process state flags
 # (_mp_face_detector*, _mp_pose_detector*, _POSE_LEFT_EYE/RIGHT_EYE,
-# _EYE_CROP_THIRDS) â†’ moved to app.services.motion_crop.detection.
+# _EYE_CROP_THIRDS) → moved to app.services.motion_crop.detection.
 # Re-exported at the top of this file so existing internal call sites
 # keep their bare references unchanged.
 
 
 # `_CONTENT_TYPE_TRACKING`, `_apply_content_type_to_cfg`, and `MotionCropConfig`
-# â†’ moved to app.services.motion_crop.config (Sprint 6.D-3.2). Re-exported
+# → moved to app.services.motion_crop.config (Sprint 6.D-3.2). Re-exported
 # at the top of this file so the rest of motion_crop.py and external consumers
 # keep using them via `app.services.motion_crop` import paths.
 
 
 # Sprint 6.D-3.3: 13 generic helpers (codec flags, fonts, ffprobe, math,
-# cascade/IoU) â†’ moved to app.services.motion_crop.utils. Re-exported at
+# cascade/IoU) → moved to app.services.motion_crop.utils. Re-exported at
 # the top of this file so existing callers in this module + tests keep
 # their import paths.
 
@@ -151,7 +151,7 @@ logger = logging.getLogger(__name__)
 # CapCut-style Auto Reframe: Subject detection & tracking
 # ---------------------------------------------------------------------------
 
-# Sprint 6.D-3.4: `_ByteTrackSubject` + `_create_tracker` â†’ moved to
+# Sprint 6.D-3.4: `_ByteTrackSubject` + `_create_tracker` → moved to
 # app.services.motion_crop.tracker. Re-exported at the top of this file
 # so existing internal call sites (build_subject_path,
 # build_subject_path_scene) keep using them via bare references.
@@ -165,7 +165,7 @@ def _sanitize_speed(playback_speed: float | int | None) -> float:
     return max(0.5, min(1.5, v))
 
 
-# `_subject_area_ratio` + `_subject_edge_overlap_ratio` â†’ moved to
+# `_subject_area_ratio` + `_subject_edge_overlap_ratio` → moved to
 # app.services.motion_crop.scoring (Sprint 6.D-3.5b).
 
 
@@ -191,13 +191,13 @@ def _untracked_hold_frames(cfg: MotionCropConfig, detect_interval: int) -> int:
     return max(4, min(cfg.lost_subject_hold_frames, max(6, detect_interval // 2)))
 
 
-# Sprint 6.D-3.5c: 5 trackerless guard helpers â†’ moved to
+# Sprint 6.D-3.5c: 5 trackerless guard helpers → moved to
 # app.services.motion_crop.trackerless. Re-exported at top of this file.
 
 
 # Sprint 6.D-3.5b: _is_plausible_subject, _filter_subject_candidates,
 # _pick_best_subject (deferred from 3.5a), _subject_center,
-# _score_subject_candidate, _same_subject â†’ moved to
+# _score_subject_candidate, _same_subject → moved to
 # app.services.motion_crop.scoring. Re-exported at top of this file.
 # `prepare_detection_frame` + `_detect_subjects_in_frame` were moved to
 # motion_crop_detection in Sprint 6.D-3.5a.
@@ -242,7 +242,7 @@ def _subject_to_crop_center(
 
     # Apply padding: zoom the crop window out around the subject
     # (padding > 0 means we follow a larger region, feels less claustrophobic)
-    # Already handled by subject_padding in the caller's crop_w/crop_hâ€”
+    # Already handled by subject_padding in the caller's crop_w/crop_h—
     # here we just clamp so the crop stays inside the frame.
     cx = clamp(cx, crop_w / 2.0, frame_w - crop_w / 2.0)
     max_cy = frame_h - crop_h / 2.0
@@ -261,11 +261,11 @@ def _apply_velocity_limiter(
     crop_h: int,
     cfg: MotionCropConfig,
 ) -> List[Tuple[int, int]]:
-    """Convert (cx, cy) float centers â†’ (x, y) integer top-left crop coords.
+    """Convert (cx, cy) float centers → (x, y) integer top-left crop coords.
 
     Applies velocity + acceleration limits with smoothstep easing for
     cinematic panning: full speed when far from target, graceful deceleration
-    when close â€” no snap, no overshoot.
+    when close — no snap, no overshoot.
 
     Also enforces subtitle_safe_bottom_ratio so the velocity limiter cannot
     push the crop into the subtitle zone even if the input path is at the
@@ -277,7 +277,7 @@ def _apply_velocity_limiter(
     max_v = max(1.0, src_w * cfg.max_pan_speed_ratio)
     max_a = max(0.5, src_w * cfg.max_pan_accel_ratio)
 
-    # Subtitle-safe ceiling for crop center Y â€” same formula as EMA loop.
+    # Subtitle-safe ceiling for crop center Y — same formula as EMA loop.
     max_cy = src_h - crop_h / 2.0
     if cfg.subtitle_safe_bottom_ratio > 0:
         max_cy -= src_h * cfg.subtitle_safe_bottom_ratio * 0.35
@@ -300,7 +300,7 @@ def _apply_velocity_limiter(
         nx = clamp(px + vx, crop_w / 2.0, src_w - crop_w / 2.0)
         ny = clamp(py + vy, crop_h / 2.0, max_cy)   # subtitle-safe ceiling
 
-        # Convert center â†’ top-left
+        # Convert center → top-left
         ix = int(clamp(round(nx - crop_w / 2.0), 0, src_w - crop_w))
         iy = int(clamp(round(ny - crop_h / 2.0), 0, src_h - crop_h))
         result.append((ix, iy))
@@ -312,15 +312,15 @@ def _apply_velocity_limiter(
 
 
 # Sprint 6.D-3.6a + 3.6b: `build_subject_path` + `build_subject_path_scene`
-# â†’ moved to app.services.motion_crop.path. Re-exported at top of this file.
+# → moved to app.services.motion_crop.path. Re-exported at top of this file.
 # The new module uses deferred imports for _subject_to_crop_center,
 # _apply_velocity_limiter, _required_lock_confirm_frames, and
-# _untracked_hold_frames â€” all of which still live in this module.
+# _untracked_hold_frames — all of which still live in this module.
 
 
 
 # Sprint 6.D-3.7: detect_motion_center, _build_motion_path_legacy,
-# _detect_scene_ranges_in_clip â†’ moved to app.services.motion_crop.motion_pixel_diff
+# _detect_scene_ranges_in_clip → moved to app.services.motion_crop.motion_pixel_diff
 # (file renamed from legacy.py in Sprint 7.1).
 # Re-exported at top of this file. build_motion_path dispatcher stays
 # here because it routes to build_subject_path (also here).
@@ -387,7 +387,7 @@ def render_motion_aware_crop(
     subtitle_safe_bottom_ratio: float | None = None,
     content_type: str = "vlog",
     _cache_key: str | None = None,
-    # Sprint 7.8 (2026-06-05) â€” fused-source-window mode. When both kwargs
+    # Sprint 7.8 (2026-06-05) — fused-source-window mode. When both kwargs
     # are set, input_path is the FULL source file and the encode processes
     # ONLY the [source_start_sec, source_start_sec + duration] window via
     # `cv2.VideoCapture.set(CAP_PROP_POS_FRAMES)` + FFmpeg `-ss/-t`. When
@@ -417,7 +417,7 @@ def render_motion_aware_crop(
         cfg.reframe_mode,
     )
 
-    # Sprint 7.8 â€” fused-source-window mode flag. When True, the OpenCV
+    # Sprint 7.8 — fused-source-window mode flag. When True, the OpenCV
     # cap is seeked to the window start and the encode loop is bounded.
     # When False, pre-7.8 whole-file processing path runs unchanged.
     _fuse_window_mode = (
@@ -427,7 +427,7 @@ def render_motion_aware_crop(
         # Sub-functions (build_motion_path / _has_subject_in_sample /
         # _build_motion_path_legacy / _detect_scene_ranges_in_clip) still
         # scan the whole source; the OpenCV main loop here is what limits
-        # output to the window. Centers list covers full source â€” indexed
+        # output to the window. Centers list covers full source — indexed
         # below with start_frame offset. Per-window subject-path optim is
         # deferred to Sprint 7.9 per audit plan.
         logger.info(
@@ -469,7 +469,7 @@ def render_motion_aware_crop(
 
     # Build crop path (subject-tracking or legacy motion)
     scene_ranges = None
-    # Sprint 7.8 â€” scene-aware tracking forced OFF in fused window mode.
+    # Sprint 7.8 — scene-aware tracking forced OFF in fused window mode.
     # Scene boundaries are in source-coords; the windowed encode would
     # mis-map them. Single-scene tracking still runs. Scene-aware-in-fuse
     # is Sprint 7.9+ if measured to matter.
@@ -481,7 +481,7 @@ def render_motion_aware_crop(
         else:
             logger.info("scene-aware scenes=%d", len(scene_ranges))
 
-    # UP28.1: motion path cache â€” skip frame scan on rerender of same clip
+    # UP28.1: motion path cache — skip frame scan on rerender of same clip
     _motion_hit = False
     if _cache_key:
         _cached_motion = _motion_path_cache_get(_cache_key)
@@ -585,7 +585,7 @@ def render_motion_aware_crop(
         target_fps = max(1, min(int(round(src_fps)), int(output_fps), _FPS_CAP))
         fps_policy = f"fps_policy=user({output_fps}) src={src_fps:.3f} target={target_fps}"
     logger.info("motion_crop: %s | input=%s", fps_policy, Path(input_path).name)
-    # fps filter is always the last video filter â€” guarantees CFR output.
+    # fps filter is always the last video filter — guarantees CFR output.
     vf_parts.append(f"fps={target_fps}")
 
     resolved_codec = _resolve_encoder(video_codec, encoder_mode=encoder_mode)
@@ -595,7 +595,7 @@ def render_motion_aware_crop(
     bgm_ok = reup_bgm_enable and bgm_path and Path(bgm_path).is_file()
     input_has_audio = has_audio_stream(input_path)
 
-    # Sprint 7.8 â€” fused-source-window: the stdin (input 0, rawvideo) is
+    # Sprint 7.8 — fused-source-window: the stdin (input 0, rawvideo) is
     # already pre-windowed by the OpenCV loop below (seek + bound). The
     # file input (input 1) must also be windowed so audio aligns: `-ss N
     # -t M` BEFORE `-i input_path` for input-side fast seek (default), or
@@ -681,9 +681,9 @@ def render_motion_aware_crop(
                 ffmpeg_cmd += ["-af", ",".join(af_parts)]
     ffmpeg_cmd += [*codec_flags, "-c:a", "aac", "-b:a", audio_bitrate, "-shortest", output_path]
 
-    # Sprint 7.8 â€” pre-compute window seek frame + budget. centers list
+    # Sprint 7.8 — pre-compute window seek frame + budget. centers list
     # (from build_motion_path or _build_motion_path_legacy) covers the
-    # FULL source â€” we index into it with start_frame offset so window
+    # FULL source — we index into it with start_frame offset so window
     # frame_idx=0 reads centers[start_frame]. This trades subject-path
     # build speed for correctness; window-only build deferred to 7.9.
     _window_start_frame = 0
@@ -698,7 +698,7 @@ def render_motion_aware_crop(
         cap = cv2.VideoCapture(input_path)
         if not cap.isOpened():
             raise RuntimeError(f"Cannot open input video: {input_path}")
-        # Sprint 7.8 â€” seek cap to window start. Forward-skim alignment
+        # Sprint 7.8 — seek cap to window start. Forward-skim alignment
         # for VBR/keyframe-edge sources is bounded inside the loop below
         # (180 frames â‰ˆ 3s at 60fps). force_accurate_cut on the FFmpeg
         # side is the operator escape if frame-precise alignment matters.
@@ -712,11 +712,11 @@ def render_motion_aware_crop(
                 ok, frame = cap.read()
                 if not ok or frame is None:
                     break
-                # Sprint 7.8 â€” bound the encode loop to the window budget.
+                # Sprint 7.8 — bound the encode loop to the window budget.
                 if _window_frame_budget is not None and frame_idx >= _window_frame_budget:
                     break
 
-                # Sprint 7.8 â€” centers covers FULL source; offset by start_frame
+                # Sprint 7.8 — centers covers FULL source; offset by start_frame
                 # so window frame_idx=0 maps to source frame=start_frame.
                 _center_idx = frame_idx + _window_start_frame if _fuse_window_mode else frame_idx
                 x, y = centers[_center_idx] if _center_idx < len(centers) else centers[-1]
