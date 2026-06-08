@@ -225,18 +225,22 @@ def parse_workflow_checklist(path: Path = WORKFLOW_CHECKLIST_PATH) -> list[dict[
 
 
 def _default_patch_targets(category: str) -> list[str]:
+    """Batch 10M cleanup: dropped categories for retired subsystems
+    (profile_system / login / proxy / scheduling / upload_ui / upload),
+    updated video_pipeline to point at the feature-layer paths. The
+    "logging" fallback now points at the new ``services/dev`` package
+    instead of the retired ``services/dev_commands.py`` monolith
+    (MT-1 split — Batch 10J).
+    """
     mapping = {
-        "app_lifecycle": ["backend/app/main.py"],
-        "profile_system": ["backend/app/services/upload_engine.py", "backend/app/routes/channels.py"],
-        "login": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "proxy": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "scheduling": ["backend/app/routes/upload.py", "backend/app/services/upload_engine.py"],
-        "video_pipeline": ["backend/app/routes/render.py", "backend/app/services/downloader.py"],
-        "upload_ui": ["backend/app/services/upload_engine.py"],
-        "upload": ["backend/app/services/upload_engine.py", "backend/app/routes/upload.py"],
-        "logging": ["backend/app/services/dev_commands.py"],
+        "app_lifecycle":  ["backend/app/main.py"],
+        "video_pipeline": [
+            "backend/app/features/render/router.py",
+            "backend/app/features/download/engine/downloader.py",
+        ],
+        "logging":        ["backend/app/services/dev/router.py"],
     }
-    return mapping.get(category, ["backend/app/services/dev_commands.py"])
+    return mapping.get(category, ["backend/app/services/dev/router.py"])
 
 
 def _evaluate_rule(rule: str, ctx: dict[str, Any]) -> tuple[bool | None, str, str]:

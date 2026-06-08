@@ -49,7 +49,7 @@ def prune_render_temp_dirs(temp_dir: Path) -> dict:
     Directories whose names are NOT UUID-format (e.g. preview/, downloads/, tmp/)
     are always left untouched.
     """
-    from app.services.db import get_job
+    from app.db.jobs_repo import get_job
     removed = kept = skipped = 0
     if not temp_dir.exists():
         return {"removed": removed, "kept": kept, "skipped": skipped}
@@ -102,6 +102,16 @@ def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
         try:
             for f in subdir.iterdir():
                 if not f.is_file():
+                    continue
+                # Audit FINDING-BR14 closure (Batch 10F 2026-06-06):
+                # never touch a ".tmp" sidecar. pipeline_cache writes
+                # atomically via "<key>.json.tmp" → os.replace into the
+                # final name; deleting the tmp file mid-write makes the
+                # writer's flush either fail (Windows sharing violation)
+                # or write into an orphaned inode (POSIX). The tmp file
+                # is by definition fresh, so we'd never legitimately
+                # match the cutoff anyway — this is belt-and-suspenders.
+                if f.suffix == ".tmp":
                     continue
                 try:
                     st = f.stat()
@@ -210,6 +220,87 @@ def prune_text_overlay_dir(overlay_dir: Path, max_age_days: int = 7) -> dict:
             removed, max_age_days, overlay_dir,
         )
     return {"removed": removed, "kept": kept}
+
+
+# Job statuses that are safe to prune. Active states are excluded so a
+# pathological clock skew or paused job can never be deleted out from under
+# the render thread. "interrupted" is included because the recovery loop in
+# main.py marks it back to running on startup if recoverable — older
+# interrupted rows past the retention window are dead.
+_PRUNABLE_JOB_STATUSES = (
+    "completed",
+    "completed_with_errors",
+    "failed",
+    "cancelled",
+    "interrupted",
+)
+
+
+def prune_old_jobs(max_age_days: int) -> dict:
+    """Audit FINDING-DB05 / MT-7 / ST-12 closure (Batch 10A 2026-06-06).
+
+    Delete completed/failed/cancelled jobs (plus their job_parts rows) whose
+    ``updated_at`` is older than ``max_age_days``. ENV-gated via
+    ``JOB_RETENTION_DAYS`` (default 0 = disabled) in the caller — this
+    function itself just runs the prune when given a positive window.
+
+    Why ``updated_at`` not ``created_at``: ``updated_at`` reflects the last
+    state transition. A failed-then-resumed job keeps its row fresh and
+    won't be pruned until N days after its FINAL state.
+
+    Defensive: returns ``{removed_jobs, removed_parts}`` on success, the
+    same dict shape with zeros on any error (and a WARN log). Never raises.
+
+    Active job rows (``status IN ('running', 'queued')``) are NEVER touched
+    regardless of age — the WHERE clause restricts deletion to the
+    terminal-status set in ``_PRUNABLE_JOB_STATUSES``.
+    """
+    if not isinstance(max_age_days, int) or max_age_days <= 0:
+        return {"removed_jobs": 0, "removed_parts": 0}
+
+    placeholders = ",".join("?" * len(_PRUNABLE_JOB_STATUSES))
+    cutoff_sql = f"datetime('now', '-{int(max_age_days)} days')"
+
+    try:
+        # Imported lazily so test collection doesn't open a connection.
+        from app.db.connection import db_conn
+        with db_conn() as conn:
+            # Collect the doomed job_ids first so we can count the parts
+            # we're about to delete (SQLite's DELETE doesn't return changes
+            # for the joined-table case).
+            doomed = conn.execute(
+                f"""
+                SELECT job_id FROM jobs
+                 WHERE status IN ({placeholders})
+                   AND updated_at < {cutoff_sql}
+                """,
+                _PRUNABLE_JOB_STATUSES,
+            ).fetchall()
+            if not doomed:
+                return {"removed_jobs": 0, "removed_parts": 0}
+            ids = [row[0] if isinstance(row, tuple) else row["job_id"] for row in doomed]
+            ph = ",".join("?" * len(ids))
+            parts_cur = conn.execute(
+                f"DELETE FROM job_parts WHERE job_id IN ({ph})", ids
+            )
+            removed_parts = parts_cur.rowcount or 0
+            jobs_cur = conn.execute(
+                f"DELETE FROM jobs WHERE job_id IN ({ph})", ids
+            )
+            removed_jobs = jobs_cur.rowcount or 0
+            # Commit explicitly so the ctxmgr's commit-on-exit doesn't
+            # also fire a no-op transaction; harmless either way.
+            conn.commit()
+    except Exception as exc:
+        logger.warning("prune_old_jobs failed (non-fatal): %s", exc)
+        return {"removed_jobs": 0, "removed_parts": 0}
+
+    if removed_jobs:
+        logger.info(
+            "maintenance: pruned %d completed/failed jobs (>%dd old) + %d job_parts",
+            removed_jobs, max_age_days, removed_parts,
+        )
+    return {"removed_jobs": removed_jobs, "removed_parts": removed_parts}
 
 
 def prune_job_logs(channels_dir: Path, keep_last: int = 30, older_than_days: int = 10):

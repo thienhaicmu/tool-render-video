@@ -129,6 +129,22 @@ if _AVAILABLE:
         registry=REGISTRY,
     )
 
+    # Audit FINDING-DB09 / ST-15 closure (Batch 10A 2026-06-06).
+    # Captures the wall-time spent opening + WAL-initing a SQLite connection
+    # in the two production paths:
+    #   - role="db_conn":      per-call open+PRAGMA inside the HTTP path ctxmgr
+    #   - role="_thread_conn": first-call open+PRAGMA on render worker threads
+    #                          (cache-hit reuse is NOT observed — it's ~free)
+    # Bucket choices: WAL open is typically < 5 ms on a healthy WAL; long
+    # tail observations indicate contention or fsync stalls.
+    DB_CONN_ACQUIRE_WAIT = Histogram(
+        "db_conn_acquire_seconds",
+        "Time spent opening + initializing a SQLite connection",
+        ["role"],
+        buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 5),
+        registry=REGISTRY,
+    )
+
 else:
     REGISTRY = None  # type: ignore[assignment]
 
@@ -141,3 +157,4 @@ else:
     JOB_QUEUE_PENDING = _NoOpMetric()         # type: ignore[assignment]
     JOB_QUEUE_ACTIVE = _NoOpMetric()          # type: ignore[assignment]
     DB_BACKUPS_TOTAL = _NoOpMetric()          # type: ignore[assignment]
+    DB_CONN_ACQUIRE_WAIT = _NoOpMetric()      # type: ignore[assignment]

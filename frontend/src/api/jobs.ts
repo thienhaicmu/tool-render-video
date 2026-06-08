@@ -144,9 +144,20 @@ export interface HybridAnalysis {
   warnings: string[]
 }
 
+// Audit FINDING-BR11 (Batch 10C 2026-06-06): ai_status discriminator so
+// the FE can show a meaningful empty-state message instead of an empty card.
+//   "ok"          — full ranking + best_clip present (normal display)
+//   "no_ranking"  — pipeline ran but produced no output_ranking
+//   "degraded"    — best_clip present but story / director hint missing
+//   "no_result"   — result_json itself absent (job still running / errored
+//                   before persisting AI artefacts)
+export type AiStatus = 'ok' | 'no_ranking' | 'degraded' | 'no_result'
+
 export interface JobAiSummary {
   job_id: string
   available: boolean
+  ai_status?: AiStatus
+  status_message?: string
   director_enabled: boolean
   story: Record<string, unknown>
   ai_ux: Record<string, unknown>

@@ -6,10 +6,11 @@ from pathlib import Path
 import os
 import logging
 import threading
-from app.services.db import init_db
+from app.db.connection import init_db
 from app.services.channel_service import ensure_channel
 from app.services.maintenance import (
     prune_job_logs,
+    prune_old_jobs,
     prune_preview_dirs,
     prune_render_cache,
     prune_render_temp_dirs,
@@ -21,17 +22,16 @@ from app.core.logging_setup import configure_logging as _configure_logging
 # Configure file-based logging before any other module emits a log event.
 # Uvicorn's console handlers are not touched — this only adds file handlers.
 _configure_logging(LOGS_DIR)
-from app.routes.channels import router as channels_router
-from app.routes.render import router as render_router
+from app.features.render.router import router as render_router
 from app.routes.jobs import router as jobs_router
 from app.routes.voice import router as voice_router
 from app.routes.files import router as files_router
-from app.routes.editing import router as editing_router
-from app.features.downloader.router import router as platform_downloader_router
+from app.features.render.editing.router import router as editing_router
+from app.features.download.router import router as platform_downloader_router
 from app.routes.feedback import router as feedback_router
 from app.routes.metrics import router as metrics_router
 from app.routes.settings import router as settings_router
-from app.services.job_manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
+from app.jobs.manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
 from app.services.warmup import start_warmup, get_status as warmup_status
 from app.core.ui_gate import resolve_static_directory
 from fastapi import Request
@@ -110,7 +110,6 @@ os.environ.setdefault("TMP",  str(_DATA_DIR / "tmp"))
 (_DATA_DIR / "tmp").mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="YT TikTok Desktop Local Platform")
-app.include_router(channels_router)
 app.include_router(render_router)
 app.include_router(jobs_router)
 # Security: POST /api/dev/command executes arbitrary shell commands with no auth.
@@ -151,7 +150,7 @@ if os.getenv("ENABLE_V2", "1") != "0":
 if _UI_VERSION == "v2":
     # static-v2 index.html uses relative paths (assets/…) so mount at /assets
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="static_assets")
-else:
+elif STATIC_DIR.is_dir():
     # Legacy index.html references /static/… absolute paths
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -185,6 +184,11 @@ async def _csp_middleware(request: Request, call_next):
 
 
 _CLEANUP_INTERVAL_SEC: int = int(os.getenv("CLEANUP_INTERVAL_SEC", "1800"))  # default 30 min
+# Audit FINDING-DB05 / MT-7 / ST-12 (Batch 10A 2026-06-06): env-gated row
+# retention for completed/failed jobs. 0 = disabled (default). Set to e.g.
+# 90 to evict any non-active job whose ``updated_at`` is more than 90 days
+# old. Active rows (running/queued) are never touched regardless of age.
+_JOB_RETENTION_DAYS: int = int(os.getenv("JOB_RETENTION_DAYS", "0"))
 _cleanup_logger = logging.getLogger("app.cleanup")
 
 
@@ -194,7 +198,7 @@ def _run_periodic_cleanup():
     while True:
         _time.sleep(_CLEANUP_INTERVAL_SEC)
         try:
-            from app.routes.render import evict_stale_preview_sessions
+            from app.features.render.router import evict_stale_preview_sessions
             evicted = evict_stale_preview_sessions()
             result_preview = prune_preview_dirs(TEMP_DIR, max_age_hours=6)
             result_render = prune_render_temp_dirs(TEMP_DIR)
@@ -208,9 +212,25 @@ def _run_periodic_cleanup():
             # Now runs on every periodic tick as well. 72h TTL matches
             # _RENDER_CACHE_TTL_SEC in pipeline_cache.py.
             result_cache = prune_render_cache(CACHE_DIR, max_age_hours=72)
+            # Audit FINDING-DB05 / MT-7: DB row retention.
+            # Batch 10R (MT-7 UI): the Settings screen can now persist
+            # ``job_retention_days`` in creator_prefs. Each cleanup tick
+            # reads the DB-stored value first; falls back to the
+            # ``JOB_RETENTION_DAYS`` env var when the user hasn't
+            # configured anything via the UI (first boot / scripted
+            # deployment). Either way, 0 = retention disabled.
+            try:
+                from app.db.creator_repo import get_job_retention_days
+                _db_days = get_job_retention_days()
+            except Exception as _exc:  # pragma: no cover — repo helper is defensive
+                _db_days = None
+                _cleanup_logger.warning("data_retention read failed: %s", _exc)
+            _retention_days = _db_days if _db_days is not None else _JOB_RETENTION_DAYS
+            result_jobs = prune_old_jobs(_retention_days)
             _cleanup_logger.info(
                 "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d "
-                "xtts_removed=%d overlay_removed=%d cache_removed=%d cache_freed_mb=%.1f",
+                "xtts_removed=%d overlay_removed=%d cache_removed=%d cache_freed_mb=%.1f "
+                "jobs_pruned=%d parts_pruned=%d",
                 evicted,
                 result_preview.get("removed", 0),
                 result_render.get("removed", 0),
@@ -218,6 +238,8 @@ def _run_periodic_cleanup():
                 result_overlay.get("removed", 0),
                 result_cache.get("removed", 0),
                 result_cache.get("freed_bytes", 0) / (1024 * 1024),
+                result_jobs.get("removed_jobs", 0),
+                result_jobs.get("removed_parts", 0),
             )
         except Exception as exc:
             _cleanup_logger.warning("periodic cleanup error: %s", exc)
@@ -244,7 +266,10 @@ def startup():
     # Same scheduler tick handles them periodically; startup prune
     # catches anything that accumulated between restarts.
     prune_xtts_cache(TEMP_DIR, max_age_days=30)
-    from app.services.text_overlay import get_text_overlay_temp_dir
+    # Phase 1-18 feature-layer migration moved text_overlay to
+    # features/render/engine/overlay/text_overlay.py. The old import path
+    # `app.services.text_overlay` no longer exists; using the new location.
+    from app.features.render.engine.overlay.text_overlay import get_text_overlay_temp_dir
     prune_text_overlay_dir(get_text_overlay_temp_dir(), max_age_days=7)
     # Re-queue any render jobs that were interrupted by a previous server restart
     recover_pending_render_jobs()
@@ -254,7 +279,7 @@ def startup():
     def _whisper_model_warmup():
         try:
             _wm = os.getenv("WARMUP_WHISPER_MODEL", "small")
-            from app.services.subtitle_transcription_adapters import warmup_fw_model
+            from app.features.render.engine.subtitle.transcription.adapters import warmup_fw_model
             ok = warmup_fw_model(_wm)
             logging.getLogger("app.startup").info(
                 "whisper_warmup: model=%s loaded=%s", _wm, ok
@@ -268,7 +293,7 @@ def startup():
     def _cookie_warmup():
         try:
             from app.core.config import COOKIES_DIR
-            from app.services.cookie_extractor import extract_youtube_cookies
+            from app.features.download.engine.cookie_extractor import extract_youtube_cookies
             out = COOKIES_DIR / "youtube_cookies.txt"
             ok = extract_youtube_cookies(out)
             if ok:

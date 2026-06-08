@@ -9,12 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from app.services.db import list_jobs, list_jobs_page, list_job_parts, list_job_parts_bulk, get_job, delete_job, clear_part_output, save_error_kind
+from app.db.jobs_repo import clear_part_output, delete_job, get_job, list_job_parts, list_job_parts_bulk, list_jobs, list_jobs_page, save_error_kind
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
 from app.models.schemas import JobStatusResponse
-from app.quality.report_locator import load_quality_report_for_part
-from app.quality.report_summary import build_job_quality_summary
+from app.features.render.engine.quality.report_locator import load_quality_report_for_part
+from app.features.render.engine.quality.report_summary import build_job_quality_summary
 
 logger = logging.getLogger("app.jobs")
 
@@ -348,7 +348,7 @@ def api_jobs_history(limit: int = 20, offset: int = 0):
 
 @router.get("/queue/status")
 def api_queue_status():
-    from app.services.job_manager import active_count, pending_count, MAX_CONCURRENT_JOBS
+    from app.jobs.manager import active_count, pending_count, MAX_CONCURRENT_JOBS
     return {
         "max_concurrent": MAX_CONCURRENT_JOBS,
         "active": active_count(),
@@ -367,9 +367,95 @@ def api_get_job(job_id: str):
     return row
 
 
+_PART_AI_FIELDS = ("clip_name", "ai_title", "ai_reason", "source")
+
+
+def _enrich_parts_with_segment_ai_fields(parts: list, result_json_raw) -> list:
+    """Merge AI-decision metadata from result_json.segments into each part.
+
+    Closes audit FINDING-C03 (2026-06-06). The FE's JobPart TS type
+    (frontend/src/types/api.ts:266-269) declares four optional AI fields:
+    ``clip_name``, ``ai_title``, ``ai_reason`` and ``source``. None of
+    these are stored on the ``job_parts`` table; they live in the LLM
+    output blob at ``jobs.result_json.segments[*]``.
+
+    Before this commit the FE always saw ``undefined`` for these fields
+    and fell back to placeholder labels. This helper performs the
+    server-side join keyed by ``part_no`` so the FE receives the
+    AI-generated titles + reasons that the LLM emitted.
+
+    The helper is defensive: a malformed result_json or a missing
+    segments list silently degrades to the un-enriched parts so the
+    endpoint never breaks.
+    """
+    if not result_json_raw:
+        return parts
+    try:
+        result = json.loads(result_json_raw) if isinstance(result_json_raw, str) else result_json_raw
+    except Exception:
+        return parts
+    if not isinstance(result, dict):
+        return parts
+    segments = result.get("segments")
+    if not isinstance(segments, list) or not segments:
+        return parts
+
+    # Build a {part_no: segment} index. The pipeline emits segments in
+    # the order the renderer processes them — that is, segments[i] is
+    # for part_no = i + 1. The per-segment dict may ALSO carry an
+    # explicit "part_no" key on the ranking pass; prefer that when present.
+    by_part: dict[int, dict] = {}
+    for idx, seg in enumerate(segments):
+        if not isinstance(seg, dict):
+            continue
+        explicit = seg.get("part_no")
+        try:
+            part_no = int(explicit) if explicit is not None else idx + 1
+        except (TypeError, ValueError):
+            part_no = idx + 1
+        by_part[part_no] = seg
+
+    enriched: list = []
+    for p in parts:
+        if not isinstance(p, dict):
+            enriched.append(p)
+            continue
+        try:
+            part_no = int(p.get("part_no") or 0)
+        except (TypeError, ValueError):
+            part_no = 0
+        seg = by_part.get(part_no)
+        if not seg:
+            enriched.append(p)
+            continue
+        # Shallow-merge the 4 documented fields, leaving everything else
+        # on the DB row untouched. The DB row wins where it has a value
+        # (Sacred Contract #2 spirit — never overwrite a stored truth).
+        merged = dict(p)
+        for key in _PART_AI_FIELDS:
+            if merged.get(key) not in (None, ""):
+                continue
+            value = seg.get(key)
+            if value is None or value == "":
+                continue
+            merged[key] = value
+        enriched.append(merged)
+    return enriched
+
+
 @router.get("/{job_id}/parts")
 def api_get_job_parts(job_id: str):
-    return {"items": list_job_parts(job_id)}
+    parts = list_job_parts(job_id)
+    # Merge AI-decision metadata (clip_name, ai_title, ai_reason, source)
+    # from the job's result_json.segments. Closes audit FINDING-C03.
+    try:
+        job_row = get_job(job_id)
+        result_json_raw = (job_row or {}).get("result_json")
+        parts = _enrich_parts_with_segment_ai_fields(parts, result_json_raw)
+    except Exception:
+        # Never break the parts list because of an enrichment edge case.
+        pass
+    return {"items": parts}
 
 
 @router.get("/{job_id}/ai-summary")
@@ -379,13 +465,33 @@ def api_get_job_ai_summary(job_id: str):
     Parses result_json and returns job-level AI reasoning: director plan, story,
     ranking summary, and segment-level context for all evaluated clips (including
     those not selected as final outputs).
+
+    Audit FINDING-BR11 closure (Batch 10C 2026-06-06): the response now
+    carries an explicit ``ai_status`` enum plus a human ``status_message``
+    so the FE can distinguish four cases and stop rendering an empty card:
+
+        - "ok"           — full ranking + best_clip present, normal display
+        - "no_ranking"   — pipeline finished but output_ranking is empty
+                           (LLM Call 2 failed, or every part failed QA)
+        - "degraded"     — best_clip present but story / director hint missing
+        - "no_result"    — result_json itself absent (job is still running or
+                           failed before persisting any AI artefacts)
+
+    Backward-compat: the legacy ``available`` boolean is preserved — false
+    for "no_result", true for every other case. Existing callers that only
+    look at ``available`` are unaffected.
     """
     row = get_job(job_id)
     if not row:
         raise HTTPException(status_code=404, detail="Job not found")
     result = _parse_json(row.get("result_json"))
     if not result:
-        return {"job_id": job_id, "available": False}
+        return {
+            "job_id":          job_id,
+            "available":       False,
+            "ai_status":       "no_result",
+            "status_message":  "AI analysis is not available yet — the job has no recorded result data.",
+        }
 
     output_ranking: list[dict] = result.get("output_ranking") or []
     best_clip: dict | None     = result.get("best_clip")
@@ -423,9 +529,32 @@ def api_get_job_ai_summary(job_id: str):
 
     hybrid_analysis: dict = ai_director.get("hybrid_analysis") or {}
 
+    # FINDING-BR11: classify the response so the FE can show a meaningful
+    # message instead of an empty card. "no_ranking" is the most common
+    # interesting case — the job ran to completion but no part was ranked,
+    # usually because LLM Call 2 failed or every part lost QA.
+    if not output_ranking and not best_clip:
+        ai_status = "no_ranking"
+        status_message = (
+            "No clips were ranked by the AI. The render completed without "
+            "producing an output-ranking — usually because the second LLM "
+            "call failed or every part was rejected by quality validation."
+        )
+    elif best_clip and not story and not ai_director.get("enabled"):
+        ai_status = "degraded"
+        status_message = (
+            "Partial AI analysis available — ranking is present but the "
+            "story / director hint is missing."
+        )
+    else:
+        ai_status = "ok"
+        status_message = ""
+
     return {
         "job_id":           job_id,
         "available":        True,
+        "ai_status":        ai_status,
+        "status_message":   status_message,
         "director_enabled": bool(ai_director.get("enabled")),
         "story":            story,
         "ai_ux":            ai_ux,

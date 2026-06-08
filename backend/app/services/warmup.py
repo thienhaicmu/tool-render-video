@@ -223,12 +223,12 @@ def _warmup_faster_whisper(name: str, size_mb: int):
     key = f"faster_whisper_{name.replace('-', '_')}"
     _set(key, "running", f"Checking faster-whisper {name} (~{size_mb}MB)...", size_mb)
     try:
-        from app.ai.dependencies import has_faster_whisper
+        from app.features.render.ai.dependencies import has_faster_whisper
         if not has_faster_whisper():
             _set(key, "skipped", "faster-whisper not installed")
             return
         from faster_whisper import WhisperModel
-        from app.services.subtitle_transcription_adapters import _detect_fw_device_compute
+        from app.features.render.engine.subtitle.transcription.adapters import _detect_fw_device_compute
         device, compute_type = _detect_fw_device_compute()
         WhisperModel(name, device=device, compute_type=compute_type)
         _set(key, "ready", f"faster-whisper {name} ready (device={device})", size_mb)

@@ -1,504 +1,384 @@
 # Render Pipeline
 
-File: `backend/app/orchestration/render_pipeline.py`  
-Entry point: `run_render_pipeline(job_id, payload, resume_mode, load_session_fn, cleanup_session_fn)`
+Entry point: `POST /api/render/process` → `features/render/routers/lifecycle.py:create_render_job` → `jobs/manager.py:submit_job` → `routers/_common.process_render` → `run_render_pipeline()` in `features/render/engine/pipeline/render_pipeline.py`.
 
-## Pipeline Identity
+The wire receives `RenderRequestPublic` (88 fields, `extra='forbid'`) post-Batch-10O and the handler expands to the full `RenderRequest` server-side via `RenderRequest(**public.model_dump())` before enqueueing. See [API_CONTRACT.md](API_CONTRACT.md) for the Public ⇄ RenderRequest contract.
 
-**Stability marker: Stable contract**
-
-The render pipeline is the execution spine of the AI rendering intelligence platform. It coordinates validation, source preparation, AI metadata, subtitles, voice, motion crop, FFmpeg execution, output validation, ranking, and result JSON.
-
-FFmpeg is the execution backend. It is not the product identity.
-
-The pipeline must remain conservative:
-
-- Existing render payloads must keep working.
-- Optional systems must fail soft where possible.
-- Partial clip failures should not fail the whole job when other outputs are usable.
-- Result JSON, job stages, part rows, and output aliases are compatibility contracts.
-
-## End-to-End Flow
-
-**Stability marker: Stable contract**
-
-```text
-Input payload
-  -> [Layer 1]   source validation and request guards
-  -> [Layer 2]   user setup: output dir, channel, options
-  -> [Layer 3]   source load or download, preview session resolution,
-                 optional editor trim/volume, optional source archive
-  -> [Layer 4]   scene detection  ──► VisualAnalysisResult
-  -> [Layer 5]   segment generation, viral/hook/motion scoring
-  -> [Layer 5.1] Phase 1 unified scoring: AI transcript blend via select_ai_segments()
-                 ai_blend_bonus (0-15 pts) written onto matched segments before final sort
-                 ENV gate: UNIFIED_SCORING_ENABLED=0 to disable
-  -> optional full subtitle transcription
-  -> optional AI Director planning:
-                 Phase 2: cloud reranker (Groq) -> clip_type, thumbnail_sec, drop signal
-                 Phase 5: audio energy analyzer (transcript-based, 0-20 pts per clip)
-                 Phase 6: feedback bias (channel rating history -> hook_type/clip_type bonus)
-  -> optional bounded AI render influence
-  -- per-part loop --
-  -> [Layer 6]   per-part execution plan (cut, speed, SRT inputs)
-  -> [Layer 6.5] camera strategy  ──► CameraStrategy
-  -> [Layer 7]   per-part subtitle slice/translate/style/overlays  ──► PartAssets
-  -> [Layer 8]   per-part FFmpeg render + voice/TTS/audio mix  ──► RenderOutputResult
-  -> [Layer 9]   output validation and quality checks
-  -> [Layer 10]  output ranking and best clip selection
-  -> [Layer 11]  report and result_json
-```
-
-## Layer Boundary Dataclasses
-
-**Stability marker: Stable contract**
-
-These dataclasses mark explicit architectural boundaries within the per-part render loop. Each is instantiated at the boundary between two layers and captures the outputs of the upstream layer before the downstream layer consumes them.
-
-They are pure-additive — they do not modify render behavior. They exist to make the layer handoff explicit, observable via `logger.info`, and structured for future extension.
-
-| Dataclass | Layer boundary | Source file | Instantiation point |
-|-----------|---------------|-------------|---------------------|
-| `VisualAnalysisResult` | Layer 4 → 5 | `orchestration/visual_analysis.py` | After `detect_scenes()`, before segment building |
-| `CameraStrategy` | Layer 6.5 | `orchestration/camera_strategy.py` | After `PartExecutionPlan`, before FFmpeg render flags |
-| `PartAssets` | Layer 7 → 8 | `orchestration/part_assets.py` | After subtitle/hook/text-layer prep, before FFmpeg encode |
-| `RenderOutputResult` | Layer 8 → 9 | `orchestration/render_output.py` | After FFmpeg encode + voice mix, before `_validate_render_output` |
-
-### VisualAnalysisResult — Layer 4 → 5
-
-**Purpose:** Encapsulate visual analysis output. Boundary between analysis and planning.
-
-Fields: `scene_count`, `detection_ms`, `cache_hit`, `clip_score_applied`, `clip_score_ms`
-
-### CameraStrategy — Layer 6.5
-
-**Purpose:** Isolate camera decision logic. Explicit camera planning contract.
-
-Fields: `aspect_ratio`, `frame_scale_x`, `frame_scale_y`, `motion_aware_crop`, `reframe_mode`, `content_type`, `camera_mode`
-
-`camera_mode` is derived in `__post_init__`: `motion_track` | `static_subject` | `static_default`
-
-### PartAssets — Layer 7 → 8
-
-**Purpose:** Encapsulate generated/render-ready assets. Boundary before render execution.
-
-Fields: `subtitle_enabled`, `srt_path`, `ass_path`, `subtitle_count`, `subtitle_style`, `hook_subtitle_formatted`, `hook_overlay_applied`, `text_layers`, `text_layers_overlay`
-
-### RenderOutputResult — Layer 8 → 9
-
-**Purpose:** Capture FFmpeg render output metadata. Boundary before validation.
-
-Fields: `output_path`, `render_ms`, `codec`, `crop_fallback`, `overlay_composite_used`
+> **Path note (post-Phase-1-18 + Batch 10P/Q):** the old `routes/render.py` no longer exists — wire handlers live under `features/render/routers/`. The `services/job_manager.py` is now `jobs/manager.py`. Per-part path derivation moved to `stages/segment_metadata.build_part_paths` (Batch 10P MT-4 phase A) and three Sacred Contract #5 transitions to `stages/part_db.{mark_part_waiting,mark_part_rendering,mark_part_skipped_done}` (Batch 10Q MT-4 phase B).
 
 ---
 
-## Stage Model
+## Stage Overview
 
-**Stability marker: Stable contract**
-
-Stages are represented by `JobStage` and stored in the `jobs.stage` column.
-
-Typical sequence:
-
-```text
-queued
--> starting
--> downloading
--> scene_detection
--> segment_building
--> transcribing_full
--> rendering or rendering_parallel
--> writing_report
--> done or failed
+```
+[1]  Source Prep         pipeline_source_prep.py
+[2]  Manual Voice TTS    pipeline_narration.py
+[3]  LLM Pre-Render      llm_pipeline.py           (Whisper + LLM Call 1)
+[4]  RenderPlan Select   render_pipeline.py         (LLM Call 2 → RenderPlan)
+[5]  Scored Override     render_pipeline.py         (_scored_from_render_plan)
+[6]  DB Persist          db/jobs_repo.py            (save RenderPlan)
+[7]  Subtitle Translate  render_pipeline.py         (if subtitle_translate_enabled)
+[8]  Render Loop         pipeline_render_loop.py    (ThreadPoolExecutor)
+     └─ Per-Part:
+        [8.1] Cut         stages/part_cut.py
+        [8.2] Setup       stages/part_render_setup.py
+        [8.3] Encode      stages/part_render_encode.py   (FFmpeg)
+        [8.4] Voice Mix   stages/part_voice_mix.py
+        [8.5] Finalize    stages/part_done.py
+[9]  Output Ranking      pipeline_ranking.py
+[10] Finalize            pipeline_finalize.py        (result_json + DONE)
 ```
 
-Part-level stages are stored in `job_parts` and include queued/waiting/cutting/transcribing/rendering/done/failed.
+---
 
-UI-visible terminal job statuses include `completed`, `completed_with_errors`, `failed`, and `interrupted`. Preserve `completed_with_errors` for partial-success jobs because the UI/history layer can use it to distinguish successful outputs with failed parts from clean completion.
+## Stage Detail
 
-### What must not break: render stages
+### [1] Source Prep — `pipeline_source_prep.py`
 
-- Keep stage strings compatible with `/api/jobs/*` and frontend monitor rendering.
-- Preserve structured render events used by logs and UI.
-- Preserve startup recovery behavior: unfinished jobs become `interrupted`, not silently resumed.
+**Function:** `prepare_render_source()`
 
-## Source Preparation and Preview Sessions
+Reads `payload.edit_session_id` first. If non-empty → load editor session. Otherwise → validate local file.
 
-**Stability marker: Stable contract**
+**Editor session path:**
+- Load session via `load_session_fn(edit_session_id)`
+- Raises `RuntimeError` if session expired or video file missing
+- Apply `edit_trim_in` / `edit_trim_out` via FFmpeg `-ss` / `-to`
+- Apply `edit_volume` via FFmpeg `volume=` filter
 
-Source resolution has two paths:
+**Local file path:**
+- Validate `source_mode == "local"` — any other value raises `RuntimeError`
+- Validate `source_video_path` exists on disk
+- Compute `output_stem` via `_smart_output_stem()`
 
-| Source path | Behavior |
-|---|---|
-| Editor session | `edit_session_id` resolves to a saved preview session created by `/api/render/prepare-source`. |
-| Local file | `source_video_path` is validated and used from disk. |
+Returns `SourcePrepResult(source, source_path, detected_source_mode)`.
 
-Remote sources (YouTube, TikTok, IG, …) are NOT downloaded inside the render
-pipeline. Users fetch them via the standalone Downloader feature
-(`features/downloader/`, `/api/downloader/*`) into a local file first, then
-submit the local file to render. Sprint 1.2 removed the YouTube branch from
-`/api/render/prepare-source` and `/api/render/quick-process`; the
-`download-health` endpoint was deleted entirely.
+---
 
-Preview sessions live under `TEMP_DIR/preview/{session_id}` and store `session.json`, source path, preview path, export dir, duration, and optional preview transcript cache.
+### [2] Manual Voice TTS — `pipeline_narration.py`
 
-Browser-safe preview may be generated through `_ensure_h264_preview()`, but the render pipeline should use the original source path where possible.
+**Function:** `run_manual_voice_tts()`
 
-## Validation Rules
+Runs only when `payload.voice_enabled=True` and `payload.voice_source="manual"`.
 
-**Stability marker: Stable contract**
+Generates a single TTS audio file from `payload.voice_script`. Returns `(voice_audio_path, _voice_tts_failed)`. If TTS fails, `_voice_tts_failed=True` and render continues without voice.
 
-Validation happens before queueing and again after rendering.
+---
 
-Pre-render validation protects:
+### [3] LLM Pre-Render — `llm_pipeline.py`
 
-- source mode (must be `local`; any other value is rejected with a 400)
-- output directory
-- local file existence
-- editor session presence
-- channel/manual output compatibility
-- schema constraints from `RenderRequest`
+**Function:** `run_llm_pre_render()`
 
-Post-render validation protects:
+Hard-fail semantics: raises `LLMPipelineError` if source has no audio stream or Whisper fails.
 
-- final file exists
-- file is not trivially small
-- ffprobe can read the output
-- output has a video stream
-- duration is plausible
-- audio presence is checked when expected
+**Step 1 — Transcription (Whisper):**
+- Model: `payload.whisper_model` (default `"auto"` → resolved by config, typically `"small"`)
+- Checks `data/cache/transcription/` first — cache hit skips re-transcription
+- Produces `full_srt` — full-video SRT file
 
-Validation failures must produce useful messages without corrupting job state.
+**Step 2 — Segment Selection (LLM Call 1):**
+- Calls `select_segments()` via `features/render/ai/llm/__init__.py`
+- Provider selected by `payload.ai_provider` (default `"gemini"`)
+- Input: SRT content (truncated to `GEMINI_MAX_SRT_CHARS`), `output_count`, `min_sec`, `max_sec`
+- Returns `list[LLMSegment]` or `None` (Sacred Contract #3)
+- Result converted to `scored[]` list by `llm_stage.py:_to_scored_dict()`
 
-## Scene Detection and Segment Generation
+Returns `LLMPreRenderResult(full_srt, full_srt_available, scored, total_parts)`.
 
-**Stability marker: Semi-stable implementation**
+---
 
-Scene detection is handled by `backend/app/services/scene_detector.py`. Segment building is handled by `backend/app/services/segment_builder.py`.
+### [4] RenderPlan Selection — `render_pipeline.py`
 
-The pipeline uses scenes plus source duration to create candidate segments within `min_part_sec` and `max_part_sec`. Segments are then scored and ordered before rendering.
+**Function:** `_llm_select_render_plan()` at line ~533
 
-Preserve these behaviors:
+Runs when `LLM_EMIT_RENDER_PLAN=1` (default ON since Sprint 7.6a).
 
-- Segment start/end must remain source-time based until SRT slicing rebases per part.
-- `max_export_parts` limits selected outputs after scoring/order logic.
-- `part_order` controls output order. Current known values include viral/combined-style ordering and timeline ordering.
+Calls `select_render_plan()` — LLM Call 2 using same provider and SRT. Returns full `RenderPlan` dataclass or `None` on any failure (Sacred Contract #3 — never raises).
 
-## Viral, Hook, Retention, and Market Scoring
+**RenderPlan schema** → see [AI_INTEGRATION.md](AI_INTEGRATION.md).
 
-**Stability marker: Semi-stable implementation**
+---
 
-Scoring is part of the intelligence layer:
+### [5] Scored Override — `render_pipeline.py`
 
-- `viral_scorer.py` scores candidate segments using timing, scene density, motion, and hook position.
-- `viral_scoring.py` scores market fit for US/EU/JP using hook patterns, keywords, duration, tone, and readability.
-- The pipeline may combine viral, hook, market, motion, retention, and quality penalty signals into output ranking.
+**Function:** `_scored_from_render_plan()` at line ~244
 
-Market-aware rendering is not just decoration. It affects subtitle policies, hook handling, market scoring, and ranking metadata.
+If `RenderPlan` is not None and has clips:
+- Convert `RenderPlan.clips` (list of `ClipPlan`) into `scored[]` dict list
+- This **overwrites** the Call 1 result from step [3]
+- Maps: `start`, `end`, `viral_score`, `hook_score`, `retention_score`, `rank`, `subtitle_style`, `content_type`, `cover_offset_ratio`, `speech_density`, `duration_fit`
 
-## AI Director Integration
+If RenderPlan is None or has no clips → use `scored[]` from Call 1 unchanged.
 
-**Stability marker: Stable contract (post Sprint 4)**
+---
 
-The legacy monolithic `backend/app/ai/director/ai_director.py` was
-retired in Phase G. The AI Director surface is now distributed across
-`backend/app/ai/`:
+### [6] DB Persist — `db/jobs_repo.py`
 
-| Layer | Module | Responsibility |
-|---|---|---|
-| LLM providers | `ai/llm/{gemini,claude,openai}_provider.py` | Per-provider HTTP/SDK calls. Each provides `select_segments` (legacy) and `select_render_plan` (Sprint 4.C). |
-| LLM dispatcher | `ai/llm/__init__.py` | `select_segments(*, provider=…)` and `select_render_plan(*, provider=…)` route to the right provider by name. Falls back to gemini for unknown providers. |
-| Prompt builder | `ai/llm/prompts.py` | `build_segment_prompt` (legacy) and `build_render_plan_prompt` (Sprint 4.B). Format-safe — every literal `{`/`}` doubled so `.format()` substitution can't KeyError on user-supplied text. |
-| Parser | `ai/llm/parser.py` | `parse_segment_response → list[LLMSegment]` (legacy) and `parse_render_plan_response → RenderPlan` (Sprint 4.A). Both are defensive — return `None` on any unparseable input, never raise. |
-| Hybrid analyzer | `ai/analysis/` | Local + optional cloud signals merged into editorial hints. |
-| AI context | `ai/context/creator_context.py` | `CreatorContextBuilder` reads the persisted CreatorContext (Sprint 3 — see `docs/CREATOR_CONTEXT.md`) and surfaces a deterministic prompt hint. |
+`update_render_plan(job_id, render_plan)` — serializes `RenderPlan` to JSON, saves to `jobs.render_plan_json` column.
 
-### Two emission paths
+---
 
-The orchestrator runs one of two emission paths per render job, gated
-on the `LLM_EMIT_RENDER_PLAN` env var:
+### [7] Subtitle Translation — `render_pipeline.py`
 
-- **`LLM_EMIT_RENDER_PLAN=1`** (Sprint 4.D AI-emission path — **default
-  since Sprint 7.6a, 2026-06-05**): `render_pipeline.py` calls
-  `ai.llm.select_render_plan(...)` and gets an `Optional[RenderPlan]`.
-  Success persists via `jobs_repo.update_render_plan(job_id,
-  plan.to_json())` and threads the plan into
-  `PartRenderContext.render_plan`. Failure (None / raise) emits
-  `render.plan.ai_fallback` and leaves `_render_plan = None` — the
-  stage resolvers (Sprint 4.E/F/G) then fall back to the legacy
-  payload-derived logic.
-- **`LLM_EMIT_RENDER_PLAN=0`** (operator opt-out, pre-Sprint-7.6a
-  baseline): `ctx.render_plan` stays `None`. The legacy per-stage
-  decisions run unchanged. The 3-second rollback escape hatch
-  documented in `docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md`.
+Runs only when `payload.subtitle_translate_enabled=True`.
 
-The Sprint 2.2 builder shim that previously synthesised a RenderPlan
-from the scored list was retired in Sprint 4.H — when the flag is
-explicitly set to 0, no RenderPlan is constructed at all. See
-`docs/RENDERPLAN.md` for the full Schema + flow.
+Translates the full SRT to `payload.subtitle_translate_target_lang` before part dispatch. Partial failures tracked in `_sub_translate_partial` list. Render continues even if translation partially fails.
 
-### Stage consume sites (Sprint 4.E/F/G)
+---
 
-| Stage | Consumes | Fallback when `ctx.render_plan is None` |
-|---|---|---|
-| `part_asset_planner.py` | `subtitle_policy.style`, `subtitle_policy.market` | Legacy 5-tier resolution (`variant > creator > platform > DNA > content-type default`). |
-| `part_render_setup.py` | `camera_strategy.reframe_mode` | `payload.reframe_mode` (legacy `"subject"` default). |
-| `render_pipeline.py` P5-1 | `ClipPlan.rank` (1..N permutation) | Score-descending sort over `_compute_output_ranking_entry.output_score`. The resolver gates further on `LLM_EMIT_RENDER_PLAN=1` so shim-produced ranks cannot leak. |
+### [8] Render Loop — `pipeline_render_loop.py`
 
-Each consume site emits a source-tag in its existing event so
-operators can attribute the decision (`subtitle_style_source`,
-`reframe_mode_source`, `rank_source`).
+**Function:** `run_render_loop()`
 
-### Safety contract
+Dispatches each segment in `scored[]` to a worker thread in `ThreadPoolExecutor(max_workers=MAX_RENDER_JOBS)`.
 
-- AI emission failure NEVER kills a render. The stage resolvers fall
-  back to legacy payload-derived logic and emit a `*_source` tag of
-  `"fallback"`.
-- Every public AI entry point (`select_render_plan`, the parsers, the
-  CreatorContext builder, every `_resolve_*_from_plan`) catches all
-  exceptions and surfaces `None` — Sacred Contract #3.
-- The orchestrator wraps the whole RenderPlan acquisition block in
-  its own try/except as a belt-and-braces guard.
-- Cloud analysis still requires explicit `ai_cloud_enabled=True` —
-  never activates by default; cloud failures fall back to local-only.
+Each worker calls `process_one_part(ctx, part_no, seg)` in `stages/part_renderer.py`. The worker function structure post-Batch-10P/Q:
 
-## Advisory Metadata vs Bounded Render Influence
+1. `build_part_paths(ctx, idx, seg)` (Batch 10P) → frozen `PartPaths` dataclass with `raw_part`, `srt_part`, `ass_part`, `translated_srt_part`, `final_part`, `part_name`. Replaces 22 lines of inline path arithmetic that mixed three filename branches.
+2. Resume-skip check (Sacred Contract #BR12) — if `payload.resume_from_last` AND DB status is `done` AND `final_part.exists()` AND `_resume_output_valid(final_part)`, call `part_db.mark_part_skipped_done` and return early.
+3. `part_db.mark_part_waiting` (Batch 10Q) — Sacred Contract #5 transition to `WAITING` at 5% progress.
+4. Stage helpers in sequence: `part_cut.run_cut_stage` → `part_asset_planner.prepare_part_assets` → `part_db.mark_part_rendering` (Batch 10Q — RENDERING at 70%) → `part_render_setup.run_render_preflight` → `part_render_encode.run_render_encode` → `part_voice_mix.run_part_voice_mix` → `part_render_finalize.run_part_finalize` → `part_done.run_part_done`.
 
-**Stability marker: Experimental / needs verification**
+The Sacred Contract #5 transitions `WAITING` / `RENDERING` are owned by the `part_db` facade. `CUTTING` (during `part_cut`), `TRANSCRIBING` (during `part_asset_planner` subtitle path), and the terminal `DONE` (in `part_done`) still come from their respective helpers — those upserts couple to stage-local state.
 
-The pipeline distinguishes:
+---
 
-- **Advisory AI:** plans, reasons, scores, recommends, explains.
-- **Bounded AI execution:** opt-in, narrow payload influence under safety gates.
+### [8.1] Cut — `stages/part_cut.py`
 
-`ai_render_influence_enabled` allows `backend/app/ai/director/render_influence.py` to apply small safe changes. Current bounded influence surfaces:
+**Function:** `cut_video(ctx, part_no, seg)`
 
-| Payload field | Set by | Effect |
-|---|---|---|
-| `motion_aware_crop` | camera_plan behavior in {fast_follow, dramatic_push, slow_reveal} | Enables MediaPipe subject tracking |
-| `reframe_mode` | camera_plan mode + cloud_camera_behavior hint | Changes crop strategy |
-| `highlight_per_word` | subtitle_plan highlight_keywords=True | Per-word ASS emphasis markers |
-| `subtitle_style` | subtitle promotion engine (confidence ≥ 0.80) | Font/color/position preset |
-
-The Hybrid Analysis layer improves the quality of these decisions by providing cloud-enriched emotion signals, camera hints, and subtitle hints to the planners — but it does not add new bounded influence surfaces.
-
-It must not rewrite playback speed, segment timing, FFmpeg commands, output validation, or executor behavior.
-
-### What must not break: AI influence
-
-- Defaults must keep AI off (`ai_cloud_enabled=False`, `ai_render_influence_enabled` default).
-- Render must work when AI modules return fallback metadata.
-- Bounded influence must remain traceable in `ai_render_influence`.
-- Advisory-only phases must not silently become execution phases.
-- `AnalysisSignals` must never directly write to FFmpeg parameters — only through the existing `render_influence.py` gate.
-
-## Subtitle Pipeline
-
-**Stability marker: Stable contract**
-
-Subtitle work is centralized in `backend/app/services/subtitle_engine.py`.
-
-Flow:
-
-```text
-full source audio
-  -> Whisper full SRT
-  -> per-part SRT slice
-  -> rebase timing to zero
-  -> optional translation
-  -> optional market hook/line-break/emphasis logic
-  -> ASS generation
-  -> FFmpeg burn-in
+**Standard path:**
+```
+ffmpeg -ss {start} -i {source} -t {duration} -c:v copy -c:a copy {raw_part.mp4}
 ```
 
-The full SRT is generated once for the source, then sliced per selected segment. This avoids per-part transcription and keeps timing consistent.
+**FEATURE_RAW_PART_SKIP optimization** (default OFF):
+- Skips writing `raw_part.mp4`
+- Uses input-side `-ss`/`-t` seek in the encode step instead
+- Only applies when `motion_aware_crop=False`
+- Returns `None` to signal "no intermediate file"
 
-### What must not break: subtitle
+---
 
-- Preserve SRT slicing with `rebase_to_zero=True`.
-- Preserve fallback to original subtitles when translation fails.
-- Preserve ASS style aliases and karaoke fallback behavior.
-- Preserve subtitle-safe region assumptions used by overlays and motion crop.
-- Preserve `subtitle_translate_summary` values.
+### [8.2] Setup — `stages/part_render_setup.py`
 
-## Motion Crop and Reframe Pipeline
+**Function:** `setup_part_render(ctx, part_no, seg)`
 
-**Stability marker: Semi-stable implementation**
+Resolves final encoding parameters. Priority for each: `RenderPlan` field → `payload` field → `tuned` profile default.
 
-Motion-aware crop lives in `backend/app/services/motion_crop.py`. Standard FFmpeg rendering lives in `backend/app/services/render_engine.py`.
+**Codec resolution:**
+```python
+final_codec = (render_plan.output_config.codec or "") or payload.video_codec
+```
 
-`render_part_smart()` chooses motion-aware rendering when enabled and falls back to standard rendering when safe to do so.
+**CRF resolution:**
+```python
+final_crf = (render_plan.output_config.crf or 0) or payload.video_crf or tuned["video_crf"]
+```
 
-Motion crop may use subject, face, motion, or fallback tracking depending on input and configuration.
+**Subtitle SRT generation:**
+- Extracts SRT lines for `[seg.start, seg.end]` from `full_srt`
+- Applies `payload.subtitle_edits` if present
+- Writes to `work_dir/srt/part_NNN.srt`
 
-### What must not break: motion crop
+**Text layer placement:**
+- For each `payload.text_layers` entry overlapping the segment time range
+- Adjusts timing relative to part start
+- Builds FFmpeg `drawtext` filter strings
 
-- Fallback to standard render must remain available.
-- Subtitle-safe framing must not be ignored.
-- Reframe mode values must stay backward compatible.
-- Motion crop must not corrupt the final video when tracking fails.
+---
 
-## Voice and TTS Pipeline
+### [8.3] Encode — `stages/part_render_encode.py`
 
-**Stability marker: Semi-stable implementation**
+**Function:** `render_part_smart(ctx, part_no, seg, setup_result)`
 
-Voice narration uses:
+Main FFmpeg call. Builds command from setup_result parameters.
 
-- `backend/app/services/tts_service.py`
-- `backend/app/services/audio_mix_service.py`
-- `backend/app/services/voice_profiles.py`
+**FFmpeg command structure:**
+```bash
+ffmpeg -y \
+  [-ss {trim_in}] -i {input} [-t {duration}] \
+  -vf "scale={w}:{h}[,subtitles={srt}][,{overlay_filters}]" \
+  -c:v {codec} -preset {preset} -crf {crf} \
+  -c:a aac -b:a 192k \
+  {output}
+```
 
-Supported voice sources:
+**NVENC hardware encoding:**
+- Acquires `NVENC_SEMAPHORE` (max 3 sessions) defined in `encoder/ffmpeg_helpers.py:27-28`
+- Codec: `h264_nvenc` or `hevc_nvenc`
+- Falls back to software encoding if NVENC unavailable or semaphore times out
 
-- `manual`
-- `subtitle`
-- `translated_subtitle`
+**Progress monitoring:**
+- Background timer thread emits `render.progress` events every 3 seconds
+- Calculates `progress_percent` from elapsed / expected duration
 
-Supported mix modes:
+**Feature flags:**
+- `FEATURE_BASE_CLIP_FIRST` — render base clip without overlays first
+- `FEATURE_OVERLAY_AFTER_BASE_CLIP` — composite subtitles/overlays onto base clip afterward
 
-- `replace_original`
-- `keep_original_low`
+---
 
-### What must not break: voice
+### [8.4] Voice Mix — `stages/part_voice_mix.py`
 
-- TTS failures should not fail the whole render when the video output is otherwise valid.
-- Mix failure must preserve the original rendered clip.
-- `VOICE001` error events must remain useful.
-- Translated subtitle narration must keep fallback behavior.
-- Voice summaries must remain in result JSON.
+**Function:** `maybe_mix_voice(ctx, part_no, seg, encoded_path)`
 
-## FFmpeg Execution Backend
+Runs only when `payload.voice_enabled=True`.
 
-**Stability marker: Semi-stable implementation**
+**Voice source:**
+- `voice_source="manual"` → use `ctx.voice_audio_path` from step [2]
+- `voice_source="model"` → generate TTS per-segment from segment transcript
 
-FFmpeg and ffprobe are used for:
+**Provider selection:**
+```python
+voice_provider = (render_plan.audio_plan.voice_provider or "") or payload.tts_engine
+# Options: "edge" (default, free), "xtts" (local neural TTS)
+```
 
-- source probing
-- editor trim/volume
-- raw part cuts
-- subtitle burn-in
-- crop/scale/render
-- text overlays
-- audio mixing
-- output validation
+**Mix command:**
+```bash
+ffmpeg -y -i {part_video} -i {tts_audio} \
+  -filter_complex "[0:a][1:a]amix=inputs=2:duration=first[a]" \
+  -map 0:v -map "[a]" -c:v copy -c:a aac {output_with_voice}
+```
 
-`render_engine.py` handles codec selection, NVENC fallback, CPU fallback, FFmpeg retries, and render filters.
+---
 
-Do not document every FFmpeg argument as a stable contract. The stable contract is behavior: valid output, fallback, validation, and compatible metadata.
+### [8.5] Finalize Per-Part — `stages/part_done.py`
 
-## Output Validation and Quality Intelligence
+**Function:** `run_part_done(ctx, idx, seg, ...)`
 
-**Stability marker: Semi-stable implementation**
+This is the terminal `DONE` transition for a non-skipped part. (The
+resume-skip variant of the DONE transition lives in
+`part_db.mark_part_skipped_done` — Batch 10Q.)
 
-The pipeline performs hard validation first, then non-blocking quality checks.
+1. **Quality intelligence:** calls `_assess_render_quality_intelligence()` in `qa_pipeline.py` (no-op on failure, Sacred Contract #3)
+2. **Cover frame selection:**
+   - `_select_cover_frame_time()` with `cover_hint_ratio` from seg (AI-suggested thumbnail offset)
+   - Optional `select_best_thumbnail()` if `S4_THUMBNAIL_QUALITY_ENABLED=1`
+   - `extract_thumbnail_frame()` as fallback
+   - Writes `{output_stem}_cover.jpg`
+3. **DB upsert:** `upsert_job_part(DONE, 100, ...)` — terminal transition
+4. **Temp cleanup:** delete `raw_part.mp4`, `srt_part`, `ass_part` if `payload.cleanup_temp_files=True`
+5. Returns `{"idx", "output", "row", "skipped": False}`
 
-Hard validation determines whether an output can count as successful. Quality checks can add warnings and score penalties without necessarily failing the output.
+---
 
-AI quality evaluation under `backend/app/ai/quality/**` is evaluation-only. It should not mutate files, delete outputs, or fail jobs.
+### [9] Output Ranking — `pipeline_ranking.py`
 
-### Creator-perceived quality gap
+**Function:** `_compute_output_ranking_entry()` + `_resolve_rank_from_plan()`
 
-Technical quality can pass while creator-perceived quality still feels less premium. Premium perception depends on hook visuals, typography, motion rhythm, audio polish, intro/outro treatment, branding, and visual consistency. These are product-quality concerns, not only FFmpeg correctness.
+**Score formula:**
+```
+output_rank_score = (
+    viral_score    * 0.35 +
+    hook_score     * 0.20 +
+    retention_score * 0.20 +
+    speech_density  * 0.10 +
+    market_score    * 0.10 +
+    duration_fit    * 0.05
+)
+```
 
-## Output Ranking and Best Clip
+**Rank resolution:**
+- If `LLM_EMIT_RENDER_PLAN=1` AND `RenderPlan.clips[i].rank` is valid → use AI ranks
+- Else → sort by descending `output_rank_score`
 
-**Stability marker: Stable contract**
-
-The pipeline writes ranking metadata after outputs are known.
-
-Important surfaces:
-
-- `output_ranking`
-- `best_clip`
-- `best_exports`
-- ranking components
-- ranking reasons
+**Sacred Contract #1 — these three keys always present in every ranking entry:**
 - `output_rank_score`
-- `is_best_clip`
 - `is_best_output`
+- `is_best_clip`
 
-Ranking may use viral score, hook score, retention score, motion score, market score, and quality penalty.
+---
 
-Auto best export copies selected top outputs to a `best` directory when enabled.
+### [10] Finalize — `pipeline_finalize.py`
 
-## Partial Success and Failed Parts
+**Function:** `run_render_finalize()`
 
-**Stability marker: Stable contract**
+1. Auto-best-export: copy top-N outputs to `output_dir/best/`
+2. Determine `_final_status`: `"completed"` or `"completed_with_errors"`
+3. Assemble `result_json` — see [DATABASE.md](DATABASE.md) for full schema
+4. `upsert_job(JobStage.DONE, result_json)` — terminal job transition
+5. Trigger DB backup if `DB_BACKUP_EVERY_N_JOBS` threshold reached
 
-Part failures are isolated. If at least one output succeeds, the job can complete with partial success.
+---
 
-Result JSON includes:
+## PartRenderContext
 
-- `failed_parts`
-- `failed_parts_detail`
-- `successful_outputs_count`
-- `failed_outputs_count`
-- `is_partial_success`
+Dataclass (`stages/part_render_context.py`) capturing all closure state passed to each worker:
 
-Final status may be `completed_with_errors` when some parts fail.
-
-### What must not break: partial success
-
-- A failed part must not erase successful outputs.
-- Failed parts must remain visible to UI/history.
-- All-parts-failed should still fail the job clearly.
-- Partial success warning must remain in output ranking metadata.
-
-## result_json Contract
-
-**Stability marker: Stable contract**
-
-`jobs.result_json` is consumed by UI, history, output gallery, AI panels, and future agents.
-
-Do not remove or rename existing keys without tests and migration notes.
-
-Important keys:
-
-```text
-outputs
-segments
-market_viral_parts
-output_ranking
-output_ranking_warning
-best_clip
-best_exports
-voice_summary
-subtitle_translate_summary
-failed_parts
-failed_parts_detail
-selected_parts_count
-successful_outputs_count
-failed_outputs_count
-is_partial_success
-ai_director
-ai_render_influence
-ai_beat_execution
-ai_output_ranking
-ai_render_quality_evaluation
-ai_ux
+```python
+@dataclass
+class PartRenderContext:
+    job_id: str
+    effective_channel: str
+    total_parts: int
+    work_dir: Path
+    output_dir: Path
+    output_stem: str
+    source_path: Path
+    source: dict                          # {title, slug, duration, filepath}
+    payload: RenderRequest
+    tuned: dict                           # resolved preset profile
+    ffmpeg_threads: int
+    full_srt: Path
+    full_srt_available: bool
+    subtitle_enabled_by_idx: dict         # {part_idx: bool}
+    voice_audio_path: Optional[Path]
+    mv_cfg: dict                          # market-viral config
+    hook_apply_enabled: bool
+    hook_applied_text: str
+    ai_edit_plan: Optional[Any]           # unused in current pipeline
+    render_plan: Optional[RenderPlan]     # Sprint 2.3: RenderPlan passed to workers
+    target_platform: str
+    # Mutable shared lists (passed by reference to workers)
+    voice_part_tts_attempts: list
+    voice_mix_ok: list
+    failed_parts: list
+    retry_count: int
 ```
 
-## Timeout and Fallback Behavior
+---
 
-**Stability marker: Semi-stable implementation**
+## Error Handling
 
-Important fallback patterns:
+| Failure Mode | Behavior |
+|-------------|----------|
+| Source file missing | HTTP 400 before job starts |
+| Session expired | HTTP 400 before job starts |
+| No audio stream | `LLMPipelineError` raised — job FAILED immediately |
+| Whisper fails | `LLMPipelineError` raised — job FAILED immediately |
+| LLM Call 1 fails | Returns `None` → empty scored[] → job FAILED (no segments) |
+| LLM Call 2 fails | Returns `None` → falls back to Call 1 result (Sacred Contract #3) |
+| RenderPlan parse error | Returns `None` → falls back (Sacred Contract #3) |
+| FFmpeg subprocess error | Part marked FAILED, added to `failed_parts` list |
+| All parts fail | Job status `"failed"` in result_json |
+| Some parts fail | Job status `"completed_with_errors"`, `is_partial_success=True` |
+| Voice TTS fails | `_voice_tts_failed=True`, render continues without voice |
+| Cover frame fails | Warning logged, part marked DONE without cover |
+| Subtitle translation partial | Continues with untranslated subtitles for failed parts |
 
-- Whisper transcription has heartbeat logging during long work.
-- FFmpeg can retry or fall back from NVENC to CPU encoders.
-- Motion crop falls back to standard render where possible.
-- Translation failures keep original text.
-- TTS/mix failures preserve the rendered video when possible.
-- AI modules return fallback metadata rather than raising.
+---
 
-Exact timeout values are implementation details unless exposed in config or tests.
+## Job Stage Transitions
 
-## What Should Not Be Documented
+`JobStage` enum (`core/stage.py`):
 
-**Stability marker: Stable contract**
+```
+QUEUED → STARTING → RUNNING → ANALYZING → TRANSCRIBING_FULL →
+SCENE_DETECTION → SEGMENT_BUILDING → RENDERING → RENDERING_PARALLEL →
+WRITING_REPORT → DONE
+(terminal: FAILED, CANCELLED)
+```
 
-- Do not mirror every implementation branch.
-- Do not list every FFmpeg flag as a public contract.
-- Do not promise experimental AI phases affect output unless currently wired.
-- Do not document private/internal future plugin plans.
-- Do not document forbidden `docs/review/**` or `docs/archive/**` as editable workflow.
+`DOWNLOADING` is retained in the enum for backward compat but not emitted by the render pipeline.
+
+## Part Stage Transitions
+
+`JobPartStage` enum (`core/stage.py`):
+
+```
+QUEUED → WAITING → CUTTING → TRANSCRIBING → RENDERING → DONE
+(terminal: FAILED, SKIPPED)
+```
+
+These names are **frozen** — changing them breaks WebSocket consumers and frontend state machines. See [API_CONTRACT.md](API_CONTRACT.md).

@@ -1,5 +1,6 @@
 import logging
 
+from app.core.stage import JobPartStage, JobStage
 from app.db.connection import (
     _json_dumps,
     _thread_conn,
@@ -9,9 +10,73 @@ from app.db.connection import (
 logger = logging.getLogger("app.db")
 
 
+# Audit FINDING-BR05 / C06 closure (Batch 3, 2026-06-06).
+#
+# The Sacred Contracts #4 and #5 freeze the job-stage and per-part status
+# strings. The JobStage / JobPartStage enums encode the frozen set in
+# app/core/stage.py, but writers historically pass raw strings — a typo
+# (`"compleated"` for "completed") would silently corrupt every consumer
+# (FE labels, status filters, recovery loops) with no error from SQLite.
+#
+# These constants give the repo a single source of truth that the
+# writers can be checked against. Validation is WARN-LEVEL, not raising,
+# because:
+#  - It must never break a live render. The orchestrator above expects
+#    its write to succeed; a hard rejection would surface as a render
+#    failure that the user can't diagnose.
+#  - "kind" and ad-hoc legacy values still appear in stored payloads
+#    (see Sacred Contract #2 — replay must not break). A WARN log surfaces
+#    drift without crashing.
+# A future migration may promote this to SQL `CHECK(status IN (...))`,
+# but that requires a clean DB scan first.
+_VALID_JOB_STATUSES = frozenset({
+    "queued",
+    "running",
+    "completed",
+    "completed_with_errors",
+    "failed",
+    "interrupted",
+    "cancelled",
+})
+_VALID_JOB_STAGES = frozenset(s.value for s in JobStage)
+_VALID_JOB_PART_STAGES = frozenset(s.value for s in JobPartStage)
+
+
+def _normalize_enum_value(raw, allow_empty: bool = False) -> str:
+    """Coerce a JobStage/JobPartStage enum or raw string to its string value.
+
+    Pass-through for raw strings; ``.value`` extraction for enum members.
+    Returns '' when ``raw`` is None/empty and ``allow_empty=True``.
+    """
+    if raw is None:
+        return "" if allow_empty else ""
+    if hasattr(raw, "value"):
+        try:
+            return str(raw.value)
+        except Exception:  # pragma: no cover — defensive only
+            pass
+    return str(raw)
+
+
+def _warn_unknown_value(label: str, value: str, allowed: frozenset[str]) -> None:
+    """Log WARN when a writer passes a value outside the frozen contract."""
+    if not value:
+        return
+    if value not in allowed:
+        logger.warning(
+            "jobs_repo: unknown %s=%r (not in contract). "
+            "Allowed: %s. Sacred Contracts #4/#5.",
+            label, value, sorted(allowed),
+        )
+
+
 def upsert_job(job_id: str, kind: str, channel_code: str, status: str,
                payload=None, result=None, stage: str = '', progress_percent: int = 0,
                message: str = '', priority: int = 0):
+    status = _normalize_enum_value(status, allow_empty=True)
+    stage = _normalize_enum_value(stage, allow_empty=True)
+    _warn_unknown_value("status", status, _VALID_JOB_STATUSES)
+    _warn_unknown_value("stage", stage, _VALID_JOB_STAGES)
     with db_conn() as conn:
         conn.execute(
             """
@@ -34,6 +99,11 @@ def upsert_job(job_id: str, kind: str, channel_code: str, status: str,
 
 
 def update_job_progress(job_id: str, stage: str, progress_percent: int, message: str = '', status: str | None = None):
+    stage = _normalize_enum_value(stage, allow_empty=True)
+    _warn_unknown_value("stage", stage, _VALID_JOB_STAGES)
+    if status is not None:
+        status = _normalize_enum_value(status, allow_empty=True)
+        _warn_unknown_value("status", status, _VALID_JOB_STATUSES)
     conn = _thread_conn()
     cur = conn.cursor()
     if status:
@@ -113,6 +183,8 @@ def upsert_job_part(job_id: str, part_no: int, part_name: str, status: str,
                     progress_percent: int = 0, start_sec: float = 0, end_sec: float = 0,
                     duration: float = 0, viral_score: float = 0, motion_score: float = 0,
                     hook_score: float = 0, output_file: str = '', message: str = ''):
+    status = _normalize_enum_value(status, allow_empty=True)
+    _warn_unknown_value("part_status", status, _VALID_JOB_PART_STAGES)
     conn = _thread_conn()
     cur = conn.cursor()
     cur.execute(
