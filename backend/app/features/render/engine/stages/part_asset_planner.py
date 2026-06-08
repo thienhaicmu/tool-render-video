@@ -849,9 +849,19 @@ def prepare_part_assets(
     _part_text_layers_overlay = list(ctx.normalized_text_layers)
     if ctx.hook_overlay_enabled and len(_part_text_layers) < MAX_TEXT_LAYERS:
         _hook_srt_path = str(srt_part) if srt_part.exists() and srt_part.stat().st_size > 0 else None
+        # Strategic-2 — Audit 2026-06-08 closure. The LLM's per-clip
+        # ``RenderPlan.clips[i].title`` (surfaced into ``seg["ai_title"]``
+        # by ``_scored_from_render_plan`` at render_pipeline.py:267) now
+        # serves as the hook-overlay text source when the operator has
+        # not set an explicit ``hook_applied_text``. Pre-Strategic-2
+        # this field was display-only (visible in the parts API but
+        # never rendered into the video). resolve_hook_overlay_text
+        # implements the priority: explicit > ai_title > SRT-first-block.
+        _ai_title = str(seg.get("ai_title") or "").strip()
         _hook_text, _hook_source = resolve_hook_overlay_text(
             ctx.hook_applied_text if ctx.hook_applied_text else None,
             _hook_srt_path,
+            ai_title=_ai_title or None,
         )
         if _hook_text:
             _hook_overlay_applied_for_part = True
