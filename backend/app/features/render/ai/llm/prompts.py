@@ -157,7 +157,7 @@ overlays is an array. Emit at most one entry per kind:
                (subscribe, comment, part 2). Set "type" to one of
                "comment" | "part_2" | "follow" | "auto".
 
-When no overlay fits, return overlays=[] instead of inventing one.
+When no overlay fits, return overlays=[] instead of inventing one.{clip_lock_section}{clip_exclude_section}
 
 ─── TRANSCRIPT ───
 
@@ -274,6 +274,8 @@ def build_render_plan_prompt(
     max_srt_chars: int | None = None,
     editorial_hint: str = "",
     target_duration: int = 0,
+    clip_lock: list[dict] | None = None,
+    clip_exclude: list[dict] | None = None,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for LLM RenderPlan emission.
 
@@ -332,6 +334,34 @@ def build_render_plan_prompt(
         else ""
     )
 
+    # Strategic-1 — UP26 Pro Timeline Steering. When the operator
+    # supplies clip_lock and/or clip_exclude ranges, render them as
+    # explicit hard constraints in the prompt. Each range is a dict
+    # {start_sec, end_sec} (floats, seconds). Empty list / None
+    # suppresses the section — back-compat with all pre-Strategic-1
+    # callers that don't pass the kwargs.
+    clip_lock_section = _format_range_section(
+        clip_lock,
+        header="HARD LOCKED RANGES",
+        body=(
+            "Each entry is a range the operator MARKED FOR INCLUSION. "
+            "At LEAST one of your emitted clips MUST OVERLAP each "
+            "locked range — drop other candidate clips before "
+            "leaving a locked range uncovered."
+        ),
+    )
+    clip_exclude_section = _format_range_section(
+        clip_exclude,
+        header="HARD EXCLUDED RANGES",
+        body=(
+            "Each entry is a range the operator MARKED FOR EXCLUSION. "
+            "NONE of your emitted clips may overlap any excluded "
+            "range — even partially. Drop candidate clips that touch "
+            "an excluded range rather than truncating them at the "
+            "boundary."
+        ),
+    )
+
     # Example end timestamp lands inside [min_sec, max_sec] so the JSON
     # example always demonstrates a compliant clip.
     example_end = round(45.2 + (min_sec + max_sec) / 2, 1)
@@ -345,6 +375,43 @@ def build_render_plan_prompt(
         example_end=example_end,
         editorial_section=editorial_section,
         target_duration_section=target_duration_section,
+        clip_lock_section=clip_lock_section,
+        clip_exclude_section=clip_exclude_section,
     )
     return system, user
+
+
+def _format_range_section(
+    ranges: list[dict] | None,
+    *,
+    header: str,
+    body: str,
+) -> str:
+    """Render a list of {start_sec, end_sec} dicts as a labelled
+    prompt section. Returns "" when ranges is None / empty so the
+    {clip_lock_section}/{clip_exclude_section} slots in the template
+    suppress cleanly. Defensive: silently skips malformed entries
+    rather than raising — Sacred Contract #3 spirit applies to
+    AI-input assembly. Validity rule: start_sec >= 0 and
+    end_sec > start_sec."""
+    if not ranges:
+        return ""
+    try:
+        lines: list[str] = []
+        for r in ranges:
+            if not isinstance(r, dict):
+                continue
+            try:
+                start = float(r.get("start_sec"))
+                end = float(r.get("end_sec"))
+            except (TypeError, ValueError):
+                continue
+            if start < 0 or end <= start:
+                continue
+            lines.append(f"  - [{start:.1f}s, {end:.1f}s]")
+        if not lines:
+            return ""
+        return f"\n\n{header}:\n{body}\n" + "\n".join(lines)
+    except Exception:
+        return ""
 

@@ -122,6 +122,16 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # LLM selection (canonical)
     "llm_enabled", "llm_model", "llm_language", "llm_min_quality", "llm_mode",
     "ai_provider",
+    # Strategic-1 — Audit 2026-06-08 closure. UP26 Pro Timeline
+    # Steering — clip_lock (ranges that MUST be included) and
+    # clip_exclude (ranges that MUST be skipped). T1.4 stripped these
+    # from the Public surface as DEAD; Strategic-1 puts them back
+    # AND wires them through ai/llm/__init__.py + the prompt
+    # template so the LLM actually sees the operator's guidance.
+    # Each is Optional[list[dict]] where each dict carries
+    # {start_sec, end_sec} (seconds, float). structure_bias +
+    # subtitle_emphasis remain stripped — no LLM consumer yet.
+    "clip_lock", "clip_exclude",
     # Creator Asset Intelligence (UP27) — surviving wired fields
     "asset_logo_path", "asset_intro_path", "asset_outro_path",
     # New vision (v2)
@@ -164,12 +174,12 @@ RenderRequestPublic = create_model(  # type: ignore[call-overload]
 )
 
 RenderRequestPublic.__doc__ = (
-    "FE-facing slice of RenderRequest (67 of 152 fields after the T1.4 "
-    "audit-2026-06-08 cleanup + follow-up, down from the pre-audit 88). "
-    "Strictly forbids unknown fields (``extra='forbid'``). The wire "
-    "endpoint /api/render/process accepts this surface and expands to "
-    "the full RenderRequest server-side. See module docstring for the "
-    "migration history."
+    "FE-facing slice of RenderRequest (69 of 152 fields after the T1.4 "
+    "audit-2026-06-08 cleanup + follow-up + Strategic-1 partial UP26 "
+    "restoration, down from the pre-audit 88). Strictly forbids unknown "
+    "fields (``extra='forbid'``). The wire endpoint /api/render/process "
+    "accepts this surface and expands to the full RenderRequest "
+    "server-side. See module docstring for the migration history."
 )
 
 

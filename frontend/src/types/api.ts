@@ -165,6 +165,17 @@ export interface RenderRequest {
   llm_mode?: string | null
   ai_provider?: string | null
 
+  // Strategic-1 — Audit 2026-06-08 closure. UP26 Pro Timeline
+  // Steering — clip_lock (ranges that MUST be included) and
+  // clip_exclude (ranges that MUST be skipped). T1.4 stripped these
+  // as DEAD; Strategic-1 puts them back AND wires them through the
+  // LLM prompt template (ai/llm/prompts.py). Each entry is a
+  // TimeRange with start_sec and end_sec fields (seconds, float).
+  // structure_bias and subtitle_emphasis remain stripped — no LLM
+  // consumer yet.
+  clip_lock?: TimeRange[] | null
+  clip_exclude?: TimeRange[] | null
+
   // Creator Asset Intelligence (UP27) — surviving wired fields
   asset_logo_path?: string | null
   asset_intro_path?: string | null

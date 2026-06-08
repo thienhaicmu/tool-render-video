@@ -589,6 +589,16 @@ def run_render_pipeline(
                         # historical payloads that never set it) suppresses
                         # the prompt section — backward-compatible.
                         target_duration=int(getattr(payload, "target_duration", 0) or 0),
+                        # Strategic-1 — Audit 2026-06-08 closure (Batch A
+                        # V8-A12 / UP26 Pro Timeline Steering). Pass the
+                        # creator's lock/exclude ranges to the LLM as
+                        # hard constraints. None / empty (default for
+                        # historical payloads that never set them)
+                        # suppresses both prompt sections — backward-
+                        # compatible. The fields are Optional[list[dict]]
+                        # in models/render.py; we coerce None -> None.
+                        clip_lock=getattr(payload, "clip_lock", None) or None,
+                        clip_exclude=getattr(payload, "clip_exclude", None) or None,
                     )
                     if _render_plan is not None:
                         _emit_render_event(

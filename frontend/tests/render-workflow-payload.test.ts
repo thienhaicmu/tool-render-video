@@ -114,9 +114,11 @@ const STRIPPED_FIELDS_PHASE_G = [
   'ai_content_driven_selection',
 ]
 
+// Strategic-1 — Audit 2026-06-08 closure. clip_lock and clip_exclude
+// were RESTORED to the wire because the LLM prompt now consumes them
+// (ai/llm/prompts.py:_format_range_section). The still-stripped UP26
+// dead fields are structure_bias and subtitle_emphasis only.
 const STRIPPED_FIELDS_UP26 = [
-  'clip_lock',
-  'clip_exclude',
   'structure_bias',
   'subtitle_emphasis',
 ]
