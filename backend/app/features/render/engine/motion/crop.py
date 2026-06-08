@@ -400,6 +400,40 @@ def render_motion_aware_crop(
     source_duration_sec: float | None = None,
     source_seek_force_accurate: bool = False,
 ) -> str:
+    """Render a motion-aware cropped clip.
+
+    Sprint 6.D-extracted public entry point that callers reach through
+    ``app.features.render.engine.motion`` (also re-exported from the
+    legacy ``app.services.motion_crop`` shim). Spawns an FFmpeg
+    subprocess (``subprocess.Popen`` below) and pipes BGR frames from
+    OpenCV through it.
+
+    NVENC contract — Strategic-5 / Audit 2026-06-08 closure (Batch B
+    B-12-A). This function does NOT acquire ``NVENC_SEMAPHORE``
+    itself. When the resolved codec is ``h264_nvenc`` or
+    ``hevc_nvenc``, the CALLER MUST acquire the semaphore BEFORE
+    invoking this function and release it AFTER the call returns.
+    Production callers in ``encoder/clip_renderer.py`` (lines 94-98,
+    635-640, 819-823) already follow this contract — they call
+    ``_resolve_codec()``, branch on the NVENC suffix, and acquire the
+    semaphore via either ``NVENC_SEMAPHORE.acquire()`` or a
+    ``with NVENC_SEMAPHORE:`` block before delegating here.
+
+    Why not acquire internally: ``motion/crop.py`` is also chained
+    into outer FFmpeg encode chains via ``clip_renderer.py`` (e.g.,
+    when motion-aware crop is followed by a transcode step). The
+    caller already needs the semaphore for the outer chain;
+    re-acquiring inside this function would either (a) double-count
+    against the GPU session cap (causing false NVENC failures) or
+    (b) require a ``nvenc_externally_held`` kwarg cascade. The
+    "caller-acquires" invariant is simpler and matches the existing
+    ``_run_ffmpeg_with_retry`` pattern.
+
+    Test guard: ``backend/tests/test_nvenc_semaphore_external_acquire.py``
+    pins this contract via AST inspection of clip_renderer.py — a
+    refactor that drops the external acquire fires the guard before
+    landing.
+    """
     layer_count = len(text_layers or [])
     if layer_count:
         logger.info("Applying %d text overlay layer(s) in motion-aware pipeline", layer_count)
