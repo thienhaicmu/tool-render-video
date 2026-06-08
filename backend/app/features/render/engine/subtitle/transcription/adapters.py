@@ -12,6 +12,12 @@ from typing import Protocol
 logger = logging.getLogger(__name__)
 
 from app.features.render.ai.dependencies import has_faster_whisper, has_whisperx
+# T2.1 — Audit 2026-06-08 closure (Batch A V9-F2): cancel poll for the
+# Whisper segment iterator. check_thread_cancel raises JobCancelledError
+# when the per-thread cancel event is set; the iterator is consumed
+# segment-by-segment so the raise arrives within ~1 audio segment
+# (~2-5s real time depending on model + audio length).
+from app.features.render.engine.encoder.ffmpeg_helpers import check_thread_cancel
 
 # Languages with a supported wav2vec2 alignment model in WhisperX.
 # Configurable via WHISPERX_ALIGN_LANGS env var (comma-separated ISO codes).
@@ -204,8 +210,20 @@ def _write_fw_srt(segments_iter, srt_path: str, *, word_level: bool) -> None:
     faster-whisper returns Segment namedtuples, not dicts.  This writer
     converts them into the same normalised word-block format used by the
     WhisperX adapter so the two paths are consistent.
+
+    T2.1 — Audit 2026-06-08 closure (Batch A V9-F2). The segment
+    iterator is consumed one segment at a time with a cancel poll
+    between yields instead of the pre-T2.1 `list(segments_iter)` slurp.
+    faster-whisper transcribes lazily, so each iteration actually runs
+    a few seconds of model inference; checking the thread-local cancel
+    event between iterations means a cancel signal arrives within
+    ~1 segment (~2-5 s real time) instead of waiting for the entire
+    transcription to finish (minutes on long videos).
     """
-    segments = list(segments_iter)
+    segments: list = []
+    for seg in segments_iter:
+        check_thread_cancel()
+        segments.append(seg)
     blocks: list[dict] = []
 
     if word_level:

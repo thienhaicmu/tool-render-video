@@ -64,6 +64,9 @@ import numpy as np
 
 from app.features.render.engine.motion.config import MotionCropConfig
 from app.features.render.engine.motion.utils import clamp, ema
+# T2.2 — Audit 2026-06-08 closure (Batch A V9-F3): cancel poll for the
+# pixel-diff fallback loops. See engine/encoder/ffmpeg_helpers.py.
+from app.features.render.engine.encoder.ffmpeg_helpers import check_thread_cancel
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +151,8 @@ def _build_motion_path_legacy(
 
     idx = 1
     while True:
+        # T2.2 — cancel poll for the pixel-diff motion-tracking loop.
+        check_thread_cancel()
         ok, frame = cap.read()
         if not ok or frame is None:
             break
@@ -229,6 +234,8 @@ def _detect_scene_ranges_in_clip(video_path: str, cfg: MotionCropConfig):
         sample_every = max(1, int(round(fps / 6.0)))
 
         while True:
+            # T2.2 — cancel poll for the scene-cut detection loop.
+            check_thread_cancel()
             ok, frame = cap.read()
             if not ok or frame is None:
                 break

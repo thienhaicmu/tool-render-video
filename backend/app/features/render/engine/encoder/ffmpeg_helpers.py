@@ -43,6 +43,34 @@ def set_thread_cancel_event(ev) -> None:
     """Register a cancel threading.Event for the current worker thread."""
     _tls.cancel_event = ev
 
+
+def get_thread_cancel_event():
+    """Return this thread's cancel event, or None if none registered.
+
+    T2.2 — Audit 2026-06-08 closure (Batch A V9-F3). The OpenCV
+    motion-tracking loops in engine/motion/ call ``check_thread_cancel``
+    below to break out of long per-frame loops when the operator
+    clicks Cancel. The getter is exposed so external callers can poll
+    the same event the FFmpeg subprocess monitor uses.
+    """
+    return getattr(_tls, "cancel_event", None)
+
+
+def check_thread_cancel() -> None:
+    """Raise JobCancelledError if the current thread's cancel event is set.
+
+    Cheap O(1) helper for use inside hot loops where threading a
+    ``job_id`` argument through the call chain is impractical.
+    Imports ``JobCancelledError`` lazily to avoid an encoder ↔
+    jobs/cancel import cycle. The check is a no-op (None compare +
+    early return) on threads that never registered a cancel event,
+    so direct test calls into motion modules are unaffected.
+    """
+    ev = getattr(_tls, "cancel_event", None)
+    if ev is not None and ev.is_set():
+        from app.jobs.cancel import JobCancelledError
+        raise JobCancelledError("operation cancelled by user")
+
 # ---------------------------------------------------------------------------
 # ffprobe metadata cache — keyed by (abspath, mtime_ns, size_bytes)
 # ---------------------------------------------------------------------------

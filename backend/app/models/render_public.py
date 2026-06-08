@@ -58,8 +58,18 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # Profile / quality
     "render_profile", "output_fps", "whisper_model",
     # Segmentation
-    "auto_detect_scene", "min_part_sec", "max_part_sec", "max_export_parts",
-    "part_order",
+    "auto_detect_scene", "min_part_sec", "max_part_sec",
+    # T1.4 follow-up — Audit 2026-06-08: `max_export_parts` and
+    # `part_order` removed from the Public surface. Both were declared
+    # in the TS interface and sent by RenderWorkflow.buildPayload
+    # (max_export_parts: cfg.outputCount, part_order: cfg.partOrder)
+    # but the render engine reads NEITHER — `max_export_parts` has no
+    # grep hit outside models/ and `part_order` is validated then
+    # ignored (FINDING-C01 closure noted in the validator at
+    # render.py:451-463). The fields stay in RenderRequest for
+    # Sacred Contract #2 replay safety. Caught by
+    # test_render_request_public_no_dead_fields.py's
+    # test_every_public_field_has_downstream_consumer guard.
     # Subtitle (the parts the FE exposes)
     "add_subtitle", "subtitle_style", "highlight_per_word", "sub_font_size",
     "subtitle_translate_enabled", "subtitle_target_language",
@@ -154,11 +164,12 @@ RenderRequestPublic = create_model(  # type: ignore[call-overload]
 )
 
 RenderRequestPublic.__doc__ = (
-    "FE-facing slice of RenderRequest (69 of 152 fields after the T1.4 "
-    "audit-2026-06-08 cleanup, down from 88). Strictly forbids unknown "
-    "fields (``extra='forbid'``). The wire endpoint /api/render/process "
-    "accepts this surface and expands to the full RenderRequest "
-    "server-side. See module docstring for the migration history."
+    "FE-facing slice of RenderRequest (67 of 152 fields after the T1.4 "
+    "audit-2026-06-08 cleanup + follow-up, down from the pre-audit 88). "
+    "Strictly forbids unknown fields (``extra='forbid'``). The wire "
+    "endpoint /api/render/process accepts this surface and expands to "
+    "the full RenderRequest server-side. See module docstring for the "
+    "migration history."
 )
 
 

@@ -93,6 +93,9 @@ from app.features.render.engine.motion.pixel_diff import (  # noqa: F401 (re-exp
     _build_motion_path_legacy,
     _detect_scene_ranges_in_clip,
 )
+# T2.2 — Audit 2026-06-08 closure (Batch A V9-F3): cancel poll for the
+# motion-aware crop render loop. See engine/encoder/ffmpeg_helpers.py.
+from app.features.render.engine.encoder.ffmpeg_helpers import check_thread_cancel
 # Sprint 6.D-3.6a + 3.6b + Sprint 5.2 split:
 #   build_subject_path lives in path.py (multi-scene dispatcher + single-
 #   scene fast path). build_subject_path_scene was split out into
@@ -694,6 +697,8 @@ def render_motion_aware_crop(
 
     attempt = 0
     while True:
+        # T2.2 — cancel poll between retry attempts (FFmpeg crash recovery).
+        check_thread_cancel()
         attempt += 1
         cap = cv2.VideoCapture(input_path)
         if not cap.isOpened():
@@ -709,6 +714,11 @@ def render_motion_aware_crop(
             proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
             frame_idx = 0
             while True:
+                # T2.2 — cancel poll for the motion-aware encode loop.
+                # On raise the FFmpeg subprocess will be reaped by the
+                # outer except's proc.kill() path; cap is released by
+                # OpenCV __del__.
+                check_thread_cancel()
                 ok, frame = cap.read()
                 if not ok or frame is None:
                     break

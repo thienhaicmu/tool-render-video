@@ -66,6 +66,10 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
+# T2.2 — Audit 2026-06-08 closure (Batch A V9-F3): cancel poll for the
+# subject-detection sample scan. See engine/encoder/ffmpeg_helpers.py.
+from app.features.render.engine.encoder.ffmpeg_helpers import check_thread_cancel
+
 # Preserve original logger name so downstream log filters / handlers
 # targeting "app.services.motion_crop" still match (same as 6.D-3.4).
 logger = logging.getLogger("app.services.motion_crop")
@@ -150,6 +154,8 @@ def _has_subject_in_sample(video_path: str, sample_count: int = 24) -> bool:
         step = max(1, total // max(1, sample_count))
         found = False
         for i in range(0, total, step):
+            # T2.2 — cancel poll for the subject-detection sample scan.
+            check_thread_cancel()
             cap.set(cv2.CAP_PROP_POS_FRAMES, float(i))
             ret, frame = cap.read()
             if not ret:

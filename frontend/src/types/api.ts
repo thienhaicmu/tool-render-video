@@ -90,8 +90,11 @@ export interface RenderRequest {
   auto_detect_scene?: boolean
   min_part_sec?: number
   max_part_sec?: number
-  max_export_parts?: number | null
-  part_order?: 'viral' | 'sequential'
+  // T1.4 follow-up — Audit 2026-06-08: removed `max_export_parts` and
+  // `part_order` from the wire surface. Both were sent by buildPayload
+  // but the render engine reads neither — see render_public.py for
+  // the per-field rationale. Kept in backend RenderRequest for
+  // Sacred Contract #2 replay safety.
 
   // Subtitle
   add_subtitle?: boolean

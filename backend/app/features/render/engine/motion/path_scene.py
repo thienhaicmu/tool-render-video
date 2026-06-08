@@ -62,6 +62,9 @@ from app.features.render.engine.motion.trackerless import (
     _apply_trackerless_center_guard,
     _trackerless_hold_frames_for_confidence,
 )
+# T2.2 — Audit 2026-06-08 closure (Batch A V9-F3): cancel poll for the
+# per-scene OpenCV frame loop. See engine/encoder/ffmpeg_helpers.py.
+from app.features.render.engine.encoder.ffmpeg_helpers import check_thread_cancel
 
 logger = logging.getLogger("app.services.motion_crop")
 
@@ -170,6 +173,10 @@ def build_subject_path_scene(
 
         _tracking_start = time.monotonic()
         while frame_idx < end_frame:
+            # T2.2 — cancel poll. Raises JobCancelledError when the
+            # operator clicks Cancel; propagates to render_pipeline's
+            # outer handler. cap is released by OpenCV __del__ on raise.
+            check_thread_cancel()
             ok, frame = cap.read()
             if not ok or frame is None:
                 break

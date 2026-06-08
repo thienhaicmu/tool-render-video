@@ -229,7 +229,7 @@ FIELD RULES:
 - speech_density: 1.0=dense dialogue, 0.0=pure visuals or long silence
 - duration_fit: 1.0=ideal clip length, 0.0=stretched/cramped
 - cover_offset_ratio: best thumbnail moment as fraction of clip
-  (0.1=very early, 0.5=mid){editorial_section}
+  (0.1=very early, 0.5=mid){editorial_section}{target_duration_section}
 
 ⚠️ FINAL VERIFICATION — before responding, check EVERY clip:
    • {min_sec} ≤ (end - start) ≤ {max_sec}  →  if any clip fails this, fix or remove it
@@ -273,6 +273,7 @@ def build_render_plan_prompt(
     language: str = "auto",
     max_srt_chars: int | None = None,
     editorial_hint: str = "",
+    target_duration: int = 0,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for LLM RenderPlan emission.
 
@@ -289,12 +290,20 @@ def build_render_plan_prompt(
         prompt body. The orchestrator already wires
         ``CreatorContext.to_prompt_hint`` into this string via
         ``llm_stage._build_editorial_hint``.
+      - ``target_duration`` (T2.4 — Audit 2026-06-08 closure, Batch A
+        V8-A1) is the creator's soft total-duration target in seconds.
+        When > 0 the prompt grows a TARGET TOTAL DURATION section that
+        invites the model to balance clip count × per-clip length to
+        fit the budget. ``min_sec``/``max_sec`` and ``output_count``
+        remain hard limits. ``target_duration=0`` (the default)
+        suppresses the section — back-compat with all callers that
+        don't pass the new kwarg.
 
     Format safety: every literal '{' / '}' inside _USER_TEMPLATE_RP is
     doubled. Only the named placeholders ({language}, {output_count},
     {min_sec}, {max_sec}, {srt_content}, {example_end},
-    {editorial_section}) are substituted by .format(). This pin
-    matches the format-safety contract baked into
+    {editorial_section}, {target_duration_section}) are substituted by
+    .format(). This pin matches the format-safety contract baked into
     test_creator_context_dataclass.py and is the regression guard for
     the pre-flight {end}/{start} bug class.
     """
@@ -309,6 +318,20 @@ def build_render_plan_prompt(
     system = _SYSTEM_RP + (f" {hint}" if hint else "")
     editorial_section = f"\n\nEDITORIAL GUIDANCE: {hint}" if hint else ""
 
+    # T2.4 — soft target. When target_duration is set and positive, the
+    # model gets one paragraph asking it to size the clip count × per-
+    # clip length to land near that aggregate total. When 0 (default),
+    # the slot resolves to empty string — same prompt as pre-T2.4.
+    target_duration_section = (
+        f"\n\nTARGET TOTAL DURATION: aim for approximately {int(target_duration)} seconds "
+        f"of total output across all clips (sum of every clip's end - start). "
+        f"This is a SOFT TARGET — the {int(min_sec)}-{int(max_sec)}s per-clip range "
+        f"and the {output_count}-clip cap remain hard limits. Prefer fewer longer "
+        f"clips or more shorter clips to land near the budget, whichever fits the content."
+        if target_duration and int(target_duration) > 0
+        else ""
+    )
+
     # Example end timestamp lands inside [min_sec, max_sec] so the JSON
     # example always demonstrates a compliant clip.
     example_end = round(45.2 + (min_sec + max_sec) / 2, 1)
@@ -321,6 +344,7 @@ def build_render_plan_prompt(
         max_sec=int(max_sec),
         example_end=example_end,
         editorial_section=editorial_section,
+        target_duration_section=target_duration_section,
     )
     return system, user
 
