@@ -618,8 +618,8 @@ def prepare_part_assets(
                 _last_sub_end = float(_srt_meta.get("last_end") or 0)
                 _eff_speed    = float(
                     seg.get("variant_playback_speed")
-                    or getattr(ctx.payload, "playback_speed", 1.07)
-                    or 1.07
+                    or getattr(ctx.payload, "playback_speed", 1.0)
+                    or 1.0
                 )
                 _raw_dur  = float(seg.get("duration") or 0)
                 _eff_dur  = max(5.0, _raw_dur / _eff_speed) - 0.5
@@ -844,7 +844,7 @@ def prepare_part_assets(
         )
         if _hook_text:
             _hook_overlay_applied_for_part = True
-            _hook_spd = max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.07)))
+            _hook_spd = max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.0)))
             _hook_end_t = round(min(2.5, 1.5 * _hook_spd), 3)
             _part_text_layers = [
                 {

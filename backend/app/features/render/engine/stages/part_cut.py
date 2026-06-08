@@ -273,7 +273,7 @@ def run_cut_stage(
         source_path=str(ctx.source_path),
         source_start=float(_effective_start),
         source_end=float(_effective_end),
-        payload_speed=float(ctx.payload.playback_speed or 1.07),
+        payload_speed=float(ctx.payload.playback_speed or 1.0),
         platform=ctx.target_platform,
         platform_delta=_part_platform_delta,
         effective_speed=_part_timeline.effective_speed,

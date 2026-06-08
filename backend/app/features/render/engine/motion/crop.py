@@ -382,7 +382,7 @@ def render_motion_aware_crop(
     reup_bgm_enable: bool = False,
     reup_bgm_path: str | None = None,
     reup_bgm_gain: float = 0.18,
-    playback_speed: float = 1.07,
+    playback_speed: float = 1.0,
     text_layers: list[dict] | None = None,
     loudnorm_enabled: bool = False,
     ffmpeg_threads: int | None = None,

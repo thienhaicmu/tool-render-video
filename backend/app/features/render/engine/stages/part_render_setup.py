@@ -279,7 +279,7 @@ def run_render_preflight(
         voice_enabled=bool(getattr(ctx.payload, "voice_enabled", False)),
         voice_source=str(getattr(ctx.payload, "voice_source", "none")),
         playback_speed=float(
-            max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.07)
+            max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.0)
                    + _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)))
         ),
     )

@@ -173,7 +173,12 @@ class RenderRequest(BaseModel):
     reup_bgm_enable: bool = False
     reup_bgm_path: Optional[str] = None
     reup_bgm_gain: float = 0.18
-    playback_speed: float = 1.07
+    # V8-A7 (audit 2026-06-08) — default changed from 1.07 → 1.0.
+    # Pre-fix every render silently ran at 7% speed-up because the FE
+    # never set this field and 1.07 was the model default. The new
+    # default is honest: 1.0 = no acceleration. Operators who want the
+    # legacy viral acceleration set the field explicitly to 1.07.
+    playback_speed: float = 1.0
 
     # Parallel / retry
     # 0 = adaptive (backend selects safe workers from cpu_count + pipeline flags)

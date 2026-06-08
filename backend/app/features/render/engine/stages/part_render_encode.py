@@ -303,7 +303,7 @@ def run_render_encode(
     _raw_part_absent = not raw_part.exists()
     _resolved_playback_speed = float(
         seg.get("variant_playback_speed")
-        or max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.07)
+        or max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.0)
                + _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)))
     )
     try:

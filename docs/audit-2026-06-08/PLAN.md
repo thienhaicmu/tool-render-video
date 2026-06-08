@@ -158,9 +158,23 @@ body are NOT edited — they record what was true at draft time).
 
 ### Open items remaining
 
-| ID | Title | Status | Reason |
+(none — see V8-A7 closure addendum below)
+
+### V8-A7 closure addendum
+
+| ID | Title | Status | Commit |
 |----|-------|--------|--------|
-| VW-4 / V8-A7 | `playback_speed=1.07` silent default | ⏳ STILL OPEN | Product call required: keep default 1.07 + add FE UI slider, OR change default to 1.00 (Sacred Contract #2 replay trade-off). No code change without that decision. |
+| V8-A7 | `playback_speed=1.07` silent default → 1.0 | ✅ DONE | (see commit log) |
+
+Approach chosen: Option A (change default 1.07 → 1.0). Eight modules
+updated to keep the fallback literal consistent end-to-end:
+`models/render.py`, `pipeline_segment_selection.py`, `clip_renderer.py`,
+`motion/crop.py`, `part_asset_planner.py`, `part_cut.py`,
+`part_render_encode.py`, `part_render_setup.py`. Sacred Contract #2
+replay safety verified: stored payloads with explicit
+`playback_speed=1.07` still decode to 1.07 because Pydantic preserves
+explicit field values during `model_dump` round-trip
+(`tests/test_v8a7_playback_speed_default.py`).
 
 ### Verification log addendum
 
