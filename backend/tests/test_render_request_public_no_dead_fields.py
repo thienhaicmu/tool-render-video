@@ -169,40 +169,29 @@ def test_known_phase_g_zombies_NOT_in_public_surface():
 
 
 def test_known_up26_dead_NOT_in_public_surface():
-    """The UP26 Pro Timeline Steering fields that REMAIN dead must
-    stay out of the Public surface. ``structure_bias`` and
-    ``subtitle_emphasis`` have no LLM consumer (no prompt wiring) and
-    no local filter — they would re-enter as UI deceit if added back.
+    """Post-Strategic-1c (commit landing after Strategic-1b): ALL four
+    UP26 Pro Timeline Steering fields are wired and present in the
+    Public surface:
+      - clip_lock + clip_exclude: LLM prompt sections + BE local
+        filter (Strategic-1 + Strategic-1b).
+      - structure_bias: ranking-formula re-weight (Strategic-1c).
+      - subtitle_emphasis: font-size multiplier (Strategic-1c).
 
-    Strategic-1 — Audit 2026-06-08 closure: ``clip_lock`` and
-    ``clip_exclude`` were RESTORED to the Public surface by
-    Strategic-1 because the LLM prompt now consumes them
-    (ai/llm/prompts.py:_format_range_section). The dead set is now
-    just the two unwired UP26 fields."""
+    The dead UP26 set is EMPTY post-Strategic-1c. This test guards
+    that all four fields STAY in the Public surface; a refactor
+    that drops any of them reverts the corresponding closure."""
     from app.models.render_public import FE_FACING_FIELDS
 
-    up26_dead_remaining = frozenset({
+    up26_all_wired = frozenset({
+        "clip_lock", "clip_exclude",
         "structure_bias", "subtitle_emphasis",
     })
-    leaked = up26_dead_remaining & FE_FACING_FIELDS
-    assert not leaked, (
-        f"T1.4 regression — UP26 STILL-DEAD field(s) reappeared in "
-        f"FE_FACING_FIELDS: {sorted(leaked)}. {sorted(up26_dead_remaining)} "
-        f"have no LLM consumer and no local filter. Re-introducing "
-        f"them without a consumer reverts to UI deceit."
-    )
-
-    # Strategic-1 guard: clip_lock and clip_exclude MUST stay in the
-    # Public surface (the LLM prompt template includes them as
-    # {clip_lock_section} / {clip_exclude_section}).
-    up26_restored = frozenset({"clip_lock", "clip_exclude"})
-    missing = up26_restored - FE_FACING_FIELDS
+    missing = up26_all_wired - FE_FACING_FIELDS
     assert not missing, (
-        f"Strategic-1 regression — UP26 wired field(s) disappeared from "
-        f"FE_FACING_FIELDS: {sorted(missing)}. The LLM prompt template "
-        f"requires these be passed through render_pipeline.py:_llm_select_render_plan; "
-        f"removing them from the Public surface breaks the wire even "
-        f"though the prompt slots still exist."
+        f"Strategic-1/1c regression — UP26 wired field(s) disappeared "
+        f"from FE_FACING_FIELDS: {sorted(missing)}. Each field has a "
+        f"specific consumer (see the test docstring); removing any "
+        f"breaks the wire even though the consumer code still exists."
     )
 
 

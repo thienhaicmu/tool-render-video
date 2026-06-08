@@ -114,14 +114,11 @@ const STRIPPED_FIELDS_PHASE_G = [
   'ai_content_driven_selection',
 ]
 
-// Strategic-1 — Audit 2026-06-08 closure. clip_lock and clip_exclude
-// were RESTORED to the wire because the LLM prompt now consumes them
-// (ai/llm/prompts.py:_format_range_section). The still-stripped UP26
-// dead fields are structure_bias and subtitle_emphasis only.
-const STRIPPED_FIELDS_UP26 = [
-  'structure_bias',
-  'subtitle_emphasis',
-]
+// Strategic-1 + Strategic-1c — Audit 2026-06-08 closure. All four UP26
+// Pro Timeline Steering fields are now wired (clip_lock + clip_exclude
+// via Strategic-1, structure_bias + subtitle_emphasis via Strategic-1c).
+// The UP26 stripped set is EMPTY post-Strategic-1c.
+const STRIPPED_FIELDS_UP26: string[] = []
 
 const STRIPPED_FIELDS_UP27 = ['asset_music_profile']
 

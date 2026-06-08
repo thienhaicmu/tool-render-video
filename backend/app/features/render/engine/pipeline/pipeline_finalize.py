@@ -198,21 +198,53 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
     # Surface the rank-source attribution AND the local-recompute
     # formula so post-render consumers can see (a) whether AI ranks
     # were honoured or a fallback fired, and (b) the weighted formula
-    # used when local recompute applied. The formula coefficients
-    # mirror pipeline_ranking.py:204-211 verbatim — if those weights
-    # change, this block must be updated in lockstep.
+    # used when local recompute applied.
+    #
+    # Strategic-1c — UP26 structure_bias closure. The `formula` field
+    # shows the BALANCED (default) weights; the new
+    # `applied_structure_bias` field records which weight SET was
+    # actually used for the local recompute (one of "hook",
+    # "balanced", "story"). When applied != "balanced" the operator
+    # picked a non-default bias and `effective_formula` shows the
+    # actual weights consumed.
+    from app.features.render.engine.pipeline.pipeline_ranking import (
+        resolve_structure_bias_weights, resolve_structure_bias_label,
+        STRUCTURE_BIAS_WEIGHTS,
+    )
+    _structure_bias_label = resolve_structure_bias_label(
+        getattr(payload, "structure_bias", None)
+    )
+    _effective_weights_dict = resolve_structure_bias_weights(_structure_bias_label)
+    # Translate internal short keys to the full metadata key names.
+    _effective_formula = {
+        "viral_score":        _effective_weights_dict["viral"],
+        "hook_score":         _effective_weights_dict["hook"],
+        "retention_score":    _effective_weights_dict["retention"],
+        "speech_density":     _effective_weights_dict["speech_density"],
+        "market_score":       _effective_weights_dict["market"],
+        "duration_fit":       _effective_weights_dict["duration_fit"],
+    }
+    _balanced_weights_dict = STRUCTURE_BIAS_WEIGHTS["balanced"]
+    _balanced_formula = {
+        "viral_score":        _balanced_weights_dict["viral"],
+        "hook_score":         _balanced_weights_dict["hook"],
+        "retention_score":    _balanced_weights_dict["retention"],
+        "speech_density":     _balanced_weights_dict["speech_density"],
+        "market_score":       _balanced_weights_dict["market"],
+        "duration_fit":       _balanced_weights_dict["duration_fit"],
+    }
+
     _ranking_metadata: dict = {
         "rank_source": ctx.rank_source or "fallback",
         "ai_rank_consumed": (ctx.rank_source == "render_plan"),
         "local_recompute_active": (ctx.rank_source != "render_plan"),
-        "formula": {
-            "viral_score":        0.35,
-            "hook_score":         0.20,
-            "retention_score":    0.20,
-            "speech_density":     0.10,
-            "market_score":       0.10,
-            "duration_fit":       0.05,
-        },
+        # Strategic-4: `formula` field preserved with the canonical
+        # 'balanced' weight set so existing consumers keep working.
+        "formula": _balanced_formula,
+        # Strategic-1c: applied_structure_bias + effective_formula
+        # surface the actual weights used.
+        "applied_structure_bias": _structure_bias_label,
+        "effective_formula": _effective_formula,
         "formula_source": "pipeline_ranking.py:_compute_output_ranking_entry",
         "fallback_reasons_documented": [
             "fallback",                  # LLM_EMIT_RENDER_PLAN env != "1"
@@ -220,6 +252,7 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
             "fallback_rank_invalid",     # AI emitted invalid rank values
             "fallback_rank_collision",   # duplicate rank values across clips
         ],
+        "structure_bias_documented": list(STRUCTURE_BIAS_WEIGHTS.keys()),
     }
 
     _result_payload = {

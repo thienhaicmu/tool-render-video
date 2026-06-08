@@ -5,7 +5,74 @@ All logic is identical — this is a mechanical lift, not a rewrite.
 
 Sacred Contract: output_rank_score, is_best_output, is_best_clip must always
 be present in every dict returned by _compute_output_ranking_entry.
+
+Strategic-1c — Audit 2026-06-08 closure (UP26 structure_bias). Provides
+``structure_bias`` re-weighted formulas for the output_score
+computation. The operator picks one of "hook" | "balanced" | "story"
+to tilt the ranking toward hook strength, retention, or a balanced
+blend. The default (None / "balanced") preserves the pre-Strategic-1c
+weights byte-for-byte.
+
+All three weight sets sum to 1.0 so output_score remains a value
+clamped to [0, 100]. The selected weight set is persisted into
+result_json.ranking_metadata.formula by pipeline_finalize.py and
+``applied_structure_bias`` records which set was used.
 """
+
+
+# Strategic-1c — UP26 structure_bias weight tables. Each row sums to
+# 1.0. Verified by test_strategic_1c_structure_bias_weights_sum_to_one.
+STRUCTURE_BIAS_WEIGHTS: dict[str, dict[str, float]] = {
+    # "hook" — bias toward strong hooks; sacrifice retention slightly.
+    "hook": {
+        "viral":          0.30,
+        "hook":           0.30,
+        "retention":      0.10,
+        "speech_density": 0.10,
+        "market":         0.15,
+        "duration_fit":   0.05,
+    },
+    # "balanced" — pre-Strategic-1c default formula.
+    "balanced": {
+        "viral":          0.35,
+        "hook":           0.20,
+        "retention":      0.20,
+        "speech_density": 0.10,
+        "market":         0.10,
+        "duration_fit":   0.05,
+    },
+    # "story" — bias toward retention/density (long-form storytelling).
+    "story": {
+        "viral":          0.30,
+        "hook":           0.10,
+        "retention":      0.30,
+        "speech_density": 0.15,
+        "market":         0.10,
+        "duration_fit":   0.05,
+    },
+}
+
+
+def resolve_structure_bias_weights(structure_bias: "str | None") -> dict[str, float]:
+    """Strategic-1c — return the weight set for the given bias.
+
+    Unknown / None / case-mismatched values default to ``balanced``
+    (the pre-Strategic-1c formula). The default ensures legacy
+    callers + stored payloads behave identically to pre-Strategic-1c.
+    """
+    if not structure_bias:
+        return STRUCTURE_BIAS_WEIGHTS["balanced"]
+    key = str(structure_bias).strip().lower()
+    return STRUCTURE_BIAS_WEIGHTS.get(key, STRUCTURE_BIAS_WEIGHTS["balanced"])
+
+
+def resolve_structure_bias_label(structure_bias: "str | None") -> str:
+    """Return the canonical label used to look up the weights — useful
+    for persisting the actual choice into ranking_metadata."""
+    if not structure_bias:
+        return "balanced"
+    key = str(structure_bias).strip().lower()
+    return key if key in STRUCTURE_BIAS_WEIGHTS else "balanced"
 
 
 def resolve_combined_score_weights(
@@ -188,7 +255,22 @@ def _output_ranking_reason(components: dict) -> str:
     return ", ".join(reasons[:2])
 
 
-def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, payload_hook_score=None) -> dict:
+def _compute_output_ranking_entry(
+    part_no: int,
+    seg: dict,
+    output_file: str,
+    payload_hook_score=None,
+    structure_bias: "str | None" = None,
+) -> dict:
+    """Compute one ranking entry.
+
+    Strategic-1c — Audit 2026-06-08 closure (UP26 structure_bias). The
+    optional ``structure_bias`` kwarg ('hook' | 'balanced' | 'story')
+    selects one of the canonical weight sets in
+    ``STRUCTURE_BIAS_WEIGHTS``. None / unknown values default to the
+    'balanced' set (pre-Strategic-1c formula — byte-for-byte
+    backward compat).
+    """
     segment_viral_score = _first_score(seg, ["viral_score"], default=50.0)
     hook_score = _first_score(
         seg,
@@ -201,13 +283,15 @@ def _compute_output_ranking_entry(part_no: int, seg: dict, output_file: str, pay
     duration_fit_score = _first_score(seg, ["duration_fit_score"], default=50.0)
     continuity_score = _first_score(seg, ["continuity_score"], default=50.0)
 
+    # Strategic-1c — pick the formula weights based on structure_bias.
+    weights = resolve_structure_bias_weights(structure_bias)
     raw_score = (
-        segment_viral_score * 0.35
-        + hook_score * 0.20
-        + retention_score * 0.20
-        + speech_density_score * 0.10
-        + market_score * 0.10
-        + duration_fit_score * 0.05
+        segment_viral_score * weights["viral"]
+        + hook_score * weights["hook"]
+        + retention_score * weights["retention"]
+        + speech_density_score * weights["speech_density"]
+        + market_score * weights["market"]
+        + duration_fit_score * weights["duration_fit"]
     )
     output_score = round(max(0.0, min(100.0, raw_score)), 1)
     components = {

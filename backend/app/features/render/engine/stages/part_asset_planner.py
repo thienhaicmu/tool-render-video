@@ -188,6 +188,37 @@ def _resolve_market_from_plan(ctx: PartRenderContext) -> str:
     return (rp.subtitle_policy.market or "").strip()
 
 
+# Strategic-1c — Audit 2026-06-08 closure (UP26 subtitle_emphasis).
+# Multipliers applied to the operator-supplied subtitle font size
+# (payload.sub_font_size) before passing to the ASS / overlay
+# pipelines. None / "balanced" / unknown values map to 1.0 — a
+# pre-Strategic-1c byte-for-byte behaviour preservation. "subtle"
+# shrinks slightly so subtitles sit lighter on busy frames;
+# "aggressive" enlarges for emphasis-heavy short-form viral content.
+_SUBTITLE_EMPHASIS_MULTIPLIERS: dict[str, float] = {
+    "subtle":     0.85,
+    "balanced":   1.0,
+    "aggressive": 1.20,
+}
+
+
+def _apply_subtitle_emphasis(font_size: int, emphasis: "str | None") -> int:
+    """Strategic-1c — return font_size scaled by the operator's
+    subtitle_emphasis preference. The scaled value is clamped to
+    [10, 200] for sanity (an aggressive 1.20× of a 90pt font yields
+    108pt, still inside the cap). None / "balanced" / unknown
+    emphasis returns font_size unchanged."""
+    if not font_size:
+        return font_size
+    if not emphasis:
+        return font_size
+    key = str(emphasis).strip().lower()
+    mult = _SUBTITLE_EMPHASIS_MULTIPLIERS.get(key)
+    if not mult or mult == 1.0:
+        return font_size
+    return max(10, min(200, int(round(font_size * mult))))
+
+
 def _resolve_cta_audio_from_plan(ctx: PartRenderContext) -> str:
     """Return AI-specified CTA text from render_plan.audio_plan.cta_audio.
 
@@ -262,6 +293,17 @@ def prepare_part_assets(
     _srt_meta: dict = {}
     _subtitle_ass_ms = 0
     _effective_subtitle_style = ""
+
+    # Strategic-1c — Audit 2026-06-08 closure (UP26 subtitle_emphasis).
+    # Resolve the effective subtitle font size ONCE by applying the
+    # operator's emphasis multiplier (subtle 0.85× / balanced 1.0× /
+    # aggressive 1.20×) to payload.sub_font_size. Used by the ASS
+    # cache key, both ASS writers, the log line, and the report dict.
+    # None / "balanced" / unknown emphasis is a byte-for-byte
+    # no-op vs pre-Strategic-1c.
+    _raw_sub_font_size = int(getattr(ctx.payload, "sub_font_size", 0) or 0)
+    _emphasis = getattr(ctx.payload, "subtitle_emphasis", None)
+    _effective_sub_font_size = _apply_subtitle_emphasis(_raw_sub_font_size, _emphasis)
 
     subtitle_selected_by_rule = ctx.subtitle_enabled_by_idx.get(idx, False)
     part_subtitle_enabled = subtitle_selected_by_rule
@@ -760,7 +802,7 @@ def prepare_part_assets(
                 style=_effective_subtitle_style or "",
                 scale_y=int(ctx.payload.frame_scale_y or 0),
                 font_name=getattr(ctx.payload, "sub_font", "Bungee") or "Bungee",
-                font_size=int(getattr(ctx.payload, "sub_font_size", 0) or 0),
+                font_size=_effective_sub_font_size,
                 margin_v=int(_margin_v),
                 play_res_y=int(_play_res_y),
                 play_res_x=1080,
@@ -793,7 +835,7 @@ def prepare_part_assets(
                     srt_to_ass_karaoke(
                         str(_ass_srt_source), str(ass_part),
                         scale_y=ctx.payload.frame_scale_y,
-                        font_size=getattr(ctx.payload, "sub_font_size", 46),
+                        font_size=_effective_sub_font_size or 46,
                         font_name=getattr(ctx.payload, "sub_font", "Bungee"),
                         margin_v=_margin_v,
                         play_res_y=_play_res_y,
@@ -813,7 +855,7 @@ def prepare_part_assets(
                         margin_v=_margin_v,
                         play_res_y=_play_res_y,
                         x_percent=getattr(ctx.payload, "sub_x_percent", 50.0),
-                        font_size=getattr(ctx.payload, "sub_font_size", 0),
+                        font_size=_effective_sub_font_size,
                     )
                 # Sprint 7.3 — after a successful generation, put the
                 # produced ASS into the cache for future re-renders.
@@ -859,7 +901,9 @@ def prepare_part_assets(
                 ctx.effective_channel, ctx.job_id,
                 f"Part {idx} subtitle: style={_effective_subtitle_style} "
                 f"(payload={ctx.payload.subtitle_style or 'auto'}) "
-                f"font_size={getattr(ctx.payload, 'sub_font_size', 0)} "
+                f"font_size={_effective_sub_font_size} "
+                f"raw_font_size={_raw_sub_font_size} "
+                f"emphasis={_emphasis or 'balanced'} "
                 f"margin_v={_margin_v} x_pct={getattr(ctx.payload, 'sub_x_percent', 50.0):.1f} "
                 f"play_res_y={_play_res_y} aspect={ctx.payload.aspect_ratio}",
                 kind="info",
@@ -886,7 +930,9 @@ def prepare_part_assets(
                         else ("auto" if not _raw_sub_style else "explicit")
                     ),
                     "content_type_hint": seg.get("content_type_hint", ""),
-                    "font_size": getattr(ctx.payload, "sub_font_size", 0),
+                    "font_size": _effective_sub_font_size,
+                    "raw_font_size": _raw_sub_font_size,
+                    "subtitle_emphasis": (str(_emphasis).lower() if _emphasis else "balanced"),
                     "margin_v": _margin_v,
                     "play_res_y": _play_res_y,
                     "aspect_ratio": ctx.payload.aspect_ratio,

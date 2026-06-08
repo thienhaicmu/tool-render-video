@@ -122,16 +122,17 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # LLM selection (canonical)
     "llm_enabled", "llm_model", "llm_language", "llm_min_quality", "llm_mode",
     "ai_provider",
-    # Strategic-1 — Audit 2026-06-08 closure. UP26 Pro Timeline
-    # Steering — clip_lock (ranges that MUST be included) and
-    # clip_exclude (ranges that MUST be skipped). T1.4 stripped these
-    # from the Public surface as DEAD; Strategic-1 puts them back
-    # AND wires them through ai/llm/__init__.py + the prompt
-    # template so the LLM actually sees the operator's guidance.
-    # Each is Optional[list[dict]] where each dict carries
-    # {start_sec, end_sec} (seconds, float). structure_bias +
-    # subtitle_emphasis remain stripped — no LLM consumer yet.
+    # Strategic-1 + Strategic-1c — Audit 2026-06-08 closure. UP26 Pro
+    # Timeline Steering — fully wired post-Strategic-1c:
+    #   clip_lock / clip_exclude → LLM prompt sections + BE local
+    #     filter (Strategic-1 + Strategic-1b).
+    #   structure_bias → ranking-formula re-weight, persisted in
+    #     result_json.ranking_metadata.applied_structure_bias
+    #     (Strategic-1c).
+    #   subtitle_emphasis → subtitle font-size multiplier applied at
+    #     ASS generation (Strategic-1c).
     "clip_lock", "clip_exclude",
+    "structure_bias", "subtitle_emphasis",
     # Creator Asset Intelligence (UP27) — surviving wired fields
     "asset_logo_path", "asset_intro_path", "asset_outro_path",
     # New vision (v2)
@@ -174,8 +175,8 @@ RenderRequestPublic = create_model(  # type: ignore[call-overload]
 )
 
 RenderRequestPublic.__doc__ = (
-    "FE-facing slice of RenderRequest (69 of 152 fields after the T1.4 "
-    "audit-2026-06-08 cleanup + follow-up + Strategic-1 partial UP26 "
+    "FE-facing slice of RenderRequest (71 of 152 fields after the T1.4 "
+    "audit-2026-06-08 cleanup + follow-up + Strategic-1/1c full UP26 "
     "restoration, down from the pre-audit 88). Strictly forbids unknown "
     "fields (``extra='forbid'``). The wire endpoint /api/render/process "
     "accepts this surface and expands to the full RenderRequest "

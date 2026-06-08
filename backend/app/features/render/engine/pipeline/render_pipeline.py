@@ -1398,6 +1398,11 @@ def run_render_pipeline(
                 _r_seg,
                 _r_output,
                 payload_hook_score=_hook_score,
+                # Strategic-1c — Audit 2026-06-08 closure. Apply the
+                # operator's structure_bias selection to the per-clip
+                # ranking formula. None / unknown values default to
+                # the 'balanced' set (pre-Strategic-1c weights).
+                structure_bias=getattr(payload, "structure_bias", None),
             )
             if _r_vt:
                 _rank_entry["variant_type"]  = _r_vt

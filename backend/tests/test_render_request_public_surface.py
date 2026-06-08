@@ -1,10 +1,11 @@
 """Audit MT-3 phase 1 closure (Batch 10N 2026-06-06).
 
 ``RenderRequestPublic`` is the explicit FE-facing slice of
-``RenderRequest`` (69 of 152 fields after the T1.4 audit-2026-06-08
-cleanup + follow-up + Strategic-1 partial UP26 restoration; 21 dead
-fields removed by T1.4 then 2 restored by Strategic-1 as the LLM
-prompt wired them through). This file pins the contract so
+``RenderRequest`` (71 of 152 fields after the T1.4 audit-2026-06-08
+cleanup + follow-up + Strategic-1/1c full UP26 restoration; 21 dead
+fields removed by T1.4 then 4 restored — 2 by Strategic-1 (clip_lock
+/ clip_exclude) and 2 by Strategic-1c (structure_bias /
+subtitle_emphasis)). This file pins the contract so
 the Public surface can't accidentally drift:
 
 1. ``FE_FACING_FIELDS`` matches the FE TS interface field set.
@@ -122,8 +123,8 @@ def test_public_field_count_pinned():
     from app.models.render import RenderRequest
     from app.models.render_public import BE_ONLY_FIELDS, FE_FACING_FIELDS
 
-    assert len(FE_FACING_FIELDS) == 69, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
-    assert len(BE_ONLY_FIELDS)   == 83, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
+    assert len(FE_FACING_FIELDS) == 71, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    assert len(BE_ONLY_FIELDS)   == 81, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
     assert len(RenderRequest.model_fields) == 152, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
