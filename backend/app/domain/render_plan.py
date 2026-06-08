@@ -77,7 +77,6 @@ class SubtitlePolicy:
     style: str = ""               # viral|clean|story|gaming|"" = inherit
     market: str = ""              # us|eu|jp|vn|global|"" = inherit
     emphasis_pass: bool = False
-    line_break_rule: str = ""     # "" = market default
 
 
 @dataclass
@@ -98,17 +97,6 @@ class AudioPlan:
 
 
 @dataclass
-class OutputConfig:
-    """Encode / output parameters. Zero or empty means 'inherit from payload'."""
-    codec: str = ""
-    preset: str = ""
-    crf: int = 0
-    fps: int = 0
-    width: int = 0
-    height: int = 0
-
-
-@dataclass
 class RenderPlan:
     """Unified RenderPlan handed from AI Director → Render Engine."""
     schema_version: int = SCHEMA_VERSION
@@ -116,9 +104,7 @@ class RenderPlan:
     subtitle_policy: SubtitlePolicy = field(default_factory=SubtitlePolicy)
     camera_strategy: CameraStrategy = field(default_factory=CameraStrategy)
     audio_plan: AudioPlan = field(default_factory=AudioPlan)
-    output_config: OutputConfig = field(default_factory=OutputConfig)
     overlays: list[dict] = field(default_factory=list)
-    creator_context_id: str = ""
 
     # ── Serialisation ────────────────────────────────────────────────────
 
@@ -169,9 +155,7 @@ class RenderPlan:
             subtitle_policy=_filter_dataclass(SubtitlePolicy, data.get("subtitle_policy")),
             camera_strategy=_filter_dataclass(CameraStrategy, data.get("camera_strategy")),
             audio_plan=_filter_dataclass(AudioPlan, data.get("audio_plan")),
-            output_config=_filter_dataclass(OutputConfig, data.get("output_config")),
             overlays=overlays,
-            creator_context_id=str(data.get("creator_context_id") or ""),
         )
 
 

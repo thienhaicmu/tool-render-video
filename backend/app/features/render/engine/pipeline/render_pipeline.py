@@ -271,7 +271,7 @@ def _scored_from_render_plan(render_plan, fallback_scored: list) -> list:
                 "content_type_hint":  str(getattr(clip, "content_type", "") or ""),
                 "hook_type":          str(getattr(clip, "hook_type", "") or ""),
                 "cover_hint_ratio":   _cover if _cover > 0 else None,
-                "speech_density":     float(getattr(clip, "speech_density", 0.0) or 0.0),
+                "speech_density_score": float(getattr(clip, "speech_density", 0.0) or 0.0) * 100.0,
                 "duration_fit_score": float(getattr(clip, "duration_fit", 0.0) or 0.0) * 100.0,
             })
         return derived
@@ -540,6 +540,27 @@ def run_render_pipeline(
                             _ai_srt_content = Path(full_srt).read_text(encoding="utf-8")
                         except Exception:
                             _ai_srt_content = ""
+                    if _ai_srt_content:
+                        from app.features.render.ai.llm.prompts import check_srt_truncation as _check_trunc
+                        _trunc = _check_trunc(_ai_srt_content)
+                        if _trunc["truncated"]:
+                            logger.warning(
+                                "render_plan: transcript truncated — %d%% shown to AI (%d of %d chars)",
+                                _trunc["shown_pct"], _trunc["shown_chars"], _trunc["original_chars"],
+                            )
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="transcript_truncated",
+                                level="WARNING",
+                                message=(
+                                    f"Transcript truncated: only {_trunc['shown_pct']}% shown to AI "
+                                    f"({_trunc['shown_chars']:,} of {_trunc['original_chars']:,} chars). "
+                                    f"Clips from the truncated portion will not be considered."
+                                ),
+                                step="render.llm_pipeline",
+                                context=_trunc,
+                            )
                     _ai_video_duration = float(source.get("duration") or 0.0)
                     try:
                         _ai_editorial_hint = _build_editorial_hint(payload)
@@ -654,6 +675,54 @@ def run_render_pipeline(
                     },
                 )
 
+        # Inject AI hook overlays from RenderPlan into normalized_text_layers.
+        # kind=cta is intentionally skipped — handled separately by audio_plan.cta_audio.
+        # Failure is non-fatal: render continues without AI overlays.
+        if _render_plan is not None and _render_plan.overlays:
+            _ai_overlay_layers = []
+            for _ov in _render_plan.overlays:
+                if str(_ov.get("kind") or "").strip().lower() == "hook":
+                    _ov_text = str(_ov.get("text") or "").strip()[:60]
+                    if _ov_text:
+                        _ai_overlay_layers.append({
+                            "id": "ai_hook_overlay",
+                            "text": _ov_text,
+                            "font_family": "Bungee",
+                            "font_size": 48,
+                            "color": "#FFFFFF",
+                            "position": "top-center",
+                            "x_percent": 50.0,
+                            "y_percent": 20.0,
+                            "alignment": "center",
+                            "bold": False,
+                            "outline": {"enabled": True, "thickness": 4},
+                            "shadow": {"enabled": False, "offset_x": 0, "offset_y": 0},
+                            "background": {"enabled": True, "color": "#000000CC", "padding": 16},
+                            "start_time": 0.0,
+                            "end_time": 2.5,
+                            "order": -10,
+                        })
+            if _ai_overlay_layers:
+                try:
+                    from app.features.render.engine.overlay.text_overlay import normalize_text_layers as _norm_layers
+                    _normalized_ai = _norm_layers(_ai_overlay_layers)
+                    normalized_text_layers = normalized_text_layers + _normalized_ai
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="render_plan.overlays_applied",
+                        level="INFO",
+                        message=f"RenderPlan hook overlay injected ({len(_normalized_ai)} layer(s))",
+                        step="render.llm_pipeline",
+                        context={"overlay_count": len(_normalized_ai)},
+                    )
+                    _job_log(
+                        effective_channel, job_id,
+                        f"render_plan.overlays_applied: {len(_normalized_ai)} AI hook overlay(s) added",
+                    )
+                except Exception as _ov_exc:
+                    logger.warning("render_plan: overlay injection failed (non-fatal): %s", _ov_exc)
+
         existing_parts = {int(x["part_no"]): x for x in list_job_parts(job_id)}
         _job_log(effective_channel, job_id, f"Segment building done: {total_parts} parts")
         # Diagnostic: per-segment selection summary (always at INFO for QA traceability)
@@ -696,14 +765,14 @@ def run_render_pipeline(
         subtitle_cutoff = payload.subtitle_viral_min_score
         subtitle_top_count = max(1, int(total_parts * max(0.1, min(1.0, float(payload.subtitle_viral_top_ratio)))))
         if scored:
-            ranked_scores = sorted([int(s.get("viral_score", 0)) for s in scored], reverse=True)
+            ranked_scores = sorted([round(float(s.get("viral_score", 0) or 0) * 100) for s in scored], reverse=True)
             subtitle_cutoff = max(subtitle_cutoff, ranked_scores[min(subtitle_top_count - 1, len(ranked_scores) - 1)])
         _job_log(effective_channel, job_id, f"Subtitle viral cutoff={subtitle_cutoff}, top_count={subtitle_top_count}")
 
         subtitle_enabled_by_idx = {}
         for idx, seg in enumerate(scored, start=1):
             subtitle_enabled_by_idx[idx] = payload.add_subtitle and (
-                (not payload.subtitle_only_viral_high) or int(seg.get("viral_score", 0)) >= int(subtitle_cutoff)
+                (not payload.subtitle_only_viral_high) or round(float(seg.get("viral_score", 0) or 0) * 100) >= subtitle_cutoff
             )
         if payload.add_subtitle and not any(subtitle_enabled_by_idx.values()):
             # Safety fallback: avoid "no subtitle at all" when viral gates are too strict.

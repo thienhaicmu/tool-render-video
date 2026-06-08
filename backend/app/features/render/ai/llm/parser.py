@@ -15,7 +15,6 @@ from app.domain.render_plan import (
     AudioPlan,
     CameraStrategy,
     ClipPlan,
-    OutputConfig,
     RenderPlan,
     SubtitlePolicy,
 )
@@ -74,7 +73,7 @@ def parse_render_plan_response(
 
       1. Native RenderPlan: ``{"clips": [...], "subtitle_policy": {...},
          "camera_strategy": {...}, "audio_plan": {...},
-         "output_config": {...}, "overlays": [...], ...}``
+         "overlays": [...], ...}``
       2. Wrapped: ``{"render_plan": {...native...}}`` so providers can
          emit a structured top-level key without colliding with
          conversational prose.

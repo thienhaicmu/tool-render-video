@@ -117,11 +117,12 @@ logger = logging.getLogger("app.render")
 # set fields override. Invalid style values soft-fall back per Sacred
 # Contract #3.
 #
-# Scope of Sprint 4.E: style + market only. emphasis_pass and
-# line_break_rule are deferred — emphasis because SubtitlePolicy can't
-# disambiguate "default False" from "explicit False" without flipping
-# baseline behaviour, line_break_rule because consuming it requires
-# extending apply_market_line_break_to_srt's signature (cross-file).
+# Sprint 4.E scope: style + market. emphasis_pass is now wired below —
+# gate is active only when render_plan is present; legacy path (None)
+# always runs emphasis so baseline behaviour is unchanged.
+# line_break_rule removed: no valid value vocabulary was defined in the
+# prompt and apply_market_line_break_to_srt doesn't expose a rule-string
+# override — keeping a dead field wastes AI tokens with no effect.
 # â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 # Allowed subtitle style strings the planner will accept from a
@@ -226,7 +227,7 @@ def prepare_part_assets(
         part_subtitle_enabled = False
         _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx} subtitle skipped: raw clip not available for transcription", kind="warning")
     if ctx.payload.add_subtitle and not part_subtitle_enabled and not subtitle_selected_by_rule:
-        _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx} subtitle skipped (viral={int(seg.get('viral_score', 0))} < cutoff={int(ctx.subtitle_cutoff)})")
+        _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx} subtitle skipped (viral={float(seg.get('viral_score', 0) or 0):.3f} < cutoff={ctx.subtitle_cutoff})")
 
     if part_subtitle_enabled:
         upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.TRANSCRIBING, 35, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Preparing subtitle")
@@ -263,6 +264,18 @@ def prepare_part_assets(
                 logger.warning("per_part_transcription_failed part=%d: %s", idx, _part_trans_exc)
                 _job_log(ctx.effective_channel, ctx.job_id,
                          f"per_part_transcription_failed part_no={idx}: {_part_trans_exc}", kind="warning")
+                _emit_render_event(
+                    channel_code=ctx.effective_channel,
+                    job_id=ctx.job_id,
+                    event="subtitle_transcription_failed",
+                    level="WARNING",
+                    message=f"Subtitle skipped for part {idx}: per-part transcription failed",
+                    step="subtitle.transcribe_part",
+                    context={"part_no": idx, "error": str(_part_trans_exc)},
+                )
+                needs_srt = False
+                needs_ass = False
+                _srt_source_is_fresh = False
             _part_trans_ms = int((time.perf_counter() - _t_part_transcribe) * 1000)
             _srt_meta = _read_srt_meta(str(srt_part)) if srt_part.exists() and srt_part.stat().st_size > 0 else {}
             _srt_count = _srt_meta.get("subtitle_count", 0)
@@ -558,23 +571,38 @@ def prepare_part_assets(
                     # site only. Log fields (L319/L335/L350) keep
                     # ctx.mv_market so upstream identity is preserved.
                     _market_for_emphasis = _resolve_market_from_plan(ctx) or ctx.mv_market
-                    subtitle_emphasis_pass(
-                        _emph_blocks,
-                        preset_id=_effective_subtitle_style,
-                        market=_market_for_emphasis,
-                        language=_sub_target_lang,
-                        emphasis_level_override=_ai_emph_override,
+                    # Honour RenderPlan.subtitle_policy.emphasis_pass when
+                    # a plan is present. Legacy path (render_plan is None)
+                    # always runs emphasis so baseline behaviour is unchanged.
+                    _run_emphasis = (
+                        ctx.render_plan is None
+                        or ctx.render_plan.subtitle_policy.emphasis_pass
                     )
-                    write_srt_blocks(_emph_blocks, str(_ass_srt_source))
-                    needs_ass = True
-                    _job_log(
-                        ctx.effective_channel, ctx.job_id,
-                        f"subtitle_emphasis_applied part={idx} "
-                        f"style={_effective_subtitle_style} market={ctx.mv_market} "
-                        f"lang={_sub_target_lang} blocks={len(_emph_blocks)}"
-                        + (f" ai_emph_override={_ai_emph_override}" if _ai_emph_override else ""),
-                        kind="info",
-                    )
+                    if _run_emphasis:
+                        subtitle_emphasis_pass(
+                            _emph_blocks,
+                            preset_id=_effective_subtitle_style,
+                            market=_market_for_emphasis,
+                            language=_sub_target_lang,
+                            emphasis_level_override=_ai_emph_override,
+                        )
+                        write_srt_blocks(_emph_blocks, str(_ass_srt_source))
+                        needs_ass = True
+                        _job_log(
+                            ctx.effective_channel, ctx.job_id,
+                            f"subtitle_emphasis_applied part={idx} "
+                            f"style={_effective_subtitle_style} market={ctx.mv_market} "
+                            f"lang={_sub_target_lang} blocks={len(_emph_blocks)}"
+                            + (f" ai_emph_override={_ai_emph_override}" if _ai_emph_override else ""),
+                            kind="info",
+                        )
+                    else:
+                        _job_log(
+                            ctx.effective_channel, ctx.job_id,
+                            f"subtitle_emphasis_skipped part={idx} reason=render_plan_disabled "
+                            f"style={_effective_subtitle_style}",
+                            kind="debug",
+                        )
                 else:
                     _job_log(
                         ctx.effective_channel, ctx.job_id,
@@ -865,7 +893,7 @@ def prepare_part_assets(
                     "shadow": {"enabled": False, "offset_x": 0, "offset_y": 0},
                     "background": {"enabled": True, "color": "#000000CC", "padding": 18},
                     "start_time": 0.0,
-                    "end_time": 1.5,
+                    "end_time": _hook_end_t,
                     "order": -1,
                 }
             ] + _part_text_layers_overlay

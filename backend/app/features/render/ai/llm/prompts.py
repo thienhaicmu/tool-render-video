@@ -190,8 +190,7 @@ Return EXACTLY this JSON object. No extra top-level keys, no markdown fences:
   "subtitle_policy": {{
     "style": "viral",
     "market": "",
-    "emphasis_pass": false,
-    "line_break_rule": ""
+    "emphasis_pass": false
   }},
   "camera_strategy": {{
     "motion_aware_crop": false,
@@ -231,6 +230,32 @@ FIELD RULES:
 Quality over quantity. Fewer strong clips beat many weak ones.
 Return up to {output_count} clips. Never invent moments not in the transcript.
 """
+def check_srt_truncation(srt_content: str, max_srt_chars: int | None = None) -> dict:
+    """Return truncation metadata without modifying input or building the prompt.
+
+    Callers use this to emit a warning event before dispatching to the LLM
+    so users know the AI only saw a fraction of a long transcript.
+
+    Returns:
+        {
+            "truncated": bool,
+            "original_chars": int,   # converted seconds-format length
+            "shown_chars": int,
+            "shown_pct": int,        # 0-100
+        }
+    """
+    converted = _srt_to_seconds_format(srt_content)
+    cap = max_srt_chars if max_srt_chars is not None else MAX_SRT_CHARS
+    truncated = len(converted) > cap
+    shown = min(len(converted), cap)
+    return {
+        "truncated": truncated,
+        "original_chars": len(converted),
+        "shown_chars": shown,
+        "shown_pct": round(shown / max(len(converted), 1) * 100),
+    }
+
+
 def build_render_plan_prompt(
     srt_content: str,
     output_count: int,
