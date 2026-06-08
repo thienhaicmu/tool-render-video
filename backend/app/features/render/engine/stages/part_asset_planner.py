@@ -199,6 +199,48 @@ def _resolve_cta_audio_from_plan(ctx: PartRenderContext) -> str:
     return (getattr(rp.audio_plan, "cta_audio", "") or "").strip()
 
 
+# Strategic-3 — Audit 2026-06-08 closure. Allowed CTA-type values that
+# can come out of either the operator (payload.cta_type) or the AI
+# (RenderPlan.overlays[kind=cta].type). Pre-Strategic-3 the AI's
+# overlays[kind=cta] entry was silently dropped at
+# render_pipeline.py:679-684 (the consumer loop only matched "hook").
+# The AI's "type" field carried real intent — Strategic-3 surfaces
+# it as a CTA-library lookup bias.
+_ALLOWED_CTA_TYPES_FROM_PLAN: frozenset[str] = frozenset({
+    "auto", "comment", "part_2", "follow",
+})
+
+
+def _resolve_cta_type_from_plan(ctx: PartRenderContext) -> str:
+    """Return the AI's CTA type from the FIRST RenderPlan.overlays
+    entry with ``kind=="cta"``. Empty string means no AI hint —
+    caller continues with its existing resolution (operator-explicit
+    cta_type → hook_type bias → library default).
+
+    Validated against the allowed set so a future prompt drift to
+    arbitrary type strings doesn't smuggle invalid values into the
+    library lookup. Returns "" on any failure — Sacred Contract #3
+    spirit applies to RenderPlan consumers.
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None or not rp.overlays:
+        return ""
+    try:
+        for ov in rp.overlays:
+            if str(ov.get("kind") or "").strip().lower() != "cta":
+                continue
+            t = str(ov.get("type") or "").strip().lower()
+            if t in _ALLOWED_CTA_TYPES_FROM_PLAN:
+                return t
+            # Found a kind=cta but with an unknown type — bail out
+            # rather than fall through to the next iteration (the
+            # prompt instructs the AI to emit at most one per kind).
+            return ""
+    except Exception:
+        pass
+    return ""
+
+
 def prepare_part_assets(
     ctx: PartRenderContext,
     idx,
@@ -624,11 +666,28 @@ def prepare_part_assets(
                 _cta_type    = str(getattr(ctx.payload, "cta_type", "auto") or "auto").strip().lower()
                 _ct_hint     = str(seg.get("content_type_hint") or "vlog")
                 _cta_vt      = str(seg.get("variant_type") or "")
+                # Strategic-3 — Audit 2026-06-08 closure. Capture AI's
+                # CTA-type hint from RenderPlan.overlays[kind=cta].type.
+                # Used below when the operator's _cta_type is "auto"
+                # AND the AI didn't supply an exact text via
+                # cta_audio. Pre-Strategic-3 the overlays[kind=cta]
+                # entry was silently dropped at render_pipeline.py
+                # :679-684 — Batch A Phase 6.2 finding.
+                _plan_cta_type = _resolve_cta_type_from_plan(ctx)
                 # Option B: AI-specified exact CTA text overrides library lookup.
                 _plan_cta_audio = _resolve_cta_audio_from_plan(ctx)
                 if _plan_cta_audio:
                     _cta_text = _plan_cta_audio
                 else:
+                    # Strategic-3: AI's overlays[kind=cta].type biases
+                    # _cta_type BEFORE the hook_type bias. The
+                    # priority order is now:
+                    #   1. Operator-explicit _cta_type (non-"auto").
+                    #   2. AI's overlays[kind=cta].type (NEW).
+                    #   3. Hook-type bias derived from seg["hook_type"].
+                    #   4. Library default ("auto" → content-type fallback).
+                    if _cta_type == "auto" and _plan_cta_type and _plan_cta_type != "auto":
+                        _cta_type = _plan_cta_type
                     # Option C: AI hook_type biases auto cta_type before library lookup.
                     _hook_type_hint = str(seg.get("hook_type") or "").strip().lower()
                     if _cta_type == "auto" and _hook_type_hint:

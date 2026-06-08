@@ -684,7 +684,14 @@ def run_render_pipeline(
                 )
 
         # Inject AI hook overlays from RenderPlan into normalized_text_layers.
-        # kind=cta is intentionally skipped — handled separately by audio_plan.cta_audio.
+        # kind=hook entries become a top-center text-layer (Bungee 48pt,
+        # 0-2.5s). kind=cta entries are consumed in part_asset_planner.py
+        # at the CTA-text resolution step (Strategic-3 — Audit
+        # 2026-06-08 closure): the AI's overlays[kind=cta].type biases
+        # the _cta_type when the operator hasn't set an explicit
+        # cta_type (priority: operator > AI overlays.type > hook_type
+        # bias > library default). The actual CTA text comes from the
+        # local CTA library lookup, not from this loop.
         # Failure is non-fatal: render continues without AI overlays.
         if _render_plan is not None and _render_plan.overlays:
             _ai_overlay_layers = []
