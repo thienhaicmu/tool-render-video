@@ -206,14 +206,20 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       aspect_ratio:        RATIO_INFO[cfg.ratio].api,
       min_part_sec:        cfg.minSec,
       max_part_sec:        cfg.maxSec,
-      max_export_parts:    cfg.outputCount,
+      // T1.4 follow-up — Audit 2026-06-08: removed `max_export_parts:
+      // cfg.outputCount` from the wire (engine reads `output_count`
+      // instead via render_pipeline.py:576). Sending both was wire-
+      // duplication; only output_count survives.
       add_subtitle:                cfg.subEnabled,
       subtitle_style:              cfg.subStyle,
       highlight_per_word:          cfg.subHighlight,
       sub_font_size:               cfg.subFontSize,
       subtitle_translate_enabled:  cfg.subTranslate || undefined,
       subtitle_target_language:    cfg.subTranslate ? cfg.subTranslateLang : undefined,
-      part_order:                  cfg.partOrder,
+      // T1.4 follow-up — Audit 2026-06-08: removed `part_order:
+      // cfg.partOrder`. The BE validator at models/render.py:451-463
+      // coerces the value to "viral" then no engine consumer reads it
+      // (FINDING-C01 closure). Pure UI deceit on the wire.
       // T1.4 — Audit 2026-06-08 closure: removed `subtitle_emphasis`,
       // `structure_bias`, `clip_lock`, `clip_exclude` from the wire
       // (UP26 Pro Timeline Steering — never reach LLM nor local
