@@ -94,6 +94,34 @@ from app.features.render.engine.audio.tts import generate_narration_audio
 logger = logging.getLogger("app.render")
 
 
+# ── Sprint AI-WF: RenderPlan.audio_plan.voice_provider consume helper ────────
+#
+# When ctx.render_plan is None (LLM_EMIT_RENDER_PLAN OFF) or the field
+# is empty, falls through to the caller's payload-derived fallback —
+# Sacred Contract #2 (default behaviour identical to baseline). When set,
+# overrides the tts_engine for both TTS call sites in run_part_voice_mix.
+#
+# Deferred (same bool-ambiguity reason as Sprint 4.F motion_aware_crop):
+#   - audio_plan.voice_enabled  (False default ≡ "not set" — can't distinguish)
+#   - audio_plan.bgm_enabled    (same)
+#   - audio_plan.cta_audio      (requires audio-mixer changes — cross-file)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _resolve_voice_provider_from_plan(ctx: PartRenderContext, fallback: str) -> str:
+    """Return the tts_engine to use for this part.
+
+    Returns ``render_plan.audio_plan.voice_provider`` when set (non-empty),
+    otherwise the caller's payload-derived fallback value.
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return fallback
+    plan_provider = (rp.audio_plan.voice_provider or "").strip()
+    if not plan_provider:
+        return fallback
+    return plan_provider
+
+
 def run_part_voice_mix(
     ctx: PartRenderContext,
     idx: int,
@@ -156,7 +184,9 @@ def run_part_voice_mix(
                         voice_id=getattr(ctx.payload, "voice_id", None),
                         output_path=_part_mp3,
                         content_type=str(seg.get("content_type_hint") or "vlog"),
-                        tts_engine=getattr(ctx.payload, "tts_engine", "edge"),
+                        tts_engine=_resolve_voice_provider_from_plan(
+                            ctx, getattr(ctx.payload, "tts_engine", "edge")
+                        ),
                     )
                     _emit_render_event(
                         channel_code=ctx.effective_channel,
@@ -248,7 +278,9 @@ def run_part_voice_mix(
                         voice_id=getattr(ctx.payload, "voice_id", None),
                         output_path=_part_mp3,
                         content_type=str(seg.get("content_type_hint") or "vlog"),
-                        tts_engine=getattr(ctx.payload, "tts_engine", "edge"),
+                        tts_engine=_resolve_voice_provider_from_plan(
+                            ctx, getattr(ctx.payload, "tts_engine", "edge")
+                        ),
                     )
                     _emit_render_event(
                         channel_code=ctx.effective_channel,

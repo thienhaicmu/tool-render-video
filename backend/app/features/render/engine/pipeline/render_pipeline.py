@@ -77,6 +77,10 @@ from app.features.render.engine.stages.part_renderer import PartRenderContext  #
 from app.features.render.engine.pipeline.pipeline_render_loop import run_render_loop
 # pipeline_pre_render removed in Phase F1 — all jobs now use llm_pipeline.
 from app.features.render.engine.pipeline.llm_pipeline import run_llm_pre_render
+from app.features.render.engine.pipeline.llm_stage import (
+    _build_editorial_hint,
+    _resolve_api_key as _resolve_llm_api_key,
+)
 from app.features.render.engine.pipeline.pipeline_cache import (
     _transcription_cache_get,
     _transcription_cache_put,
@@ -490,16 +494,15 @@ def run_render_pipeline(
             retry_count=retry_count,
             cancel_registry=cancel_registry,
             set_stage_fn=_set_stage,
+            skip_segment_selection=_FEATURE_LLM_EMIT_RENDER_PLAN,
         )
         full_srt = _pre.full_srt
         full_srt_available = _pre.full_srt_available
         _early_transcription_done = _pre.early_transcription_done
         scored = _pre.scored
         total_parts = _pre.total_parts
-        _content_analysis = _pre.content_analysis
         _target_platform = _pre.target_platform
         _dna_clean_visual = _pre.dna_clean_visual
-        _early_retrieved_knowledge = _pre.early_retrieved_knowledge
         _seg_min_sec = _pre.seg_min_sec
         _seg_max_sec = _pre.seg_max_sec
         # full_srt and full_srt_available initialized before scene detection (Phase 45 hoist).
@@ -530,21 +533,7 @@ def run_render_pipeline(
                     from app.core import config as _ai_cfg
                     _ai_provider = (getattr(payload, "ai_provider", "") or "").strip().lower() \
                         or getattr(_ai_cfg, "AI_PROVIDER_DEFAULT", "gemini")
-                    _per_key_attr = {
-                        "gemini": "gemini_api_key",
-                        "openai": "openai_api_key",
-                        "claude": "claude_api_key",
-                    }
-                    _ai_payload_key = (
-                        (getattr(payload, _per_key_attr.get(_ai_provider, ""), "") or "").strip()
-                        or (getattr(payload, "ai_cloud_api_key", "") or "").strip()
-                    )
-                    _ai_env_key = {
-                        "gemini": getattr(_ai_cfg, "GEMINI_API_KEY", ""),
-                        "openai": getattr(_ai_cfg, "OPENAI_API_KEY", ""),
-                        "claude": getattr(_ai_cfg, "CLAUDE_API_KEY", ""),
-                    }.get(_ai_provider, "")
-                    _ai_api_key = _ai_payload_key or _ai_env_key
+                    _ai_api_key, _ = _resolve_llm_api_key(payload, _ai_provider)
                     _ai_srt_content = ""
                     if full_srt_available and full_srt and Path(full_srt).exists():
                         try:
@@ -552,12 +541,8 @@ def run_render_pipeline(
                         except Exception:
                             _ai_srt_content = ""
                     _ai_video_duration = float(source.get("duration") or 0.0)
-                    # Reuse llm_stage's editorial-hint builder so Sprint 3
-                    # CreatorContext integration flows through identically
-                    # to the legacy select_segments path.
                     try:
-                        from app.features.render.engine.pipeline.llm_stage import _build_editorial_hint as _ai_hint_fn
-                        _ai_editorial_hint = _ai_hint_fn(payload)
+                        _ai_editorial_hint = _build_editorial_hint(payload)
                     except Exception:
                         _ai_editorial_hint = ""
                     logger.info(
@@ -875,13 +860,8 @@ def run_render_pipeline(
         # preserve their default values for downstream consumers (part_renderer kwargs,
         # result_json fields). Hook overlay state is no longer mutated by AI.
         _ai_edit_plan = None
-        _ai_tracer = None
-        _exec_hints: dict = {}
-        _phase53_tracer = None
         _ai_subtitle_emphasis_config = None
-        _ai_visual_intensity_config = None
         _vis_intensity_hint: "str | None" = None
-        _ai_exec_mode: str = "off"
         _ai_influence_report: dict = {"enabled": False}
         _ai_beat_report: dict = {"enabled": False}
 
@@ -1268,6 +1248,7 @@ def run_render_pipeline(
             subtitle_translate_summary=_subtitle_translate_summary,
             ai_influence_report=_ai_influence_report,
             ai_beat_report=_ai_beat_report,
+            render_plan=_render_plan,
         ))
     except Exception as e:
         fail_message = f"Failed at step '{current_stage}': {e}"

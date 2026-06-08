@@ -22,7 +22,7 @@ def _now() -> str:
 
 
 def _run_git(args: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=str(PROJECT_ROOT), capture_output=True, text=True)
+    return subprocess.run(["git", *args], cwd=str(PROJECT_ROOT), capture_output=True, text=True, encoding="utf-8")
 
 
 def _http_get(url: str, timeout: int = 6) -> tuple[int | None, str]:

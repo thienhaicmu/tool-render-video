@@ -165,7 +165,7 @@ def _run_with_retry(command: list[str], retries: int = 2, wait_sec: float = 0.8)
     while True:
         attempt += 1
         try:
-            return subprocess.run(command, check=True, capture_output=True, text=True)
+            return subprocess.run(command, check=True, capture_output=True, text=True, encoding="utf-8")
         except subprocess.CalledProcessError as exc:
             if attempt > retries:
                 stderr_tail = (exc.stderr or "")[-1000:].strip()

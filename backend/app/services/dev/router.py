@@ -149,7 +149,7 @@ def _cmd_run() -> dict:
     cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(PROJECT_ROOT / "run-backend.ps1")]
     with log_src.open("a", encoding="utf-8") as lf:
         lf.write(f"[{_now()}] /run requested\n")
-        subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), stdout=lf, stderr=subprocess.STDOUT, text=True)
+        subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), stdout=lf, stderr=subprocess.STDOUT, text=True, encoding="utf-8")
     time.sleep(2)
     status2, _ = _http_get(_service_url() + "/health", timeout=3)
     return {

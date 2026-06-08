@@ -196,10 +196,8 @@ def _make_llm_pre(scored: list, full_srt: Path):
         early_transcription_done=False,
         scored=scored,
         total_parts=len(scored),
-        content_analysis=None,
         target_platform="tiktok",
         dna_clean_visual=False,
-        early_retrieved_knowledge=[],
         seg_min_sec=15,
         seg_max_sec=60,
     )

@@ -31,6 +31,7 @@ from typing import Any, Optional
 from app.models.schemas import RenderRequest
 from app.db.jobs_repo import upsert_job
 from app.core.stage import JobStage
+from app.domain.render_plan import RenderPlan
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 
 
@@ -71,6 +72,7 @@ class FinalizeContext:
     subtitle_translate_summary: Any
     ai_influence_report: dict
     ai_beat_report: dict
+    render_plan: Optional[RenderPlan] = None
 
 
 def run_render_finalize(ctx: FinalizeContext) -> str:
@@ -202,6 +204,7 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
         "ai_director": {"enabled": False},
         "ai_render_influence": _ai_influence_report,
         "ai_beat_execution": _ai_beat_report,
+        "render_plan": ctx.render_plan.to_json() if ctx.render_plan is not None else None,
         "story": {},
         "preset_evolution": {},
         "creator_style": {},

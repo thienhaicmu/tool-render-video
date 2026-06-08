@@ -20,11 +20,9 @@ Sacred Contract guards baked in:
   (no editorial hint).
 - to_json / from_json are deterministic + defensive (unknown keys
   dropped, never raise). Same pattern as RenderPlan.
-- to_prompt_hint() renders a plain string suitable for the
-  *existing* `editorial_hint` parameter on prompts.build_segment_prompt
-  — this is intentional: it minimises the blast radius on the
-  HIGH-tier prompts.py file. No new template variables, no risk of
-  the {end}/{start} class of bug from the pre-flight fix.
+- to_prompt_hint() renders a plain string passed as the
+  `editorial_hint` parameter to the LLM prompt builder. No new
+  template variables, no risk of the {end}/{start} class of bug.
 
 The dataclass is the *contract* — populated by user settings (singleton
 creator_prefs row in DB for now; Sprint 3-FE will expose UI). Multi-
@@ -134,12 +132,11 @@ class CreatorContext:
     # ── Prompt-hint rendering ────────────────────────────────────────────
 
     def to_prompt_hint(self) -> str:
-        """Render a plain editorial-hint string for prompts.build_segment_prompt.
+        """Render a plain editorial-hint string for the LLM prompt.
 
-        Empty context returns "" so the prompt template's
-        editorial_section stays empty and behaviour is identical to
-        pre-Sprint-3. Otherwise emits a compact human-readable hint
-        the LLM can read directly. Order is stable (deterministic).
+        Empty context returns "" (no-op). Otherwise emits a compact
+        human-readable hint the LLM can read directly. Order is stable
+        (deterministic).
         """
         if self.is_empty():
             return ""

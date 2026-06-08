@@ -12,10 +12,9 @@ Vision (Sprint 2 — RenderPlan skeleton):
        → **RenderPlan**  ← this file pins the dataclass for that handoff
        → Render Engine (pure executor)
 
-In Sprint 2 the AI still emits `LLMSegment` and a builder shim
-(`orchestration/render_plan_builder.py`) adapts the segment list +
-scattered backend decisions into a RenderPlan. In Sprint 4 the AI
-provider will emit RenderPlan directly and the builder shim goes away.
+The AI provider (Gemini/OpenAI/Claude) emits RenderPlan directly via
+`ai/llm/providers/<name>.select_render_plan`. The builder shim path
+was retired in Sprint 4.H.
 
 Sacred Contract guards baked into the schema:
 - Every field has a safe default. Loading a legacy payload that omits
@@ -55,7 +54,7 @@ class ClipPlan:
     clip_name: str = ""
     title: str = ""
     reason: str = ""
-    # Extended segment metadata mirrored from LLMSegment for forward-compat.
+    # Extended segment metadata emitted by the AI provider per clip.
     hook_type: str = ""           # question|reveal|contrast|humor|emotion|statement
     content_type: str = ""        # interview|vlog|tutorial|commentary|montage|gaming
     subtitle_style: str = ""      # viral|clean|story|gaming|"" = inherit (Sprint 7.6 FULL)

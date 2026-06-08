@@ -43,174 +43,6 @@ def _srt_to_seconds_format(srt_content: str) -> str:
     return "\n".join(out)
 
 
-_SYSTEM = (
-    "You are a viral video editor AI. Your job is to find the strongest viral hook moments "
-    "in a transcript and build complete, standalone short-form clips around each one. "
-    'Return a RenderPlan as a single JSON object with a "segments" array. '
-    "No prose, no markdown fences, no explanation."
-)
-
-_USER_TEMPLATE = """\
-Find the strongest viral hooks in this transcript ({language}) and build up to {output_count} complete clips.
-Every returned clip MUST be {min_sec}â€“{max_sec} seconds long. Any clip outside this range is invalid.
-
-â”â”â” STEP 1 â€” SCAN FOR VIRAL HOOKS â”â”â”
-
-Read the ENTIRE transcript. Identify every moment that is:
-  â€¢ A hook, reveal, or surprising statement that grabs attention immediately
-  â€¢ An emotional peak, confrontational moment, or strong opinion
-  â€¢ A contrarian or counterintuitive insight
-  â€¢ A curiosity gap ("here's why X is wrong / here's what most people don't know")
-  â€¢ A complete standalone thought that works without prior context
-
-Rank ALL found hook moments by viral + retention potential.
-Remove near-duplicates â€” only keep the strongest version if two hooks cover the same idea.
-
-â”â”â” STEP 2 â€” BUILD CLIPS AROUND HOOKS â”â”â”
-
-For each top-ranked hook:
-
-  1. The hook moment itself is typically just 2â€“10 seconds. It is your anchor â€” NOT the clip.
-  2. BACK UP the start timestamp: add enough lead-in so the hook lands in the first 3 seconds
-     of the clip. Add at least 5â€“15 seconds before the hook moment.
-  3. EXTEND the end timestamp: keep going until the thought is complete, the payoff lands,
-     and the viewer feels satisfied. Usually 30â€“80 seconds AFTER the hook.
-  4. Target clip duration: {min_sec}â€“{max_sec} seconds. This spans MANY transcript lines.
-     A valid clip typically covers 15â€“60 [x - y] timestamp markers.
-  5. Check: if ({{end}} - {{start}}) < {min_sec} â†’ you must extend further. Do not return it.
-  6. Check: if ({{end}} - {{start}}) > {max_sec} â†’ trim to keep the core complete thought.
-
-â›” NEVER return a raw hook moment as a clip. A 2â€“10 second clip is ALWAYS invalid.
-â›” NEVER copy [x - y] transcript boundaries directly as start/end. Use arbitrary timestamps.
-
-â”â”â” OVERLAP RULES â”â”â”
-
-âœ“ Two clips MAY overlap or share transcript content if they are anchored on DIFFERENT hooks.
-âœ“ Two clips MAY come from nearby timestamps if they represent distinct viral opportunities.
-âœ— Do NOT return two clips that convey the same idea or differ only in a few seconds.
-
-â”â”â” COVERAGE IS NOT THE GOAL â”â”â”
-
-Do NOT try to:
-  - Cover different parts of the transcript
-  - Distribute clips evenly across the video timeline
-  - Avoid returning clips from the same section
-
-DO prioritize:
-  - The absolute strongest viral moments, wherever they appear
-  - Hooks that work without requiring prior context
-  - Clips a viewer can share and understand standalone
-
-Transcript format â€” each [start_sec - end_sec] line is followed by the spoken text:
-{srt_content}
-
-â”â”â” HARD CONSTRAINTS â”â”â”
-
-1. (end - start) MUST be between {min_sec} and {max_sec} seconds. Any other value = INVALID.
-2. start â‰¥ 0 and end â‰¤ video duration.
-3. clip_name: max 60 chars. Allowed: letters (incl. Vietnamese/CJK), digits, spaces, hyphens.
-4. All float scores: 0.0â€“1.0.
-
-Avoid: greetings, intros, sponsor segments, outros, long silences, mid-sentence cuts.
-
-Return EXACTLY this JSON â€” no extra keys, no markdown:
-{{
-  "segments": [
-    {{
-      "start": 42.0,
-      "end": {example_end},
-      "score": 0.92,
-      "clip_name": "Hook reveal moment",
-      "title": "The hook everyone missed",
-      "reason": "Hook at 44s grabs immediately; extended to payoff at {example_end}s â€” complete thought, {min_sec}â€“{max_sec}s",
-      "hook_type": "question",
-      "content_type": "interview",
-      "subtitle_style": "viral",
-      "viral_score": 0.88,
-      "hook_score": 0.92,
-      "retention_score": 0.78,
-      "speech_density": 0.85,
-      "duration_fit": 0.90,
-      "cover_offset_ratio": 0.15
-    }}
-  ]
-}}
-
-FIELD RULES:
-- hook_type: question | reveal | contrast | humor | emotion | statement
-- content_type: interview | vlog | tutorial | commentary | montage | gaming
-- subtitle_style (pick exactly one):
-    viral  = bold bounce, thick outline, Anton font  â€” commentary / reaction / hook-heavy shorts
-    clean  = minimal, thin outline, Inter font        â€” tutorial / education / podcast clips
-    story  = soft cinematic, Montserrat font          â€” vlog / emotional / storytelling
-    gaming = box-backed caption, Anton font           â€” gaming / sports / montage
-- viral_score: shareability â€” surprising, relatable, emotional peak
-- hook_score: how hard the first 3 seconds grab attention
-- retention_score: predicted fraction of viewers who watch to the end
-- speech_density: 1.0=dense dialogue, 0.0=pure visuals or long silence
-- duration_fit: how well this clip length fits short-form (1.0=ideal {min_sec}â€“{max_sec}s)
-- cover_offset_ratio: best thumbnail moment as fraction of clip duration (0.1=very early, 0.5=mid){editorial_section}
-
-âš ï¸ FINAL VERIFICATION â€” before responding, check EVERY segment:
-   â€¢ {min_sec} â‰¤ (end - start) â‰¤ {max_sec}  â†’  if any segment fails this, fix or remove it
-   â€¢ start lands 5â€“15s before the hook moment  â†’  the hook fires within the first 3s of the clip
-   â€¢ the clip ends after the payoff, not mid-thought
-
-Quality over quantity. Fewer strong clips beat many weak ones.
-Return up to {output_count} segments. Never invent moments not in the transcript.
-"""
-
-# Default cap for providers with tight token limits. High-context providers
-# (Gemini 1M, Claude 200K) can override via max_srt_chars parameter.
-MAX_SRT_CHARS = int(_os.getenv("LLM_MAX_SRT_CHARS", "6000"))
-
-
-def build_segment_prompt(
-    srt_content: str,
-    output_count: int,
-    min_sec: float,
-    max_sec: float,
-    language: str = "auto",
-    max_srt_chars: int | None = None,
-    editorial_hint: str = "",
-) -> tuple[str, str]:
-    """Return (system_prompt, user_prompt) for LLM segment selection.
-
-    Converts SRT timestamps to seconds format before sending to the LLM.
-    max_srt_chars overrides MAX_SRT_CHARS â€” use for high-context providers.
-    editorial_hint is appended to both system prompt and user prompt.
-    """
-    converted = _srt_to_seconds_format(srt_content)
-
-    cap = max_srt_chars if max_srt_chars is not None else MAX_SRT_CHARS
-    truncated = converted[:cap]
-    if len(converted) > cap:
-        truncated += "\n... [transcript truncated]"
-
-    hint = editorial_hint.strip()
-    system = _SYSTEM + (f" {hint}" if hint else "")
-    editorial_section = f"\n\nEDITORIAL GUIDANCE: {hint}" if hint else ""
-
-    # Example end timestamp: 45.2 + midpoint of requested range, so the
-    # JSON example always shows a segment that complies with min/max duration.
-    example_end = round(45.2 + (min_sec + max_sec) / 2, 1)
-
-    user = _USER_TEMPLATE.format(
-        language=language,
-        srt_content=truncated,
-        output_count=output_count,
-        min_sec=int(min_sec),
-        max_sec=int(max_sec),
-        example_end=example_end,
-        editorial_section=editorial_section,
-    )
-    return system, user
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Sprint 4.B â€” RenderPlan prompt (dual-mode alongside build_segment_prompt)
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 _SYSTEM_RP = (
     "You are a viral video editor AI. Your job is to emit a complete RenderPlan "
     "as a single JSON object describing both WHICH clips to extract and HOW each "
@@ -223,28 +55,58 @@ _SYSTEM_RP = (
 # literal brace in the prose body below is doubled â€” only the named
 # placeholders ({language}, {min_sec}, {max_sec}, {output_count},
 # {srt_content}, {example_end}, {editorial_section}) are substituted.
-_USER_TEMPLATE_RP = """\
-Build a RenderPlan from this transcript ({language}) â€” pick up to {output_count} clips
+_USER_TEMPLATE_RP = """Build a RenderPlan from this transcript ({language}) — pick up to {output_count} clips
 and decide the editorial sub-plans that fit the content. Every clip MUST be
-{min_sec}-{max_sec} seconds long; clips outside that range are invalid.
+{min_sec}–{max_sec} seconds long; clips outside that range are invalid.
 
-â”â”â” STEP 1 - CLIP SELECTION â”â”â”
+─── STEP 1 — CLIP SELECTION ───
 
-Scan the entire transcript. Identify the strongest viral hooks: surprising
-reveals, emotional peaks, contrarian opinions, curiosity gaps, complete
-standalone moments. For each top-ranked hook:
+Read the ENTIRE transcript. Identify every moment that is:
+  • A hook, reveal, or surprising statement that grabs attention immediately
+  • An emotional peak, confrontational moment, or strong opinion
+  • A contrarian or counterintuitive insight
+  • A curiosity gap ("here's why X is wrong / here's what most people don't know")
+  • A complete standalone thought that works without prior context
 
-  1. The hook itself is typically 2-10 seconds. Back the start up so the
-     hook lands within the first 3 seconds of the clip â€” usually 5-15
-     seconds of lead-in.
-  2. Extend the end until the thought is complete and the payoff lands â€”
-     usually 30-80 seconds after the hook.
-  3. Target clip duration {min_sec}-{max_sec} seconds. Check
-     ({{end}} - {{start}}) before finalising each clip.
+Rank ALL found hook moments by viral + retention potential.
+Remove near-duplicates — only keep the strongest version if two hooks cover the same idea.
+
+For each top-ranked hook:
+
+  1. The hook moment itself is typically just 2–10 seconds. It is your anchor — NOT the clip.
+  2. BACK UP the start timestamp: add enough lead-in so the hook lands in the first 3 seconds
+     of the clip. Add at least 5–15 seconds before the hook moment.
+  3. EXTEND the end timestamp: keep going until the thought is complete, the payoff lands,
+     and the viewer feels satisfied. Usually 30–80 seconds AFTER the hook.
+  4. Target clip duration: {min_sec}–{max_sec} seconds. This spans MANY transcript lines.
+     A valid clip typically covers 15–60 [x - y] timestamp markers.
+  5. Check: if ({{end}} - {{start}}) < {min_sec} → you must extend further. Do not return it.
+  6. Check: if ({{end}} - {{start}}) > {max_sec} → trim to keep the core complete thought.
+
+⛔ NEVER return a raw hook moment as a clip. A 2–10 second clip is ALWAYS invalid.
+⛔ NEVER copy [x - y] transcript boundaries directly as start/end. Use arbitrary timestamps.
+
+OVERLAP RULES
+
+✔ Two clips MAY overlap or share transcript content if they are anchored on DIFFERENT hooks.
+✔ Two clips MAY come from nearby timestamps if they represent distinct viral opportunities.
+✗ Do NOT return two clips that convey the same idea or differ only in a few seconds.
+
+COVERAGE IS NOT THE GOAL
+
+Do NOT try to:
+  - Cover different parts of the transcript
+  - Distribute clips evenly across the video timeline
+  - Avoid returning clips from the same section
+
+DO prioritize:
+  - The absolute strongest viral moments, wherever they appear
+  - Hooks that work without requiring prior context
+  - Clips a viewer can share and understand standalone
 
 Avoid: intros, sponsor segments, outros, long silences, mid-sentence cuts.
 
-â”â”â” STEP 2 - SUBTITLE POLICY â”â”â”
+─── STEP 2 — SUBTITLE POLICY ───
 
 Pick ONE subtitle_style that fits the dominant content type:
   viral  - high-energy reactions, commentary, hook-heavy shorts
@@ -259,7 +121,7 @@ Set emphasis_pass=true ONLY when at least one clip has a strong
 single-line shouty hook that benefits from bigger subtitle styling on
 that line. Otherwise leave false.
 
-â”â”â” STEP 3 - CAMERA STRATEGY â”â”â”
+─── STEP 3 — CAMERA STRATEGY ───
 
 motion_aware_crop=true when subjects move noticeably (interview head
 movement, gameplay action). False for static talking-head content.
@@ -269,7 +131,7 @@ reframe_mode:
   center  - subject roughly stays in frame center
   fixed   - keep the original framing (rare for vertical short-form)
 
-â”â”â” STEP 4 - AUDIO PLAN â”â”â”
+─── STEP 4 — AUDIO PLAN ───
 
 Default both flags to false. Only flip a flag when the content clearly
 needs the feature:
@@ -277,7 +139,7 @@ needs the feature:
                         (extremely rare for short-form viral clips)
   bgm_enabled=true    - the clip is montage-style and needs background music
 
-â”â”â” STEP 5 - OVERLAYS â”â”â”
+─── STEP 5 — OVERLAYS ───
 
 overlays is an array. Emit at most one entry per kind:
   kind=hook  - add when the strongest clip's hook deserves an on-screen
@@ -288,12 +150,12 @@ overlays is an array. Emit at most one entry per kind:
 
 When no overlay fits, return overlays=[] instead of inventing one.
 
-â”â”â” TRANSCRIPT â”â”â”
+─── TRANSCRIPT ───
 
 Each [start_sec - end_sec] line is followed by spoken text:
 {srt_content}
 
-â”â”â” HARD CONSTRAINTS â”â”â”
+─── HARD CONSTRAINTS ───
 
 1. ({{end}} - {{start}}) MUST be in [{min_sec}, {max_sec}] for every clip.
 2. start >= 0 and end <= video duration.
@@ -301,7 +163,7 @@ Each [start_sec - end_sec] line is followed by spoken text:
    hyphens only.
 4. All numeric scores in [0.0, 1.0].
 
-â”â”â” OUTPUT JSON SHAPE â”â”â”
+─── OUTPUT JSON SHAPE ───
 
 Return EXACTLY this JSON object. No extra top-level keys, no markdown fences:
 
@@ -313,9 +175,10 @@ Return EXACTLY this JSON object. No extra top-level keys, no markdown fences:
       "score": 0.92,
       "clip_name": "Hook reveal moment",
       "title": "The hook everyone missed",
-      "reason": "Hook at 44s grabs immediately; extended to payoff",
+      "reason": "Hook at 44s grabs immediately; extended to payoff at {example_end}s — complete thought, {min_sec}–{max_sec}s",
       "hook_type": "reveal",
       "content_type": "interview",
+      "subtitle_style": "viral",
       "viral_score": 0.88,
       "hook_score": 0.92,
       "retention_score": 0.78,
@@ -347,8 +210,12 @@ Return EXACTLY this JSON object. No extra top-level keys, no markdown fences:
 FIELD RULES:
 - hook_type: question | reveal | contrast | humor | emotion | statement
 - content_type: interview | vlog | tutorial | commentary | montage | gaming
-- subtitle_style: viral | clean | story | gaming
-- viral_score: shareability â€” surprising, relatable, emotional peak
+- subtitle_style (pick exactly one per clip):
+    viral  = bold bounce, thick outline, Anton font  — commentary / reaction / hook-heavy shorts
+    clean  = minimal, thin outline, Inter font        — tutorial / education / podcast clips
+    story  = soft cinematic, Montserrat font          — vlog / emotional / storytelling
+    gaming = box-backed caption, Anton font           — gaming / sports / montage
+- viral_score: shareability — surprising, relatable, emotional peak
 - hook_score: how hard the first 3 seconds grab attention
 - retention_score: predicted fraction watching to the end
 - speech_density: 1.0=dense dialogue, 0.0=pure visuals or long silence
@@ -356,11 +223,14 @@ FIELD RULES:
 - cover_offset_ratio: best thumbnail moment as fraction of clip
   (0.1=very early, 0.5=mid){editorial_section}
 
+⚠️ FINAL VERIFICATION — before responding, check EVERY clip:
+   • {min_sec} ≤ (end - start) ≤ {max_sec}  →  if any clip fails this, fix or remove it
+   • start lands 5–15s before the hook moment  →  the hook fires within the first 3s of the clip
+   • the clip ends after the payoff, not mid-thought
+
 Quality over quantity. Fewer strong clips beat many weak ones.
 Return up to {output_count} clips. Never invent moments not in the transcript.
 """
-
-
 def build_render_plan_prompt(
     srt_content: str,
     output_count: int,

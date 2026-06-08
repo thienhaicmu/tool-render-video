@@ -106,7 +106,7 @@ from app.features.render.engine.subtitle.translation_service import translate_sr
 logger = logging.getLogger("app.render")
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 # Sprint 4.E â€” RenderPlan.subtitle_policy consume helpers.
 #
 # When ctx.render_plan is None (flag OFF, no AI emission), both
@@ -122,7 +122,7 @@ logger = logging.getLogger("app.render")
 # disambiguate "default False" from "explicit False" without flipping
 # baseline behaviour, line_break_rule because consuming it requires
 # extending apply_market_line_break_to_srt's signature (cross-file).
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 # Allowed subtitle style strings the planner will accept from a
 # RenderPlan. Superset of the SubtitlePolicy vocabulary
@@ -137,19 +137,35 @@ _RENDER_PLAN_ALLOWED_SUBTITLE_STYLES: frozenset[str] = frozenset({
 
 
 def _resolve_subtitle_style_from_plan(
-    ctx: PartRenderContext, fallback_value: str
+    ctx: PartRenderContext, fallback_value: str, part_no: int = 0
 ) -> tuple[str, str]:
     """Return ``(effective_subtitle_style, source_tag)``.
 
-    Source tag is one of ``"render_plan"``, ``"fallback"``, or
-    ``"fallback_invalid_style"`` â€” the planner emits it as
-    ``subtitle_style_source`` in the existing ``subtitle_style_applied``
-    event so downstream observers can attribute the choice without
-    re-reading the dataclass.
+    Resolution order (highest to lowest priority):
+      1. Per-clip: ``render_plan.clips[part_no-1].subtitle_style`` when
+         ``part_no > 0`` and in bounds â€” source tag ``"render_plan_clip"``.
+      2. Global: ``render_plan.subtitle_policy.style`` â€” source tag ``"render_plan"``.
+      3. Fallback: caller-supplied legacy value â€” source tag ``"fallback"``
+         or ``"fallback_invalid_style"`` when a plan style failed validation.
+
+    Empty string in either plan field means â€œinherit from next levelâ€
+    (the same semantic as SubtitlePolicy). Invalid style values soft-fall
+    back to the caller's legacy resolution (Sacred Contract #3).
     """
     rp = getattr(ctx, "render_plan", None)
     if rp is None:
         return fallback_value, "fallback"
+    # Per-clip override (Sprint 4.E extension)
+    if part_no > 0:
+        try:
+            clips = rp.clips
+            if clips and part_no - 1 < len(clips):
+                clip_style = (getattr(clips[part_no - 1], "subtitle_style", "") or "").strip()
+                if clip_style and clip_style in _RENDER_PLAN_ALLOWED_SUBTITLE_STYLES:
+                    return clip_style, "render_plan_clip"
+        except Exception:
+            pass
+    # Global subtitle_policy fallback
     plan_style = (rp.subtitle_policy.style or "").strip()
     if not plan_style:
         return fallback_value, "fallback"
@@ -169,6 +185,17 @@ def _resolve_market_from_plan(ctx: PartRenderContext) -> str:
     if rp is None:
         return ""
     return (rp.subtitle_policy.market or "").strip()
+
+
+def _resolve_cta_audio_from_plan(ctx: PartRenderContext) -> str:
+    """Return AI-specified CTA text from render_plan.audio_plan.cta_audio.
+
+    Empty string means no override -- caller falls back to the CTA library.
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return ""
+    return (getattr(rp.audio_plan, "cta_audio", "") or "").strip()
 
 
 def prepare_part_assets(
@@ -511,7 +538,7 @@ def prepare_part_assets(
             )
         )
         _effective_subtitle_style, _subtitle_style_source = _resolve_subtitle_style_from_plan(
-            ctx, _legacy_subtitle_style
+            ctx, _legacy_subtitle_style, idx
         )
 
         if _srt_source_is_fresh and _ass_srt_source.exists() and _ass_srt_source.stat().st_size > 0:
@@ -569,7 +596,22 @@ def prepare_part_assets(
                 _cta_type    = str(getattr(ctx.payload, "cta_type", "auto") or "auto").strip().lower()
                 _ct_hint     = str(seg.get("content_type_hint") or "vlog")
                 _cta_vt      = str(seg.get("variant_type") or "")
-                _cta_text    = _select_cta_text(_ct_hint, ctx.target_platform, _cta_type, _cta_vt)
+                # Option B: AI-specified exact CTA text overrides library lookup.
+                _plan_cta_audio = _resolve_cta_audio_from_plan(ctx)
+                if _plan_cta_audio:
+                    _cta_text = _plan_cta_audio
+                else:
+                    # Option C: AI hook_type biases auto cta_type before library lookup.
+                    _hook_type_hint = str(seg.get("hook_type") or "").strip().lower()
+                    if _cta_type == "auto" and _hook_type_hint:
+                        _cta_type = {
+                            "question": "comment",
+                            "humor":    "comment",
+                            "reveal":   "follow",
+                            "contrast": "follow",
+                            "emotion":  "follow",
+                        }.get(_hook_type_hint, _cta_type)
+                    _cta_text = _select_cta_text(_ct_hint, ctx.target_platform, _cta_type, _cta_vt)
                 _last_sub_end = float(_srt_meta.get("last_end") or 0)
                 _eff_speed    = float(
                     seg.get("variant_playback_speed")

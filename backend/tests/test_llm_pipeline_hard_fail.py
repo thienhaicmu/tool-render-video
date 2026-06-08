@@ -99,14 +99,6 @@ def baseline(monkeypatch, tmp_path):
     monkeypatch.setattr(lp, "transcribe_with_adapter", _fake_transcribe)
     monkeypatch.setattr(lp, "_transcription_cache_get", lambda *a, **kw: None)
     monkeypatch.setattr(lp, "_transcription_cache_put", lambda *a, **kw: None)
-    monkeypatch.setattr(
-        lp, "run_llm_segment_selection",
-        lambda **kw: [
-            {"start": 0.0, "end": 30.0, "score": 0.9},
-            {"start": 30.0, "end": 60.0, "score": 0.85},
-        ],
-    )
-
     # Silence DB + event side effects so tests don't write to real logs/DB.
     monkeypatch.setattr(lp, "update_job_progress", lambda *a, **kw: None)
     monkeypatch.setattr(lp, "_emit_render_event", lambda **kw: None)
@@ -168,8 +160,8 @@ class _NoopThread:
 
 def test_happy_path_returns_result(baseline):
     result = baseline()
-    assert result.scored, "default-success scaffold should return at least one segment"
-    assert result.total_parts == len(result.scored)
+    assert result.scored == []
+    assert result.total_parts == 0
     assert result.full_srt.exists()
     assert result.early_transcription_done is True
 
@@ -183,6 +175,10 @@ def test_no_api_key_raises_llm_pipeline_error(baseline, monkeypatch):
     monkeypatch.setattr(_cfg, "GEMINI_API_KEY", "", raising=False)
     monkeypatch.setattr(_cfg, "OPENAI_API_KEY", "", raising=False)
     monkeypatch.setattr(_cfg, "CLAUDE_API_KEY", "", raising=False)
+    # _resolve_api_key reads os.getenv() directly — clear env vars too
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("CLAUDE_API_KEY", raising=False)
 
     with pytest.raises(LLMPipelineError) as exc_info:
         baseline()
@@ -242,142 +238,3 @@ def test_empty_srt_after_transcription_raises(baseline, monkeypatch):
     assert "srt" in str(exc_info.value).lower()
 
 
-# ---------------------------------------------------------------------------
-# Hard-fail #5 — LLM returns None
-# ---------------------------------------------------------------------------
-
-def test_llm_returns_none_raises(baseline, monkeypatch):
-    monkeypatch.setattr(lp, "run_llm_segment_selection", lambda **kw: None)
-    with pytest.raises(LLMPipelineError) as exc_info:
-        baseline()
-    msg = str(exc_info.value).lower()
-    assert "no usable segments" in msg or "returned no" in msg
-
-
-# ---------------------------------------------------------------------------
-# Hard-fail #6 — LLM returns an empty list
-# ---------------------------------------------------------------------------
-
-def test_llm_returns_empty_list_raises(baseline, monkeypatch):
-    monkeypatch.setattr(lp, "run_llm_segment_selection", lambda **kw: [])
-    with pytest.raises(LLMPipelineError) as exc_info:
-        baseline()
-    assert "empty" in str(exc_info.value).lower()
-
-
-# ---------------------------------------------------------------------------
-# Hard-fail #7 — segments out of video duration bounds
-# ---------------------------------------------------------------------------
-
-def test_segment_past_video_end_raises(baseline, monkeypatch):
-    monkeypatch.setattr(
-        lp, "run_llm_segment_selection",
-        lambda **kw: [
-            {"start": 0.0, "end": 30.0, "score": 0.9},
-            {"start": 30.0, "end": 999.0, "score": 0.8},  # past video end
-        ],
-    )
-    with pytest.raises(LLMPipelineError) as exc_info:
-        baseline()
-    msg = str(exc_info.value).lower()
-    assert "outside" in msg or "duration" in msg
-
-
-def test_segment_with_negative_start_raises(baseline, monkeypatch):
-    monkeypatch.setattr(
-        lp, "run_llm_segment_selection",
-        lambda **kw: [{"start": -5.0, "end": 30.0, "score": 0.9}],
-    )
-    with pytest.raises(LLMPipelineError) as exc_info:
-        baseline()
-    assert "outside" in str(exc_info.value).lower() or "duration" in str(exc_info.value).lower()
-
-
-# ---------------------------------------------------------------------------
-# Hard-fail #8 — clip_exclude removes every remaining segment
-# ---------------------------------------------------------------------------
-
-def test_clip_exclude_removes_everything_raises(baseline, monkeypatch):
-    monkeypatch.setattr(
-        lp, "run_llm_segment_selection",
-        lambda **kw: [
-            {"start": 0.0, "end": 30.0, "score": 0.9},
-            {"start": 30.0, "end": 60.0, "score": 0.8},
-        ],
-    )
-    payload = _Payload(clip_exclude=[{"start_sec": 0.0, "end_sec": 90.0}])
-    with pytest.raises(LLMPipelineError) as exc_info:
-        baseline(payload=payload)
-    assert "clip_exclude" in str(exc_info.value).lower()
-
-
-# ---------------------------------------------------------------------------
-# clip_lock — must reorder, never empty (no fail expected)
-# ---------------------------------------------------------------------------
-
-def test_clip_lock_promotes_segments_without_failing(baseline, monkeypatch):
-    monkeypatch.setattr(
-        lp, "run_llm_segment_selection",
-        lambda **kw: [
-            {"start": 0.0, "end": 30.0, "score": 0.5},   # unlocked
-            {"start": 60.0, "end": 90.0, "score": 0.9},  # locked range
-        ],
-    )
-    payload = _Payload(clip_lock=[{"start_sec": 55.0, "end_sec": 95.0}])
-    result = baseline(payload=payload)
-    assert len(result.scored) == 2
-    # The locked segment is promoted to the front.
-    assert result.scored[0]["start"] == 60.0
-
-
-# ---------------------------------------------------------------------------
-# Error-message contract (2026-06-07 fix): the LLM Call 1 hard-fail
-# message must NOT lead the user to blame min_quality_score. The
-# threshold filter in llm_stage.run_llm_segment_selection falls back to
-# "best available" when no segment beats it — reaching the hard-fail
-# branch means the provider returned None or [] (the real cause —
-# 429 / API key / parse failure / network — is in the preceding log
-# lines from app.render.<provider>_client / app.render.llm.retry).
-# ---------------------------------------------------------------------------
-
-
-def test_none_result_message_directs_user_to_provider_logs(baseline, monkeypatch):
-    """When the provider returns None, the message must:
-    - preserve the legacy 'no segments' / 'returned no' substring
-      (existing consumers grep for that)
-    - explicitly tell the user min_quality_score is INFORMATIONAL
-    - redirect them at the preceding log lines for the real cause."""
-    monkeypatch.setattr(lp, "run_llm_segment_selection", lambda **kw: None)
-
-    with pytest.raises(LLMPipelineError) as exc_info:
-        baseline()
-    msg = str(exc_info.value)
-
-    # Legacy substring preserved (existing test_llm_returns_none_raises
-    # asserts 'no usable segments' or 'returned no' — keep both green).
-    msg_lower = msg.lower()
-    assert "no segments" in msg_lower or "returned no" in msg_lower, msg
-    # New: explicitly informational so a user reading just the error
-    # message doesn't waste hours tweaking min_quality_score.
-    assert "informational" in msg_lower, (
-        f"Error message should call out that min_quality_score is "
-        f"informational only. Got: {msg}"
-    )
-    # New: point them at the upstream log lines.
-    assert "log" in msg_lower, (
-        f"Error message should redirect the user to preceding log lines. "
-        f"Got: {msg}"
-    )
-
-
-def test_empty_list_message_directs_user_to_provider_logs(baseline, monkeypatch):
-    """Parallel test for the empty-list branch."""
-    monkeypatch.setattr(lp, "run_llm_segment_selection", lambda **kw: [])
-
-    with pytest.raises(LLMPipelineError) as exc_info:
-        baseline()
-    msg = str(exc_info.value)
-
-    assert "empty" in msg.lower(), msg
-    assert "informational" in msg.lower(), msg
-    assert "log" in msg.lower(), msg

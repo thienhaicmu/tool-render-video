@@ -1,20 +1,14 @@
 ﻿"""
-parser.py â€” Parse LLM segment-selection response into LLMSegment list.
+parser.py â€” Parse LLM RenderPlan response into a validated RenderPlan.
 
 All parsing is defensive: never raises, returns None on any failure.
 Caller treats None as signal to hard-fail the pipeline.
-
-Sprint 4.A â€” adds `parse_render_plan_response()` alongside the existing
-`parse_segment_response()`. Both functions co-exist while the
-orchestrator gates the new path behind a flag. Phase 4.D will wire the
-new parser; phase 4.H will retire the segment-only path.
 """
 from __future__ import annotations
 
 import json
 import logging
 import re
-from dataclasses import dataclass
 from typing import Optional
 
 from app.domain.render_plan import (
@@ -31,121 +25,11 @@ logger = logging.getLogger("app.render.llm_parser")
 _INVALID_FS_CHARS = re.compile(r'[/\\:*?"<>|\t\n\r]')
 
 
-@dataclass
-class LLMSegment:
-    start: float      # seconds
-    end: float        # seconds
-    score: float      # 0.0â€“1.0
-    clip_name: str    # natural name used as output filename stem
-    title: str        # display title
-    reason: str       # model's explanation
-    # RenderPlan extended fields â€” populated when LLM returns the full schema
-    hook_type: str = ""            # question|reveal|contrast|humor|emotion|statement
-    content_type: str = ""         # interview|vlog|tutorial|commentary|montage|gaming
-    subtitle_style: str = ""       # viral|clean|story|gaming
-    viral_score: float = 0.0       # 0.0â€“1.0 shareability
-    hook_score: float = 0.0        # 0.0â€“1.0 first-3s grab strength
-    retention_score: float = 0.0   # 0.0â€“1.0 predicted watch-through rate
-    speech_density: float = 0.0    # 1.0=dense dialogue, 0.0=silence/visuals
-    duration_fit: float = 0.0      # 1.0=ideal length for target short-form
-    cover_offset_ratio: float = 0.0  # thumbnail moment as fraction of clip (0=absent)
-
-
-# Sprint 7.6 LITE (2026-06-05): GroqSegment = LLMSegment backward-compat
-# alias deleted. Zero callers verified across backend/ + tests/ + frontend/
-# at audit time. See docs/review/SPRINT_7_6_LITE_GROQSEGMENT_ALIAS_2026-06-05.md.
-
-
 def sanitize_clip_name(raw: str) -> str:
     """Keep natural name (spaces, Vietnamese chars OK), strip only FS-invalid chars."""
     clean = _INVALID_FS_CHARS.sub("", raw).strip()
     clean = re.sub(r" {2,}", " ", clean)[:80]
     return clean or "clip"
-
-
-def parse_segment_response(
-    raw: str,
-    output_count: int,
-    min_sec: float,
-    max_sec: float,
-    video_duration: float,
-) -> Optional[list[LLMSegment]]:
-    """
-    Parse LLM raw text response into validated LLMSegment list.
-
-    Returns None only when no valid segments can be parsed at all.
-    When the LLM returns fewer valid segments than requested, returns the
-    valid subset (lenient â€” better some clips than render failure).
-    """
-    try:
-        data = _extract_json_array(raw)
-        if isinstance(data, dict):
-            for _key in ("segments", "clips", "items", "results", "data"):
-                if isinstance(data.get(_key), list):
-                    data = data[_key]
-                    break
-        if not isinstance(data, list):
-            logger.warning(
-                "llm_parser: expected list (or object with 'segments' key), "
-                "got %s â€” raw preview: %r",
-                type(data).__name__, raw[:300],
-            )
-            return None
-
-        segments: list[LLMSegment] = []
-        rejected = 0
-        for item in data:
-            seg = _parse_item(item, min_sec, max_sec, video_duration)
-            if seg is not None:
-                segments.append(seg)
-            else:
-                rejected += 1
-
-        # Second pass: LLM ignored duration constraints â€” accept any segment with
-        # positive duration rather than failing the entire render.
-        #
-        # 2026-06-07 fix: the second pass ALSO clamps an over-end segment
-        # (end > video_duration) to video_duration so a small LLM
-        # overshoot (e.g. Gemini returning end=70 on a 65 s video) becomes
-        # usable rather than rejected by the bounds check at _parse_item.
-        # We only clamp small overshoots (≤ 10% of the video, or ≤ 10s)
-        # so a wildly-off hallucination still fails clearly.
-        if not segments and rejected > 0:
-            logger.warning(
-                "llm_parser: 0 valid segments with strict bounds "
-                "(min_sec=%.0f max_sec=%.0f) â€” retrying without duration filter",
-                min_sec, max_sec,
-            )
-            for item in data:
-                # Best-effort clamp of small overshoots before re-parsing.
-                clamped_item = _clamp_overshoot_end(item, video_duration)
-                seg = _parse_item(clamped_item, min_sec=1.0, max_sec=86400,
-                                  video_duration=video_duration)
-                if seg is not None:
-                    segments.append(seg)
-
-        if not segments:
-            logger.warning(
-                "llm_parser: 0 valid segments out of %d returned "
-                "(min_sec=%.0f max_sec=%.0f video_dur=%.0f) â€” raw preview: %r",
-                len(data), min_sec, max_sec, video_duration, raw[:300],
-            )
-            return None
-
-        segments.sort(key=lambda s: s.score, reverse=True)
-        result = segments[:output_count]
-
-        if len(result) < output_count:
-            logger.info(
-                "llm_parser: %d/%d valid segments (%d rejected) â€” proceeding with subset",
-                len(result), output_count, rejected,
-            )
-
-        return result
-
-    except Exception as exc:
-        logger.warning("llm_parser: unexpected error â€” %s", exc, exc_info=True)
-        return None
 
 
 def _extract_json_array(raw: str) -> object:
@@ -173,114 +57,6 @@ def _extract_json_array(raw: str) -> object:
         except json.JSONDecodeError:
             pass
     return None
-
-
-def _clamp_overshoot_end(item: object, video_duration: float) -> object:
-    """Best-effort overshoot clamp for the parser's relaxed-retry path.
-
-    The LLM occasionally returns ``end`` slightly past ``video_duration``
-    (rounding up, or "to the end" intent). When the overshoot is small
-    (≤ 10 seconds OR ≤ 10% of the video, whichever is bigger), clamp
-    ``end`` to ``video_duration`` so the segment survives the bounds
-    check in ``_parse_item``. Larger overshoots are left alone — that
-    way a wildly-off hallucination still fails clearly.
-
-    Pure: returns a NEW dict on clamp, the original object on no-op.
-    Never raises.
-    """
-    if not isinstance(item, dict):
-        return item
-    if not (isinstance(video_duration, (int, float)) and video_duration > 0):
-        return item
-    try:
-        end = float(item.get("end", 0))
-    except (TypeError, ValueError):
-        return item
-    if end <= video_duration:
-        return item
-    overshoot = end - video_duration
-    tolerance = max(10.0, 0.10 * video_duration)
-    if overshoot > tolerance:
-        return item
-    # Build a shallow-copied dict with the clamped end so we don't mutate
-    # the caller's object.
-    clamped = dict(item)
-    clamped["end"] = float(video_duration)
-    logger.info(
-        "llm_parser: clamped segment end %.2f → %.2f (video_dur=%.2f, overshoot=%.2fs)",
-        end, video_duration, video_duration, overshoot,
-    )
-    return clamped
-
-
-def _parse_item(
-    item: object,
-    min_sec: float,
-    max_sec: float,
-    video_duration: float,
-) -> Optional[LLMSegment]:
-    if not isinstance(item, dict):
-        return None
-    try:
-        start = float(item["start"])
-        end   = float(item["end"])
-    except (KeyError, TypeError, ValueError):
-        return None
-
-    duration = end - start
-    if not (min_sec <= duration <= max_sec):
-        logger.debug("llm_parser: segment %.1f-%.1f rejected (dur=%.1fs)", start, end, duration)
-        return None
-    if start < 0 or (video_duration > 0 and end > video_duration + 1.0):
-        logger.debug("llm_parser: segment %.1f-%.1f out of bounds (video=%.1fs)", start, end, video_duration)
-        return None
-
-    raw_name  = str(item.get("clip_name") or item.get("title") or "clip")
-    raw_title = str(item.get("title")     or raw_name)
-    score     = float(item.get("score", 0.5))
-    score     = max(0.0, min(1.0, score))
-
-    # Defensive parse of RenderPlan extended fields â€” any bad value falls back to safe defaults
-    try:
-        _hook_type    = str(item.get("hook_type")    or "").strip()[:30]
-        _content_type = str(item.get("content_type") or "").strip()[:30]
-        _sub_style    = str(item.get("subtitle_style") or "").strip()[:20]
-        def _fs(key: str, fallback: float) -> float:
-            v = item.get(key)
-            return max(0.0, min(1.0, float(v))) if v is not None else fallback
-        _viral_score    = _fs("viral_score",       score)
-        _hook_score     = _fs("hook_score",        score)
-        _ret_score      = _fs("retention_score",   score)
-        _speech_density = _fs("speech_density",    0.0)
-        _dur_fit        = _fs("duration_fit",       score)
-        _cover_ratio    = _fs("cover_offset_ratio", 0.0)
-    except Exception:
-        _hook_type = _content_type = _sub_style = ""
-        _viral_score = _hook_score = _ret_score = _dur_fit = score
-        _speech_density = _cover_ratio = 0.0
-
-    return LLMSegment(
-        start=start,
-        end=end,
-        score=score,
-        clip_name=sanitize_clip_name(raw_name),
-        title=raw_title.strip()[:120],
-        reason=str(item.get("reason", "")).strip()[:300],
-        hook_type=_hook_type,
-        content_type=_content_type,
-        subtitle_style=_sub_style,
-        viral_score=_viral_score,
-        hook_score=_hook_score,
-        retention_score=_ret_score,
-        speech_density=_speech_density,
-        duration_fit=_dur_fit,
-        cover_offset_ratio=_cover_ratio,
-    )
-
-
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Sprint 4.A â€” RenderPlan parser (dual-mode alongside parse_segment_response)
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def parse_render_plan_response(
@@ -386,7 +162,7 @@ def parse_render_plan_response(
         return None
 
 
-# â”€â”€ Shape normaliser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ Shape normaliser â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 
 def _normalise_render_plan_shape(data: dict) -> Optional[dict]:
@@ -447,7 +223,7 @@ def _segment_to_clip_dict(seg: dict) -> dict:
     }
 
 
-# â”€â”€ Per-clip validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ Per-clip validation â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 
 def _filter_and_score_clip_dicts(

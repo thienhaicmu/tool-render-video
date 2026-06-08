@@ -14,7 +14,7 @@ def _has_audio_stream(input_path: str) -> bool:
             "-of", "csv=p=0",
             str(input_path),
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True)
         return bool((result.stdout or "").strip())
     except Exception:
         return False

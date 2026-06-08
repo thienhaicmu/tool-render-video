@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.core.stage import JobStage
-from app.features.render.engine.pipeline.llm_stage import run_llm_segment_selection
+from app.features.render.engine.pipeline.llm_stage import _resolve_api_key
 from app.features.render.engine.pipeline.pipeline_cache import (
     _transcription_cache_get,
     _transcription_cache_put,
@@ -41,17 +41,14 @@ class LLMPreRenderResult:
     """Pre-render result consumed by run_render_pipeline.
 
     Moved here from pipeline_pre_render.py in Phase F1 (legacy path removed).
-    Field shape preserved for backward-compat with downstream consumers.
     """
     full_srt: Path
     full_srt_available: bool
     early_transcription_done: bool
     scored: list
     total_parts: int
-    content_analysis: Any
     target_platform: str
     dna_clean_visual: bool
-    early_retrieved_knowledge: list
     seg_min_sec: int
     seg_max_sec: int
 
@@ -77,6 +74,7 @@ def run_llm_pre_render(
     retry_count: int,
     cancel_registry: Any,
     set_stage_fn: Callable[..., None],
+    skip_segment_selection: bool = False,
 ) -> LLMPreRenderResult:
     """LLM-only replacement for run_pre_render_scenes().
 
@@ -110,18 +108,8 @@ def run_llm_pre_render(
     from app.core import config as _cfg
     _provider = (getattr(payload, "ai_provider", "") or "").strip().lower() \
                 or getattr(_cfg, "AI_PROVIDER_DEFAULT", "gemini")
-    # payload-level key: provider-specific field first, then generic ai_cloud_api_key
-    _per_key_attr = {"gemini": "gemini_api_key", "openai": "openai_api_key", "claude": "claude_api_key"}
-    _payload_key = (
-        (getattr(payload, _per_key_attr.get(_provider, ""), "") or "")
-    ).strip() or (getattr(payload, "ai_cloud_api_key", "") or "").strip()
-    # env-level key: pick the correct config var for the selected provider
-    _env_key = {
-        "gemini": getattr(_cfg, "GEMINI_API_KEY", ""),
-        "openai": getattr(_cfg, "OPENAI_API_KEY", ""),
-        "claude": getattr(_cfg, "CLAUDE_API_KEY", ""),
-    }.get(_provider, "")
-    if not (_payload_key or _env_key):
+    _api_key, _ = _resolve_api_key(payload, _provider)
+    if not _api_key:
         raise LLMPipelineError(
             f"provider '{_provider}' requires a valid API key "
             f"(set {_provider.upper()}_API_KEY in .env or pass via payload field)"
@@ -313,151 +301,25 @@ def run_llm_pre_render(
         step="render.llm_pipeline.select",
     )
 
-    # â”€â”€ 6. Call LLM via existing wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    scored = run_llm_segment_selection(
-        full_srt=full_srt,
-        full_srt_available=True,
-        scored=[],
-        payload=payload,
-        source=source,
-    )
-    _min_score = float(getattr(payload, "llm_min_quality", None) or 0.6)
-    # The min_quality_score threshold is INFORMATIONAL only — the actual
-    # filter in llm_stage.run_llm_segment_selection falls back to "use
-    # best available" when no segment beats the threshold, so a low-score
-    # response NEVER causes this hard-fail. Reaching the raise here means
-    # the provider returned None or an empty list — the actual cause is
-    # in the provider's log line (look for 429 / quota / API key /
-    # parse_error / network-timeout in the previous WARN lines from
-    # app.render.<provider>_client and app.render.llm.retry).
-    if scored is None:
-        raise LLMPipelineError(
-            "LLM pipeline: LLM Call 1 returned no segments (provider call "
-            "failed). Common causes in the preceding log lines: 429 quota "
-            "exceeded, invalid API key, network timeout, or response "
-            "JSON parse failure. The threshold "
-            f"min_quality_score={_min_score} is informational only — it "
-            "never causes hard-fail."
-        )
-    if not scored:
-        raise LLMPipelineError(
-            "LLM pipeline: LLM Call 1 returned an empty segment list "
-            "(provider responded but no segments were extracted). Check "
-            "the preceding log lines for raw response / parse warnings. "
-            f"min_quality_score={_min_score} is informational only — it "
-            "never causes hard-fail."
-        )
-
-    # â”€â”€ 7. Bound-check segments against video duration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    video_dur = float(source.get("duration") or 0.0)
-    bad = [
-        s for s in scored
-        if float(s.get("end", 0)) > video_dur + 0.5
-        or float(s.get("start", 0)) < 0
-    ]
-    if bad:
-        raise LLMPipelineError(
-            f"LLM pipeline: {len(bad)} segments outside video duration "
-            f"(video_duration={video_dur:.2f}s)"
-        )
-
-    # â”€â”€ 8. Apply clip_exclude (mirror pipeline_pre_render.py 535-547) â”€â”€â”€â”€
-    _clip_exclude = [
-        x for x in (getattr(payload, "clip_exclude", None) or [])
-        if isinstance(x, dict)
-    ]
-    if _clip_exclude:
-        _before_ex = len(scored)
-
-        def _in_exclude_range(seg, _ranges=_clip_exclude):
-            s = float(seg.get("start", 0))
-            e = float(seg.get("end", s + 1))
-            return any(
-                s < float(ex.get("end_sec", 0)) and e > float(ex.get("start_sec", 0))
-                for ex in _ranges
-            )
-
-        scored = [seg for seg in scored if not _in_exclude_range(seg)]
-        _job_log(
-            effective_channel, job_id,
-            f"llm_pipeline.clip_exclude: {_before_ex - len(scored)} segments filtered "
-            f"by {len(_clip_exclude)} excluded ranges",
-        )
-        _emit_render_event(
-            channel_code=effective_channel, job_id=job_id,
-            event="clip_excluded", level="INFO",
-            message=f"LLM pipeline clip_exclude: {_before_ex - len(scored)} segments removed",
-            step="render.llm_pipeline.steering",
-            context={
-                "excluded_ranges": len(_clip_exclude),
-                "segments_removed": _before_ex - len(scored),
-            },
-        )
-        if not scored:
-            raise LLMPipelineError(
-                "LLM pipeline: clip_exclude removed all segments"
-            )
-
-    # â”€â”€ 9. Apply clip_lock (mirror pipeline_pre_render.py 605-619) â”€â”€â”€â”€â”€â”€â”€
-    _clip_lock = [
-        x for x in (getattr(payload, "clip_lock", None) or [])
-        if isinstance(x, dict)
-    ]
-    if _clip_lock:
-        def _in_lock_range(seg, _ranges=_clip_lock):
-            s = float(seg.get("start", 0))
-            e = float(seg.get("end", s + 1))
-            return any(
-                s < float(lk.get("end_sec", 0)) and e > float(lk.get("start_sec", 0))
-                for lk in _ranges
-            )
-
-        _locked = [seg for seg in scored if _in_lock_range(seg)]
-        _unlocked = [seg for seg in scored if not _in_lock_range(seg)]
-        scored = _locked + _unlocked
-        _job_log(
-            effective_channel, job_id,
-            f"llm_pipeline.clip_lock: {len(_locked)} segments promoted "
-            f"by {len(_clip_lock)} locked ranges",
-        )
-        _emit_render_event(
-            channel_code=effective_channel, job_id=job_id,
-            event="clip_locked", level="INFO",
-            message=f"LLM pipeline clip_lock: {len(_locked)} segments promoted to front",
-            step="render.llm_pipeline.steering",
-            context={
-                "lock_ranges": len(_clip_lock),
-                "segments_promoted": len(_locked),
-            },
-        )
-
-    # â”€â”€ 10. Emit selection-complete event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _emit_render_event(
         channel_code=effective_channel, job_id=job_id,
-        event="llm_pipeline.selection_complete",
+        event="llm_pipeline.selection_skipped",
         level="INFO",
-        message=f"LLM pipeline: {len(scored)} segments selected",
+        message="LLM pipeline: Call 1 skipped — segments will be derived from RenderPlan",
         step="render.llm_pipeline.select",
-        context={
-            "segment_count": len(scored),
-            "source": "llm",
-            "min_quality_score": _min_score,
-        },
+        context={"reason": "skip_segment_selection"},
     )
-
-    # â”€â”€ 11. Return LLMPreRenderResult (same shape as standard path) â”€â”€â”€â”€â”€â”€
     return LLMPreRenderResult(
         full_srt=full_srt,
         full_srt_available=True,
         early_transcription_done=True,
-        scored=scored,
-        total_parts=len(scored),
-        content_analysis=None,
+        scored=[],
+        total_parts=0,
         target_platform=str(
             getattr(payload, "target_platform", "") or "youtube_shorts"
         ).lower(),
         dna_clean_visual=False,
-        early_retrieved_knowledge=[],
         seg_min_sec=int(payload.min_part_sec),
         seg_max_sec=int(payload.max_part_sec),
     )
+

@@ -61,7 +61,7 @@ def _get_video_fps(video_path: str) -> float:
             "-of", "default=noprint_wrappers=1:nokey=1",
             video_path,
         ]
-        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True).strip()
+        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True, encoding="utf-8").strip()
         if "/" in out:
             a, b = out.split("/")
             return float(a) / float(b) if float(b) else 30.0
@@ -144,7 +144,7 @@ def _compute_silence_features(video_path: str, scenes: list) -> list:
             "-af", "silencedetect=noise=-40dB:d=0.3",
             "-f", "null", "-",
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=90)
         stderr = result.stderr
 
         raw_starts = re.findall(r"silence_start:\s*([\d.]+)", stderr)
