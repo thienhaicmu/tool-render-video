@@ -242,6 +242,197 @@ def _validate_text_layers_or_400(payload: RenderRequest) -> list[dict]:
 # #3 spirit): any unexpected error returns fallback_scored unchanged so
 # the render keeps moving.
 # See docs/review/SPRINT_7_6_FULL_PLAN_2026-06-05.md.
+def _ranges_overlap(a_start: float, a_end: float, b_start: float, b_end: float) -> bool:
+    """Two half-open ranges [a_start, a_end) and [b_start, b_end) overlap
+    iff a_start < b_end AND b_start < a_end.
+
+    Strategic-1b — Audit 2026-06-08 closure (Batch A V8-A12 follow-up).
+    The exclude / lock filter uses strict (non-inclusive) endpoints
+    so adjoining ranges (e.g. clip [10, 20] and exclude [20, 30])
+    do NOT count as overlap — the operator's intent for an exclude
+    range like 'avoid this 10-second window' shouldn't reject a
+    clip that ENDS exactly where the exclude starts.
+    """
+    return a_start < b_end and b_start < a_end
+
+
+def _coerce_range(entry) -> "tuple[float, float] | None":
+    """Coerce an arbitrary dict to (start_sec, end_sec) tuple or None.
+
+    Defensive against payloads from stored job records that may carry
+    legacy shapes or partial data. Sacred Contract #3 spirit applies
+    to the clip_lock/exclude pipeline — bad input is silently
+    skipped, never raised.
+    """
+    if not isinstance(entry, dict):
+        return None
+    try:
+        start = float(entry.get("start_sec"))
+        end = float(entry.get("end_sec"))
+    except (TypeError, ValueError):
+        return None
+    if start < 0 or end <= start:
+        return None
+    return start, end
+
+
+def _apply_clip_lock_exclude_filter(
+    scored: list,
+    clip_lock,
+    clip_exclude,
+    *,
+    channel_code: str = "",
+    job_id: str = "",
+) -> list:
+    """Strategic-1b — Audit 2026-06-08 closure (Batch A V8-A12 follow-up).
+
+    The local-side defence-in-depth filter that complements
+    Strategic-1's LLM-prompt wiring. Strategic-1 instructs the model
+    to honour the operator's clip_lock and clip_exclude ranges via
+    the HARD LOCKED RANGES and HARD EXCLUDED RANGES prompt sections;
+    this filter VERIFIES the model's emission and enforces the rule
+    on the BE side regardless of what the model returned.
+
+    Two rules:
+
+    1. EXCLUDE — drop any clip whose [start, end) overlaps any
+       supplied exclude range. The drop is logged via _job_log AND
+       emitted as a structured render event (forensic value).
+
+    2. LOCK — verify that at least one surviving clip overlaps each
+       supplied lock range. Uncovered locks are logged AND emitted
+       as a warning event so the operator (and downstream consumers)
+       can see the gap. The filter does NOT synthesise a new clip
+       to cover an uncovered lock — that would require segmenting
+       the source again; instead it emits a render event the FE can
+       render as a 'lock uncovered' warning badge.
+
+    Sacred Contract #3 spirit: the helper NEVER raises into the
+    pipeline. Any unexpected error returns the input scored list
+    unchanged so the render keeps moving.
+
+    Args:
+        scored: the post-AI clip list (as built by _scored_from_render_plan).
+        clip_lock: list of {start_sec, end_sec} dicts, or None / [].
+        clip_exclude: same shape.
+        channel_code, job_id: for event emission. Falsy values
+            suppress the event emit (test-friendly).
+
+    Returns:
+        The filtered scored list. Identical to input when no
+        ranges were supplied OR every clip survived.
+    """
+    try:
+        if not scored:
+            return scored
+        if not clip_lock and not clip_exclude:
+            return scored
+
+        excludes: list[tuple[float, float]] = []
+        for entry in (clip_exclude or []):
+            rng = _coerce_range(entry)
+            if rng is not None:
+                excludes.append(rng)
+        locks: list[tuple[float, float]] = []
+        for entry in (clip_lock or []):
+            rng = _coerce_range(entry)
+            if rng is not None:
+                locks.append(rng)
+
+        # ── Exclude pass ────────────────────────────────────────────
+        kept: list[dict] = []
+        for clip in scored:
+            try:
+                c_start = float(clip.get("start", 0) or 0)
+                c_end = float(clip.get("end", 0) or 0)
+            except (TypeError, ValueError):
+                # Malformed clip dict — keep it; the rest of the
+                # pipeline already tolerates bad coords.
+                kept.append(clip)
+                continue
+            offending = next(
+                (rng for rng in excludes if _ranges_overlap(c_start, c_end, rng[0], rng[1])),
+                None,
+            )
+            if offending is None:
+                kept.append(clip)
+                continue
+            # Drop. Log + emit.
+            _drop_msg = (
+                f"clip_exclude filter dropped clip "
+                f"start={c_start:.1f}s end={c_end:.1f}s "
+                f"overlaps exclude [{offending[0]:.1f}s, {offending[1]:.1f}s]"
+            )
+            try:
+                if channel_code and job_id:
+                    _job_log(channel_code, job_id, _drop_msg, kind="warning")
+                    _emit_render_event(
+                        channel_code=channel_code,
+                        job_id=job_id,
+                        event="render.plan.exclude_filter_applied",
+                        level="WARNING",
+                        message=_drop_msg,
+                        step="render.llm_pipeline",
+                        context={
+                            "clip_start_sec": c_start,
+                            "clip_end_sec":   c_end,
+                            "exclude_start_sec": offending[0],
+                            "exclude_end_sec":   offending[1],
+                        },
+                    )
+            except Exception:
+                pass  # log emission failure must not break the filter
+
+        # ── Lock pass ───────────────────────────────────────────────
+        # Uncovered-lock warnings run after the exclude pass so the
+        # "covered" check uses the post-filter clip set.
+        for lock_start, lock_end in locks:
+            covered = any(
+                _ranges_overlap(
+                    float(clip.get("start", 0) or 0),
+                    float(clip.get("end", 0) or 0),
+                    lock_start,
+                    lock_end,
+                )
+                for clip in kept
+            )
+            if covered:
+                continue
+            _uncovered_msg = (
+                f"clip_lock uncovered: no surviving clip overlaps "
+                f"[{lock_start:.1f}s, {lock_end:.1f}s]"
+            )
+            try:
+                if channel_code and job_id:
+                    _job_log(channel_code, job_id, _uncovered_msg, kind="warning")
+                    _emit_render_event(
+                        channel_code=channel_code,
+                        job_id=job_id,
+                        event="render.plan.lock_uncovered_warning",
+                        level="WARNING",
+                        message=_uncovered_msg,
+                        step="render.llm_pipeline",
+                        context={
+                            "lock_start_sec": lock_start,
+                            "lock_end_sec":   lock_end,
+                        },
+                    )
+            except Exception:
+                pass
+
+        return kept
+    except Exception as exc:
+        # Sacred Contract #3 spirit — never let an unexpected error
+        # in the filter break a render. Log + degrade gracefully.
+        try:
+            logger.warning(
+                "clip_lock_exclude_filter unexpected error (non-fatal): %s", exc,
+            )
+        except Exception:
+            pass
+        return scored
+
+
 def _scored_from_render_plan(render_plan, fallback_scored: list) -> list:
     try:
         if render_plan is None or not getattr(render_plan, "clips", None):
@@ -677,6 +868,30 @@ def run_render_pipeline(
         if _render_plan is not None:
             _scored_before = scored
             scored = _scored_from_render_plan(_render_plan, fallback_scored=scored)
+            # Strategic-1b — Audit 2026-06-08 closure (Batch A V8-A12
+            # follow-up). Local-side defence-in-depth: after the
+            # LLM-derived scored list is built, run the operator's
+            # clip_lock / clip_exclude ranges through the BE filter.
+            # Strategic-1 wired the constraints into the prompt; this
+            # call verifies the LLM honoured them and drops any clip
+            # that overlaps an exclude range. Uncovered locks surface
+            # as render events so the FE can render a warning. The
+            # filter is a no-op when neither field is set OR scored
+            # was unchanged by _scored_from_render_plan; never raises.
+            try:
+                _scored_post_filter = _apply_clip_lock_exclude_filter(
+                    scored,
+                    getattr(payload, "clip_lock", None) or None,
+                    getattr(payload, "clip_exclude", None) or None,
+                    channel_code=effective_channel,
+                    job_id=job_id,
+                )
+                if _scored_post_filter is not scored:
+                    scored = _scored_post_filter
+            except Exception as _filter_exc:
+                logger.warning(
+                    "clip_lock_exclude wire-up failed (non-fatal): %s", _filter_exc,
+                )
             if scored is not _scored_before:
                 total_parts = len(scored)
                 _emit_render_event(
