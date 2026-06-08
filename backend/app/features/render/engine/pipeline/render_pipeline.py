@@ -1079,6 +1079,21 @@ def run_render_pipeline(
         rows = _loop_result.rows
         failed_parts = _loop_result.failed_parts
 
+        if not outputs and not failed_parts:
+            # T1.1 — Audit 2026-06-08 closure (Batch A V9-C1/C2 — CRITICAL
+            # false success). When the render loop produces zero outputs
+            # AND zero failures, the AI emission was empty: the LLM
+            # returned None, or the parser's range/score filters
+            # rejected every clip. Without this guard the pipeline
+            # marches on to finalize and writes status="completed" with
+            # outputs=[] — the silent success-toast path that hides
+            # total AI failure from the user. Raising here routes the
+            # job through the outer except → status="failed", stage=
+            # FAILED, FE shows failure state.
+            raise RuntimeError(
+                f"ai_emission_empty: 0 outputs produced and 0 parts attempted "
+                f"(total_parts={total_parts}). The AI returned no usable clips."
+            )
         if failed_parts and not outputs:
             raise RuntimeError(f"All parts failed ({len(failed_parts)}/{total_parts})")
         if failed_parts:

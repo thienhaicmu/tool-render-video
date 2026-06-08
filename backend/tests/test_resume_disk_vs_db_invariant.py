@@ -87,23 +87,38 @@ def test_existing_part_info_never_read_for_output_file():
 
 def test_resume_skip_block_uses_all_three_disk_checks():
     """Pin the disk-truth signal set: a resume-skip ``if`` that only checks
-    ``status == 'done'`` (and not file existence + size + ffprobe) would
-    skip parts whose files are corrupt or missing — silently corrupting
-    output. Cheap AST grep so a future refactor can't drop these checks."""
+    ``status == 'done'`` (and not file existence + size + qa_pipeline
+    gate) would skip parts whose files are corrupt or missing —
+    silently corrupting output.
+
+    T1.2 — Audit 2026-06-08 closure (Batch A V9-A1/V9-G1). The
+    invariant was originally pinned with ``_resume_output_valid(final_part)``,
+    which runs a single ffprobe ``format=duration`` probe. T1.2
+    STRENGTHENED the invariant: resume now runs the SAME
+    ``_validate_render_output`` gate as fresh renders (size floor 10
+    KB, video-stream presence, duration tolerance vs expected,
+    audio-stream presence — i.e. the full Sacred Contract #8 gate).
+    This guard now pins the stronger function while still verifying
+    the cheap disk-truth signals (existence + size).
+    """
     source = PART_RENDERER_PATH.read_text(encoding="utf-8-sig")
-    # All three signals must coexist in the file. We don't pin a specific
+    # All four signals must coexist in the file. We don't pin a specific
     # call site here — just that the names show up so a deletion is loud.
     must_have = [
         "final_part.exists()",
         "final_part.stat().st_size",
-        "_resume_output_valid(final_part)",
+        # T1.2: the full QA gate replaces the duration-only probe. The
+        # function name is pinned so a future refactor can't quietly
+        # drop back to ``_resume_output_valid`` or to ``.exists()``-only.
+        "_validate_render_output(",
         "resume_from_last",
     ]
     missing = [needle for needle in must_have if needle not in source]
     assert not missing, (
-        "BR12 invariant breached — resume-skip lost one of its disk-truth "
-        f"checks. Missing: {missing}. The full check set is required so a "
-        "stale 'done' DB status with a corrupt file can't be wrongly skipped."
+        "Resume-skip invariant breached — resume-skip lost one of its "
+        f"disk-truth/QA checks. Missing: {missing}. The full check set "
+        "is required so a stale 'done' DB status with a corrupt file "
+        "can't be wrongly skipped (Sacred Contract #8, T1.2 closure)."
     )
 
 
