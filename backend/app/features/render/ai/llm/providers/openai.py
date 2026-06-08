@@ -48,10 +48,10 @@ def select_render_plan(
 ) -> Optional[RenderPlan]:
     """Send SRT to OpenAI and return a RenderPlan emitted in one pass.
 
-    Sprint 4.C — additive partner of select_segments. Same OpenAI Chat
-    Completions call (JSON mode) underneath; prompt builder and parser
-    swap out. The editorial_hint parameter mirrors Gemini/Claude so
-    the Sprint 4.D dispatcher can forward it uniformly.
+    OpenAI Chat Completions call in JSON mode (response_format =
+    json_object). The editorial_hint parameter mirrors Gemini/Claude so
+    the ``ai.llm.select_render_plan`` dispatcher can forward it uniformly.
+    Returns None on any failure (Sacred Contract #3).
     """
     try:
         return _run_render_plan(

@@ -54,10 +54,11 @@ def select_render_plan(
 ) -> Optional[RenderPlan]:
     """Send SRT to Claude and return a RenderPlan emitted in one pass.
 
-    Sprint 4.C — additive partner of select_segments. Same Anthropic
-    API call helper underneath; only the prompt builder and parser
-    swap out. The editorial_hint parameter mirrors the Gemini provider
-    so the Sprint 4.D dispatcher can forward it uniformly.
+    Anthropic Messages API call (no native JSON mode — relies on prompt
+    obedience plus the defensive JSON extractor in parser.py). The
+    editorial_hint parameter mirrors Gemini/OpenAI so the
+    ``ai.llm.select_render_plan`` dispatcher can forward it uniformly.
+    Returns None on any failure (Sacred Contract #3).
     """
     try:
         return _run_render_plan(

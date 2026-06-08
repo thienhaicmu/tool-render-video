@@ -154,8 +154,10 @@ _FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOT
 # means AI emission failure cannot crash a render — _render_plan stays None
 # and the legacy resolvers behave exactly as in the pre-flip baseline.
 # Operators who need the pre-flip behaviour set LLM_EMIT_RENDER_PLAN=0 (the
-# 3-second rollback). Sprint 7.6 will retire the legacy select_segments path
-# + LLMSegment + _to_scored_dict after ≥ 1 release cycle of this flip.
+# 3-second rollback). The legacy segment-only resolvers (LLMSegment +
+# _to_scored_dict) survive in this module as the OFF-path; they receive no
+# new callers and are slated for removal after ≥ 1 release cycle of
+# observed stability with the flip enabled.
 # See docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md.
 _FEATURE_LLM_EMIT_RENDER_PLAN: bool = os.getenv("LLM_EMIT_RENDER_PLAN", "1") == "1"
 
