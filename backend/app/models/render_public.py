@@ -80,28 +80,43 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     "voice_text", "tts_engine", "voice_mix_mode",
     # Hook
     "hook_apply_enabled", "hook_overlay_enabled",
-    # AI Director (legacy flags the FE still toggles)
-    "ai_director_enabled", "ai_auto_cut", "ai_use_semantic_hooks",
-    "ai_render_influence_enabled", "ai_beat_pulse_enabled",
+    # T1.4 — Audit 2026-06-08 closure (Batch A V8-B5 + UP26 + UP27 + v2).
+    # Removed 19 fields from the FE-facing wire surface because the
+    # render pipeline never reads them. They remain in RenderRequest
+    # itself (Sacred Contract #2 — historical payload_json blobs still
+    # deserialize cleanly under RenderRequest's extra="ignore"). What
+    # was removed and why:
+    #   Phase-G zombies (11) — `ai_director_enabled`, `ai_auto_cut`,
+    #     `ai_use_semantic_hooks`, `ai_render_influence_enabled`,
+    #     `ai_beat_pulse_enabled`, `ai_cloud_enabled`,
+    #     `ai_cloud_provider`, `ai_cloud_api_key`, `ai_cloud_model`,
+    #     `ai_analysis_mode`, `ai_content_driven_selection`. Gated by
+    #     `ctx.ai_edit_plan` which is hardcoded None at
+    #     render_pipeline.py:931. UI surfacing them as toggles was
+    #     deceit.
+    #   UP26 Pro Timeline Steering (4) — `clip_lock`, `clip_exclude`,
+    #     `structure_bias`, `subtitle_emphasis`. Never reach the LLM
+    #     prompt nor a local-side filter; `_scored_from_render_plan`
+    #     passes AI clips through without lock/exclude awareness.
+    #   UP27 Creator Asset Intelligence (1) — `asset_music_profile`.
+    #     Zero grep hits in features/render/engine. (logo/intro/outro
+    #     paths kept — they ARE consumed by asset_pipeline.)
+    #   v2 vision dead (3) — `energy_style`, `output_language`,
+    #     `narration_style`. Validated then never read.
+    # `target_duration` is intentionally KEPT in the Public surface —
+    # it is targeted for wiring into the LLM prompt by T2.4 (Sprint 2).
     # Platform / market
     "target_platform", "ai_target_market",
     # Multi-variant + CTA
     "multi_variant", "cta_enabled", "cta_type",
-    # Cloud LLM (provider + key + model + mode)
-    "ai_cloud_enabled", "ai_cloud_provider", "ai_cloud_api_key",
-    "ai_cloud_model", "ai_analysis_mode", "ai_content_driven_selection",
     # LLM selection (canonical)
     "llm_enabled", "llm_model", "llm_language", "llm_min_quality", "llm_mode",
     "ai_provider",
-    # Pro Timeline Steering (UP26)
-    "clip_lock", "clip_exclude", "structure_bias", "subtitle_emphasis",
-    # Creator Asset Intelligence (UP27)
+    # Creator Asset Intelligence (UP27) — surviving wired fields
     "asset_logo_path", "asset_intro_path", "asset_outro_path",
-    "asset_music_profile",
     # New vision (v2)
     "target_duration", "output_count", "video_type",
-    "energy_style", "hook_strength",
-    "output_language", "narration_style",
+    "hook_strength",
 })
 
 
@@ -139,10 +154,11 @@ RenderRequestPublic = create_model(  # type: ignore[call-overload]
 )
 
 RenderRequestPublic.__doc__ = (
-    "FE-facing slice of RenderRequest (88 of 152 fields). Strictly forbids "
-    "unknown fields (``extra='forbid'``). NOT yet wired to /api/render/"
-    "process — current wire still accepts RenderRequestStrict (full schema). "
-    "See module docstring for the migration plan."
+    "FE-facing slice of RenderRequest (69 of 152 fields after the T1.4 "
+    "audit-2026-06-08 cleanup, down from 88). Strictly forbids unknown "
+    "fields (``extra='forbid'``). The wire endpoint /api/render/process "
+    "accepts this surface and expands to the full RenderRequest "
+    "server-side. See module docstring for the migration history."
 )
 
 

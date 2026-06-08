@@ -137,30 +137,22 @@ export interface RenderRequest {
   hook_apply_enabled?: boolean
   hook_overlay_enabled?: boolean
 
-  // AI Director
-  ai_director_enabled?: boolean
-  // Phase 1+ AI feature flags. Sprint 3 3E Subset B (audit 2026-06-02)
-  // flipped these backend defaults from True to False to honor Sacred
-  // Contract 2; UI now sets them explicitly true via RenderWorkflow
-  // buildPayload. Type added here in P3 follow-up to clear long-standing
-  // TS errors on those buildPayload lines.
-  ai_auto_cut?: boolean
-  ai_use_semantic_hooks?: boolean
-  ai_render_influence_enabled?: boolean
-  ai_beat_pulse_enabled?: boolean
+  // T1.4 — Audit 2026-06-08 closure (Batch A V8-B5 + UP26 + UP27 + v2).
+  // Removed 19 dead fields from the wire surface (kept in the BE
+  // RenderRequest model for Sacred Contract #2 replay safety, but
+  // dropped from RenderRequestPublic + this interface because the
+  // render pipeline never reads them). Phase-G zombies, UP26 Pro
+  // Timeline Steering, asset_music_profile, energy_style /
+  // output_language / narration_style. See backend/app/models/
+  // render_public.py:FE_FACING_FIELDS comment block for the full
+  // rationale and per-field evidence anchors.
+  // `target_duration` is intentionally KEPT — it is targeted for LLM
+  // prompt wiring by T2.4 (Sprint 2).
   target_platform?: 'tiktok' | 'youtube_shorts' | 'instagram_reels'
   ai_target_market?: string
   multi_variant?: boolean
   cta_enabled?: boolean
   cta_type?: 'auto' | 'comment' | 'part_2' | 'follow'
-
-  // AI Cloud Analyzer
-  ai_cloud_enabled?: boolean
-  ai_cloud_provider?: string | null
-  ai_cloud_api_key?: string | null
-  ai_cloud_model?: string | null
-  ai_analysis_mode?: 'local' | 'cloud' | 'hybrid' | null
-  ai_content_driven_selection?: boolean
 
   // LLM segment selection — canonical names
   llm_enabled?: boolean | null
@@ -170,27 +162,16 @@ export interface RenderRequest {
   llm_mode?: string | null
   ai_provider?: string | null
 
-
-  // Pro Timeline Steering (UP26)
-  clip_lock?: TimeRange[] | null
-  clip_exclude?: TimeRange[] | null
-  structure_bias?: 'hook' | 'balanced' | 'story' | null
-  subtitle_emphasis?: 'subtle' | 'balanced' | 'aggressive' | null
-
-  // Creator Asset Intelligence (UP27)
+  // Creator Asset Intelligence (UP27) — surviving wired fields
   asset_logo_path?: string | null
   asset_intro_path?: string | null
   asset_outro_path?: string | null
-  asset_music_profile?: 'clean' | 'energetic' | 'soft' | null
 
-  // Vision v2 fields
+  // Vision v2 — surviving wired fields
   target_duration?: number
   output_count?: number
   video_type?: string
-  energy_style?: string
   hook_strength?: string
-  output_language?: string
-  narration_style?: string
 }
 
 // ── RenderResponse ────────────────────────────────────────────────────────────

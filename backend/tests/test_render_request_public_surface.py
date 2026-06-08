@@ -1,7 +1,10 @@
 """Audit MT-3 phase 1 closure (Batch 10N 2026-06-06).
 
 ``RenderRequestPublic`` is the explicit FE-facing slice of
-``RenderRequest`` (88 of 152 fields). This file pins the contract so
+``RenderRequest`` (69 of 152 fields after the T1.4 audit-2026-06-08
+cleanup that removed 19 dead intent fields — Phase-G zombies, UP26
+Pro Timeline Steering, UP27 asset_music_profile, energy_style /
+output_language / narration_style). This file pins the contract so
 the Public surface can't accidentally drift:
 
 1. ``FE_FACING_FIELDS`` matches the FE TS interface field set.
@@ -110,13 +113,17 @@ def test_public_and_be_only_partition_render_request():
 
 
 def test_public_field_count_pinned():
-    """88 Public + 64 BE-only = 152 total. Pinned so adding a field on
-    either side without updating the FE TS interface is loud."""
+    """T1.4 — Audit 2026-06-08 closure: 69 Public + 83 BE-only = 152
+    total (was 88 + 64 = 152 pre-cleanup). The 19-field drop is the
+    Batch A V8-B5 + UP26 + UP27 + v2 dead-field removal — see
+    backend/app/models/render_public.py:FE_FACING_FIELDS for the full
+    per-field rationale. Pinned so adding a field on either side
+    without updating the FE TS interface is loud."""
     from app.models.render import RenderRequest
     from app.models.render_public import BE_ONLY_FIELDS, FE_FACING_FIELDS
 
-    assert len(FE_FACING_FIELDS) == 88, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
-    assert len(BE_ONLY_FIELDS)   == 64, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
+    assert len(FE_FACING_FIELDS) == 69, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    assert len(BE_ONLY_FIELDS)   == 83, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
     assert len(RenderRequest.model_fields) == 152, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
