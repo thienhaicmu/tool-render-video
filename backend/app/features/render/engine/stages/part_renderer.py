@@ -18,7 +18,10 @@ import time
 # Batch 10Q: JobPartStage was previously imported here for the 3 inline
 # upsert_job_part calls. Those moved to part_db.py — every reference to
 # the enum in this file is now in docstrings / comments only.
-from app.features.render.engine.pipeline.qa_pipeline import _resume_output_valid
+from app.features.render.engine.pipeline.qa_pipeline import (
+    _resume_output_valid,
+    _validate_render_output,
+)
 from app.features.render.engine.pipeline.render_events import _job_log
 # Batch 10Q: ``upsert_job_part`` is no longer imported here — the 3 stage
 # transitions this file owned (resume-skip DONE, WAITING, RENDERING)
@@ -167,21 +170,52 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
     #   1. Require the DB ``status == 'done'`` flag (cheap precondition)
     #   2. Recompute ``final_part`` from ``output_dir + part_name``
     #      (independent of DB state)
-    #   3. Probe the file with ffprobe via ``_resume_output_valid``
-    # All four conditions must hold for skip — any failure re-renders.
+    #   3. Run the SAME ``_validate_render_output`` gate that fresh
+    #      renders pass through (T1.2 — Sacred Contract #8 closure;
+    #      see below).
     if (
         ctx.payload.resume_from_last
         and ((_existing_part_info.get("status") or "").lower() == "done")
         and final_part.exists()
         and final_part.stat().st_size > 0
-        and _resume_output_valid(final_part)
     ):
-        # Batch 10Q (MT-4 phase B): the 13-arg inline upsert is now a
-        # named facade call — Sacred Contract #5 transition (resume-skip
-        # → DONE @ 100) lives in part_db.mark_part_skipped_done.
-        mark_part_skipped_done(ctx, idx, _paths, seg)
-        _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx} skipped: final output already exists", kind="debug")
-        return {"idx": idx, "output": str(final_part), "row": None, "skipped": True}
+        # T1.2 — Audit 2026-06-08 closure (Batch A V9-A1/V9-G1 — Sacred
+        # Contract #8 partial bypass). Previously the resume-skip
+        # predicate used only ``_resume_output_valid`` (single ffprobe
+        # call asserting duration > 0). That misses 4 of the 5 hard
+        # checks in ``_validate_render_output``: size floor 10 KB,
+        # video-stream presence, duration tolerance vs the segment's
+        # expected duration, and audio-stream presence. A part that
+        # "completed" but is truncated, video-streamless, or far off
+        # the expected duration could be re-served as DONE on resume.
+        # Now resume runs through the SAME QA gate as a fresh render.
+        # expect_audio=None: the resume path can't reliably know whether
+        # audio was originally required (voice_enabled state may have
+        # changed across runs), so missing-audio surfaces as a warning
+        # rather than a hard failure — matches the fresh-render policy
+        # for legacy callers (see qa_pipeline.py:165-178).
+        _resume_qa = _validate_render_output(
+            final_part,
+            expected_duration=float(seg.get("duration") or 0.0),
+            expect_audio=None,
+        )
+        if _resume_qa.get("ok"):
+            # Batch 10Q (MT-4 phase B): the 13-arg inline upsert is now a
+            # named facade call — Sacred Contract #5 transition (resume-skip
+            # → DONE @ 100) lives in part_db.mark_part_skipped_done.
+            mark_part_skipped_done(ctx, idx, _paths, seg)
+            _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx} skipped: final output already exists", kind="debug")
+            return {"idx": idx, "output": str(final_part), "row": None, "skipped": True}
+        # QA rejected the cached output — fall through to re-render the
+        # part. Log the rejection reason so operators can distinguish a
+        # legit re-render from "resume did nothing" in the job log.
+        _job_log(
+            ctx.effective_channel, ctx.job_id,
+            f"Part {idx} resume-skip rejected by QA "
+            f"(code={_resume_qa.get('code') or '?'}): "
+            f"{_resume_qa.get('error') or 'unknown'} — re-rendering",
+            kind="warning",
+        )
 
     # Batch 10Q: first DB write after the resume check — Sacred Contract
     # #5 WAITING @ 5%. The 13-arg inline call moved to part_db.mark_part_waiting.

@@ -78,10 +78,10 @@ def parse_render_plan_response(
          emit a structured top-level key without colliding with
          conversational prose.
       3. Legacy segments-only: ``{"segments": [...]}`` — clips-only,
-         every other sub-plan stays at its safe default. This is the
-         exact same payload shape ``parse_segment_response`` accepts,
-         so a Sprint 4.D dual-path provider can hand the same response
-         to either parser without rewriting the prompt.
+         every other sub-plan stays at its safe default. This shape is
+         retained for backward compatibility with stored historical
+         payloads (Sacred Contract #2); no live caller emits it post
+         Sprint 4.H.
 
     Validation:
       - Each clip's ``(end - start)`` must land in [min_sec, max_sec].
@@ -130,8 +130,9 @@ def parse_render_plan_response(
             )
             return None
 
-        # Sort by score descending (mirrors parse_segment_response) and
-        # truncate to the requested output count.
+        # Sort by score descending and truncate to the requested output
+        # count (this is the rank source consumed by pipeline_ranking.py
+        # via _resolve_rank_from_plan).
         valid_clip_dicts.sort(key=lambda c: c.get("score", 0.0), reverse=True)
         valid_clip_dicts = valid_clip_dicts[: max(1, int(output_count))]
 

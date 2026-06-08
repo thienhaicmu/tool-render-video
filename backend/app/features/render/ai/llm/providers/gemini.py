@@ -67,13 +67,10 @@ def select_render_plan(
 ) -> Optional[RenderPlan]:
     """Send SRT to Gemini and return a RenderPlan emitted in one pass.
 
-    Sprint 4.C — additive partner of select_segments. Uses the same
-    Gemini API call helper; only the prompt builder and the parser
-    differ. Sprint 4.D will gate which entry point the orchestrator
-    invokes behind a feature flag.
-
-    Returns None on any failure — caller falls back to the segment-only
-    path (Sprint 2.2 builder shim).
+    Gemini ``generate_content`` call with response_mime_type=
+    application/json. The editorial_hint parameter mirrors OpenAI/Claude
+    so the ``ai.llm.select_render_plan`` dispatcher can forward it
+    uniformly. Returns None on any failure (Sacred Contract #3).
     """
     try:
         return _run_render_plan(

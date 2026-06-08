@@ -205,9 +205,11 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
         "ai_render_influence": _ai_influence_report,
         "ai_beat_execution": _ai_beat_report,
         "render_plan": ctx.render_plan.to_json() if ctx.render_plan is not None else None,
-        "story": {},
-        "preset_evolution": {},
-        "creator_style": {},
+        # Audit 2026-06-08 T1.6 closure — removed always-empty stubs
+        # `story`, `preset_evolution`, `creator_style`. They were cargo-culted
+        # from a pre-Phase-G design that never landed. All consumers default
+        # via `.get(... or {})` (routes/jobs.py:501, FE StepResults.tsx:358),
+        # so absence == empty-dict from the reader's point of view.
         "ai_output_ranking": _ai_output_ranking,
         "ai_render_quality_evaluation": _ai_render_quality,
         "ai_ux": _ai_ux_metadata,

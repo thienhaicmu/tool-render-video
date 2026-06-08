@@ -16,6 +16,15 @@ _SRT_TS_RE = _re.compile(
 )
 _SRT_BLOCK_NUM_RE = _re.compile(r"^\d+\s*$")
 
+# Audit 2026-06-08 T1.5 closure — module-level fallback cap for callers
+# that invoke check_srt_truncation() / build_render_plan_prompt() WITHOUT
+# an explicit max_srt_chars (notably render_pipeline.py's pre-flight
+# warning emit). Providers ALWAYS pass their own _MAX_SRT_CHARS, so this
+# constant only applies to provider-agnostic call sites. Default 60000
+# matches Gemini's permissive cap so the warning fires only when even the
+# most-permissive provider would truncate. Override via PROMPTS_MAX_SRT_CHARS.
+MAX_SRT_CHARS = int(_os.getenv("PROMPTS_MAX_SRT_CHARS", "60000"))
+
 
 def _srt_to_seconds_format(srt_content: str) -> str:
     """Convert SRT timestamps to [start_sec - end_sec] format.
@@ -267,20 +276,19 @@ def build_render_plan_prompt(
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for LLM RenderPlan emission.
 
-    Sprint 4.B - dual-mode partner of build_segment_prompt. Asks the AI
-    to emit a complete RenderPlan (clips + subtitle_policy +
-    camera_strategy + audio_plan + overlays) in one pass rather than
-    just a segment list. The resulting JSON is parseable by
-    parse_render_plan_response (Sprint 4.A) under the "native" shape.
+    Asks the AI to emit a complete RenderPlan (clips + subtitle_policy
+    + camera_strategy + audio_plan + overlays) in one pass. The
+    resulting JSON is parseable by ``parse_render_plan_response`` under
+    the "native" shape (see parser.py).
 
-    Same calling convention as build_segment_prompt:
+    Calling convention:
       - SRT timestamps are converted to seconds format before sending.
-      - max_srt_chars overrides MAX_SRT_CHARS for high-context providers.
-      - editorial_hint is appended to both system prompt and user
-        prompt. Sprint 3 already wires CreatorContext.to_prompt_hint
-        into editorial_hint via llm_stage._build_editorial_hint, so
-        Sprint 4.D will not need a separate creator-context parameter
-        here.
+      - ``max_srt_chars`` overrides the module-level ``MAX_SRT_CHARS``
+        fallback for high-context providers.
+      - ``editorial_hint`` is appended to BOTH system prompt and user
+        prompt body. The orchestrator already wires
+        ``CreatorContext.to_prompt_hint`` into this string via
+        ``llm_stage._build_editorial_hint``.
 
     Format safety: every literal '{' / '}' inside _USER_TEMPLATE_RP is
     doubled. Only the named placeholders ({language}, {output_count},

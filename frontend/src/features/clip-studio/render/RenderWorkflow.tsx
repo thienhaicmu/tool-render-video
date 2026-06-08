@@ -213,11 +213,13 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       sub_font_size:               cfg.subFontSize,
       subtitle_translate_enabled:  cfg.subTranslate || undefined,
       subtitle_target_language:    cfg.subTranslate ? cfg.subTranslateLang : undefined,
-      subtitle_emphasis:           cfg.subEmphasis ?? undefined,
       part_order:                  cfg.partOrder,
-      structure_bias:              cfg.structureBias ?? undefined,
-      clip_lock:                   cfg.clipLock.length > 0 ? cfg.clipLock : undefined,
-      clip_exclude:                cfg.clipExclude.length > 0 ? cfg.clipExclude : undefined,
+      // T1.4 — Audit 2026-06-08 closure: removed `subtitle_emphasis`,
+      // `structure_bias`, `clip_lock`, `clip_exclude` from the wire
+      // (UP26 Pro Timeline Steering — never reach LLM nor local
+      // filter). UI form state still collects cfg.subEmphasis /
+      // cfg.structureBias / cfg.clipLock / cfg.clipExclude; cleanup of
+      // the form widgets themselves is a follow-up task.
       voice_enabled:               cfg.narrEnabled,
       voice_source:        cfg.narrEnabled ? cfg.voiceSource : undefined,
       voice_text:          cfg.narrEnabled && cfg.voiceSource === 'manual' ? cfg.voiceText : undefined,
@@ -235,15 +237,15 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,
       hook_apply_enabled:  cfg.hookApplyEnabled || undefined,
       hook_overlay_enabled: cfg.hookOverlayEnabled || undefined,
-      // Sprint 3 3E Subset B (audit 2026-06-02): backend flipped these 4
-      // defaults from True to False to honor Sacred Contract 2. New UI jobs
-      // explicitly set them True here so current new-job behavior is
-      // unchanged; stored historical payloads that omitted these fields no
-      // longer silently activate the features on Resume/Retry.
-      ai_auto_cut:                 true,
-      ai_use_semantic_hooks:       true,
-      ai_render_influence_enabled: true,
-      ai_beat_pulse_enabled:       true,
+      // T1.4 — Audit 2026-06-08 closure: removed `ai_auto_cut`,
+      // `ai_use_semantic_hooks`, `ai_render_influence_enabled`,
+      // `ai_beat_pulse_enabled` from the wire (Phase-G zombies — gated
+      // by ctx.ai_edit_plan which is hardcoded None at
+      // render_pipeline.py:931, so setting these `true` had zero
+      // behavioural effect). Sprint 3 3E Subset B's rationale for
+      // sending them was to keep new jobs aligned with the BE defaults;
+      // now that they're outside the Public surface they can't even
+      // reach the BE, so the alignment is automatic.
       motion_aware_crop:   cfg.focusMode === 'face' || cfg.focusMode === 'object',
       target_platform:     cfg.platform,
       effect_preset:       cfg.style,
@@ -253,15 +255,18 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       target_duration:     cfg.targetDuration,
       output_count:        cfg.outputCount,
       video_type:          cfg.videoType,
-      energy_style:        cfg.energyStyle,
       hook_strength:       cfg.hookStrength,
       reframe_mode:        cfg.focusMode,
-      output_language:     cfg.outputLanguage !== 'auto' ? cfg.outputLanguage : undefined,
-      narration_style:     cfg.narrationStyle,
+      // T1.4 — Audit 2026-06-08 closure: removed `energy_style`,
+      // `output_language`, `narration_style` (v2 vision dead — never
+      // consumed by the render engine) and `asset_music_profile`
+      // (UP27 — never wired). UI form state for these still exists
+      // (cfg.energyStyle / cfg.outputLanguage / cfg.narrationStyle /
+      // cfg.assetMusicProfile); cleanup of those form widgets is a
+      // follow-up task.
       asset_logo_path:     cfg.assetLogoPath ?? undefined,
       asset_intro_path:    cfg.assetIntroPath ?? undefined,
       asset_outro_path:    cfg.assetOutroPath ?? undefined,
-      asset_music_profile: cfg.assetMusicProfile ?? undefined,
     }
     try {
       const id = await submitRender(payload)

@@ -154,8 +154,10 @@ _FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOT
 # means AI emission failure cannot crash a render — _render_plan stays None
 # and the legacy resolvers behave exactly as in the pre-flip baseline.
 # Operators who need the pre-flip behaviour set LLM_EMIT_RENDER_PLAN=0 (the
-# 3-second rollback). Sprint 7.6 will retire the legacy select_segments path
-# + LLMSegment + _to_scored_dict after ≥ 1 release cycle of this flip.
+# 3-second rollback). The legacy segment-only resolvers (LLMSegment +
+# _to_scored_dict) survive in this module as the OFF-path; they receive no
+# new callers and are slated for removal after ≥ 1 release cycle of
+# observed stability with the flip enabled.
 # See docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md.
 _FEATURE_LLM_EMIT_RENDER_PLAN: bool = os.getenv("LLM_EMIT_RENDER_PLAN", "1") == "1"
 
@@ -1077,6 +1079,21 @@ def run_render_pipeline(
         rows = _loop_result.rows
         failed_parts = _loop_result.failed_parts
 
+        if not outputs and not failed_parts:
+            # T1.1 — Audit 2026-06-08 closure (Batch A V9-C1/C2 — CRITICAL
+            # false success). When the render loop produces zero outputs
+            # AND zero failures, the AI emission was empty: the LLM
+            # returned None, or the parser's range/score filters
+            # rejected every clip. Without this guard the pipeline
+            # marches on to finalize and writes status="completed" with
+            # outputs=[] — the silent success-toast path that hides
+            # total AI failure from the user. Raising here routes the
+            # job through the outer except → status="failed", stage=
+            # FAILED, FE shows failure state.
+            raise RuntimeError(
+                f"ai_emission_empty: 0 outputs produced and 0 parts attempted "
+                f"(total_parts={total_parts}). The AI returned no usable clips."
+            )
         if failed_parts and not outputs:
             raise RuntimeError(f"All parts failed ({len(failed_parts)}/{total_parts})")
         if failed_parts:
