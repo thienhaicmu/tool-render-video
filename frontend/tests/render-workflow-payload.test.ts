@@ -181,6 +181,28 @@ describe('T1.4 — RenderWorkflow.buildPayload omits dead fields', () => {
     expect(payloadBody).toMatch(/(^|\s|,)hook_strength\s*:/)
     expect(payloadBody).toMatch(/(^|\s|,)video_type\s*:/)
   })
+
+  /*
+   * UP26 widgets (audit-2026-06-08 follow-up). Strategic-1c wired
+   * structure_bias + subtitle_emphasis end-to-end on the BE. The FE
+   * form widgets land alongside this test — pin the wire so a future
+   * refactor that removes the form bindings doesn't silently break
+   * UP26 Pro Timeline Steering.
+   *
+   * clip_lock / clip_exclude stay API-only — no widget yet (the
+   * TimeRange editor is a separate task). They are NOT pinned as
+   * present here because the FE doesn't send them; the BE accepts
+   * them via the Public surface for API clients.
+   */
+  it('sends structure_bias (Strategic-1c UP26 wiring)', () => {
+    const payloadBody = extractPayloadBody(readWorkflow())
+    expect(payloadBody).toMatch(/(^|\s|,)structure_bias\s*:/)
+  })
+
+  it('sends subtitle_emphasis (Strategic-1c UP26 wiring)', () => {
+    const payloadBody = extractPayloadBody(readWorkflow())
+    expect(payloadBody).toMatch(/(^|\s|,)subtitle_emphasis\s*:/)
+  })
 })
 
 describe('T1.4 — `RenderRequest` TS interface omits dead fields', () => {

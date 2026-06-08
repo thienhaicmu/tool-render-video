@@ -176,6 +176,34 @@ replay safety verified: stored payloads with explicit
 explicit field values during `model_dump` round-trip
 (`tests/test_v8a7_playback_speed_default.py`).
 
+### UP26 FE widgets follow-up
+
+| ID | Title | Status | Commit |
+|----|-------|--------|--------|
+| UP26-FE | FE form widgets for `structure_bias` + `subtitle_emphasis` | ✅ DONE | (see commit log) |
+
+Approach: minimum-viable widgets. Two segmented-button controls added
+to `StepConfigure.tsx` (advanced mode), matching the `hookStrength` /
+`outputLanguage` pattern. Each has 4 buttons: `AI auto` (null payload)
+plus the 3 enum values. `buildPayload` in `RenderWorkflow.tsx` sends
+`structure_bias` / `subtitle_emphasis` when set, omits the key when
+`null` (Sacred Contract #2 spirit — null = inherit).
+
+`clip_lock` / `clip_exclude` stay API-only. The FE state schema
+(`types.ts:23-24`) still carries them but no UI widget — the
+TimeRange editor is a separate task. Operators using clip_lock or
+clip_exclude continue to set them via the API. They are accepted by
+the BE Public surface (`models/render_public.py:FE_FACING_FIELDS`)
+and wired through to the LLM prompt + local filter
+(Strategic-1/Strategic-1b).
+
+Test guards
+  - `frontend/tests/render-workflow-payload.test.ts` — 2 new positive
+    assertions pin `structure_bias` / `subtitle_emphasis` in
+    buildPayload.
+  - Existing BE guards in `tests/test_strategic_1c_*` pin the
+    consumer side.
+
 ### Verification log addendum
 
 | Step | Tests before | Tests after | Status |

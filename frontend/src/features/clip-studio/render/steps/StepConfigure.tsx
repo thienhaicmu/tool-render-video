@@ -599,6 +599,54 @@ function StepConfigureBase({
             </div>
             )}
 
+            {/* UP26 Pro Timeline Steering — audit-2026-06-08 closure.
+                structure_bias re-weights the ranking formula (Strategic-1c).
+                'AI auto' = null payload, leaves the formula at the default
+                balanced weights. */}
+            {adv && (
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>STRUCTURE BIAS</span>
+                <span className="cfg-sec-api">structure_bias</span>
+              </div>
+              <div className="seg">
+                {([
+                  { v: null,       l: 'AI auto'  },
+                  { v: 'hook',     l: 'Hook'     },
+                  { v: 'balanced', l: 'Balanced' },
+                  { v: 'story',    l: 'Story'    },
+                ] as Array<{ v: ConfigState['structureBias']; l: string }>).map(({ v, l }) => (
+                  <div key={l} className={`seg-b${cfg.structureBias === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('structureBias', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+            )}
+
+            {/* UP26 Pro Timeline Steering — audit-2026-06-08 closure.
+                subtitle_emphasis multiplies sub_font_size (Strategic-1c).
+                'AI auto' = null payload, falls back to the operator-supplied
+                sub_font_size without the multiplier. */}
+            {adv && (
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>SUBTITLE EMPHASIS</span>
+                <span className="cfg-sec-api">subtitle_emphasis</span>
+              </div>
+              <div className="seg">
+                {([
+                  { v: null,         l: 'AI auto'   },
+                  { v: 'subtle',     l: 'Subtle'    },
+                  { v: 'balanced',   l: 'Balanced'  },
+                  { v: 'aggressive', l: 'Aggressive'},
+                ] as Array<{ v: ConfigState['subEmphasis']; l: string }>).map(({ v, l }) => (
+                  <div key={l} className={`seg-b${cfg.subEmphasis === v ? ' on' : ''}`}
+                    onClick={() => setCfgKey('subEmphasis', v)}>{l}</div>
+                ))}
+              </div>
+            </div>
+            )}
+
 
             {adv && (
             <div className="cfg-section">
