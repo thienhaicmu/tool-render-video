@@ -51,6 +51,7 @@ def select_render_plan(
     model: Optional[str] = None,
     language: str = "auto",
     editorial_hint: str = "",
+    target_duration: int = 0,
 ) -> Optional[RenderPlan]:
     """Send SRT to Claude and return a RenderPlan emitted in one pass.
 
@@ -58,7 +59,9 @@ def select_render_plan(
     obedience plus the defensive JSON extractor in parser.py). The
     editorial_hint parameter mirrors Gemini/OpenAI so the
     ``ai.llm.select_render_plan`` dispatcher can forward it uniformly.
-    Returns None on any failure (Sacred Contract #3).
+    ``target_duration`` is the creator's soft total-duration target in
+    seconds (T2.4); 0 = disabled. Returns None on any failure
+    (Sacred Contract #3).
     """
     try:
         return _run_render_plan(
@@ -71,6 +74,7 @@ def select_render_plan(
             model=model,
             language=language,
             editorial_hint=editorial_hint,
+            target_duration=target_duration,
         )
     except Exception as exc:
         logger.warning("claude_client: select_render_plan unexpected error — %s", exc, exc_info=True)
@@ -87,6 +91,7 @@ def _run_render_plan(
     model: Optional[str],
     language: str,
     editorial_hint: str,
+    target_duration: int = 0,
 ) -> Optional[RenderPlan]:
     if not _ANTHROPIC_SDK:
         logger.warning("claude_client: anthropic SDK not installed (render_plan path)")
@@ -106,6 +111,7 @@ def _run_render_plan(
         language=language,
         max_srt_chars=_MAX_SRT_CHARS,
         editorial_hint=editorial_hint,
+        target_duration=target_duration,
     )
 
     resolved_model = model or _DEFAULT_MODEL

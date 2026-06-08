@@ -33,11 +33,17 @@ def select_render_plan(
     model: Optional[str] = None,
     language: str = "auto",
     editorial_hint: str = "",
+    target_duration: int = 0,
 ) -> Optional["RenderPlan"]:
     """Dispatch RenderPlan emission to the named LLM provider.
 
     The provider is asked to emit a full RenderPlan (clips + subtitle_policy +
     camera_strategy + audio_plan + overlays) in a single call.
+
+    ``target_duration`` (T2.4 — Audit 2026-06-08 closure, Batch A
+    V8-A1) is the creator's soft total-duration target in seconds, 0 =
+    disabled (backward-compat default — callers that don't pass it
+    behave exactly as pre-T2.4).
 
     Returns None on any failure. Sacred Contract #3 — provider modules
     catch all exceptions and surface None at the wire.
@@ -65,5 +71,6 @@ def select_render_plan(
         model=model,
         language=language,
         editorial_hint=editorial_hint,
+        target_duration=target_duration,
     )
 

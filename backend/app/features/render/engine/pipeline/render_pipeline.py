@@ -583,6 +583,12 @@ def run_render_pipeline(
                         model=getattr(payload, "llm_model", None) or None,
                         language=getattr(payload, "llm_language", "auto") or "auto",
                         editorial_hint=_ai_editorial_hint,
+                        # T2.4 — Audit 2026-06-08 closure (Batch A V8-A1).
+                        # Surface the creator's target_duration to the LLM
+                        # as a soft total-duration budget. 0 (default for
+                        # historical payloads that never set it) suppresses
+                        # the prompt section — backward-compatible.
+                        target_duration=int(getattr(payload, "target_duration", 0) or 0),
                     )
                     if _render_plan is not None:
                         _emit_render_event(
