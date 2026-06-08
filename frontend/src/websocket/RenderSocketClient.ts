@@ -11,7 +11,8 @@
  * The client silently ignores these — they exist solely to keep TCP alive.
  */
 import { BASE_URL } from '../api/client'
-import { isProgressEvent, isErrorEvent } from './events'
+import { isProgressEvent, isErrorEvent, isLogEvent } from './events'
+import type { WsLogEvent } from './events'
 import { isTerminalStatus } from '../types/enums'
 import type { WebSocketEvent, WsProgressSummary } from '../types/api'
 
@@ -20,6 +21,9 @@ type ProgressHandler = (summary: WsProgressSummary, parts: import('../types/api'
 type CompleteHandler = (event: WebSocketEvent) => void
 type ErrorHandler = (error: string) => void
 type ReconnectingHandler = (attempt: number, maxAttempts: number) => void
+// T3.1 — Audit 2026-06-08 closure (Batch A V8-C1). Live log/structured
+// event bridged from EVENT_BROADCASTER on the backend.
+type LogEventHandler = (event: WsLogEvent) => void
 
 function computeWsBase(): string {
   if (BASE_URL) {
@@ -54,6 +58,8 @@ export class RenderSocketClient {
   private completeHandlers: CompleteHandler[] = []
   private errorHandlers: ErrorHandler[] = []
   private reconnectingHandlers: ReconnectingHandler[] = []
+  // T3.1 — log/structured event handlers.
+  private logEventHandlers: LogEventHandler[] = []
 
   get isConnected(): boolean {
     return this._connected
@@ -93,6 +99,19 @@ export class RenderSocketClient {
     this.reconnectingHandlers.push(handler)
   }
 
+  /**
+   * T3.1 — Audit 2026-06-08 closure (Batch A V8-C1). Register a
+   * handler for live structured/log events bridged from the
+   * backend's ``_emit_render_event`` stream via EVENT_BROADCASTER.
+   * Pre-T3.1 these events were trapped in JSONL log files — now
+   * they flow live alongside the snapshot poll. Consumers can use
+   * them to render an "AI activity" panel, a live log view, or
+   * surface specific event types (e.g. ``render.plan.ai_emitted``).
+   */
+  onLogEvent(handler: LogEventHandler): void {
+    this.logEventHandlers.push(handler)
+  }
+
   // ── Private ────────────────────────────────────────────────────────────────
 
   private _openSocket(): void {
@@ -125,6 +144,22 @@ export class RenderSocketClient {
 
       if (isErrorEvent(msg)) {
         this._emitError(String(msg.error))
+        return
+      }
+
+      // T3.1 — Dispatch on the new ``type:"event"`` message before the
+      // progress-event check. Log events DO NOT carry job/parts/summary
+      // so they would fail isProgressEvent; we route them to the
+      // dedicated log-event channel here.
+      if (isLogEvent(msg)) {
+        this.logEventHandlers.forEach((h) => {
+          try {
+            h(msg.event)
+          } catch {
+            // A handler that throws must NOT kill the WS loop. The
+            // structured event channel is best-effort.
+          }
+        })
         return
       }
 

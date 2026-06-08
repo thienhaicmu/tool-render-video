@@ -31,9 +31,19 @@ from app.routes.jobs import _compute_progress_summary
 
 _PROGRESS_KEY_SET = {"job", "parts", "summary"}
 _ALLOWED_NON_PROGRESS_KEY_SETS = (
-    {"type"},        # ping keepalive
-    {"error"},       # not_found short-circuit
+    {"type"},          # ping keepalive
+    {"error"},         # not_found short-circuit
+    {"type", "event"}, # T3.1 — event message bridged from EVENT_BROADCASTER
 )
+# T3.1 — Audit 2026-06-08 closure (Batch A V8-C1). The snapshot
+# message added a ``type="snapshot"`` discriminator alongside the
+# canonical {job, parts, summary} keys, so the wire shape is
+# {job, parts, summary, type}. Sacred Contract #6 freezes the
+# REQUIRED keys ({job, parts, summary}) and EXPLICITLY allows
+# additions ("Additions are allowed; removals never are" — see
+# CLAUDE.md Frozen API Contracts §"Backward Compatibility Protocol").
+# The keys the contract guards are PRESENT; ``type`` is additive.
+_PROGRESS_OPTIONAL_KEYS = {"type"}
 
 
 def _routes_jobs_path() -> Path:
@@ -71,21 +81,34 @@ def test_ws_handler_uses_only_known_keysets():
     assert keysets, "no send_json calls found in routes/jobs.py — test traversal broken"
 
     for keys in keysets:
-        is_progress = keys == _PROGRESS_KEY_SET
+        # T3.1: a progress frame is any send_json whose key set is a
+        # SUPERSET of the Sacred Contract #6 required keys
+        # {job, parts, summary}, with only the documented optional
+        # extras (currently just ``type``).
+        is_progress = (
+            _PROGRESS_KEY_SET.issubset(keys)
+            and (keys - _PROGRESS_KEY_SET).issubset(_PROGRESS_OPTIONAL_KEYS)
+        )
         is_known_other = any(keys == allowed for allowed in _ALLOWED_NON_PROGRESS_KEY_SETS)
         assert is_progress or is_known_other, (
             f"unknown send_json shape: {sorted(keys)}. "
-            f"Sacred Contract #6 requires progress frames be exactly {{job, parts, summary}}. "
-            f"Allowed non-progress shapes: ping / error."
+            f"Sacred Contract #6 requires progress frames carry "
+            f"{{job, parts, summary}} (additions allowed — currently "
+            f"only 'type' is documented). "
+            f"Allowed non-progress shapes: ping / error / "
+            f"T3.1 event {{type, event}}."
         )
 
 
 def test_ws_handler_emits_at_least_one_progress_frame_shape():
-    """Among all send_json calls, at least one must be the canonical {job, parts, summary}."""
+    """Among all send_json calls, at least one must carry the
+    canonical {job, parts, summary} keys (subset check — additional
+    keys like ``type`` are allowed)."""
     keysets = _send_json_call_keysets()
-    assert _PROGRESS_KEY_SET in keysets, (
-        "no send_json call with {job, parts, summary} found in routes/jobs.py — "
-        "Sacred Contract #6 cannot be honoured."
+    has_progress = any(_PROGRESS_KEY_SET.issubset(k) for k in keysets)
+    assert has_progress, (
+        "no send_json call carrying {job, parts, summary} found in "
+        "routes/jobs.py — Sacred Contract #6 cannot be honoured."
     )
 
 

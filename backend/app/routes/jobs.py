@@ -792,13 +792,52 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
     Keepalive: sends {"type":"ping"} every _WS_PING_INTERVAL_S seconds when
     no state change occurs.  Prevents proxy/OS from dropping the TCP connection
     during long renders (55-60 min) that have infrequent DB updates.
+
+    T3.1 — Audit 2026-06-08 closure (Batch A V8-C1). The handler now
+    multiplexes TWO message types over the same WS:
+      - ``{"type":"snapshot", "job":..., "parts":..., "summary":...}``
+        — the original DB-snapshot shape (Sacred Contract #6 preserved
+        — the snapshot still carries job/parts/summary at the top
+        level; the new ``type`` discriminator is additive).
+      - ``{"type":"event", "event":{...}}`` — structured events from
+        ``_emit_render_event`` bridged via EVENT_BROADCASTER. Pre-T3.1
+        these events were trapped in JSONL log files; now they
+        stream live alongside the snapshot poll.
+
+    Old FE consumers that don't dispatch on ``type`` ignore event
+    messages (their ``isProgressEvent`` guard checks for ``job`` which
+    event messages don't carry) and continue to read snapshots.
     """
+    from app.features.render.engine.pipeline.render_events import EVENT_BROADCASTER
     await websocket.accept()
+    # T3.1 — per-WS event queue + broadcaster subscription. The queue
+    # is created in the FastAPI event loop; push from worker threads
+    # crosses the boundary via loop.call_soon_threadsafe inside
+    # EVENT_BROADCASTER.push.
+    event_queue: asyncio.Queue = asyncio.Queue(maxsize=EVENT_BROADCASTER.DEFAULT_QUEUE_SIZE)
+    event_loop = asyncio.get_event_loop()
+    subscribed = EVENT_BROADCASTER.register(job_id, event_queue, event_loop)
     try:
         last_fp = None
         loop = asyncio.get_event_loop()
         last_send_time = loop.time()
         while True:
+            # T3.1 — drain any pending events first. Bounded by the
+            # queue cap (default 200) so this loop is O(queue_size)
+            # in the worst case. Events fire whenever the broadcaster
+            # pushes; in steady-state most iterations drain 0-1
+            # events.
+            if subscribed:
+                while True:
+                    try:
+                        evt = event_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    try:
+                        await websocket.send_json({"type": "event", "event": evt})
+                    except Exception:
+                        # Send failure — let the outer except handle.
+                        raise
             job = get_job(job_id)
             if not job:
                 await websocket.send_json({"error": "not_found"})
@@ -831,7 +870,16 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
                     except Exception:
                         pass
                     job_payload = {**job, "error_kind": kind}
-                await websocket.send_json({"job": job_payload, "parts": parts, "summary": summary})
+                # T3.1: the snapshot now carries ``type="snapshot"``.
+                # Old FE consumers that destructure
+                # ``{job, parts, summary}`` still work because those
+                # keys are unchanged at the top level.
+                await websocket.send_json({
+                    "type": "snapshot",
+                    "job": job_payload,
+                    "parts": parts,
+                    "summary": summary,
+                })
                 last_fp = fp
                 last_send_time = loop.time()
             elif loop.time() - last_send_time >= _WS_PING_INTERVAL_S:
@@ -848,6 +896,16 @@ async def ws_job_progress(websocket: WebSocket, job_id: str):
         pass
     except Exception as exc:
         logger.warning("ws_job_progress error job_id=%s: %s", job_id, exc)
+    finally:
+        # T3.1 — ALWAYS unregister the broadcaster subscription so the
+        # broadcaster's subscriber list doesn't leak across WS
+        # disconnects (especially on the exception path above).
+        # Unregister is idempotent and safe to call when register
+        # returned False (subscribe-at-cap case).
+        try:
+            EVENT_BROADCASTER.unregister(job_id, event_queue)
+        except Exception:
+            pass
 
 
 @router.post("/cleanup/logs")
