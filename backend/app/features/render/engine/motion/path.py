@@ -62,6 +62,10 @@ from app.features.render.engine.motion.trackerless import (
     _apply_trackerless_center_guard,
 )
 from app.features.render.engine.motion.pixel_diff import _build_motion_path_legacy
+# T2.2 — Audit 2026-06-08 closure (Batch A V9-F3). Lightweight cancel
+# poll for OpenCV per-frame loops. No-op on threads with no registered
+# cancel event so direct test calls into this module are unaffected.
+from app.features.render.engine.encoder.ffmpeg_helpers import check_thread_cancel
 
 logger = logging.getLogger("app.services.motion_crop")
 
@@ -201,6 +205,14 @@ def build_subject_path(
 
     _tracking_start = time.monotonic()
     while True:
+        # T2.2 — Audit 2026-06-08 closure (Batch A V9-F3). Cancel poll
+        # at the top of each frame iteration. check_thread_cancel raises
+        # JobCancelledError when the operator clicks Cancel; the
+        # exception propagates up to _common.process_render where it is
+        # caught and turned into status=CANCELLED. On the raise path
+        # `cap` is released by OpenCV's __del__ + Python GC (the
+        # explicit cap.release() after the loop is skipped on cancel).
+        check_thread_cancel()
         ok, frame = cap.read()
         if not ok or frame is None:
             break
