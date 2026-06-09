@@ -89,9 +89,12 @@ logger = logging.getLogger("app.render")
 # Scope of Sprint 4.F: reframe_mode only. Extended in P3:
 #   - motion_aware_crop: wired in P3 — render_plan.camera_strategy.motion_aware_crop
 #     (Optional[bool]) overrides ctx.payload.motion_aware_crop when not None.
-#   - tracker has zero orchestration consumer today; the dispatch
-#     happens inside services/motion_crop.py via internal capability
-#     detection. Nothing to migrate yet.
+# Sprint 1 extensions:
+#   - tracker_hint: wired — "trackerless" forces detection-only in path.py.
+#     Other values ("bytetrack", "legacy") reserved; treated as auto for now.
+#   - zoom_burst: resolved from ClipPlan.hook_score. Visual effect deferred to
+#     Sprint 2 (requires crop.py FFmpeg filter change). Field captured in
+#     PartExecutionPlan + CameraStrategy for observability now.
 # ────────────────────────────────────────────────────────────────────
 
 # Vocabulary of reframe_mode values the planner will accept from a
@@ -101,6 +104,13 @@ logger = logging.getLogger("app.render")
 # token belongs to the payload schema, not the plan schema.
 _RENDER_PLAN_ALLOWED_REFRAME_MODES: frozenset[str] = frozenset({
     "center", "track", "fixed",
+})
+
+# Vocabulary the plan may set for tracker selection. "trackerless" disables
+# the OpenCV tracker entirely (detection-only mode). "bytetrack"/"legacy"
+# are reserved for future dispatch; currently treated as auto ("").
+_RENDER_PLAN_ALLOWED_TRACKER_HINTS: frozenset[str] = frozenset({
+    "bytetrack", "trackerless", "legacy",
 })
 
 
@@ -125,6 +135,49 @@ def _resolve_reframe_mode_from_plan(
     return plan_reframe, "render_plan"
 
 
+def _resolve_tracker_from_plan(
+    ctx: PartRenderContext, fallback_value: str
+) -> tuple[str, str]:
+    """Return ``(effective_tracker_hint, source_tag)``.
+
+    Returns render_plan.camera_strategy.tracker when set and valid,
+    otherwise the caller's fallback. Source tag is ``"render_plan"``,
+    ``"fallback"``, or ``"fallback_invalid_tracker"``.
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return fallback_value, "fallback"
+    plan_tracker = (rp.camera_strategy.tracker or "").strip()
+    if not plan_tracker:
+        return fallback_value, "fallback"
+    if plan_tracker not in _RENDER_PLAN_ALLOWED_TRACKER_HINTS:
+        return fallback_value, "fallback_invalid_tracker"
+    return plan_tracker, "render_plan"
+
+
+def _resolve_zoom_burst_from_seg(
+    seg: dict,
+    ctx: PartRenderContext = None,
+    part_no: int = 0,
+    threshold: float = 0.75,
+) -> bool:
+    """Return True when the clip warrants an intro zoom-burst visual effect.
+
+    Sprint 2.2 — priority chain:
+      1. ClipPlan.hook_intensity (0.0–1.0, explicit AI signal) when > 0.
+         Threshold applied directly. "0.0" means AI left it unset → fall through.
+      2. hook_score from seg dict (0–100 scale). Threshold * 100 applied.
+    """
+    if ctx is not None and part_no > 0:
+        rp = getattr(ctx, "render_plan", None)
+        if rp is not None and rp.clips and (part_no - 1) < len(rp.clips):
+            hi = float(getattr(rp.clips[part_no - 1], "hook_intensity", 0.0) or 0.0)
+            if hi > 0.0:
+                return hi >= threshold
+    hook_score = float(seg.get("hook_score", 0.0) or 0.0)
+    return hook_score >= (threshold * 100.0)
+
+
 def _resolve_motion_aware_crop_from_plan(
     ctx: PartRenderContext, fallback_value: bool
 ) -> tuple[bool, str]:
@@ -141,6 +194,25 @@ def _resolve_motion_aware_crop_from_plan(
     if plan_crop is None:
         return fallback_value, "fallback"
     return bool(plan_crop), "render_plan"
+
+
+def _score_crf_micro_delta(seg: dict) -> int:
+    """Return a ±1 CRF micro-adjustment from viral_score + retention_score.
+
+    Both ≥ 85 → -1 (raise quality for strong clips).
+    Both < 35 → +1 (save bitrate on weak clips).
+    Otherwise → 0 (no adjustment).
+    """
+    try:
+        viral = float(seg.get("viral_score", 0.0) or 0.0)
+        retention = float(seg.get("retention_score", 0.0) or 0.0)
+        if viral >= 85.0 and retention >= 85.0:
+            return -1
+        if viral < 35.0 and retention < 35.0:
+            return 1
+    except Exception:
+        pass
+    return 0
 
 
 @dataclass
@@ -195,8 +267,11 @@ def run_render_preflight(
     _effective_motion_crop, _motion_crop_source = _resolve_motion_aware_crop_from_plan(
         ctx, bool(ctx.payload.motion_aware_crop)
     )
+    _effective_tracker, _tracker_source = _resolve_tracker_from_plan(ctx, "")
+    _zoom_burst = _resolve_zoom_burst_from_seg(seg, ctx=ctx, part_no=idx)
     _vf_ct = seg.get("content_type_hint", "vlog")
     _vf_crf_delta = _crf_delta_for_content_type(_vf_ct)
+    _vf_crf_delta += _score_crf_micro_delta(seg)
     _part_video_crf = max(11, min(28, ctx.tuned["video_crf"] + _vf_crf_delta))
     _vf_bitrate_profile = (
         "high" if _vf_ct == "montage" else
@@ -275,6 +350,7 @@ def run_render_preflight(
             max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.0)
                    + _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)))
         ),
+        zoom_burst=_zoom_burst,
     )
     logger.info(
         "part_execution_plan part=%d trim=%.3f+%.3f accurate_cut=%s "
@@ -291,6 +367,8 @@ def run_render_preflight(
         motion_aware_crop=_effective_motion_crop,
         reframe_mode=_effective_reframe,
         content_type=_vf_ct,
+        tracker_hint=_effective_tracker,
+        zoom_burst=_zoom_burst,
     )
     logger.info(
         "camera_strategy part=%d mode=%s crop=%s reframe=%s aspect=%s scale=%dx%d",
@@ -319,6 +397,9 @@ def run_render_preflight(
             "motion_crop_source": _motion_crop_source,
             "camera_mode": _camera_strategy.camera_mode,
             "aspect_ratio": _camera_strategy.aspect_ratio,
+            "tracker_hint": _effective_tracker,
+            "tracker_hint_source": _tracker_source,
+            "zoom_burst": _zoom_burst,
         },
     )
     return RenderPreflightResult(

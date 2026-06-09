@@ -194,13 +194,16 @@ Return EXACTLY this JSON object. No extra top-level keys, no markdown fences:
       "speech_density": 0.85,
       "duration_fit": 0.90,
       "cover_offset_ratio": 0.15,
+      "pacing": "fast",
+      "hook_intensity": 0.92,
       "rank": 1
     }}
   ],
   "subtitle_policy": {{
     "style": "viral",
     "market": "",
-    "emphasis_pass": false
+    "emphasis_pass": false,
+    "subtitle_mode": "word_by_word"
   }},
   "camera_strategy": {{
     "motion_aware_crop": false,
@@ -211,7 +214,9 @@ Return EXACTLY this JSON object. No extra top-level keys, no markdown fences:
     "voice_enabled": false,
     "voice_provider": "",
     "bgm_enabled": false,
-    "cta_audio": ""
+    "cta_audio": "",
+    "bgm_mood": "energetic",
+    "bgm_volume": 0.0
   }},
   "overlays": []
 }}
@@ -231,9 +236,21 @@ FIELD RULES:
 - duration_fit: 1.0=ideal clip length, 0.0=stretched/cramped
 - cover_offset_ratio: best thumbnail moment as fraction of clip
   (0.1=very early, 0.5=mid)
+- pacing (per clip): fast | medium | slow | "" = unset
+    fast  = rapid cuts, high speech density, energy-driven (gaming, reaction, hype)
+    medium = balanced dialogue + reaction (interview, commentary, vlog)
+    slow   = deliberate, emotional, minimal cuts (storytelling, emotional, cinematic)
+- hook_intensity (per clip): 0.0–1.0 — how aggressively to punch the opening
+    ≥ 0.75 triggers a zoom-burst visual effect on the first cut
 - rank: quality rank among all returned clips; 1 = strongest, N = weakest.
   Every clip gets a unique integer in [1, N] where N = number of clips returned.
-  Assign based on your viral + retention ordering from Step 1.{editorial_section}{target_duration_section}
+  Assign based on your viral + retention ordering from Step 1.
+- subtitle_policy.subtitle_mode: word_by_word | sentence | phrase | "" = inherit
+    word_by_word = karaoke-style one word at a time (fast/hype clips)
+    sentence     = full sentence appears at once (slow/cinematic)
+    phrase       = 3–5 word groups (default for most content)
+- audio_plan.bgm_mood: energetic | calm | emotional | hype | "" = no BGM preference
+- audio_plan.bgm_volume: dB gain relative to vocal track (0.0 = platform default, -6.0 = softer){editorial_section}{target_duration_section}
 
 ⚠️ FINAL VERIFICATION — before responding, check EVERY clip:
    • {min_sec} ≤ (end - start) ≤ {max_sec}  →  if any clip fails this, fix or remove it

@@ -64,6 +64,9 @@ class ClipPlan:
     speech_density: float = 0.0
     duration_fit: float = 0.0
     cover_offset_ratio: float = 0.0
+    # Sprint 2 — new AI-directed fields
+    pacing: str = ""              # fast|medium|slow|"" = inherit (subtitle timing, edit rhythm)
+    hook_intensity: float = 0.0   # 0.0–1.0; >= 0.75 triggers zoom_burst visual effect
 
 
 @dataclass
@@ -77,6 +80,8 @@ class SubtitlePolicy:
     style: str = ""               # viral|clean|story|gaming|"" = inherit
     market: str = ""              # us|eu|jp|vn|global|"" = inherit
     emphasis_pass: Optional[bool] = None
+    # Sprint 2 — AI-directed subtitle timing mode
+    subtitle_mode: str = ""       # word_by_word|sentence|phrase|"" = inherit
 
 
 @dataclass
@@ -94,6 +99,9 @@ class AudioPlan:
     voice_provider: str = ""      # "" = inherit (xtts default)
     bgm_enabled: Optional[bool] = None
     cta_audio: str = ""           # path or "" = none
+    # Sprint 2 — AI-directed BGM selection
+    bgm_mood: str = ""            # energetic|calm|emotional|hype|"" = no BGM preference
+    bgm_volume: float = 0.0       # 0.0 = inherit platform default; >0 = dB gain relative to vocal
 
 
 @dataclass

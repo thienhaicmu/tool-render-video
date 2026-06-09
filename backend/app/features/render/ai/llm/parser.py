@@ -220,6 +220,9 @@ def _segment_to_clip_dict(seg: dict) -> dict:
         "speech_density": seg.get("speech_density", 0.0),
         "duration_fit": seg.get("duration_fit", 0.0),
         "cover_offset_ratio": seg.get("cover_offset_ratio", 0.0),
+        # Sprint 2 — new clip-level fields
+        "pacing": seg.get("pacing", ""),
+        "hook_intensity": seg.get("hook_intensity", 0.0),
     }
 
 

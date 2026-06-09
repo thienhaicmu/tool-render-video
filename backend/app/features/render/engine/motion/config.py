@@ -129,3 +129,9 @@ class MotionCropConfig:
     fps_fallback: float = 30.0
     max_tracking_seconds: float = 300.0
 
+    # Sprint 1: RenderPlan.camera_strategy.tracker hint.
+    # "" = auto (KCF→CSRT→MOSSE fallback chain, existing behaviour)
+    # "trackerless" = force detection-only (no OpenCV tracker object)
+    # "bytetrack" / "legacy" = reserved vocabulary, treated as auto for now
+    tracker_hint: str = ""
+

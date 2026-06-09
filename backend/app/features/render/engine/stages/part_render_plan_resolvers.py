@@ -126,6 +126,28 @@ def _apply_subtitle_emphasis(font_size: int, emphasis: "str | None") -> int:
     return max(10, min(200, int(round(font_size * mult))))
 
 
+_ALLOWED_SUBTITLE_MODES: frozenset[str] = frozenset({
+    "word_by_word", "sentence", "phrase",
+})
+
+
+def _resolve_subtitle_mode_from_plan(ctx: PartRenderContext) -> str:
+    """Return AI-directed subtitle timing mode or '' (inherit).
+
+    word_by_word → karaoke writer, words_per_group=1
+    phrase       → karaoke writer, words_per_group from pacing/speech_density
+    sentence     → bounce writer (full sentence at once)
+    ""           → inherit from existing style-based writer selection
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return ""
+    mode = (getattr(rp.subtitle_policy, "subtitle_mode", "") or "").strip().lower()
+    if mode not in _ALLOWED_SUBTITLE_MODES:
+        return ""
+    return mode
+
+
 def _resolve_cta_audio_from_plan(ctx: PartRenderContext) -> str:
     """Return AI-specified CTA text from render_plan.audio_plan.cta_audio.
 
@@ -185,6 +207,8 @@ __all__ = [
     "_resolve_market_from_plan",
     "_SUBTITLE_EMPHASIS_MULTIPLIERS",
     "_apply_subtitle_emphasis",
+    "_ALLOWED_SUBTITLE_MODES",
+    "_resolve_subtitle_mode_from_plan",
     "_resolve_cta_audio_from_plan",
     "_ALLOWED_CTA_TYPES_FROM_PLAN",
     "_resolve_cta_type_from_plan",

@@ -141,10 +141,55 @@ from app.features.render.engine.stages.part_render_plan_resolvers import (  # no
     _resolve_market_from_plan,
     _SUBTITLE_EMPHASIS_MULTIPLIERS,
     _apply_subtitle_emphasis,
+    _ALLOWED_SUBTITLE_MODES,
+    _resolve_subtitle_mode_from_plan,
     _resolve_cta_audio_from_plan,
     _ALLOWED_CTA_TYPES_FROM_PLAN,
     _resolve_cta_type_from_plan,
 )
+
+# ── Sprint 1/2: pacing / speech_density → karaoke words_per_group ────────────
+#
+# Priority chain:
+#   1. Sprint 2 — RenderPlan.clips[idx].pacing (fast|medium|slow) when set
+#   2. Sprint 1 — speech_density_score heuristic as fallback
+#
+# Range: 3 (sparse/slow) → 4 (normal/medium) → 5 (dense/fast).
+# Only affects pro_karaoke path; srt_to_ass_bounce has no words_per_group.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PACING_TO_WORDS: dict[str, int] = {"fast": 5, "medium": 4, "slow": 3}
+
+
+def _speech_density_words_per_group(seg: dict, base: int = 4) -> int:
+    score = float(seg.get("speech_density_score", 50.0) or 50.0)
+    score = max(0.0, min(100.0, score))
+    if score >= 80.0:
+        return base + 1
+    if score < 30.0:
+        return max(2, base - 1)
+    return base
+
+
+def _resolve_words_per_group(ctx: "PartRenderContext", seg: dict, idx: int) -> int:
+    """Return karaoke words_per_group.
+
+    Priority chain:
+      1. subtitle_mode=word_by_word → 1 (single word at a time)
+      2. ClipPlan.pacing field (fast=5 / medium=4 / slow=3)
+      3. speech_density_score heuristic fallback
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is not None:
+        mode = (getattr(rp.subtitle_policy, "subtitle_mode", "") or "").strip().lower()
+        if mode == "word_by_word":
+            return 1
+        if idx < len(rp.clips):
+            pacing = (rp.clips[idx].pacing or "").strip().lower()
+            if pacing in _PACING_TO_WORDS:
+                return _PACING_TO_WORDS[pacing]
+    return _speech_density_words_per_group(seg)
+
 
 def prepare_part_assets(
     ctx: PartRenderContext,
@@ -663,6 +708,14 @@ def prepare_part_assets(
             # base_clip_renderer/overlay_compositor/motion_crop) is preserved.
             # See docs/review/SPRINT_7_3_ASS_CONTENT_CACHE_2026-06-05.md.
             _ass_writer = "karaoke" if _effective_subtitle_style == "pro_karaoke" else "bounce"
+            # Sprint 2.1 — subtitle_mode can override the writer selection
+            # independently of the visual style. word_by_word/phrase → karaoke;
+            # sentence → bounce. "" (unset) → no change.
+            _subtitle_mode = _resolve_subtitle_mode_from_plan(ctx)
+            if _subtitle_mode in ("word_by_word", "phrase"):
+                _ass_writer = "karaoke"
+            elif _subtitle_mode == "sentence":
+                _ass_writer = "bounce"
             _ass_cache_k = _ass_cache_key(
                 srt_path=_ass_srt_source,
                 writer=_ass_writer,
@@ -701,6 +754,7 @@ def prepare_part_assets(
                     from app.features.render.engine.subtitle.generator.ass import _hex_to_ass
                     srt_to_ass_karaoke(
                         str(_ass_srt_source), str(ass_part),
+                        words_per_group=_resolve_words_per_group(ctx, seg, idx),
                         scale_y=ctx.payload.frame_scale_y,
                         font_size=_effective_sub_font_size or 46,
                         font_name=getattr(ctx.payload, "sub_font", "Bungee"),

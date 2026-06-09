@@ -181,7 +181,8 @@ def build_subject_path(
     default_cx = src_w / 2.0
     default_cy = src_h / 2.0
 
-    tracker = _create_tracker()
+    # Sprint 1: "trackerless" hint from RenderPlan forces detection-only mode.
+    tracker = None if cfg.tracker_hint == "trackerless" else _create_tracker()
     tracker_available = tracker is not None
     tracking = False
     last_subject: Optional[Tuple[int, int, int, int]] = None

@@ -74,7 +74,7 @@ import os
 import traceback
 from pathlib import Path
 
-from app.core.config import TEMP_DIR
+from app.core.config import TEMP_DIR, _pick_bgm_file
 from app.domain.manifests import BaseClipManifest
 from app.features.render.engine.pipeline.audio_cleanup import _maybe_cleanup_narration_audio
 from app.features.render.engine.pipeline.pipeline_config import extract_text_from_srt
@@ -85,7 +85,7 @@ from app.features.render.engine.pipeline.render_events import (
     _safe_unlink,
 )
 from app.features.render.engine.stages.part_render_context import PartRenderContext
-from app.features.render.engine.audio.mixer import mix_narration_audio
+from app.features.render.engine.audio.mixer import mix_narration_audio, mix_with_bgm
 from app.features.render.engine.stages.manifest_writer import write_manifest
 from app.features.render.engine.subtitle.generator.srt import slice_srt_to_text
 from app.features.render.engine.audio.tts import generate_narration_audio
@@ -103,8 +103,12 @@ logger = logging.getLogger("app.render")
 #
 # P3 wired:
 #   - audio_plan.voice_enabled: wired via _resolve_voice_enabled_from_plan
-# Deferred (P4 scope):
-#   - audio_plan.bgm_enabled    (Optional[bool] since P2 — needs audio-mixer consumer)
+#   - audio_plan.voice_provider: wired via _resolve_voice_provider_from_plan
+# Sprint 1 wired (resolver only):
+#   - audio_plan.bgm_enabled: resolver wired; full BGM mixing deferred to
+#     Sprint 2.3 — full BGM mixing now wired via _resolve_bgm_mood_from_plan +
+#     _resolve_bgm_volume_from_plan and mix_with_bgm() at end of voice block.
+# Deferred (future sprint):
 #   - audio_plan.cta_audio      (requires audio-mixer changes — cross-file)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -138,6 +142,41 @@ def _resolve_voice_enabled_from_plan(ctx: PartRenderContext, fallback: bool) -> 
     return bool(plan_enabled)
 
 
+def _resolve_bgm_enabled_from_plan(ctx: PartRenderContext, fallback: bool) -> bool:
+    """Return the effective bgm_enabled flag for this part."""
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return fallback
+    plan_enabled = rp.audio_plan.bgm_enabled
+    if plan_enabled is None:
+        return fallback
+    return bool(plan_enabled)
+
+
+def _resolve_bgm_mood_from_plan(ctx: PartRenderContext) -> str:
+    """Return AI-directed BGM mood or '' (no preference).
+
+    Empty string means no AI BGM preference — caller should not attempt BGM.
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return ""
+    return (getattr(rp.audio_plan, "bgm_mood", "") or "").strip().lower()
+
+
+def _resolve_bgm_volume_from_plan(ctx: PartRenderContext) -> float:
+    """Return AI-directed BGM dB offset relative to vocal track.
+
+    0.0 means "use platform default" (-18 dB). Positive values raise BGM,
+    negative values lower it. Clamped to [-20, 6] to prevent extremes.
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return 0.0
+    raw = float(getattr(rp.audio_plan, "bgm_volume", 0.0) or 0.0)
+    return max(-20.0, min(6.0, raw))
+
+
 def run_part_voice_mix(
     ctx: PartRenderContext,
     idx: int,
@@ -161,6 +200,17 @@ def run_part_voice_mix(
     _part_subtitle_voice_path = None
     _effective_voice_enabled = _resolve_voice_enabled_from_plan(
         ctx, getattr(ctx.payload, "voice_enabled", False)
+    )
+    _effective_bgm_enabled = _resolve_bgm_enabled_from_plan(
+        ctx, getattr(ctx.payload, "bgm_enabled", False)
+    )
+    _bgm_mood = _resolve_bgm_mood_from_plan(ctx)
+    _bgm_volume_offset = _resolve_bgm_volume_from_plan(ctx)
+    _job_log(
+        ctx.effective_channel,
+        ctx.job_id,
+        f"voice_mix.bgm_enabled={_effective_bgm_enabled} mood={_bgm_mood or 'none'} vol_offset={_bgm_volume_offset:+.1f}dB part_no={idx}",
+        kind="debug",
     )
     if (
         _effective_voice_enabled
@@ -412,4 +462,40 @@ def run_part_voice_mix(
                 _safe_unlink(_artifact)
     except Exception:
         pass
+
+    # ── Sprint 2.3 — BGM mix ─────────────────────────────────────────────────
+    # Mix background music under the final video when bgm_enabled AND the AI
+    # specified a mood AND a matching file exists in BGM_DIR/{mood}/.
+    # Sacred Contract #3 spirit: any failure here emits a warning and
+    # continues — BGM is optional, never a render-blocker.
+    if _effective_bgm_enabled and _bgm_mood:
+        _bgm_file = _pick_bgm_file(_bgm_mood)
+        if _bgm_file:
+            _bgm_tmp = final_part.with_name(final_part.stem + ".bgm_tmp.mp4")
+            try:
+                _bgm_db = -18.0 + _bgm_volume_offset
+                mix_with_bgm(
+                    video_path=str(final_part),
+                    bgm_path=_bgm_file,
+                    output_path=str(_bgm_tmp),
+                    bgm_db_gain=_bgm_db,
+                )
+                os.replace(str(_bgm_tmp), str(final_part))
+                _job_log(
+                    ctx.effective_channel, ctx.job_id,
+                    f"bgm_mix_completed part_no={idx} mood={_bgm_mood} gain={_bgm_db:.1f}dB",
+                )
+            except Exception as _bgm_exc:
+                _safe_unlink(_bgm_tmp)
+                _job_log(
+                    ctx.effective_channel, ctx.job_id,
+                    f"bgm_mix_failed part_no={idx} mood={_bgm_mood} — {_bgm_exc}; continuing without BGM",
+                    kind="warning",
+                )
+        else:
+            _job_log(
+                ctx.effective_channel, ctx.job_id,
+                f"bgm_no_file part_no={idx} mood={_bgm_mood} — no audio files in BGM_DIR/{_bgm_mood}/; skipping BGM",
+                kind="debug",
+            )
 

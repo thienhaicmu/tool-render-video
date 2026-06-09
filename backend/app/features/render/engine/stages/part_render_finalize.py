@@ -152,6 +152,7 @@ from app.features.render.engine.encoder.clip_ops import apply_micro_pacing
 # See docs/review/AUDIT_2026-06-02_followup_6.md for the timeline +
 # impact assessment.
 from app.features.render.engine.stages.viral_scoring import score_part_for_market as _mv_score_part
+from app.features.render.engine.encoder.ffmpeg_helpers import extract_thumbnail_frame as _extract_thumbnail_frame
 
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5d).
 logger = logging.getLogger("app.render")
@@ -544,6 +545,28 @@ def run_part_finalize(
             step="render.output.validate",
             context={"part_no": idx, "output_file": str(final_part), **_qa["metadata"]},
         )
+
+    # Sprint 3.2 — cover frame extraction using RenderPlan.cover_offset_ratio.
+    # Runs only on the validation-passed branch so we never extract from corrupt output.
+    # All errors are non-fatal — Sacred Contract #8 is upstream, not here.
+    try:
+        _cover_ratio = float(seg.get("cover_offset_ratio", 0.0) or 0.0)
+        _rp = getattr(ctx, "render_plan", None)
+        if _rp is not None and _rp.clips and (idx - 1) < len(_rp.clips):
+            _plan_ratio = float(getattr(_rp.clips[idx - 1], "cover_offset_ratio", 0.0) or 0.0)
+            if _plan_ratio > 0.0:
+                _cover_ratio = _plan_ratio
+        _cover_ratio = max(0.05, min(0.95, _cover_ratio or 0.15))
+        _cover_offset_sec = _cover_ratio * max(1.0, _actual_final_duration)
+        _cover_jpeg = _extract_thumbnail_frame(str(final_part), offset_sec=_cover_offset_sec, width=1080)
+        if _cover_jpeg:
+            _cover_path = ctx.output_dir / f"{final_part.stem}_cover.jpg"
+            _cover_path.write_bytes(_cover_jpeg)
+            _job_log(ctx.effective_channel, ctx.job_id,
+                     f"cover_frame_extracted part_no={idx} offset={_cover_offset_sec:.2f}s ratio={_cover_ratio:.2f}")
+    except Exception as _cover_exc:
+        _job_log(ctx.effective_channel, ctx.job_id,
+                 f"cover_frame_failed part_no={idx} — {_cover_exc}; continuing", kind="warning")
 
     _emit_render_event(
         channel_code=ctx.effective_channel,

@@ -28,6 +28,7 @@ from app.features.render.engine.stages.part_render_context import PartRenderCont
 from app.features.render.engine.stages.part_render_setup import RenderPreflightResult
 from app.features.render.engine.stages.manifest_writer import write_manifest
 from app.features.render.engine.encoder.clip_renderer import render_part_smart
+from app.features.render.engine.motion import MotionCropConfig
 
 # Preserve original logger name (same pattern as 6.D-2.1 / 2.2 / 2.3 / 2.4).
 logger = logging.getLogger("app.render")
@@ -81,12 +82,26 @@ def run_render_encode(
         or max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.0)
                + _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)))
     )
+    # Sprint 1: Use resolved camera strategy values from RenderPlan (preflight)
+    # instead of raw ctx.payload.*. Closes the pre-existing gap where the resolver
+    # results in part_render_setup were computed but never reached render_part_smart.
+    _effective_motion_crop = preflight.camera_strategy.motion_aware_crop
+    _effective_reframe = preflight.camera_strategy.reframe_mode
+    # Build crop_cfg_override when tracker_hint is set so path.py can honour it.
+    _crop_cfg_override: MotionCropConfig | None = None
+    if _effective_motion_crop and preflight.camera_strategy.tracker_hint:
+        _crop_cfg_override = MotionCropConfig(
+            scale_x_percent=float(ctx.payload.frame_scale_x),
+            scale_y_percent=float(ctx.payload.frame_scale_y),
+            reframe_mode=_effective_reframe,
+            tracker_hint=preflight.camera_strategy.tracker_hint,
+        )
     try:
         render_part_smart(
             str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if ctx.payload.add_title_overlay else "",
             ctx.payload.aspect_ratio, ctx.payload.frame_scale_x, ctx.payload.frame_scale_y,
-            ctx.payload.motion_aware_crop,
-            reframe_mode=ctx.payload.reframe_mode,
+            _effective_motion_crop,
+            reframe_mode=_effective_reframe,
             add_subtitle=part_subtitle_enabled,
             add_title_overlay=ctx.payload.add_title_overlay,
             effect_preset=ctx.payload.effect_preset,
@@ -109,16 +124,20 @@ def run_render_encode(
             loudnorm_enabled=getattr(ctx.payload, "loudnorm_enabled", False),
             ffmpeg_threads=ctx.ffmpeg_threads,
             content_type=seg.get("content_type_hint", "vlog"),
+            crop_cfg_override=_crop_cfg_override,
             _motion_cache_key=_motion_ck,
             _fallback_flag=_motion_crop_fallback,
-            visual_intensity_hint=None,
+            visual_intensity_hint="high" if preflight.camera_strategy.zoom_burst else None,
+            zoom_burst=preflight.camera_strategy.zoom_burst,
         )
     finally:
         preflight.encode_stop.set()
         preflight.encode_timer.join(timeout=5.0)
     _render_ms = int((time.perf_counter() - preflight.t_render) * 1000)
-    logger.info("render_part_ms=%d part=%d codec=%s crop=%s",
-                _render_ms, idx, ctx.payload.video_codec, ctx.payload.motion_aware_crop)
+    logger.info("render_part_ms=%d part=%d codec=%s crop=%s tracker=%s zoom_burst=%s",
+                _render_ms, idx, ctx.payload.video_codec, _effective_motion_crop,
+                preflight.camera_strategy.tracker_hint or "auto",
+                preflight.camera_strategy.zoom_burst)
     part_manifest.rendered_path = str(final_part)
     write_manifest(ctx.work_dir, part_manifest)
     if _motion_ck:

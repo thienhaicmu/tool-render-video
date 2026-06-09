@@ -409,6 +409,24 @@ def _effect_filter(effect_preset: str):
     return "eq=contrast=1.05:saturation=1.10:brightness=0.0:gamma=1.01,unsharp=5:5:0.9:3:3:0.35"
 
 
+def _zoom_burst_filter(
+    max_zoom: float = 1.15,
+    target_w: int = 720,
+    target_h: int = 1280,
+) -> str:
+    """Return a scale+crop filter string that applies a static punch-in zoom.
+
+    Scales up by max_zoom then crops back to target_w × target_h from center.
+    Static (not animated) — zoompan was avoided because its default fps=25 and
+    s=hd720 corrupt duration and size on 60fps vertical sources.
+    Output is always exactly target_w × target_h with no timing changes.
+    """
+    return (
+        f"scale=trunc(iw*{max_zoom:.4f}/2)*2:trunc(ih*{max_zoom:.4f}/2)*2:flags=lanczos,"
+        f"crop={target_w}:{target_h}:(iw-{target_w})/2:(ih-{target_h})/2"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Phase 5.7 — Safe visual intensity → effect preset resolver
 # ---------------------------------------------------------------------------

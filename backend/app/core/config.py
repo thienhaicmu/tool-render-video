@@ -1,3 +1,4 @@
+import random
 import sys
 from pathlib import Path
 import os
@@ -45,9 +46,38 @@ COOKIES_DIR = APP_DATA_DIR / "cookies"
 # pipeline_cache.py + motion_crop.py + the maintenance prune helper.
 CACHE_DIR   = APP_DATA_DIR / "cache"
 REQUEST_LOG = LOGS_DIR / "request.log"   # Type 1: request/validation errors
+# Sprint 2.3 — BGM library root. User places audio files under
+# {BGM_DIR}/{mood}/*.mp3 (or .wav/.m4a/.ogg/.flac). No files shipped
+# in repo; the dir is created on startup for user convenience.
+BGM_DIR     = APP_DATA_DIR / "bgm"
 
-for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, COOKIES_DIR, CACHE_DIR, DATABASE_PATH.parent]:
+for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, COOKIES_DIR, CACHE_DIR, BGM_DIR, DATABASE_PATH.parent]:
     p.mkdir(parents=True, exist_ok=True)
+
+
+_BGM_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".ogg", ".flac"}
+
+
+def _pick_bgm_file(mood: str) -> "str | None":
+    """Return a random BGM file path for the requested mood, or None.
+
+    Scan order: ``BGM_DIR/{mood}/`` first, then ``BGM_DIR/default/`` as
+    fallback. Returns None when neither directory contains audio files.
+    Never raises.
+    """
+    try:
+        candidates: list[Path] = []
+        for subdir in [mood.strip().lower(), "default"]:
+            if not subdir:
+                continue
+            d = BGM_DIR / subdir
+            if d.is_dir():
+                candidates = [f for f in d.iterdir() if f.is_file() and f.suffix.lower() in _BGM_AUDIO_EXTS]
+                if candidates:
+                    break
+        return str(random.choice(candidates)) if candidates else None
+    except Exception:
+        return None
 
 # AI Cloud Analyzer — server-side defaults read from environment / .env
 # These are fallbacks used when RenderRequest does not supply ai_cloud_api_key.
