@@ -27,6 +27,7 @@ import heapq
 import logging
 import os
 import threading
+import time
 import concurrent.futures
 from typing import Callable
 
@@ -40,6 +41,12 @@ MAX_CONCURRENT_JOBS: int = max(1, int(os.getenv(
     "MAX_CONCURRENT_JOBS",
     str(max(1, (os.cpu_count() or 4) // 2)),
 )))
+
+# Global job age limit in seconds. Jobs running longer than this are cancelled
+# by the watchdog. Default 7200 s (2 h) — covers transcription + LLM + render
+# for long-form content.  Set to 0 to disable.
+_MAX_JOB_AGE: int = int(os.getenv("MAX_JOB_AGE_SECONDS", "7200"))
+_WATCHDOG_INTERVAL: int = 30
 
 # ---------------------------------------------------------------------------
 # Internal state  (all mutations must hold _cond/_lock)
@@ -59,6 +66,66 @@ _active_job_ids: set[str] = set()          # jobs currently executing
 _executor: concurrent.futures.ThreadPoolExecutor | None = None
 _scheduler_thread: threading.Thread | None = None
 _stopping: bool = False
+
+# Watchdog state — tracks when each job was dispatched for age-limit enforcement.
+_job_start_times: dict[str, float] = {}
+_job_times_lock = threading.Lock()
+_watchdog_thread: threading.Thread | None = None
+
+
+# ---------------------------------------------------------------------------
+# Watchdog — cancels jobs that exceed MAX_JOB_AGE_SECONDS
+# ---------------------------------------------------------------------------
+
+def _check_and_cancel_stale_jobs() -> None:
+    """Scan active jobs and cancel any that have exceeded _MAX_JOB_AGE.
+
+    Called from the watchdog daemon thread every _WATCHDOG_INTERVAL seconds.
+    Exposed at module level so unit tests can invoke it directly without
+    sleeping.  _MAX_JOB_AGE == 0 disables the check entirely.
+    """
+    if _MAX_JOB_AGE <= 0:
+        return
+    now = time.monotonic()
+    with _cond:
+        active = list(_active_job_ids)
+    for job_id in active:
+        with _job_times_lock:
+            t0 = _job_start_times.get(job_id)
+        if t0 is not None and (now - t0) > _MAX_JOB_AGE:
+            logger.warning(
+                "watchdog: job %s has run for %.0fs (limit %ds) — cancelling",
+                job_id, now - t0, _MAX_JOB_AGE,
+            )
+            try:
+                from app.jobs.cancel import request_cancel
+                request_cancel(job_id)
+            except Exception as exc:
+                logger.error("watchdog: request_cancel(%s) failed: %s", job_id, exc)
+
+
+def _watchdog_loop() -> None:
+    """Daemon loop: sleep, then check for stale jobs. Never raises."""
+    while True:
+        time.sleep(_WATCHDOG_INTERVAL)
+        try:
+            _check_and_cancel_stale_jobs()
+        except Exception as exc:
+            logger.error("watchdog loop error: %s", exc, exc_info=True)
+
+
+def _ensure_watchdog_running() -> None:
+    """Start the watchdog daemon thread if it is not already alive."""
+    global _watchdog_thread
+    if _MAX_JOB_AGE <= 0:
+        return
+    with _job_times_lock:
+        if _watchdog_thread is not None and _watchdog_thread.is_alive():
+            return
+        t = threading.Thread(target=_watchdog_loop, daemon=True, name="job-watchdog")
+        t.start()
+        _watchdog_thread = t
+        logger.info("Job watchdog started (MAX_JOB_AGE_SECONDS=%d)", _MAX_JOB_AGE)
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +194,11 @@ def _scheduler_loop() -> None:
         # don't block other threads from enqueuing.
         _mark_job_running(job_id)
 
+        # Record dispatch time for watchdog age-limit enforcement.
+        with _job_times_lock:
+            _job_start_times[job_id] = time.monotonic()
+        _ensure_watchdog_running()
+
         def _run(jid: str = job_id, f: Callable = fn, a=args, kw=kwargs) -> None:
             try:
                 f(*a, **kw)
@@ -135,6 +207,8 @@ def _scheduler_loop() -> None:
                     "Job %s raised unhandled exception: %s", jid, exc, exc_info=True
                 )
             finally:
+                with _job_times_lock:
+                    _job_start_times.pop(jid, None)
                 with _cond:
                     _active_job_ids.discard(jid)
                     _cond.notify_all()  # a slot just opened — wake the scheduler

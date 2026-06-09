@@ -154,19 +154,13 @@ def test_emit_render_event_uses_keyword_only_calls():
 @pytest.mark.parametrize(
     ("env_var", "expected_default_on"),
     [
-        ("FEATURE_BASE_CLIP_FIRST",          False),
-        ("FEATURE_OVERLAY_AFTER_BASE_CLIP",  False),
-        ("FEATURE_RAW_PART_SKIP",            False),
-        ("FEATURE_RAW_PART_SKIP_MOTION_AWARE", False),
         ("LLM_EMIT_RENDER_PLAN",             True),
     ],
 )
 def test_feature_flag_default(env_var: str, expected_default_on: bool, monkeypatch):
-    """Pin each render feature flag's default state.
+    """Pin the LLM_EMIT_RENDER_PLAN flag default state.
 
     Sprint 7.6a (2026-06-05) flipped LLM_EMIT_RENDER_PLAN from OFF → ON.
-    All other flags default OFF (Sacred Contract #2 — no historical
-    payload silently activates a new feature on replay).
 
     Re-imports render_pipeline with the env unset to capture the default.
     """
@@ -177,14 +171,8 @@ def test_feature_flag_default(env_var: str, expected_default_on: bool, monkeypat
             "app.features.render.engine.pipeline.render_pipeline"
         )
     )
-    flag_name = "_FEATURE_" + env_var.replace("FEATURE_", "").upper() \
-        if env_var.startswith("FEATURE_") else f"_FEATURE_{env_var}"
     # The flag attribute names in render_pipeline:
     name_map = {
-        "FEATURE_BASE_CLIP_FIRST":           "_FEATURE_BASE_CLIP_FIRST",
-        "FEATURE_OVERLAY_AFTER_BASE_CLIP":   "_FEATURE_OVERLAY_AFTER_BASE_CLIP",
-        "FEATURE_RAW_PART_SKIP":             "_FEATURE_RAW_PART_SKIP",
-        "FEATURE_RAW_PART_SKIP_MOTION_AWARE": "_FEATURE_RAW_PART_SKIP_MOTION_AWARE",
         "LLM_EMIT_RENDER_PLAN":              "_FEATURE_LLM_EMIT_RENDER_PLAN",
     }
     attr = name_map[env_var]
@@ -323,3 +311,22 @@ def test_feature_flag_reads_never_use_subscript_environ():
         "render_pipeline.py uses os.environ[...] subscript (line "
         f"{bad}). Use os.getenv(...) so a missing env var defaults to None."
     )
+
+
+# ---------------------------------------------------------------------------
+# 7. LLM_EMIT_RENDER_PLAN=0 — flag resolves to False when explicitly disabled
+# ---------------------------------------------------------------------------
+
+def test_llm_emit_render_plan_flag_off_when_zero(monkeypatch):
+    """When LLM_EMIT_RENDER_PLAN=0 is set, _FEATURE_LLM_EMIT_RENDER_PLAN must
+    be False. Verifies the explicit opt-out path, complementing the default=1
+    test above which covers the absence case.
+    """
+    import importlib
+    monkeypatch.setenv("LLM_EMIT_RENDER_PLAN", "0")
+    rp = importlib.reload(
+        importlib.import_module(
+            "app.features.render.engine.pipeline.render_pipeline"
+        )
+    )
+    assert rp._FEATURE_LLM_EMIT_RENDER_PLAN is False

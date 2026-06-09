@@ -129,6 +129,54 @@ def upsert_creator_context(context: Optional[CreatorContext]) -> Optional[Creato
     return get_creator_context()
 
 
+# ── Output directory preference ─────────────────────────────────────────
+
+_OUTPUT_DIR_KEY = "output_dir"
+
+
+def get_default_output_dir() -> Optional[str]:
+    """Return the persisted default output directory or None when not set.
+
+    Never raises — returns None on any DB or parse error so a transient
+    failure cannot break the Settings screen.
+    """
+    try:
+        prefs = get_creator_prefs()
+    except Exception as exc:
+        logger.warning("get_default_output_dir: read failed: %s", exc)
+        return None
+    nested = prefs.get(_OUTPUT_DIR_KEY)
+    if not isinstance(nested, dict):
+        return None
+    raw = nested.get("path")
+    if not raw or not str(raw).strip():
+        return None
+    return str(raw).strip()
+
+
+def upsert_default_output_dir(path: Optional[str]) -> Optional[str]:
+    """Persist the default output directory. None or empty string clears the setting.
+
+    Returns the value that was actually persisted, or None on error.
+    Other top-level prefs keys are preserved verbatim.
+    """
+    try:
+        current = get_creator_prefs()
+    except Exception as exc:
+        logger.warning("upsert_default_output_dir: read failed: %s", exc)
+        current = {}
+    if not path or not str(path).strip():
+        current.pop(_OUTPUT_DIR_KEY, None)
+    else:
+        current[_OUTPUT_DIR_KEY] = {"path": str(path).strip()}
+    try:
+        upsert_creator_prefs(current)
+    except Exception as exc:
+        logger.warning("upsert_default_output_dir: write failed: %s", exc)
+        return None
+    return get_default_output_dir()
+
+
 # ── Batch 10R (MT-7 UI) — data-retention helpers ────────────────────────
 
 # Hard bounds the API enforces. 0 = retention disabled (Sacred Contract

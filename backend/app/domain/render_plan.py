@@ -76,13 +76,13 @@ class SubtitlePolicy:
     """
     style: str = ""               # viral|clean|story|gaming|"" = inherit
     market: str = ""              # us|eu|jp|vn|global|"" = inherit
-    emphasis_pass: bool = False
+    emphasis_pass: Optional[bool] = None
 
 
 @dataclass
 class CameraStrategy:
     """Camera / motion-crop / reframe decisions."""
-    motion_aware_crop: bool = False
+    motion_aware_crop: Optional[bool] = None
     reframe_mode: str = ""        # center|track|fixed|"" = inherit
     tracker: str = ""             # bytetrack|trackerless|legacy|"" = auto
 
@@ -90,9 +90,9 @@ class CameraStrategy:
 @dataclass
 class AudioPlan:
     """Voice / BGM / CTA-audio configuration."""
-    voice_enabled: bool = False
+    voice_enabled: Optional[bool] = None
     voice_provider: str = ""      # "" = inherit (xtts default)
-    bgm_enabled: bool = False
+    bgm_enabled: Optional[bool] = None
     cta_audio: str = ""           # path or "" = none
 
 
@@ -190,6 +190,27 @@ def _coerce_bool(value: Any, default: bool) -> bool:
     return default
 
 
+def _coerce_optional_bool(value: Any) -> Optional[bool]:
+    """Coerce to bool or None. None means 'not set by AI'.
+
+    Unlike _coerce_bool, unknown/None input returns None instead of a
+    fallback — preserving the three-state semantic of Optional[bool].
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("true", "1", "yes", "on"):
+            return True
+        if v in ("false", "0", "no", "off"):
+            return False
+    return None
+
+
 def _filter_dataclass(cls, data: Any):
     """Build a dataclass instance from a dict — drop unknown keys, coerce
     primitives to the declared type, keep defaults for missing or
@@ -210,7 +231,9 @@ def _filter_dataclass(cls, data: Any):
         default_val = f.default if f.default is not _MISSING else None
         if annot is None and default_val is not None:
             annot = type(default_val)
-        if annot is bool:
+        if f.type in ("Optional[bool]", "bool | None"):
+            kwargs[f.name] = _coerce_optional_bool(raw_val)
+        elif annot is bool:
             kwargs[f.name] = _coerce_bool(raw_val, bool(default_val))
         elif annot is int:
             kwargs[f.name] = _coerce_int(raw_val, int(default_val or 0))

@@ -15,11 +15,7 @@ Block responsibilities (in order):
   3. detect_bad_first_frame visual scan. When trim is feasible
      (clip still â‰¥ 3.0 s after combined offset), sets
      force_accurate_cut=True and emits `first_frame_shift_applied`.
-  4. AI timing-mutation deltas (tighten_setup / shorten_outro) when
-     payload.ai_timing_mutation_enabled AND ctx.ai_edit_plan has
-     applied_mutations. Each delta is bounded so the clip stays
-     â‰¥ payload.min_part_sec after trim.
-  5. TimelineMap + BaseClipManifest construction (timeline manifest
+  4. TimelineMap + BaseClipManifest construction (timeline manifest
      pre-cut snapshot — written to disk).
   6. JobPartStage.CUTTING upsert (Sacred Contract #5 — frozen
      state-machine transition, line 328 of original).
@@ -77,55 +73,6 @@ from app.features.render.engine.encoder.clip_ops import (
 # Preserve original logger name (same pattern as 6.D-2.1 / 6.D-2.2).
 logger = logging.getLogger("app.render")
 
-# Sprint 6 O-4 Commit 1 — feature-flag mirror reads.
-# Same pattern as part_renderer.py / part_render_setup.py /
-# part_render_encode.py / render_pipeline.py (four-site read drift-
-# prevention). No drift possible — every site reads the same env vars
-# deterministically at import time.
-_FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
-_FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
-# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
-# see render_pipeline.py for the closure rationale.
-# Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
-_FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
-# Sprint 7.8 (2026-06-05): motion-aware extension flag — see render_pipeline.py.
-_FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
-
-
-def _should_skip_raw_part_write(
-    *,
-    part_subtitle_enabled: bool,
-    feature_base_clip_first: bool,
-    feature_overlay_after_base_clip: bool,
-) -> bool:
-    """Sprint 6 audit O-4 predicate — Commit 1 (telemetry-only).
-
-    Returns True when ``raw_part`` has zero downstream readers and
-    ``cut_video`` could be fused into the final render encode. Three
-    consumer sites today:
-
-      C1  per-part Whisper at part_asset_planner.py:209
-      C2  render_base_clip at part_render_encode.py (post Sprint 6 P0 HIGH gate)
-      C3  render_part_smart at part_render_encode.py
-
-    C1 is gated by ``part_subtitle_enabled``. C2 is gated by the same
-    boolean ``_base_clip_consumer_active`` introduced in Sprint 6 P0
-    HIGH. C3 is the only consumer the fuse would replace — its argv
-    would change from ``-i raw_part`` to ``-ss start -t duration -i source``.
-
-    The predicate is pure (no I/O, no side effects) so the truth-table
-    test in tests/test_raw_part_skip_predicate.py can exercise it
-    without constructing a PartRenderContext.
-
-    Sprint 6 audit O-4 Commit 1 ships this predicate AS TELEMETRY ONLY.
-    No skip is wired yet — ``run_cut_stage`` still calls ``cut_video``
-    on every part. A future sprint commit will gate the actual skip on
-    a feature flag (``FEATURE_RAW_PART_SKIP=0`` default) after manual
-    visual review on 3-5 sample renders per SPRINT_PLAN risk register
-    line 302.
-    """
-    base_clip_will_render = feature_base_clip_first and feature_overlay_after_base_clip
-    return (not part_subtitle_enabled) and (not base_clip_will_render)
 
 
 @dataclass
@@ -221,42 +168,6 @@ def run_cut_stage(
                 f"total_trim={_trim_offset:.3f}s effective_start={_effective_start:.3f}s accurate_cut=True")
 
     _effective_end = seg['end']
-    if (
-        getattr(ctx.payload, 'ai_timing_mutation_enabled', False)
-        and ctx.ai_edit_plan is not None
-        and ctx.ai_edit_plan.timing_apply.get('applied_mutations')
-    ):
-        _mutations = ctx.ai_edit_plan.timing_apply['applied_mutations']
-        _min_sec = float(getattr(ctx.payload, 'min_part_sec', 15) or 15)
-
-        _ai_setup_delta = sum(
-            float(m.get('delta_sec', 0.0))
-            for m in _mutations
-            if (
-                m.get('mutation_type') == 'tighten_setup'
-                and m.get('safe') is True
-                and seg['start'] <= float(m.get('start_sec', -1)) <= seg['start'] + 5.0
-            )
-        )
-        if _ai_setup_delta > 0:
-            _ai_setup_delta = min(_ai_setup_delta, max(0.0, _effective_end - _effective_start - _min_sec))
-        if _ai_setup_delta > 0:
-            _trim_offset += _ai_setup_delta
-            _effective_start = seg['start'] + _trim_offset
-
-        _ai_outro_delta = sum(
-            float(m.get('delta_sec', 0.0))
-            for m in _mutations
-            if (
-                m.get('mutation_type') == 'shorten_outro'
-                and m.get('safe') is True
-                and seg['end'] - 5.0 <= float(m.get('end_sec', -1)) <= seg['end']
-            )
-        )
-        if _ai_outro_delta > 0:
-            _ai_outro_delta = min(_ai_outro_delta, max(0.0, _effective_end - _effective_start - _min_sec))
-        if _ai_outro_delta > 0:
-            _effective_end -= _ai_outro_delta
 
     _part_platform_delta = float(
         _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)
@@ -287,79 +198,15 @@ def run_cut_stage(
         visual_trim_offset=float(_visual_trim),
         timeline=_part_timeline,
         ai_enabled=bool(getattr(ctx.payload, "ai_director_enabled", False)),
-        ai_mode=getattr(ctx.ai_edit_plan, "mode", None) if ctx.ai_edit_plan is not None else None,
-        ai_selected=(
-            any(
-                min(seg["end"], clip.end) - max(seg["start"], clip.start)
-                >= 0.5 * min(seg["end"] - seg["start"], clip.end - clip.start)
-                for clip in ctx.ai_edit_plan.selected_segments
-            )
-            if ctx.ai_edit_plan is not None and ctx.ai_edit_plan.selected_segments
-            else False
-        ),
+        ai_mode=None,
+        ai_selected=False,
         ai_speed_hint=None,
     )
     write_manifest(ctx.work_dir, _part_manifest)
 
     upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
 
-    # Sprint 6 audit O-4 Commit 1 — telemetry-only predicate evaluation.
-    # Sprint 7.4 (this commit) — actually skip cut_video when:
-    #   1. The predicate fires (subtitle off + no base_clip consumer); AND
-    #   2. FEATURE_RAW_PART_SKIP=1 (30-day settling opt-in); AND
-    #   3. payload.motion_aware_crop=False (Option E scope — Sprint 7.8
-    #      will add the motion-aware branch).
-    # The fused render runs in run_render_encode via render_part_from_source
-    # when raw_part.exists() is False (this skip leaves the file absent
-    # which is the cross-stage signal).
-    _part_subtitle_enabled = ctx.subtitle_enabled_by_idx.get(idx, False)
-    _skip_predicate_fires = _should_skip_raw_part_write(
-        part_subtitle_enabled=_part_subtitle_enabled,
-        feature_base_clip_first=_FEATURE_BASE_CLIP_FIRST,
-        feature_overlay_after_base_clip=_FEATURE_OVERLAY_AFTER_BASE_CLIP,
-    )
-    _payload_motion_aware = bool(getattr(ctx.payload, "motion_aware_crop", False))
-    # Sprint 7.8 — motion-aware extension. Both FEATURE_RAW_PART_SKIP=1 AND
-    # FEATURE_RAW_PART_SKIP_MOTION_AWARE=1 are required to engage the
-    # motion-aware-crop fuse path. Sprint 7.4 case (motion_aware=False)
-    # gate-state preserved when 7.8 flag is OFF.
-    _motion_aware_fuse_enabled = (
-        _FEATURE_RAW_PART_SKIP_MOTION_AWARE and _payload_motion_aware
-    )
-    _skip_active = (
-        _skip_predicate_fires
-        and _FEATURE_RAW_PART_SKIP
-        and (not _payload_motion_aware or _motion_aware_fuse_enabled)
-    )
-    if _skip_predicate_fires:
-        _job_log(
-            ctx.effective_channel,
-            ctx.job_id,
-            f"raw_part_skip_eligible part={idx} predicate=true "
-            f"subtitle_enabled=False base_clip_consumer=False "
-            f"motion_aware={_payload_motion_aware} flag={_FEATURE_RAW_PART_SKIP} "
-            f"motion_aware_flag={_FEATURE_RAW_PART_SKIP_MOTION_AWARE} "
-            f"motion_aware_fuse_enabled={_motion_aware_fuse_enabled} "
-            f"active={_skip_active}",
-            kind="debug",
-        )
-    if _skip_active:
-        _job_log(
-            ctx.effective_channel,
-            ctx.job_id,
-            f"raw_part_skip_active part={idx} cut_video bypassed — "
-            f"render_part_from_source will fuse cut+render in render_encode",
-            kind="info",
-        )
-
-    if _skip_active:
-        # Sprint 7.4 — cut_video bypassed. raw_part stays absent; the
-        # encode stage detects this via raw_part.exists() and routes to
-        # render_part_from_source (input-side -ss/-t fused with the
-        # final encode). _cut_ms stays 0 — the time shows up in the
-        # encode stage timing instead.
-        logger.info("cut_video_skipped_sprint_7_4 part=%d", idx)
-    elif not (ctx.payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
+    if not (ctx.payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
         _t_cut = time.perf_counter()
         cut_video(str(ctx.source_path), str(raw_part), _effective_start, _effective_end,
                   retry_count=ctx.retry_count, force_accurate_cut=_force_accurate_cut)

@@ -101,9 +101,10 @@ logger = logging.getLogger("app.render")
 # Sacred Contract #2 (default behaviour identical to baseline). When set,
 # overrides the tts_engine for both TTS call sites in run_part_voice_mix.
 #
-# Deferred (same bool-ambiguity reason as Sprint 4.F motion_aware_crop):
-#   - audio_plan.voice_enabled  (False default ≡ "not set" — can't distinguish)
-#   - audio_plan.bgm_enabled    (same)
+# P3 wired:
+#   - audio_plan.voice_enabled: wired via _resolve_voice_enabled_from_plan
+# Deferred (P4 scope):
+#   - audio_plan.bgm_enabled    (Optional[bool] since P2 — needs audio-mixer consumer)
 #   - audio_plan.cta_audio      (requires audio-mixer changes — cross-file)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -120,6 +121,21 @@ def _resolve_voice_provider_from_plan(ctx: PartRenderContext, fallback: str) -> 
     if not plan_provider:
         return fallback
     return plan_provider
+
+
+def _resolve_voice_enabled_from_plan(ctx: PartRenderContext, fallback: bool) -> bool:
+    """Return the effective voice_enabled flag for this part.
+
+    Returns render_plan.audio_plan.voice_enabled when explicitly set
+    (not None), otherwise the caller's payload-derived fallback.
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return fallback
+    plan_enabled = rp.audio_plan.voice_enabled
+    if plan_enabled is None:
+        return fallback
+    return bool(plan_enabled)
 
 
 def run_part_voice_mix(
@@ -143,8 +159,11 @@ def run_part_voice_mix(
     _part_manifest = part_manifest
 
     _part_subtitle_voice_path = None
+    _effective_voice_enabled = _resolve_voice_enabled_from_plan(
+        ctx, getattr(ctx.payload, "voice_enabled", False)
+    )
     if (
-        getattr(ctx.payload, "voice_enabled", False)
+        _effective_voice_enabled
         and getattr(ctx.payload, "voice_source", "manual") == "subtitle"
         and ctx.voice_audio_path is None
     ):
@@ -234,7 +253,7 @@ def run_part_voice_mix(
                 context={"part_no": idx, "source": "subtitle"},
             )
     elif (
-        getattr(ctx.payload, "voice_enabled", False)
+        _effective_voice_enabled
         and getattr(ctx.payload, "voice_source", "manual") == "translated_subtitle"
         and ctx.voice_audio_path is None
     ):

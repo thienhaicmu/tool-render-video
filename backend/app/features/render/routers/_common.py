@@ -96,22 +96,7 @@ def _validate_output_dir(payload: RenderRequest):
         raise HTTPException(status_code=400, detail="output_dir is required")
 
 
-def _coerce_legacy_channel_payload(payload: RenderRequest) -> None:
-    """Convert channel-mode payloads (from old clients / stored jobs) to manual mode in-place."""
-    if (payload.output_mode or "").strip().lower() == "channel":
-        logger.info(
-            "Legacy channel mode payload detected — converting to manual (output_dir=%s channel=%s)",
-            payload.output_dir or "",
-            payload.channel_code or "",
-        )
-        payload.output_mode = "manual"
-
-
 def _validate_render_source(payload: RenderRequest):
-    output_mode = (payload.output_mode or "manual").strip().lower()
-    if output_mode not in ("channel", "manual"):
-        raise HTTPException(status_code=400, detail="output_mode must be 'channel' or 'manual'")
-
     # When an editor session is provided, the pipeline uses the session's video_path;
     # skip source-path validation entirely.
     if (getattr(payload, "edit_session_id", None) or "").strip():
@@ -137,18 +122,6 @@ def _validate_render_source(payload: RenderRequest):
     if not Path(local).exists():
         raise HTTPException(status_code=400, detail=f"Source file not found on disk: {local}")
     _validate_output_dir(payload)
-    if output_mode == "channel":
-        channel = (payload.channel_code or "").strip()
-        if not channel:
-            raise HTTPException(status_code=400, detail="channel_code is required when output_mode='channel'")
-        out_path = Path(str(payload.output_dir).strip())
-        parts = [str(p).strip().lower() for p in out_path.parts if str(p).strip()]
-        chan = channel.lower()
-        if chan not in parts:
-            raise HTTPException(
-                status_code=400,
-                detail=f"output_dir must be inside selected channel folder '{channel}' (example: D:/data/{channel}/upload/video_output).",
-            )
 
 
 def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = False):

@@ -102,3 +102,24 @@ def test_observe_acquire_wait_is_failure_tolerant(monkeypatch):
         sys.modules.pop("app.services.metrics", None)
         if saved is not None:
             sys.modules["app.services.metrics"] = saved
+
+
+# ---------------------------------------------------------------------------
+# DB_TIMEOUT configurable (Sprint B-1)
+# ---------------------------------------------------------------------------
+
+def test_db_timeout_default_is_30():
+    """DB_TIMEOUT defaults to 30 when DB_TIMEOUT env var is absent."""
+    import importlib
+    import app.core.config as cfg
+    importlib.reload(cfg)
+    assert cfg.DB_TIMEOUT == 30
+
+
+def test_db_timeout_respects_env(monkeypatch):
+    """DB_TIMEOUT reads the DB_TIMEOUT env var when present."""
+    monkeypatch.setenv("DB_TIMEOUT", "60")
+    import importlib
+    import app.core.config as cfg
+    importlib.reload(cfg)
+    assert cfg.DB_TIMEOUT == 60

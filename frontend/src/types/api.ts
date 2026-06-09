@@ -75,7 +75,6 @@ export interface RenderRequest {
   source_video_path?: string
 
   // Output group
-  output_mode?: 'manual'
   output_dir: string
   render_output_subdir?: string
   keep_source_copy?: boolean

@@ -32,11 +32,6 @@ Block responsibilities (in order):
      composite_overlays_on_base_clip call).
   5. PartExecutionPlan construction + part_execution_plan INFO log.
   6. CameraStrategy construction + camera_strategy INFO log.
-  7. Feature-flag warning when FEATURE_OVERLAY_AFTER_BASE_CLIP=1 but
-     FEATURE_BASE_CLIP_FIRST=0 — read at the module-load level of
-     this module via os.getenv (identical to part_renderer.py's
-     module-level reads; same behavior, same env-var lookup).
-
 Returns RenderPreflightResult dataclass with all 13 outputs the
 downstream RENDER block consumes. The caller aliases each field
 back to its original local-variable name in process_one_part so
@@ -55,13 +50,6 @@ Logger note (same pattern as 6.D-2.1 / 2.2 / 2.3):
   `logger = logging.getLogger("app.render")` preserved verbatim so
   existing log routing resolves identically.
 
-Feature-flag env-var read note:
-  `_FEATURE_BASE_CLIP_FIRST` and `_FEATURE_OVERLAY_AFTER_BASE_CLIP`
-  are read at module-load time via os.getenv (identical to
-  part_renderer.py's module-level reads). The flags are read ONCE
-  per process startup in BOTH modules — behavior is identical
-  because both reads happen at import time and read the same
-  deterministic env var. No drift risk.
 """
 from __future__ import annotations
 
@@ -85,17 +73,6 @@ from app.features.render.engine.encoder.ffmpeg_helpers import (
 # Preserve original logger name (same pattern as 6.D-2.1 / 2.2 / 2.3).
 logger = logging.getLogger("app.render")
 
-# Re-read feature flags at this module's load time — identical to
-# part_renderer.py module-level reads. Both modules read the same env
-# vars deterministically at import; no drift possible.
-_FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
-_FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
-# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed —
-# see render_pipeline.py for the closure rationale.
-# Sprint 7.4 (2026-06-05): raw_part skip flag — see render_pipeline.py.
-_FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
-# Sprint 7.8 (2026-06-05): motion-aware extension flag — see render_pipeline.py.
-_FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -109,14 +86,9 @@ _FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOT
 # set fields override. Invalid reframe_mode values soft-fall back per
 # Sacred Contract #3.
 #
-# Scope of Sprint 4.F: reframe_mode only. motion_aware_crop and
-# tracker are DEFERRED:
-#   - motion_aware_crop is a plain bool that defaults to False, so the
-#     dataclass cannot disambiguate "AI never set it" from "AI
-#     explicitly disabled it". Honouring the plan value when present
-#     would flip baseline behaviour for jobs where
-#     payload.motion_aware_crop=True but the plan defaulted to False
-#     — same blocker the Sprint 4.E emphasis_pass deferral cited.
+# Scope of Sprint 4.F: reframe_mode only. Extended in P3:
+#   - motion_aware_crop: wired in P3 — render_plan.camera_strategy.motion_aware_crop
+#     (Optional[bool]) overrides ctx.payload.motion_aware_crop when not None.
 #   - tracker has zero orchestration consumer today; the dispatch
 #     happens inside services/motion_crop.py via internal capability
 #     detection. Nothing to migrate yet.
@@ -151,6 +123,24 @@ def _resolve_reframe_mode_from_plan(
     if plan_reframe not in _RENDER_PLAN_ALLOWED_REFRAME_MODES:
         return fallback_value, "fallback_invalid_reframe"
     return plan_reframe, "render_plan"
+
+
+def _resolve_motion_aware_crop_from_plan(
+    ctx: PartRenderContext, fallback_value: bool
+) -> tuple[bool, str]:
+    """Return ``(effective_motion_aware_crop, source_tag)``.
+
+    Source tag is ``"render_plan"`` when the plan explicitly set the
+    field, ``"fallback"`` otherwise. Follows the same pattern as
+    _resolve_reframe_mode_from_plan (Sprint 4.F).
+    """
+    rp = getattr(ctx, "render_plan", None)
+    if rp is None:
+        return fallback_value, "fallback"
+    plan_crop = rp.camera_strategy.motion_aware_crop
+    if plan_crop is None:
+        return fallback_value, "fallback"
+    return bool(plan_crop), "render_plan"
 
 
 @dataclass
@@ -202,6 +192,9 @@ def run_render_preflight(
     is responsible for `result.encode_stop.set()` + `result.encode_timer.join(timeout=5.0)`
     after the FFmpeg render completes (or in a finally block).
     """
+    _effective_motion_crop, _motion_crop_source = _resolve_motion_aware_crop_from_plan(
+        ctx, bool(ctx.payload.motion_aware_crop)
+    )
     _vf_ct = seg.get("content_type_hint", "vlog")
     _vf_crf_delta = _crf_delta_for_content_type(_vf_ct)
     _part_video_crf = max(11, min(28, ctx.tuned["video_crf"] + _vf_crf_delta))
@@ -209,7 +202,7 @@ def run_render_preflight(
         "high" if _vf_ct == "montage" else
         "low" if _vf_ct in ("interview", "tutorial") else "standard"
     )
-    _vf_subtitle_bump = not ctx.payload.motion_aware_crop and _vf_ct in ("interview", "commentary")
+    _vf_subtitle_bump = not _effective_motion_crop and _vf_ct in ("interview", "commentary")
     logger.info(
         "visual_finish_applied part=%d content_type=%s crf=%d(delta=%+d) "
         "bitrate_profile=%s subtitle_safety_bump=%s",
@@ -244,7 +237,7 @@ def run_render_preflight(
     )
     _motion_ck = None
     _motion_crop_fallback: list = []
-    if ctx.payload.motion_aware_crop and ctx.src_stat_for_motion is not None:
+    if _effective_motion_crop and ctx.src_stat_for_motion is not None:
         try:
             _motion_ck = _render_cache_key(
                 str(ctx.source_path),
@@ -269,7 +262,7 @@ def run_render_preflight(
         visual_trim_sec=_visual_trim,
         force_accurate_cut=_force_accurate_cut,
         subtitle_enabled=part_subtitle_enabled,
-        motion_aware_crop=bool(ctx.payload.motion_aware_crop),
+        motion_aware_crop=_effective_motion_crop,
         reframe_mode=_effective_reframe,
         frame_scale_x=int(ctx.payload.frame_scale_x),
         frame_scale_y=int(ctx.payload.frame_scale_y),
@@ -295,7 +288,7 @@ def run_render_preflight(
         aspect_ratio=ctx.payload.aspect_ratio,
         frame_scale_x=int(ctx.payload.frame_scale_x),
         frame_scale_y=int(ctx.payload.frame_scale_y),
-        motion_aware_crop=bool(ctx.payload.motion_aware_crop),
+        motion_aware_crop=_effective_motion_crop,
         reframe_mode=_effective_reframe,
         content_type=_vf_ct,
     )
@@ -323,18 +316,11 @@ def run_render_preflight(
             "reframe_mode": _effective_reframe,
             "reframe_mode_source": _reframe_source,
             "motion_aware_crop": _camera_strategy.motion_aware_crop,
+            "motion_crop_source": _motion_crop_source,
             "camera_mode": _camera_strategy.camera_mode,
             "aspect_ratio": _camera_strategy.aspect_ratio,
         },
     )
-    if _FEATURE_OVERLAY_AFTER_BASE_CLIP and not _FEATURE_BASE_CLIP_FIRST:
-        logger.warning(
-            "overlay_flag_ignored job_id=%s part=%d: "
-            "FEATURE_OVERLAY_AFTER_BASE_CLIP=1 requires FEATURE_BASE_CLIP_FIRST=1 "
-            "— using render_part_smart() for final output",
-            ctx.job_id, idx,
-        )
-
     return RenderPreflightResult(
         vf_ct=_vf_ct,
         vf_crf_delta=_vf_crf_delta,

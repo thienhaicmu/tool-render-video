@@ -53,7 +53,7 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # Source
     "source_mode", "source_quality_mode", "youtube_url", "source_video_path",
     # Output
-    "output_mode", "output_dir", "render_output_subdir", "keep_source_copy",
+    "output_dir", "render_output_subdir", "keep_source_copy",
     "cleanup_temp_files",
     # Profile / quality
     "render_profile", "output_fps", "whisper_model",

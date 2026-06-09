@@ -290,20 +290,8 @@ def _event_from_stage(stage: str) -> str:
     return STAGE_TO_EVENT.get(stage, "render.start")
 
 
-def _resolve_job_log_dir(output_dir: Path, output_mode: str, channel_code: str) -> Path:
-    out = output_dir.resolve()
-    if output_mode == "channel":
-        chan = (channel_code or "").strip().lower()
-        if chan:
-            for p in [out, *out.parents]:
-                if p.name.strip().lower() == chan:
-                    return p / "logs"
-        if out.name.strip().lower() in ("video_output", "video_out"):
-            parent = out.parent
-            if parent.name.strip().lower() == "upload":
-                return parent.parent / "logs"
-        return out / "logs"
-    return out / "_logs"
+def _resolve_job_log_dir(output_dir: Path, channel_code: str) -> Path:
+    return output_dir.resolve() / "_logs"
 
 
 def _render_progress_timer(

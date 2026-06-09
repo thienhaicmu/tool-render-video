@@ -465,10 +465,7 @@ def run_part_finalize(
         render_ms=_render_ms,
         codec=str(ctx.payload.video_codec),
         crop_fallback=bool(_motion_crop_fallback),
-        overlay_composite_used=bool(
-            int(os.environ.get("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0"))
-            and int(os.environ.get("FEATURE_BASE_CLIP_FIRST", "0"))
-        ),
+        overlay_composite_used=False,
     )
     logger.info(
         "render_output part=%d codec=%s render_ms=%d crop_fallback=%s overlay=%s",

@@ -101,63 +101,16 @@ from app.features.render.engine.pipeline.pipeline_config import (
 from app.features.render.ai.llm import select_render_plan as _llm_select_render_plan
 from app.db.jobs_repo import update_render_plan
 
-# Feature flag: generate a no-overlay base clip as a parallel artifact before the
-# final render.  OFF by default.  Set FEATURE_BASE_CLIP_FIRST=1 to enable.
-# The base clip is never fed into the final output — render_part_smart() always
-# produces the final video unless FEATURE_OVERLAY_AFTER_BASE_CLIP is also enabled.
-_FEATURE_BASE_CLIP_FIRST: bool = os.getenv("FEATURE_BASE_CLIP_FIRST", "0") == "1"
 
-# Feature flag: composite subtitle overlays onto base_clip.mp4 as the final output.
-# Requires FEATURE_BASE_CLIP_FIRST=1.  OFF by default.
-# When both flags are ON: overlay composite path → fallback render_part_smart() on failure.
-_FEATURE_OVERLAY_AFTER_BASE_CLIP: bool = os.getenv("FEATURE_OVERLAY_AFTER_BASE_CLIP", "0") == "1"
-
-# Sprint 7.4 (2026-06-05) — feature flag: when ON, the raw_part.mp4
-# intermediate is skipped (cut_video bypassed) when the predicate at
-# part_cut._should_skip_raw_part_write fires AND payload.motion_aware_crop
-# is False. The fused cut+render call uses
-# services.render.base_clip_renderer.render_part_from_source with
-# input-side -ss/-t seek. Default OFF (Sacred Contract #2) — 30-day
-# settling window. See docs/review/SPRINT_7_4_RAW_PART_FUSE_2026-06-05.md.
-_FEATURE_RAW_PART_SKIP: bool = os.getenv("FEATURE_RAW_PART_SKIP", "0") == "1"
-
-# Sprint 7.8 (2026-06-05) — feature flag: when ON in combination with
-# FEATURE_RAW_PART_SKIP=1, extends the fused cut+render path to the
-# motion-aware-crop case (payload.motion_aware_crop=True). Requires
-# FEATURE_RAW_PART_SKIP=1 to engage — Sacred Contract #2 spirit
-# preserved (operators already on 7.4 see zero behaviour change on
-# 7.8 deploy until they explicitly opt in via this second flag).
-# Default OFF. See docs/review/SPRINT_7_8_MOTION_AWARE_FUSE_PLAN_2026-06-05.md.
-_FEATURE_RAW_PART_SKIP_MOTION_AWARE: bool = os.getenv("FEATURE_RAW_PART_SKIP_MOTION_AWARE", "0") == "1"
-
-# Sprint 7.2 (2026-06-05): FEATURE_BASE_CLIP_VALIDATION_ARTIFACT removed.
-# The validation-artifact opt-in (Sprint 6 P0 HIGH) was a 30-day settling
-# escape hatch for users who relied on writing base_clip.mp4 as an A/B
-# forensics artifact when FEATURE_BASE_CLIP_FIRST=1 but the overlay
-# composite consumer was off. Zero usage observed during the settling
-# period → flag removed. The gate at part_render_encode.py:172 now reads
-# `if FEATURE_BASE_CLIP_FIRST and FEATURE_OVERLAY_AFTER_BASE_CLIP:` —
-# base_clip.mp4 is only rendered when the overlay-composite consumer is
-# actually downstream. See docs/review/SPRINT_7_2_VALIDATION_FLAG_REMOVAL_2026-06-05.md.
-
-# Sprint 4.D — feature flag: when ON, ask the LLM to emit a full RenderPlan
-# (clips + subtitle_policy + camera_strategy + audio_plan + overlays) via
-# ai.llm.select_render_plan BEFORE the Sprint 2.2 builder shim runs. If the
-# AI returns a RenderPlan we use it directly; if it returns None or raises,
-# we fall back to the shim path — Sacred Contract #3 absolute. Sprint 4.E-G
-# migrated stage decision logic (subtitle_policy, camera_strategy, rank) to
-# read this AI-emitted plan with per-field merge — empty plan fields still
-# inherit legacy fallback (Sacred Contract #2 baseline preservation).
-#
-# Sprint 7.6a (2026-06-05): default flipped OFF → ON. The dual-mode fallback
-# at lines 457-552 (outer try/except wrapping the entire emission block)
-# means AI emission failure cannot crash a render — _render_plan stays None
-# and the legacy resolvers behave exactly as in the pre-flip baseline.
-# Operators who need the pre-flip behaviour set LLM_EMIT_RENDER_PLAN=0 (the
-# 3-second rollback). The legacy segment-only resolvers (LLMSegment +
-# _to_scored_dict) survive in this module as the OFF-path; they receive no
-# new callers and are slated for removal after ≥ 1 release cycle of
-# observed stability with the flip enabled.
+# Sprint 4.D — feature flag: when ON (default since Sprint 7.6a), ask the LLM
+# to emit a full RenderPlan (clips + subtitle_policy + camera_strategy +
+# audio_plan + overlays) via ai.llm.select_render_plan. If the AI returns a
+# RenderPlan we use it directly; if it returns None, the ai_emission_empty
+# guard (below) raises RuntimeError and the job fails. There is no heuristic
+# fallback — the Sprint 2.2 builder shim was removed in Sprint 4.H.
+# When LLM_EMIT_RENDER_PLAN=0 (non-default override), _render_plan stays None
+# and the stage resolvers fall back to payload-derived logic, preserving
+# Sacred Contract #2 baseline behaviour byte-identical.
 # See docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md.
 _FEATURE_LLM_EMIT_RENDER_PLAN: bool = os.getenv("LLM_EMIT_RENDER_PLAN", "1") == "1"
 
@@ -500,7 +453,6 @@ def run_render_pipeline(
     # to orchestration/pipeline_setup.py. The local aliases below preserve
     # the names used throughout the rest of this function.
     _setup = setup_render_pipeline(payload)
-    output_mode          = _setup.output_mode
     effective_channel    = _setup.effective_channel
     started_at           = _setup.started_at
     _mv_cfg              = _setup.mv_cfg
@@ -513,7 +465,7 @@ def run_render_pipeline(
     # Sprint 6.D-1.2: mkdir + render.output.prepare.{start,success,error}
     # WebSocket emits moved to orchestration/pipeline_setup.prepare_output_dir.
     prepare_output_dir(job_id, effective_channel, output_dir)
-    register_job_log_dir(job_id, _resolve_job_log_dir(output_dir, output_mode, effective_channel))
+    register_job_log_dir(job_id, _resolve_job_log_dir(output_dir, effective_channel))
     work_dir = TEMP_DIR / job_id
     work_dir.mkdir(parents=True, exist_ok=True)
     tuned = _resolve_profile(payload)
@@ -540,7 +492,7 @@ def run_render_pipeline(
     _job_log(
         effective_channel,
         job_id,
-        f"Render started | resume={resume_mode} | profile={payload.render_profile} | codec={payload.video_codec} | reup_mode={payload.reup_mode} | source_mode={payload.source_mode} | output_mode={output_mode}",
+        f"Render started | resume={resume_mode} | profile={payload.render_profile} | codec={payload.video_codec} | reup_mode={payload.reup_mode} | source_mode={payload.source_mode}",
     )
     _job_log(
         effective_channel,
@@ -611,7 +563,6 @@ def run_render_pipeline(
             "profile": payload.render_profile,
             "codec": payload.video_codec,
             "source_mode": payload.source_mode,
-            "output_mode": output_mode,
         },
     )
     upsert_job(
@@ -702,23 +653,12 @@ def run_render_pipeline(
         # _early_transcription_done=True means Phase 45 already ran Whisper — subtitle block skips.
 
         # Sprint 4.D + 4.H — RenderPlan acquisition (AI-emission only).
-        # When LLM_EMIT_RENDER_PLAN=1 the orchestrator asks the LLM to
-        # emit a full RenderPlan directly via ai.llm.select_render_plan
-        # and persists it. When the flag is OFF (default) _render_plan
-        # stays None — the Sprint 4.E/F/G stage resolvers fall back to
-        # the legacy payload-derived logic, preserving Sacred Contract
-        # #2 baseline behaviour byte-identical.
-        #
-        # Sprint 4.H removed the Sprint 2.2 builder shim path. The
-        # shim previously reconstructed LLMSegment objects from the
-        # scored list and produced a RenderPlan via
-        # render_plan_builder.build_render_plan; every Sprint 4
-        # consume site already handled ctx.render_plan=None so the
-        # shim was redundant scaffolding once 4.E/F/G landed.
-        #
-        # Outer try/except is the Sacred Contract #3 belt-and-braces —
-        # a future refactor must not be able to take down a render
-        # via the wire-up itself.
+        # When LLM_EMIT_RENDER_PLAN=1 (default since Sprint 7.6a) the
+        # orchestrator calls ai.llm.select_render_plan and persists the plan.
+        # When LLM_EMIT_RENDER_PLAN=0 (non-default override), _render_plan
+        # stays None and stage resolvers use payload-derived logic.
+        # The Sprint 2.2 builder shim was removed in Sprint 4.H.
+        # Outer try/except is the Sacred Contract #3 belt-and-braces.
         _render_plan = None
         try:
             if _FEATURE_LLM_EMIT_RENDER_PLAN:
@@ -1164,19 +1104,6 @@ def run_render_pipeline(
                             _hb_stop.set()
                             _hb.join(timeout=2)
 
-        # Phases 5.3, 5.5, 5.7, 10, 11, 60D removed in Phase G. All consumed _ai_edit_plan
-        # which is permanently None after AI Director removal (Phase E3). Variables below
-        # preserve their default values for downstream consumers (part_renderer kwargs,
-        # result_json fields). Hook overlay state is no longer mutated by AI.
-        _ai_edit_plan = None
-        _ai_subtitle_emphasis_config = None
-        _vis_intensity_hint: "str | None" = None
-        _ai_influence_report: dict = {"enabled": False}
-        _ai_beat_report: dict = {"enabled": False}
-
-        # AI Segment Promotion (Phase 59C) + Quality Gate (Phase 59D) removed (Phase F4).
-        # Both consumed _ai_edit_plan which is always None after E3.
-        # AI advisory phases 60A–62D also removed (Phase F2).
 
         for idx, seg in enumerate(scored, start=1):
             existing = existing_parts.get(idx, {})
@@ -1267,8 +1194,6 @@ def run_render_pipeline(
             output_stem=_output_stem,
             payload=payload,
             existing_parts=existing_parts,
-            ai_edit_plan=_ai_edit_plan,
-            vis_intensity_hint=_vis_intensity_hint,
             target_platform=_target_platform,
             tuned=tuned,
             ffmpeg_threads=1,
@@ -1286,7 +1211,6 @@ def run_render_pipeline(
             hook_score=_hook_score,
             hook_overlay_enabled=_hook_overlay_enabled,
             dna_clean_visual=_dna_clean_visual,
-            ai_subtitle_emphasis_config=_ai_subtitle_emphasis_config,
             normalized_text_layers=normalized_text_layers,
             voice_part_tts_attempts=_voice_part_tts_attempts,
             voice_mix_ok=_voice_mix_ok,
@@ -1575,8 +1499,6 @@ def run_render_pipeline(
             mv_parts=_mv_parts,
             voice_summary=_voice_summary,
             subtitle_translate_summary=_subtitle_translate_summary,
-            ai_influence_report=_ai_influence_report,
-            ai_beat_report=_ai_beat_report,
             render_plan=_render_plan,
             # Strategic-4 — Audit 2026-06-08 closure. The rank-source tag
             # was already computed at line 1160 and surfaced in per-entry

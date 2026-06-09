@@ -99,7 +99,6 @@ def _build_payload(output_dir: Path):
         channel_code="t1-1-guard",
         source_mode="local",
         source_video_path=str(Path(__file__).parent / "_NONEXISTENT_BECAUSE_MOCKED.mp4"),
-        output_mode="manual",
         output_dir=str(output_dir / "t1-1-guard" / "video_out"),
         render_profile="fast",
         output_count=2,

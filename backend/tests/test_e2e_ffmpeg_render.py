@@ -191,7 +191,6 @@ def test_real_ffmpeg_render_produces_valid_output(_e2e_sandbox):
         channel_code="e2e-ffmpeg",
         source_mode="local",
         source_video_path=str(source_video),
-        output_mode="manual",
         output_dir=str(output_dir / "e2e-ffmpeg" / "video_out"),
         render_profile="fast",
         output_count=1,

@@ -516,14 +516,7 @@ def prepare_part_assets(
             try:
                 _emph_blocks = parse_srt_blocks(str(_ass_srt_source))
                 if _emph_blocks:
-                    _ai_emph_override = (
-                        ctx.ai_subtitle_emphasis_config.emphasis_style
-                        if (
-                            ctx.ai_subtitle_emphasis_config is not None
-                            and ctx.ai_subtitle_emphasis_config.applied
-                        )
-                        else None
-                    )
+                    _ai_emph_override = None
                     # Sprint 4.E — RenderPlan.subtitle_policy.market
                     # overrides ctx.mv_market at this functional call
                     # site only. Log fields (L319/L335/L350) keep
@@ -534,7 +527,7 @@ def prepare_part_assets(
                     # always runs emphasis so baseline behaviour is unchanged.
                     _run_emphasis = (
                         ctx.render_plan is None
-                        or ctx.render_plan.subtitle_policy.emphasis_pass
+                        or ctx.render_plan.subtitle_policy.emphasis_pass is not False
                     )
                     if _run_emphasis:
                         subtitle_emphasis_pass(

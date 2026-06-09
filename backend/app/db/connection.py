@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from app.core.config import DATABASE_PATH
+from app.core.config import DATABASE_PATH, DB_TIMEOUT
 
 logger = logging.getLogger("app.db")
 
@@ -116,7 +116,7 @@ def is_fallback_active() -> bool:
 
 def get_conn():
     db_path = _resolve_db_path()
-    conn = sqlite3.connect(str(db_path), timeout=30)
+    conn = sqlite3.connect(str(db_path), timeout=DB_TIMEOUT)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA journal_mode=WAL;')
     conn.execute('PRAGMA synchronous=NORMAL;')
@@ -193,7 +193,7 @@ def _thread_conn() -> sqlite3.Connection:
             _tls.conn = None
     _start = time.monotonic()
     db_path = _resolve_db_path()
-    conn = sqlite3.connect(str(db_path), timeout=30)
+    conn = sqlite3.connect(str(db_path), timeout=DB_TIMEOUT)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA journal_mode=WAL;')
     conn.execute('PRAGMA synchronous=NORMAL;')

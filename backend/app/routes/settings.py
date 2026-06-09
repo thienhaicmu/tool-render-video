@@ -28,8 +28,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.creator_repo import (
     get_creator_context,
+    get_default_output_dir,
     get_job_retention_days,
     upsert_creator_context,
+    upsert_default_output_dir,
     upsert_job_retention_days,
 )
 from app.domain.creator_context import CreatorContext
@@ -181,6 +183,62 @@ def get_settings_data_retention() -> DataRetentionEnvelope:
     return DataRetentionEnvelope(
         is_configured=days is not None,
         data_retention=DataRetentionPayload(job_retention_days=days or 0),
+    )
+
+
+# ── Output directory preference endpoints ───────────────────────────────
+
+
+class OutputDirPayload(BaseModel):
+    """Request body / response shape for /api/settings/output-dir.
+
+    ``path``: absolute path to the user's preferred output directory.
+    Empty string clears the setting (next render will require an explicit
+    output_dir in the request payload).
+    """
+    model_config = ConfigDict(extra="ignore")
+
+    path: str = ""
+
+
+class OutputDirEnvelope(BaseModel):
+    """Response shape — carries ``is_configured`` so the frontend can
+    distinguish "not yet set" from an explicit empty path."""
+    is_configured: bool
+    output_dir: OutputDirPayload
+
+
+@router.get("/output-dir", response_model=OutputDirEnvelope)
+def get_settings_output_dir() -> OutputDirEnvelope:
+    """Return the persisted default output directory.
+
+    Never 404 — returns ``is_configured=False`` with an empty path when
+    nothing has been saved yet, so the frontend can always render the
+    directory picker unconditionally.
+    """
+    try:
+        path = get_default_output_dir()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"output_dir read failed: {exc}")
+    return OutputDirEnvelope(
+        is_configured=bool(path),
+        output_dir=OutputDirPayload(path=path or ""),
+    )
+
+
+@router.put("/output-dir", response_model=OutputDirEnvelope)
+def put_settings_output_dir(payload: OutputDirPayload) -> OutputDirEnvelope:
+    """Persist the default output directory and return what was saved.
+
+    Sending ``{"path": ""}`` or ``{}`` clears the setting.
+    """
+    try:
+        saved = upsert_default_output_dir(payload.path or None)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"output_dir write failed: {exc}")
+    return OutputDirEnvelope(
+        is_configured=bool(saved),
+        output_dir=OutputDirPayload(path=saved or ""),
     )
 
 

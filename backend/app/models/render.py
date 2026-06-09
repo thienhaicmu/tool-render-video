@@ -102,7 +102,6 @@ class RenderRequest(BaseModel):
     source_video_path: Optional[str] = ""
 
     # Output
-    output_mode: Optional[str] = "manual"
     channel_code: Optional[str] = ""
     output_dir: Optional[str] = ""
     render_output_subdir: Optional[str] = ""

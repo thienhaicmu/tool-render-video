@@ -193,7 +193,8 @@ Return EXACTLY this JSON object. No extra top-level keys, no markdown fences:
       "retention_score": 0.78,
       "speech_density": 0.85,
       "duration_fit": 0.90,
-      "cover_offset_ratio": 0.15
+      "cover_offset_ratio": 0.15,
+      "rank": 1
     }}
   ],
   "subtitle_policy": {{
@@ -229,7 +230,10 @@ FIELD RULES:
 - speech_density: 1.0=dense dialogue, 0.0=pure visuals or long silence
 - duration_fit: 1.0=ideal clip length, 0.0=stretched/cramped
 - cover_offset_ratio: best thumbnail moment as fraction of clip
-  (0.1=very early, 0.5=mid){editorial_section}{target_duration_section}
+  (0.1=very early, 0.5=mid)
+- rank: quality rank among all returned clips; 1 = strongest, N = weakest.
+  Every clip gets a unique integer in [1, N] where N = number of clips returned.
+  Assign based on your viral + retention ordering from Step 1.{editorial_section}{target_duration_section}
 
 ⚠️ FINAL VERIFICATION — before responding, check EVERY clip:
    • {min_sec} ≤ (end - start) ≤ {max_sec}  →  if any clip fails this, fix or remove it

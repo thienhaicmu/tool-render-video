@@ -65,3 +65,8 @@ AI_PROVIDER_DEFAULT  : str  = os.getenv("AI_PROVIDER_DEFAULT", "gemini").strip()
 GEMINI_API_KEY       : str  = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY       : str  = os.getenv("OPENAI_API_KEY", "")
 CLAUDE_API_KEY       : str  = os.getenv("CLAUDE_API_KEY", "")
+
+# SQLite connection timeout in seconds. Desktop renders on slow SSD/NAS may
+# need a larger value. The startup write-check uses timeout=5 (uncontended)
+# and is intentionally excluded from this setting.
+DB_TIMEOUT           : int  = int(os.getenv("DB_TIMEOUT", "30"))

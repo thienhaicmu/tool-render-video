@@ -70,8 +70,6 @@ class FinalizeContext:
 
     voice_summary: Any
     subtitle_translate_summary: Any
-    ai_influence_report: dict
-    ai_beat_report: dict
     render_plan: Optional[RenderPlan] = None
     # Strategic-4 — Audit 2026-06-08 closure (Batch A V8-D1/V8-D2).
     # The rank-source tag returned by _resolve_rank_from_plan(). One of:
@@ -116,8 +114,6 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
     _mv_parts           = ctx.mv_parts
     _voice_summary      = ctx.voice_summary
     _subtitle_translate_summary = ctx.subtitle_translate_summary
-    _ai_influence_report = ctx.ai_influence_report
-    _ai_beat_report     = ctx.ai_beat_report
 
     # ── P5-2 Auto Best Export ─────────────────────────────────────────────
     _best_exports_list: list[dict] = []
@@ -276,8 +272,6 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
         "failed_outputs_count": len(failed_parts),
         "is_partial_success": _is_partial_success,
         "ai_director": {"enabled": False},
-        "ai_render_influence": _ai_influence_report,
-        "ai_beat_execution": _ai_beat_report,
         "render_plan": ctx.render_plan.to_json() if ctx.render_plan is not None else None,
         # Audit 2026-06-08 T1.6 closure — removed always-empty stubs
         # `story`, `preset_evolution`, `creator_style`. They were cargo-culted
