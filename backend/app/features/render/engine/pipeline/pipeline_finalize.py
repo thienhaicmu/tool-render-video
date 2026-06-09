@@ -294,6 +294,26 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
         progress_percent=100,
         message=_final_message,
     )
+    # G-3: best-effort A/B score write — never fails a render.
+    try:
+        _ab_channel = (getattr(payload, "channel_code", "") or "").strip()
+        _ab_bias = str(_ranking_metadata.get("applied_structure_bias", "balanced"))
+        from app.db.ab_scores_repo import upsert_ab_score
+        for _ab_entry in _rank_entries_ordered:
+            upsert_ab_score(
+                job_id=job_id,
+                part_no=int(_ab_entry.get("part_no", 0)),
+                channel_code=_ab_channel,
+                structure_bias=_ab_bias,
+                viral_score=float(_ab_entry.get("segment_viral_score") or 50.0),
+                hook_score=float(_ab_entry.get("hook_score") or 50.0),
+                retention_score=float(_ab_entry.get("retention_score") or 50.0),
+                output_rank_score=float(_ab_entry.get("output_rank_score") or 50.0),
+                output_rank=int(_ab_entry.get("output_rank") or 0),
+                is_best_output=bool(_ab_entry.get("is_best_output")),
+            )
+    except Exception:
+        pass
     # AI Memory write (Phase 3) removed in Phase G — consumed _ai_edit_plan (None after E3).
     # Sprint 6.A: opportunistic db backup after a completed render. Wrapped
     # so any backup failure CANNOT propagate into the render pipeline.

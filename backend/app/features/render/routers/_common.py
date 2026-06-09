@@ -109,6 +109,16 @@ def _validate_output_dir(payload: RenderRequest):
                     "to set a default and avoid sending it with every request."
                 ),
             )
+    # Reject the case where the path exists but is a file — the pipeline cannot
+    # mkdir over an existing file. Non-existent paths are fine (pipeline creates them).
+    resolved = Path(payload.output_dir).expanduser()
+    if not resolved.is_absolute():
+        resolved = (Path.cwd() / resolved).resolve()
+    if resolved.exists() and not resolved.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"output_dir exists but is not a directory: {payload.output_dir}",
+        )
 
 
 def _validate_render_source(payload: RenderRequest):
