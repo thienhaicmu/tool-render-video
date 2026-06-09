@@ -91,9 +91,24 @@ def _emit_request_event(
 
 
 def _validate_output_dir(payload: RenderRequest):
-    """Require output_dir to be non-empty."""
+    """Require output_dir, auto-populating from saved setting when empty."""
     if not (payload.output_dir or "").strip():
-        raise HTTPException(status_code=400, detail="output_dir is required")
+        saved: "str | None" = None
+        try:
+            from app.db.creator_repo import get_default_output_dir
+            saved = get_default_output_dir()
+        except Exception:
+            pass
+        if saved:
+            payload.output_dir = saved
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "output_dir is required. Go to Settings → Output Directory "
+                    "to set a default and avoid sending it with every request."
+                ),
+            )
 
 
 def _validate_render_source(payload: RenderRequest):

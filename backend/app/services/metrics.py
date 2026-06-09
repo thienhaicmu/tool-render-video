@@ -158,6 +158,12 @@ if _AVAILABLE:
         buckets=(0.5, 1, 2, 5, 10, 30, 60, 120),
         registry=REGISTRY,
     )
+    LLM_SEGMENTS_SELECTED = Counter(
+        "llm_segments_selected_total",
+        "Cumulative count of video segments (clips) selected by AI, per provider",
+        ["provider"],
+        registry=REGISTRY,
+    )
 
 else:
     REGISTRY = None  # type: ignore[assignment]
@@ -174,3 +180,4 @@ else:
     DB_CONN_ACQUIRE_WAIT = _NoOpMetric()      # type: ignore[assignment]
     LLM_RENDER_PLAN_CALLS = _NoOpMetric()     # type: ignore[assignment]
     LLM_RENDER_PLAN_LATENCY = _NoOpMetric()   # type: ignore[assignment]
+    LLM_SEGMENTS_SELECTED = _NoOpMetric()     # type: ignore[assignment]

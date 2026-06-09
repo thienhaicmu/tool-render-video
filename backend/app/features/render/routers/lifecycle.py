@@ -85,6 +85,12 @@ def create_render_job(public_payload: RenderRequestPublic):
             channel_code=(payload.channel_code or "").strip(),
         )
         raise
+    # Save the chosen output_dir as the new default (best-effort — never fails the request).
+    try:
+        from app.db.creator_repo import upsert_default_output_dir
+        upsert_default_output_dir(payload.output_dir)
+    except Exception:
+        pass
     effective_channel = (payload.channel_code or "").strip() or "manual"
     # resume_job_id is BE-only by design (resume goes through /resume/{id}).
     # The full payload defaults it to None — fresh /process call always
@@ -491,6 +497,11 @@ def resume_render_job(job_id: str):
     payload = RenderRequest(**payload_data)
     payload.resume_from_last = True
     _validate_render_source(payload)
+    try:
+        from app.db.creator_repo import upsert_default_output_dir
+        upsert_default_output_dir(payload.output_dir)
+    except Exception:
+        pass
     effective_channel = (payload.channel_code or "").strip() or "manual"
     _queue_render_job(job_id, effective_channel, payload, resume_mode=True, queued_message="Resume job queued")
     return {"job_id": job_id, "status": "queued", "resume_mode": True}
@@ -533,6 +544,11 @@ def retry_failed_parts(job_id: str):
     payload = RenderRequest(**payload_data)
     payload.resume_from_last = True
     _validate_render_source(payload)
+    try:
+        from app.db.creator_repo import upsert_default_output_dir
+        upsert_default_output_dir(payload.output_dir)
+    except Exception:
+        pass
     effective_channel = (payload.channel_code or "").strip() or "manual"
     _queue_render_job(
         job_id, effective_channel, payload,

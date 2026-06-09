@@ -116,9 +116,13 @@ def select_render_plan(
         result = _impl(**kwargs)
         _status = "success" if result is not None else "empty"
         try:
-            from app.services.metrics import LLM_RENDER_PLAN_CALLS, LLM_RENDER_PLAN_LATENCY
+            from app.services.metrics import (
+                LLM_RENDER_PLAN_CALLS, LLM_RENDER_PLAN_LATENCY, LLM_SEGMENTS_SELECTED,
+            )
             LLM_RENDER_PLAN_CALLS.labels(provider=_p, status=_status).inc()
             LLM_RENDER_PLAN_LATENCY.labels(provider=_p).observe(_time.perf_counter() - _t0)
+            if result is not None:
+                LLM_SEGMENTS_SELECTED.labels(provider=_p).inc(len(result.clips))
         except Exception:
             pass
         if result is not None:
