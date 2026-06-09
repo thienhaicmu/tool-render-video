@@ -26,3 +26,5 @@ class PartExecutionPlan:
     voice_enabled: bool
     voice_source: str
     playback_speed: float
+    # Sprint 1: resolved from ClipPlan.hook_score; visual effect wired in Sprint 2
+    zoom_burst: bool = False

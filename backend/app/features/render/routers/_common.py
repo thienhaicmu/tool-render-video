@@ -91,27 +91,37 @@ def _emit_request_event(
 
 
 def _validate_output_dir(payload: RenderRequest):
-    """Require output_dir to be non-empty."""
+    """Require output_dir, auto-populating from saved setting when empty."""
     if not (payload.output_dir or "").strip():
-        raise HTTPException(status_code=400, detail="output_dir is required")
-
-
-def _coerce_legacy_channel_payload(payload: RenderRequest) -> None:
-    """Convert channel-mode payloads (from old clients / stored jobs) to manual mode in-place."""
-    if (payload.output_mode or "").strip().lower() == "channel":
-        logger.info(
-            "Legacy channel mode payload detected — converting to manual (output_dir=%s channel=%s)",
-            payload.output_dir or "",
-            payload.channel_code or "",
+        saved: "str | None" = None
+        try:
+            from app.db.creator_repo import get_default_output_dir
+            saved = get_default_output_dir()
+        except Exception:
+            pass
+        if saved:
+            payload.output_dir = saved
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "output_dir is required. Go to Settings → Output Directory "
+                    "to set a default and avoid sending it with every request."
+                ),
+            )
+    # Reject the case where the path exists but is a file — the pipeline cannot
+    # mkdir over an existing file. Non-existent paths are fine (pipeline creates them).
+    resolved = Path(payload.output_dir).expanduser()
+    if not resolved.is_absolute():
+        resolved = (Path.cwd() / resolved).resolve()
+    if resolved.exists() and not resolved.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"output_dir exists but is not a directory: {payload.output_dir}",
         )
-        payload.output_mode = "manual"
 
 
 def _validate_render_source(payload: RenderRequest):
-    output_mode = (payload.output_mode or "manual").strip().lower()
-    if output_mode not in ("channel", "manual"):
-        raise HTTPException(status_code=400, detail="output_mode must be 'channel' or 'manual'")
-
     # When an editor session is provided, the pipeline uses the session's video_path;
     # skip source-path validation entirely.
     if (getattr(payload, "edit_session_id", None) or "").strip():
@@ -137,18 +147,6 @@ def _validate_render_source(payload: RenderRequest):
     if not Path(local).exists():
         raise HTTPException(status_code=400, detail=f"Source file not found on disk: {local}")
     _validate_output_dir(payload)
-    if output_mode == "channel":
-        channel = (payload.channel_code or "").strip()
-        if not channel:
-            raise HTTPException(status_code=400, detail="channel_code is required when output_mode='channel'")
-        out_path = Path(str(payload.output_dir).strip())
-        parts = [str(p).strip().lower() for p in out_path.parts if str(p).strip()]
-        chan = channel.lower()
-        if chan not in parts:
-            raise HTTPException(
-                status_code=400,
-                detail=f"output_dir must be inside selected channel folder '{channel}' (example: D:/data/{channel}/upload/video_output).",
-            )
 
 
 def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = False):

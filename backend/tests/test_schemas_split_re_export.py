@@ -97,12 +97,10 @@ def test_render_request_field_count_unchanged():
     from app.models.render import RenderRequest
 
     field_count = len(RenderRequest.model_fields)
-    # 152 fields measured at MT-2 close (Batch 10I, 2026-06-06). Pin the
-    # precise number so a future drop/rename is loud. If a legitimate new
-    # field is added (additive), bump this count + cite the audit
-    # follow-up that authorised it. NEVER bump it to make a removal pass.
-    assert field_count == 152, (
-        f"RenderRequest now has {field_count} fields (was 152 at MT-2 close). "
+    # 151 fields after output_mode removal (2026-06-09 — field was unused,
+    # always "manual", all callers cleaned up). Previously 152 at MT-2 close.
+    assert field_count == 151, (
+        f"RenderRequest now has {field_count} fields (was 151 after output_mode removal). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

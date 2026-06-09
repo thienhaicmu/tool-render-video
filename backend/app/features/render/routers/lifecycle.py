@@ -38,7 +38,6 @@ from app.services.bin_paths import get_ffmpeg_bin
 from app.services.channel_service import ensure_channel
 from app.db.jobs_repo import get_job, list_job_parts, update_job_progress
 from ._common import (
-    _coerce_legacy_channel_payload,
     _emit_request_event,
     _queue_render_job,
     _validate_render_source,
@@ -70,7 +69,6 @@ def create_render_job(public_payload: RenderRequestPublic):
     # Public is stricter than Strict on the FE-facing subset:
     # ``extra='forbid'`` plus an even smaller allowed field set.
     payload = RenderRequest(**public_payload.model_dump())
-    _coerce_legacy_channel_payload(payload)
     # Apply server-wide LLM provider default to NEW jobs only.
     # Resume/retry: ai_provider stays as stored.
     if "ai_provider" not in public_payload.model_fields_set:
@@ -87,6 +85,12 @@ def create_render_job(public_payload: RenderRequestPublic):
             channel_code=(payload.channel_code or "").strip(),
         )
         raise
+    # Save the chosen output_dir as the new default (best-effort — never fails the request).
+    try:
+        from app.db.creator_repo import upsert_default_output_dir
+        upsert_default_output_dir(payload.output_dir)
+    except Exception:
+        pass
     effective_channel = (payload.channel_code or "").strip() or "manual"
     # resume_job_id is BE-only by design (resume goes through /resume/{id}).
     # The full payload defaults it to None — fresh /process call always
@@ -492,8 +496,12 @@ def resume_render_job(job_id: str):
 
     payload = RenderRequest(**payload_data)
     payload.resume_from_last = True
-    _coerce_legacy_channel_payload(payload)
     _validate_render_source(payload)
+    try:
+        from app.db.creator_repo import upsert_default_output_dir
+        upsert_default_output_dir(payload.output_dir)
+    except Exception:
+        pass
     effective_channel = (payload.channel_code or "").strip() or "manual"
     _queue_render_job(job_id, effective_channel, payload, resume_mode=True, queued_message="Resume job queued")
     return {"job_id": job_id, "status": "queued", "resume_mode": True}
@@ -535,8 +543,12 @@ def retry_failed_parts(job_id: str):
 
     payload = RenderRequest(**payload_data)
     payload.resume_from_last = True
-    _coerce_legacy_channel_payload(payload)
     _validate_render_source(payload)
+    try:
+        from app.db.creator_repo import upsert_default_output_dir
+        upsert_default_output_dir(payload.output_dir)
+    except Exception:
+        pass
     effective_channel = (payload.channel_code or "").strip() or "manual"
     _queue_render_job(
         job_id, effective_channel, payload,

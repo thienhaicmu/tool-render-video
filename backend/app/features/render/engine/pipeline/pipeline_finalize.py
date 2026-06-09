@@ -70,8 +70,6 @@ class FinalizeContext:
 
     voice_summary: Any
     subtitle_translate_summary: Any
-    ai_influence_report: dict
-    ai_beat_report: dict
     render_plan: Optional[RenderPlan] = None
     # Strategic-4 — Audit 2026-06-08 closure (Batch A V8-D1/V8-D2).
     # The rank-source tag returned by _resolve_rank_from_plan(). One of:
@@ -116,8 +114,6 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
     _mv_parts           = ctx.mv_parts
     _voice_summary      = ctx.voice_summary
     _subtitle_translate_summary = ctx.subtitle_translate_summary
-    _ai_influence_report = ctx.ai_influence_report
-    _ai_beat_report     = ctx.ai_beat_report
 
     # ── P5-2 Auto Best Export ─────────────────────────────────────────────
     _best_exports_list: list[dict] = []
@@ -276,8 +272,6 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
         "failed_outputs_count": len(failed_parts),
         "is_partial_success": _is_partial_success,
         "ai_director": {"enabled": False},
-        "ai_render_influence": _ai_influence_report,
-        "ai_beat_execution": _ai_beat_report,
         "render_plan": ctx.render_plan.to_json() if ctx.render_plan is not None else None,
         # Audit 2026-06-08 T1.6 closure — removed always-empty stubs
         # `story`, `preset_evolution`, `creator_style`. They were cargo-culted
@@ -300,6 +294,26 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
         progress_percent=100,
         message=_final_message,
     )
+    # G-3: best-effort A/B score write — never fails a render.
+    try:
+        _ab_channel = (getattr(payload, "channel_code", "") or "").strip()
+        _ab_bias = str(_ranking_metadata.get("applied_structure_bias", "balanced"))
+        from app.db.ab_scores_repo import upsert_ab_score
+        for _ab_entry in _rank_entries_ordered:
+            upsert_ab_score(
+                job_id=job_id,
+                part_no=int(_ab_entry.get("part_no", 0)),
+                channel_code=_ab_channel,
+                structure_bias=_ab_bias,
+                viral_score=float(_ab_entry.get("segment_viral_score") or 50.0),
+                hook_score=float(_ab_entry.get("hook_score") or 50.0),
+                retention_score=float(_ab_entry.get("retention_score") or 50.0),
+                output_rank_score=float(_ab_entry.get("output_rank_score") or 50.0),
+                output_rank=int(_ab_entry.get("output_rank") or 0),
+                is_best_output=bool(_ab_entry.get("is_best_output")),
+            )
+    except Exception:
+        pass
     # AI Memory write (Phase 3) removed in Phase G — consumed _ai_edit_plan (None after E3).
     # Sprint 6.A: opportunistic db backup after a completed render. Wrapped
     # so any backup failure CANNOT propagate into the render pipeline.

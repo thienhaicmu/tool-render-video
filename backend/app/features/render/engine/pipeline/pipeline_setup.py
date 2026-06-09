@@ -39,7 +39,6 @@ class PipelineSetupResult:
     back to its original local-variable name to keep the rest of the
     function byte-for-byte unchanged.
     """
-    output_mode: str
     effective_channel: str
     started_at: datetime
     mv_cfg: dict
@@ -52,18 +51,12 @@ class PipelineSetupResult:
 
 
 def setup_render_pipeline(payload: RenderRequest) -> PipelineSetupResult:
-    """Normalize payload + resolve channel/output_dir.
+    """Normalize payload + resolve output_dir.
 
     Returns:
         PipelineSetupResult with all derived values that the rest of
         run_render_pipeline consumes.
-
-    Raises:
-        RuntimeError: when output_mode == "channel" and render_output_subdir
-                      is empty (validated to match the caller's existing
-                      pre-Sprint 6.D-1.1 behavior).
     """
-    output_mode = (payload.output_mode or "channel").strip().lower()
     effective_channel = (payload.channel_code or "").strip() or "manual"
     started_at = datetime.utcnow()
 
@@ -87,18 +80,11 @@ def setup_render_pipeline(payload: RenderRequest) -> PipelineSetupResult:
     _hook_overlay_enabled = bool(getattr(payload, "hook_overlay_enabled", False))
     if not _hook_applied_text:
         _hook_apply_enabled = False
-    if output_mode == "channel":
-        ensure_channel(effective_channel)
-        if not (payload.render_output_subdir or "").strip():
-            raise RuntimeError("render_output_subdir is required")
-        output_dir = _resolve_output_dir(effective_channel, payload.output_dir, payload.render_output_subdir)
-    else:
-        output_dir = Path(payload.output_dir).expanduser()
-        if not output_dir.is_absolute():
-            output_dir = (Path.cwd() / output_dir).resolve()
+    output_dir = Path(payload.output_dir).expanduser()
+    if not output_dir.is_absolute():
+        output_dir = (Path.cwd() / output_dir).resolve()
 
     return PipelineSetupResult(
-        output_mode=output_mode,
         effective_channel=effective_channel,
         started_at=started_at,
         mv_cfg=_mv_cfg,

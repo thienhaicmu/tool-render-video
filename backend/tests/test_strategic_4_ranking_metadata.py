@@ -101,7 +101,6 @@ def _build_minimal_ctx(*, rank_source: str = "render_plan"):
         channel_code="t-strategic-4",
         source_mode="local",
         source_video_path="/nonexistent.mp4",
-        output_mode="manual",
         output_dir="/nonexistent/out",
     )
 
@@ -127,8 +126,6 @@ def _build_minimal_ctx(*, rank_source: str = "render_plan"):
         mv_parts=[],
         voice_summary="not used",
         subtitle_translate_summary="not used",
-        ai_influence_report={"enabled": False},
-        ai_beat_report={"enabled": False},
         render_plan=None,
         rank_source=rank_source,
     )

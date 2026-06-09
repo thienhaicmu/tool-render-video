@@ -24,6 +24,7 @@ from app.features.render.engine.encoder.ffmpeg_helpers import (
     _has_audio_stream,
     _smart_denoise_filter,
     _effect_filter,
+    _zoom_burst_filter,
     _cinematic_color_filter,
     _cinematic_sharpen_filter,
     resolve_target_dimensions,
@@ -297,6 +298,7 @@ def render_part(
     ffmpeg_threads: int | None = None,
     content_type: str = "vlog",
     visual_intensity_hint: str | None = None,
+    zoom_burst: bool = False,
     # Sprint 7.4 (2026-06-05) — fuse mode: when both _source_seek_start and
     # _source_seek_duration are provided, input_path is treated as a full
     # source (not a pre-cut raw_part). The seek args are prepended (input-
@@ -355,6 +357,8 @@ def render_part(
         zoom_scale,
         fixed_canvas,
     ]
+    if zoom_burst:
+        vf_parts.append(_zoom_burst_filter(target_w=target_w, target_h=target_h))
     # Phase 5.7: Resolve effective effect preset from AI visual intensity hint.
     # Renderer OWNS the mapping; AI only passes None/"low"/"medium"/"high".
     # User explicit effect_preset (non-default) always wins over AI hint.
@@ -609,6 +613,7 @@ def render_part_smart(
     _motion_cache_key: str | None = None,
     _fallback_flag: list | None = None,
     visual_intensity_hint: str | None = None,
+    zoom_burst: bool = False,
 ):
     # Phase 5.7: Resolve effective effect preset from AI visual intensity hint.
     # Renderer OWNS the mapping; AI only passes None/"low"/"medium"/"high".
@@ -710,6 +715,7 @@ def render_part_smart(
                 ffmpeg_threads=ffmpeg_threads,
                 content_type=content_type,
                 visual_intensity_hint=visual_intensity_hint,
+                zoom_burst=zoom_burst,
             )
             logger.info("recovery_success strategy=fallback_standard_crop output=%s", Path(output_path).name)
             return _fb
@@ -744,6 +750,7 @@ def render_part_smart(
         loudnorm_enabled=loudnorm_enabled,
         content_type=content_type,
         visual_intensity_hint=visual_intensity_hint,
+        zoom_burst=zoom_burst,
     )
 
 
@@ -781,6 +788,7 @@ def render_part_from_source(
     ffmpeg_threads: int | None = None,
     content_type: str = "vlog",
     visual_intensity_hint: str | None = None,
+    zoom_burst: bool = False,
     force_accurate_cut: bool = False,
     # Sprint 7.8 (2026-06-05) — motion-aware fused cut+render branch.
     # When motion_aware_crop=True, delegates to render_motion_aware_crop
@@ -897,6 +905,7 @@ def render_part_from_source(
         ffmpeg_threads=ffmpeg_threads,
         content_type=content_type,
         visual_intensity_hint=visual_intensity_hint,
+        zoom_burst=zoom_burst,
         _source_seek_start=float(source_start),
         _source_seek_duration=float(source_duration),
         _source_seek_force_accurate=force_accurate_cut,

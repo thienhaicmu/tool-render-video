@@ -15,7 +15,6 @@ Field grouping (preserved verbatim from the original):
   - Job identity: job_id, effective_channel, total_parts, retry_count.
   - I/O paths: work_dir, output_dir, source_path, source dict, output_stem.
   - Payload + resume: payload, existing_parts.
-  - AI state: ai_edit_plan, vis_intensity_hint.
   - Platform/render config: target_platform, tuned, ffmpeg_threads.
   - Cancel + motion: cancel_registry, src_stat_for_motion.
   - Subtitle: full_srt, full_srt_available, subtitle_enabled_by_idx,
@@ -23,7 +22,7 @@ Field grouping (preserved verbatim from the original):
   - Voice: voice_audio_path.
   - Market/hook: mv_market, mv_cfg, hook_apply_enabled,
     hook_applied_text, hook_score, hook_overlay_enabled.
-  - AI subtitle: dna_clean_visual, ai_subtitle_emphasis_config.
+  - AI subtitle: dna_clean_visual.
   - Text layers: normalized_text_layers.
   - Mutable shared lists (passed by reference — same list object as
     outer scope): voice_part_tts_attempts, voice_mix_ok,
@@ -70,9 +69,6 @@ class PartRenderContext:
     payload: Any
     # Resume
     existing_parts: dict
-    # AI state
-    ai_edit_plan: Any
-    vis_intensity_hint: Any
     # Platform/render config
     target_platform: str
     tuned: dict
@@ -97,7 +93,6 @@ class PartRenderContext:
     hook_overlay_enabled: bool
     # AI subtitle
     dna_clean_visual: bool
-    ai_subtitle_emphasis_config: Any
     # Text layers
     normalized_text_layers: Any
     # Mutable shared lists (passed by reference — same list object as outer scope)

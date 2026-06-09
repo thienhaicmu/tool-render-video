@@ -24,12 +24,16 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.db.creator_repo import (
     get_creator_context,
+    get_creator_context_for_channel,
+    get_default_output_dir,
     get_job_retention_days,
     upsert_creator_context,
+    upsert_creator_context_for_channel,
+    upsert_default_output_dir,
     upsert_job_retention_days,
 )
 from app.domain.creator_context import CreatorContext
@@ -102,18 +106,23 @@ class CreatorContextEnvelope(BaseModel):
 
 
 @router.get("/creator-context", response_model=CreatorContextEnvelope)
-def get_settings_creator_context() -> CreatorContextEnvelope:
+def get_settings_creator_context(channel_code: str = "") -> CreatorContextEnvelope:
     """Return the persisted CreatorContext (or defaults when none).
+
+    When channel_code is provided, returns the per-channel row (falling
+    back to the global singleton when none exists). Empty channel_code
+    (default) returns the global singleton — backward compatible.
 
     Never 404 — the response always carries a valid envelope so the
     frontend renders the same form for both empty and configured states.
     """
     try:
-        ctx = get_creator_context()
+        ctx = (
+            get_creator_context_for_channel(channel_code)
+            if channel_code
+            else get_creator_context()
+        )
     except Exception as exc:
-        # Repo helpers already swallow exceptions, but belt-and-braces:
-        # a 500 here would block the entire Settings screen, which is a
-        # worse UX than serving defaults with is_configured=False.
         raise HTTPException(status_code=500, detail=f"creator_context read failed: {exc}")
     return CreatorContextEnvelope(
         is_configured=ctx is not None and not ctx.is_empty(),
@@ -122,21 +131,26 @@ def get_settings_creator_context() -> CreatorContextEnvelope:
 
 
 @router.put("/creator-context", response_model=CreatorContextEnvelope)
-def put_settings_creator_context(payload: CreatorContextPayload) -> CreatorContextEnvelope:
+def put_settings_creator_context(
+    payload: CreatorContextPayload, channel_code: str = ""
+) -> CreatorContextEnvelope:
     """Persist the CreatorContext and return what was actually saved.
 
-    Posting an empty body clears the field (every default value is
-    empty / 0 / []). The repo helper handles None semantics: when the
-    domain object is empty, it ends up persisted as a creator_context
-    key with an empty payload, which deserialises back to an empty
-    CreatorContext on read — `is_configured` will then be False.
+    When channel_code is provided, writes to the per-channel table only
+    (global singleton untouched). Empty channel_code (default) writes to
+    the global singleton — backward compatible.
+
+    Posting an empty body clears the field. The repo helper handles None
+    semantics: an empty domain object → is_configured=False on readback.
     """
     try:
-        saved = upsert_creator_context(payload.to_domain())
+        if channel_code:
+            upsert_creator_context_for_channel(channel_code, payload.to_domain())
+            saved = get_creator_context_for_channel(channel_code)
+        else:
+            saved = upsert_creator_context(payload.to_domain())
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"creator_context write failed: {exc}")
-    # upsert_creator_context returns the readback so what we send back
-    # is the canonical persisted value.
     return CreatorContextEnvelope(
         is_configured=saved is not None and not saved.is_empty(),
         creator_context=CreatorContextPayload.from_domain(saved),
@@ -184,6 +198,62 @@ def get_settings_data_retention() -> DataRetentionEnvelope:
     )
 
 
+# ── Output directory preference endpoints ───────────────────────────────
+
+
+class OutputDirPayload(BaseModel):
+    """Request body / response shape for /api/settings/output-dir.
+
+    ``path``: absolute path to the user's preferred output directory.
+    Empty string clears the setting (next render will require an explicit
+    output_dir in the request payload).
+    """
+    model_config = ConfigDict(extra="ignore")
+
+    path: str = ""
+
+
+class OutputDirEnvelope(BaseModel):
+    """Response shape — carries ``is_configured`` so the frontend can
+    distinguish "not yet set" from an explicit empty path."""
+    is_configured: bool
+    output_dir: OutputDirPayload
+
+
+@router.get("/output-dir", response_model=OutputDirEnvelope)
+def get_settings_output_dir() -> OutputDirEnvelope:
+    """Return the persisted default output directory.
+
+    Never 404 — returns ``is_configured=False`` with an empty path when
+    nothing has been saved yet, so the frontend can always render the
+    directory picker unconditionally.
+    """
+    try:
+        path = get_default_output_dir()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"output_dir read failed: {exc}")
+    return OutputDirEnvelope(
+        is_configured=bool(path),
+        output_dir=OutputDirPayload(path=path or ""),
+    )
+
+
+@router.put("/output-dir", response_model=OutputDirEnvelope)
+def put_settings_output_dir(payload: OutputDirPayload) -> OutputDirEnvelope:
+    """Persist the default output directory and return what was saved.
+
+    Sending ``{"path": ""}`` or ``{}`` clears the setting.
+    """
+    try:
+        saved = upsert_default_output_dir(payload.path or None)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"output_dir write failed: {exc}")
+    return OutputDirEnvelope(
+        is_configured=bool(saved),
+        output_dir=OutputDirPayload(path=saved or ""),
+    )
+
+
 @router.put("/data-retention", response_model=DataRetentionEnvelope)
 def put_settings_data_retention(payload: DataRetentionPayload) -> DataRetentionEnvelope:
     """Persist ``job_retention_days`` and return what was actually saved.
@@ -201,3 +271,126 @@ def put_settings_data_retention(payload: DataRetentionPayload) -> DataRetentionE
         is_configured=saved is not None,
         data_retention=DataRetentionPayload(job_retention_days=saved or 0),
     )
+
+
+# ── H-1: A/B scores read endpoint ────────────────────────────────────────────
+
+@router.get("/scores/{channel_code}")
+def get_channel_scores(channel_code: str, limit: int = 100, offset: int = 0) -> list:
+    """Return recent A/B scores for a channel (newest first, max 500 rows)."""
+    from app.db.ab_scores_repo import list_channel_scores
+    return list_channel_scores(channel_code, limit=min(limit, 500), offset=max(offset, 0))
+
+
+# ── L-B: Channel creator-context CRUD ────────────────────────────────────────
+
+@router.get("/channels/creator-context")
+def get_creator_context_channels() -> list:
+    """List all channels that have a per-channel creator context configured."""
+    from app.db.creator_repo import list_creator_context_channels
+    return list_creator_context_channels()
+
+
+@router.delete("/creator-context/{channel_code}")
+def delete_channel_creator_context(channel_code: str) -> dict:
+    """Remove the per-channel creator context row for a channel."""
+    from app.db.creator_repo import delete_creator_context_for_channel
+    if not delete_creator_context_for_channel(channel_code):
+        raise HTTPException(status_code=404, detail=f"No per-channel context found for: {channel_code}")
+    return {"channel_code": channel_code, "deleted": True}
+
+
+# ── K-B: Whisper per-channel endpoints ───────────────────────────────────────
+
+_ALLOWED_WHISPER_MODELS = {
+    "auto",
+    "tiny", "tiny.en",
+    "base", "base.en",
+    "small", "small.en",
+    "medium", "medium.en",
+    "large", "large-v1", "large-v2", "large-v3", "large-v3-turbo",
+    "turbo",
+}
+
+
+class WhisperModelPayload(BaseModel):
+    whisper_model: str
+
+    @field_validator("whisper_model")
+    @classmethod
+    def _validate_whisper_model(cls, v: str) -> str:
+        m = str(v).strip()
+        if not m or m not in _ALLOWED_WHISPER_MODELS:
+            raise ValueError(
+                f"Unknown whisper_model {m!r}. Allowed: {sorted(_ALLOWED_WHISPER_MODELS)}"
+            )
+        return m
+
+
+@router.get("/whisper/{channel_code}")
+def get_channel_whisper_model(channel_code: str) -> dict:
+    """Return the preferred whisper model for a channel, or null when not set."""
+    from app.db.creator_repo import get_whisper_model_for_channel
+    return {"channel_code": channel_code, "whisper_model": get_whisper_model_for_channel(channel_code)}
+
+
+@router.put("/whisper/{channel_code}")
+def put_channel_whisper_model(channel_code: str, payload: WhisperModelPayload) -> dict:
+    """Persist preferred whisper model for a channel and return the saved value."""
+    from app.db.creator_repo import upsert_whisper_model_for_channel, get_whisper_model_for_channel
+    upsert_whisper_model_for_channel(channel_code, payload.whisper_model)
+    return {"channel_code": channel_code, "whisper_model": get_whisper_model_for_channel(channel_code)}
+
+
+# ── J-B: Channel list endpoint ───────────────────────────────────────────────
+
+@router.get("/channels")
+def get_channels() -> list:
+    """Return distinct channels that have A/B score rows, newest activity first."""
+    from app.db.ab_scores_repo import list_channels
+    return list_channels()
+
+
+# ── J-A: Channel score summary endpoint ──────────────────────────────────────
+
+@router.get("/scores/{channel_code}/summary")
+def get_channel_score_summary(
+    channel_code: str, since: Optional[str] = None
+) -> list:
+    """Return per-structure_bias aggregate scores for a channel.
+
+    ``since``: optional ISO-8601 datetime string to filter by ``created_at``.
+    When omitted, all rows for the channel are included.
+    """
+    from app.db.ab_scores_repo import channel_score_summary
+    return channel_score_summary(channel_code, since=since)
+
+
+# ── K-A: Score delete endpoint ────────────────────────────────────────────────
+
+@router.delete("/scores/{job_id}")
+def delete_scores_for_job(job_id: str) -> dict:
+    """Delete all A/B score rows for a specific job. Returns count deleted."""
+    from app.db.ab_scores_repo import delete_job_scores
+    deleted = delete_job_scores(job_id)
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail=f"No score rows found for job: {job_id}")
+    return {"job_id": job_id, "deleted": deleted}
+
+
+# ── H-3: A/B score feedback rating PATCH ─────────────────────────────────────
+
+class FeedbackRatingPayload(BaseModel):
+    rating: int
+
+
+@router.patch("/scores/{job_id}/{part_no}/rating")
+def patch_score_feedback_rating(
+    job_id: str, part_no: int, payload: FeedbackRatingPayload
+) -> dict:
+    """Set user feedback rating (0–5) on a specific render output score row."""
+    from app.db.ab_scores_repo import update_feedback_rating
+    updated = update_feedback_rating(job_id=job_id, part_no=part_no, rating=payload.rating)
+    if not updated:
+        raise HTTPException(status_code=404, detail=f"Score row not found: {job_id}/{part_no}")
+    return {"job_id": job_id, "part_no": part_no, "rating": payload.rating}

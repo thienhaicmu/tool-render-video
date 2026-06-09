@@ -78,7 +78,6 @@ def _minimal_fe_payload():
     return {
         "source_mode":       "local",
         "source_video_path": "C:/test/fake.mp4",
-        "output_mode":       "manual",
         "output_dir":        "C:/test/out",
         "render_profile":    "fast",
         "output_count":      1,

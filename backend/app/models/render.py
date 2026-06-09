@@ -102,7 +102,6 @@ class RenderRequest(BaseModel):
     source_video_path: Optional[str] = ""
 
     # Output
-    output_mode: Optional[str] = "manual"
     channel_code: Optional[str] = ""
     output_dir: Optional[str] = ""
     render_output_subdir: Optional[str] = ""
@@ -452,6 +451,27 @@ class RenderRequest(BaseModel):
         if v not in allowed:
             raise ValueError(f"render_profile must be one of {sorted(allowed)!r}, got {v!r}")
         return v
+
+    @field_validator("whisper_model", mode="before")
+    @classmethod
+    def _validate_whisper_model(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or str(v).strip() == "":
+            return v
+        m = str(v).strip()
+        allowed = {
+            "auto",
+            "tiny", "tiny.en",
+            "base", "base.en",
+            "small", "small.en",
+            "medium", "medium.en",
+            "large", "large-v1", "large-v2", "large-v3", "large-v3-turbo",
+            "turbo",
+        }
+        if m not in allowed:
+            raise ValueError(
+                f"Unknown whisper_model '{m}'. Allowed: {sorted(allowed)}"
+            )
+        return m
 
     @field_validator("part_order")
     @classmethod

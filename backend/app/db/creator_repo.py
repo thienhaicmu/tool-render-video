@@ -14,6 +14,7 @@ the new payload at a nested key. Backward compat: prefs that omit
 "creator_context" return None and the AI layer behaves identically to
 pre-Sprint-3.
 """
+import json
 import logging
 from typing import Optional
 
@@ -127,6 +128,196 @@ def upsert_creator_context(context: Optional[CreatorContext]) -> Optional[Creato
         logger.warning("upsert_creator_context: write failed: %s", exc)
         return None
     return get_creator_context()
+
+
+# ── Sprint I-B — Per-channel CreatorContext ──────────────────────────────
+
+
+def get_creator_context_for_channel(channel_code: str) -> Optional[CreatorContext]:
+    """Return CreatorContext for channel_code, falling back to global singleton.
+
+    Priority:
+      1. creator_prefs_channel WHERE channel_code = ?
+      2. global get_creator_context() (existing singleton)
+      3. None
+
+    Never raises — returns None on any DB or deserialise error.
+    """
+    try:
+        if channel_code:
+            with db_conn() as conn:
+                row = conn.execute(
+                    "SELECT prefs_json FROM creator_prefs_channel WHERE channel_code = ?",
+                    (channel_code,),
+                ).fetchone()
+            if row:
+                data = json.loads(row["prefs_json"] or "{}")
+                ctx = CreatorContext.from_json(json.dumps(data.get(_CREATOR_CONTEXT_KEY) or {}))
+                if ctx is not None and not ctx.is_empty():
+                    return ctx
+        return get_creator_context()
+    except Exception as exc:
+        logger.warning("get_creator_context_for_channel(%r) failed: %s", channel_code, exc)
+        return None
+
+
+_WHISPER_MODEL_KEY = "whisper_model"
+
+
+def get_whisper_model_for_channel(channel_code: str) -> Optional[str]:
+    """Return the preferred whisper model for a channel, or None when not set.
+
+    Reads from creator_prefs_channel.prefs_json[whisper_model].
+    Never raises — returns None on any DB or parse error.
+    """
+    try:
+        if not channel_code:
+            return None
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT prefs_json FROM creator_prefs_channel WHERE channel_code = ?",
+                (channel_code,),
+            ).fetchone()
+        if not row:
+            return None
+        data = json.loads(row["prefs_json"] or "{}")
+        model = (data.get(_WHISPER_MODEL_KEY) or "").strip()
+        return model if model else None
+    except Exception as exc:
+        logger.warning("get_whisper_model_for_channel(%r) failed: %s", channel_code, exc)
+        return None
+
+
+def upsert_whisper_model_for_channel(channel_code: str, model: str) -> None:
+    """Persist preferred whisper model for a channel.
+
+    Merges into the existing creator_prefs_channel row (preserving
+    other keys like creator_context). Swallows exceptions.
+    """
+    try:
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT prefs_json FROM creator_prefs_channel WHERE channel_code = ?",
+                (channel_code,),
+            ).fetchone()
+        data = json.loads(row["prefs_json"] or "{}") if row else {}
+        data[_WHISPER_MODEL_KEY] = model.strip()
+        with db_conn() as conn:
+            conn.execute(
+                """INSERT INTO creator_prefs_channel (channel_code, prefs_json, updated_at)
+                   VALUES (?, ?, datetime('now'))
+                   ON CONFLICT(channel_code) DO UPDATE SET
+                       prefs_json = excluded.prefs_json,
+                       updated_at = datetime('now')""",
+                (channel_code, json.dumps(data)),
+            )
+    except Exception as exc:
+        logger.warning("upsert_whisper_model_for_channel(%r) failed: %s", channel_code, exc)
+
+
+def list_creator_context_channels() -> list:
+    """Return channel_codes that have a row in creator_prefs_channel, newest first.
+
+    Never raises — returns [] on any DB error.
+    """
+    try:
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT channel_code FROM creator_prefs_channel ORDER BY updated_at DESC"
+            ).fetchall()
+            return [r["channel_code"] for r in rows]
+    except Exception as exc:
+        logger.warning("list_creator_context_channels() failed: %s", exc)
+        return []
+
+
+def delete_creator_context_for_channel(channel_code: str) -> bool:
+    """Delete the creator_prefs_channel row for channel_code.
+
+    Returns True when a row was found and deleted, False otherwise.
+    Never raises.
+    """
+    try:
+        with db_conn() as conn:
+            cur = conn.execute(
+                "DELETE FROM creator_prefs_channel WHERE channel_code = ?",
+                (channel_code,),
+            )
+            return (cur.rowcount or 0) > 0
+    except Exception as exc:
+        logger.warning("delete_creator_context_for_channel(%r) failed: %s", channel_code, exc)
+        return False
+
+
+def upsert_creator_context_for_channel(
+    channel_code: str, context: CreatorContext
+) -> None:
+    """Write per-channel creator context. Does NOT touch the global singleton.
+
+    Swallows exceptions so a DB failure can never propagate to the caller
+    (Settings endpoint, render pipeline).
+    """
+    try:
+        prefs = {_CREATOR_CONTEXT_KEY: json.loads(context.to_json())}
+        with db_conn() as conn:
+            conn.execute(
+                """INSERT INTO creator_prefs_channel (channel_code, prefs_json, updated_at)
+                   VALUES (?, ?, datetime('now'))
+                   ON CONFLICT(channel_code) DO UPDATE SET
+                       prefs_json = excluded.prefs_json,
+                       updated_at = datetime('now')""",
+                (channel_code, json.dumps(prefs)),
+            )
+    except Exception as exc:
+        logger.warning("upsert_creator_context_for_channel(%r) failed: %s", channel_code, exc)
+
+
+# ── Output directory preference ─────────────────────────────────────────
+
+_OUTPUT_DIR_KEY = "output_dir"
+
+
+def get_default_output_dir() -> Optional[str]:
+    """Return the persisted default output directory or None when not set.
+
+    Never raises — returns None on any DB or parse error so a transient
+    failure cannot break the Settings screen.
+    """
+    try:
+        prefs = get_creator_prefs()
+    except Exception as exc:
+        logger.warning("get_default_output_dir: read failed: %s", exc)
+        return None
+    nested = prefs.get(_OUTPUT_DIR_KEY)
+    if not isinstance(nested, dict):
+        return None
+    raw = nested.get("path")
+    if not raw or not str(raw).strip():
+        return None
+    return str(raw).strip()
+
+
+def upsert_default_output_dir(path: Optional[str]) -> Optional[str]:
+    """Persist the default output directory. None or empty string clears the setting.
+
+    Returns the value that was actually persisted, or None on error.
+    Other top-level prefs keys are preserved verbatim.
+    """
+    try:
+        current = get_creator_prefs()
+    except Exception as exc:
+        logger.warning("upsert_default_output_dir: read failed: %s", exc)
+        current = {}
+    if not path or not str(path).strip():
+        current.pop(_OUTPUT_DIR_KEY, None)
+    else:
+        current[_OUTPUT_DIR_KEY] = {"path": str(path).strip()}
+    try:
+        upsert_creator_prefs(current)
+    except Exception as exc:
+        logger.warning("upsert_default_output_dir: write failed: %s", exc)
+        return None
+    return get_default_output_dir()
 
 
 # ── Batch 10R (MT-7 UI) — data-retention helpers ────────────────────────

@@ -209,3 +209,69 @@ def test_compute_output_ranking_entry_empty_seg_uses_defaults():
     assert result["ok"] if "ok" in result else True  # ok key not required
     assert "output_rank_score" in result
     assert 0.0 <= result["output_rank_score"] <= 100.0
+
+
+# ---------------------------------------------------------------------------
+# _resolve_rank_from_plan — rank wiring (P5)
+# ---------------------------------------------------------------------------
+
+from types import SimpleNamespace
+from app.features.render.engine.pipeline.pipeline_ranking import _resolve_rank_from_plan
+
+
+def _clip(rank: int) -> SimpleNamespace:
+    return SimpleNamespace(rank=rank)
+
+
+def _plan(clips: list) -> SimpleNamespace:
+    return SimpleNamespace(clips=clips)
+
+
+def test_rank_no_plan_returns_fallback():
+    mapping, tag = _resolve_rank_from_plan(None, [{}], set())
+    assert mapping is None
+    assert tag == "fallback"
+
+
+def test_rank_empty_clips_returns_fallback_no_plan_rank():
+    mapping, tag = _resolve_rank_from_plan(_plan([]), [{}], set())
+    assert mapping is None
+    assert tag == "fallback_no_plan_rank"
+
+
+def test_rank_zero_returns_fallback_no_plan_rank():
+    # AI didn't emit rank — ClipPlan.rank defaults to 0
+    mapping, tag = _resolve_rank_from_plan(_plan([_clip(0)]), [{}], set())
+    assert mapping is None
+    assert tag == "fallback_no_plan_rank"
+
+
+def test_rank_valid_permutation_returns_mapping():
+    # 3 clips, ranks [2, 1, 3] — valid permutation
+    plan = _plan([_clip(2), _clip(1), _clip(3)])
+    mapping, tag = _resolve_rank_from_plan(plan, [{}, {}, {}], set())
+    assert tag == "render_plan"
+    assert mapping == {1: 2, 2: 1, 3: 3}
+
+
+def test_rank_collision_returns_fallback_collision():
+    plan = _plan([_clip(1), _clip(1)])
+    mapping, tag = _resolve_rank_from_plan(plan, [{}, {}], set())
+    assert mapping is None
+    assert tag == "fallback_rank_collision"
+
+
+def test_rank_non_sequential_returns_fallback_invalid():
+    # [1, 3] is not a valid 1..N permutation for N=2
+    plan = _plan([_clip(1), _clip(3)])
+    mapping, tag = _resolve_rank_from_plan(plan, [{}, {}], set())
+    assert mapping is None
+    assert tag == "fallback_rank_invalid"
+
+
+def test_rank_flag_off_returns_fallback(monkeypatch):
+    monkeypatch.setenv("LLM_EMIT_RENDER_PLAN", "0")
+    plan = _plan([_clip(1)])
+    mapping, tag = _resolve_rank_from_plan(plan, [{}], set())
+    assert mapping is None
+    assert tag == "fallback"

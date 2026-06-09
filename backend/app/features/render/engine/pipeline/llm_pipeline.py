@@ -160,7 +160,16 @@ def run_llm_pre_render(
         # GPT/Claude infer meaning from context. Override via LLM_WHISPER_MODEL
         # for slower-but-accurate (small) or faster-but-lossier (tiny).
         import os as _os
-        _model = (_os.getenv("LLM_WHISPER_MODEL", "base") or tuned["whisper_model"]).strip()
+        _env_model = (_os.getenv("LLM_WHISPER_MODEL") or "").strip()
+        _ch_code = (getattr(payload, "channel_code", "") or "").strip()
+        _channel_model = ""
+        if not _env_model and _ch_code:
+            try:
+                from app.db.creator_repo import get_whisper_model_for_channel
+                _channel_model = get_whisper_model_for_channel(_ch_code) or ""
+            except Exception:
+                pass
+        _model = (_env_model or _channel_model or tuned["whisper_model"] or "base").strip()
         _engine = getattr(payload, "subtitle_transcription_engine", "default")
         _llm_language_raw = (getattr(payload, "llm_language", None) or "").strip().lower()
         _language = None if _llm_language_raw in ("", "auto") else _llm_language_raw

@@ -14,8 +14,7 @@ Block responsibilities (in order):
      outer try/except). Sacred Contract #3 holds: AI module returns None
      on failure — no propagation.
   2. Cover frame selection + extraction:
-       - _select_cover_frame_time() chooses an offset using ai_edit_plan
-         hints when available.
+       - _select_cover_frame_time() chooses an offset using seg cover_hint_ratio.
        - Optional S4 thumbnail quality selection when
          S4_THUMBNAIL_QUALITY_ENABLED=1.
        - extract_thumbnail_frame() falls back when S4 fails or returns nothing.
@@ -143,11 +142,6 @@ def run_part_done(
         _clip_dur = max(1.0, float(seg.get("duration") or 0))
         _cover_hint_ratio: float | None = None
         try:
-            if ctx.ai_edit_plan is not None:
-                _plan_hint = (ctx.ai_edit_plan.clip_cover_hints or {}).get(idx - 1) or {}
-                _raw_ratio = _plan_hint.get("preferred_offset_ratio")
-                if _raw_ratio is not None:
-                    _cover_hint_ratio = float(_raw_ratio)
             if _cover_hint_ratio is None:
                 _raw_ratio = seg.get("cover_hint_ratio")
                 if _raw_ratio is not None:

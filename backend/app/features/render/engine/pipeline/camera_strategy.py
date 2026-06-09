@@ -15,6 +15,10 @@ class CameraStrategy:
     reframe_mode: str = "subject"
     content_type: str = "vlog"
     camera_mode: str = ""
+    # Sprint 1: resolved from RenderPlan.camera_strategy.tracker
+    tracker_hint: str = ""
+    # Sprint 1: resolved from ClipPlan.hook_score; visual effect wired in Sprint 2
+    zoom_burst: bool = False
 
     def __post_init__(self):
         if not self.camera_mode:

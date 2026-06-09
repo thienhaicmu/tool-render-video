@@ -145,6 +145,26 @@ if _AVAILABLE:
         registry=REGISTRY,
     )
 
+    LLM_RENDER_PLAN_CALLS = Counter(
+        "llm_render_plan_calls_total",
+        "LLM render plan calls by provider and outcome",
+        ["provider", "status"],   # status: success | empty | error
+        registry=REGISTRY,
+    )
+    LLM_RENDER_PLAN_LATENCY = Histogram(
+        "llm_render_plan_seconds",
+        "Latency of render plan LLM call per provider",
+        ["provider"],
+        buckets=(0.5, 1, 2, 5, 10, 30, 60, 120),
+        registry=REGISTRY,
+    )
+    LLM_SEGMENTS_SELECTED = Counter(
+        "llm_segments_selected_total",
+        "Cumulative count of video segments (clips) selected by AI, per provider",
+        ["provider"],
+        registry=REGISTRY,
+    )
+
 else:
     REGISTRY = None  # type: ignore[assignment]
 
@@ -156,5 +176,8 @@ else:
     NVENC_ACTIVE_SESSIONS = _NoOpMetric()     # type: ignore[assignment]
     JOB_QUEUE_PENDING = _NoOpMetric()         # type: ignore[assignment]
     JOB_QUEUE_ACTIVE = _NoOpMetric()          # type: ignore[assignment]
-    DB_BACKUPS_TOTAL = _NoOpMetric()          # type: ignore[assignment]
+    DB_BACKUPS_TOTAL = _NoOpMetric()           # type: ignore[assignment]
     DB_CONN_ACQUIRE_WAIT = _NoOpMetric()      # type: ignore[assignment]
+    LLM_RENDER_PLAN_CALLS = _NoOpMetric()     # type: ignore[assignment]
+    LLM_RENDER_PLAN_LATENCY = _NoOpMetric()   # type: ignore[assignment]
+    LLM_SEGMENTS_SELECTED = _NoOpMetric()     # type: ignore[assignment]

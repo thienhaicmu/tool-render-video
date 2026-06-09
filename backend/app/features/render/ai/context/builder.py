@@ -1,15 +1,11 @@
 ﻿"""
 ai/context/creator_context.py — CreatorContextBuilder.
 
-Sprint 3.2 deliverable. A thin faÃ§ade in front of `db.creator_repo` that:
+Sprint 3.2 deliverable. A thin facade in front of `db.creator_repo` that:
 
 1. Reads the persisted `CreatorContext` from the singleton creator_prefs
    row (Sprint 3.1).
-2. Acts as the seam where Sprint 4+ will enrich the context with
-   derived signals (clip_feedback ranking history, channel performance,
-   target-platform inference, etc.). Today the enrichment hook returns
-   the context unchanged.
-3. Exposes a single `build()` entry point so the LLM pipeline never
+2. Exposes a single `build()` entry point so the LLM pipeline never
    reaches into the DB / domain layers directly.
 
 Sacred Contract #3 (AI modules return None on failure, never raise) is
@@ -29,11 +25,10 @@ logger = logging.getLogger("app.ai.context.creator_context")
 
 
 class CreatorContextBuilder:
-    """Build the CreatorContext the AI Director should consider.
+    """Build the CreatorContext the AI Director should consider."""
 
-    Single-method API for now — `build()`. Future extensions land here
-    as separate enrichment methods called from inside `build()`.
-    """
+    def __init__(self, channel_code: str = "") -> None:
+        self._channel_code = channel_code
 
     def build(self) -> Optional[CreatorContext]:
         """Return the active CreatorContext or None when none is configured.
@@ -54,30 +49,33 @@ class CreatorContextBuilder:
                 return None
             if ctx.is_empty():
                 return None
-            return self._enrich(ctx)
+            return ctx
         except Exception as exc:
             logger.warning("CreatorContextBuilder.build failed: %s", exc, exc_info=True)
             return None
 
-    # ── Internal seams ──────────────────────────────────────────────────
-
     def _fetch_persisted(self) -> Optional[CreatorContext]:
         """Read from `db.creator_repo`. Local import avoids the DB layer
-        being touched at module import time (keeps cold-start cheap)."""
+        being touched at module import time (keeps cold-start cheap).
+
+        When channel_code is set, tries the per-channel row first and
+        falls back to the global singleton via get_creator_context_for_channel().
+        When channel_code is empty, calls get_creator_context() directly.
+        """
+        if self._channel_code:
+            from app.db.creator_repo import get_creator_context_for_channel
+            return get_creator_context_for_channel(self._channel_code)
         from app.db.creator_repo import get_creator_context as _get
         return _get()
 
-    def _enrich(self, ctx: CreatorContext) -> CreatorContext:
-        """Sprint 3 placeholder. Sprint 4 will mix in derived signals
-        (feedback bias, channel performance, etc.). Today returns the
-        input unchanged so the behaviour is purely a persistent
-        passthrough."""
-        return ctx
 
-
-def build_creator_context() -> Optional[CreatorContext]:
+def build_creator_context(channel_code: str = "") -> Optional[CreatorContext]:
     """Module-level convenience wrapper. The LLM pipeline imports this
     rather than instantiating CreatorContextBuilder directly so unit
-    tests can monkeypatch the symbol cleanly."""
-    return CreatorContextBuilder().build()
+    tests can monkeypatch the symbol cleanly.
+
+    channel_code="" (default) preserves existing behavior — reads from
+    the global singleton creator_prefs row.
+    """
+    return CreatorContextBuilder(channel_code=channel_code).build()
 
