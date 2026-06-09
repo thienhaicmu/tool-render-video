@@ -94,7 +94,14 @@ def _detect_fw_device_compute() -> tuple[str, str]:
     Checks ctranslate2 CUDA device count — no PyTorch dependency required
     for the faster-whisper path.  Falls back to CPU int8 if CUDA is absent
     or ctranslate2 is not installed.
+
+    Override: set FASTER_WHISPER_DEVICE=cpu to force CPU regardless of GPU.
+    Note: cuBLAS is bundled inside the ctranslate2 package — do NOT check
+    for system-level cublas64_12.dll; that check produces a false negative
+    because the bundled DLL is not on the system PATH.
     """
+    if os.getenv("FASTER_WHISPER_DEVICE", "").lower() == "cpu":
+        return "cpu", "int8"
     try:
         import ctranslate2  # noqa: PLC0415
         if ctranslate2.get_cuda_device_count() > 0:
