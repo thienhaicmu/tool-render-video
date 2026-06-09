@@ -80,7 +80,8 @@ def _build_editorial_hint(payload: Any) -> str:
     # raised import failure can't propagate.
     try:
         from app.features.render.ai.context.builder import build_creator_context
-        creator_ctx = build_creator_context()
+        _channel_code = (getattr(payload, "channel_code", "") or "").strip()
+        creator_ctx = build_creator_context(channel_code=_channel_code)
         if creator_ctx is not None:
             creator_hint = creator_ctx.to_prompt_hint()
             if creator_hint:

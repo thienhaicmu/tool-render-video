@@ -27,6 +27,9 @@ logger = logging.getLogger("app.ai.context.creator_context")
 class CreatorContextBuilder:
     """Build the CreatorContext the AI Director should consider."""
 
+    def __init__(self, channel_code: str = "") -> None:
+        self._channel_code = channel_code
+
     def build(self) -> Optional[CreatorContext]:
         """Return the active CreatorContext or None when none is configured.
 
@@ -54,14 +57,25 @@ class CreatorContextBuilder:
     def _fetch_persisted(self) -> Optional[CreatorContext]:
         """Read from `db.creator_repo`. Local import avoids the DB layer
         being touched at module import time (keeps cold-start cheap).
+
+        When channel_code is set, tries the per-channel row first and
+        falls back to the global singleton via get_creator_context_for_channel().
+        When channel_code is empty, calls get_creator_context() directly.
         """
+        if self._channel_code:
+            from app.db.creator_repo import get_creator_context_for_channel
+            return get_creator_context_for_channel(self._channel_code)
         from app.db.creator_repo import get_creator_context as _get
         return _get()
 
 
-def build_creator_context() -> Optional[CreatorContext]:
+def build_creator_context(channel_code: str = "") -> Optional[CreatorContext]:
     """Module-level convenience wrapper. The LLM pipeline imports this
     rather than instantiating CreatorContextBuilder directly so unit
-    tests can monkeypatch the symbol cleanly."""
-    return CreatorContextBuilder().build()
+    tests can monkeypatch the symbol cleanly.
+
+    channel_code="" (default) preserves existing behavior — reads from
+    the global singleton creator_prefs row.
+    """
+    return CreatorContextBuilder(channel_code=channel_code).build()
 
