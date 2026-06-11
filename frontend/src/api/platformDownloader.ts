@@ -132,3 +132,80 @@ export function platformColor(platform: string): string {
   }
   return map[platform] || '#666'
 }
+
+// ── Catalog + Queue ───────────────────────────────────────────────────────────
+
+const CATALOG_BASE = '/api/downloader/catalog'
+
+export interface CatalogAsset {
+  asset_id: string
+  url: string
+  platform: string
+  status: 'pending' | 'downloading' | 'ready' | 'processing' | 'archived' | 'deleted' | 'failed'
+  storage_tier: string
+  storage_path: string
+  filename: string
+  title: string
+  duration: number
+  height: number
+  fps: number
+  filesize: number
+  quality: string
+  ref_count: number
+  created_at: string
+  updated_at: string
+  expires_at: string
+}
+
+export interface QueueItem {
+  queue_id: string
+  url: string
+  platform: string
+  quality: string
+  priority: number
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+  retry_count: number
+  max_retries: number
+  download_job_id: string
+  asset_id: string
+  error_msg: string
+  created_at: string
+  updated_at: string
+  started_at: string
+  completed_at: string
+}
+
+export async function listCatalog(status?: string, limit = 100): Promise<CatalogAsset[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (status) params.set('status', status)
+  return _fetch<CatalogAsset[]>(`${CATALOG_BASE}/?${params}`)
+}
+
+export async function archiveCatalogAsset(assetId: string): Promise<void> {
+  await _fetch(`${CATALOG_BASE}/${assetId}/archive`, { method: 'POST' })
+}
+
+export async function deleteCatalogAsset(assetId: string): Promise<void> {
+  await _fetch(`${CATALOG_BASE}/${assetId}`, { method: 'DELETE' })
+}
+
+export async function listQueue(status?: string, limit = 100): Promise<QueueItem[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (status) params.set('status', status)
+  return _fetch<QueueItem[]>(`${CATALOG_BASE}/queue?${params}`)
+}
+
+export async function addToQueue(
+  url: string,
+  opts: { platform?: string; quality?: string; priority?: number; max_retries?: number } = {},
+): Promise<{ queue_id: string; platform: string }> {
+  return _fetch(`${CATALOG_BASE}/queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, ...opts }),
+  })
+}
+
+export async function cancelQueueItem(queueId: string): Promise<void> {
+  await _fetch(`${CATALOG_BASE}/queue/${queueId}`, { method: 'DELETE' })
+}

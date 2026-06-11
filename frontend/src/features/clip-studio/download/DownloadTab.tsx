@@ -3,8 +3,10 @@ import type { Lang } from '../ClipStudio'
 import {
   listJobs, startDownload, cancelJob,
   platformLabel, platformColor, formatFilesize,
+  listQueue, cancelQueueItem,
+  listCatalog, archiveCatalogAsset, deleteCatalogAsset,
 } from '@/api/platformDownloader'
-import type { DownloadJob } from '@/api/platformDownloader'
+import type { DownloadJob, QueueItem, CatalogAsset } from '@/api/platformDownloader'
 
 const POLL_MS = 1500
 
@@ -219,6 +221,129 @@ function EmptyQueue() {
   )
 }
 
+function QueueCard({ item, onCancel }: { item: QueueItem; onCancel: (id: string) => void }) {
+  const borderColor: Record<string, string> = {
+    queued: 'rgba(59,130,246,.7)',
+    running: 'var(--accent)',
+    done: 'var(--ok)',
+    failed: 'var(--fail)',
+    cancelled: 'rgba(138,147,176,.4)',
+  }
+  const bc = borderColor[item.status] ?? 'rgba(138,147,176,.4)'
+
+  return (
+    <div style={{
+      borderRadius: 8,
+      background: '#111622',
+      border: '1px solid #1C2438',
+      borderLeft: `3px solid ${bc}`,
+      padding: '10px 14px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      flexShrink: 0,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 12, color: 'var(--text-1)', fontWeight: 600,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+        }}>
+          {item.url}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+          <span>{item.platform || 'unknown'}</span>
+          <span>·</span>
+          <span>{item.quality}</span>
+          <span>·</span>
+          <span>P{item.priority}</span>
+          {item.retry_count > 0 && <><span>·</span><span>retry {item.retry_count}/{item.max_retries}</span></>}
+          {item.error_msg && <><span>·</span><span style={{ color: 'var(--fail)' }}>{item.error_msg}</span></>}
+        </div>
+      </div>
+      <span style={{ fontSize: 9, fontWeight: 800, color: bc, textTransform: 'uppercase' as const, flexShrink: 0 }}>
+        {item.status}
+      </span>
+      {item.status === 'queued' && (
+        <button
+          onClick={() => onCancel(item.queue_id)}
+          style={{
+            padding: '3px 9px', borderRadius: 5, cursor: 'pointer', flexShrink: 0,
+            background: 'rgba(232,64,122,.12)', border: '1px solid rgba(232,64,122,.2)',
+            color: 'var(--fail)', fontSize: 10, fontWeight: 600,
+          }}
+        >
+          Cancel
+        </button>
+      )}
+    </div>
+  )
+}
+
+function CatalogAssetCard({
+  asset,
+  onArchive,
+  onDelete,
+}: {
+  asset: CatalogAsset
+  onArchive: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  const statusColor = asset.status === 'ready' ? 'var(--ok)'
+    : asset.status === 'failed' ? 'var(--fail)'
+    : asset.status === 'archived' ? 'rgba(138,147,176,.6)'
+    : 'var(--text-2)'
+
+  return (
+    <div style={{
+      borderRadius: 8, background: '#111622',
+      border: '1px solid #1C2438', padding: '10px 14px',
+      display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 12, color: 'var(--text-1)', fontWeight: 600,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+        }}>
+          {asset.title || asset.filename || asset.url}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+          {asset.platform && <span>{asset.platform}</span>}
+          {asset.quality && <><span>·</span><span>{asset.quality}</span></>}
+          {asset.filesize > 0 && <><span>·</span><span>{formatFilesize(asset.filesize)}</span></>}
+          {asset.storage_tier && <><span>·</span><span style={{ fontFamily: 'monospace' }}>{asset.storage_tier}</span></>}
+        </div>
+      </div>
+      <span style={{ fontSize: 9, fontWeight: 800, color: statusColor, textTransform: 'uppercase' as const, flexShrink: 0 }}>
+        {asset.status}
+      </span>
+      <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+        {asset.status === 'ready' && (
+          <button
+            onClick={() => onArchive(asset.asset_id)}
+            style={{
+              padding: '3px 9px', borderRadius: 5, cursor: 'pointer',
+              background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)',
+              color: 'var(--text-2)', fontSize: 10, fontWeight: 600,
+            }}
+          >
+            Archive
+          </button>
+        )}
+        <button
+          onClick={() => onDelete(asset.asset_id)}
+          style={{
+            padding: '3px 9px', borderRadius: 5, cursor: 'pointer',
+            background: 'rgba(232,64,122,.12)', border: '1px solid rgba(232,64,122,.2)',
+            color: 'var(--fail)', fontSize: 10, fontWeight: 600,
+          }}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  )
+}
+
 type CookieStatus = {
   present: boolean
   age_seconds?: number
@@ -226,6 +351,8 @@ type CookieStatus = {
   has_v20_warning?: boolean
   detail?: string
 }
+
+type DlTab = 'jobs' | 'queue' | 'catalog'
 
 export function DownloadTab({ lang: _lang }: { lang: Lang }) {
   const [url, setUrl]               = useState('')
@@ -240,6 +367,9 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
   const [showCookieHelp, setShowCookieHelp] = useState(false)
   const [cookiePath, setCookiePath] = useState('')
   const [cookieError, setCookieError] = useState<string | null>(null)
+  const [activeTab, setActiveTab]   = useState<DlTab>('jobs')
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([])
+  const [catalogAssets, setCatalogAssets] = useState<CatalogAsset[]>([])
   const pollRef                     = useRef<ReturnType<typeof setInterval> | null>(null)
   const inputRef                    = useRef<HTMLInputElement>(null)
 
@@ -264,6 +394,22 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
     pollRef.current = setInterval(refresh, POLL_MS)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [refresh, fetchCookieStatus])
+
+  useEffect(() => {
+    if (activeTab === 'jobs') return
+    let cancelled = false
+    const poll = async () => {
+      if (cancelled) return
+      if (activeTab === 'queue') {
+        try { setQueueItems(await listQueue()) } catch { /* ignore */ }
+      } else if (activeTab === 'catalog') {
+        try { setCatalogAssets(await listCatalog()) } catch { /* ignore */ }
+      }
+    }
+    poll()
+    const id = setInterval(poll, POLL_MS)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [activeTab])
 
   const pickDir = async () => {
     const dir = await window.electronAPI?.pickDirectory?.()
@@ -635,12 +781,93 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
         )}
       </div>
 
-      {/* Queue */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
-        {jobs.length === 0
-          ? <EmptyQueue />
-          : jobs.map((job) => <DownloadCard key={job.id} job={job} onCancel={cancelJob} />)
-        }
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: 4, padding: '8px 16px 0', flexShrink: 0 }}>
+        {(['jobs', 'queue', 'catalog'] as DlTab[]).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: '5px 14px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              fontSize: 11, fontWeight: 600, transition: 'all .12s',
+              background: activeTab === tab ? 'rgba(123,97,255,.25)' : 'rgba(255,255,255,.04)',
+              color: activeTab === tab ? 'var(--accent)' : 'var(--text-2)',
+            }}
+          >
+            {tab === 'jobs'
+              ? `Jobs${jobs.length ? ` (${jobs.length})` : ''}`
+              : tab === 'queue'
+              ? `Queue${queueItems.length ? ` (${queueItems.length})` : ''}`
+              : `Catalog${catalogAssets.length ? ` (${catalogAssets.length})` : ''}`}
+          </button>
+        ))}
+      </div>
+
+      {/* Content area */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '10px 16px 12px', display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+        {activeTab === 'jobs' && (
+          <>
+            {jobs.length === 0
+              ? <EmptyQueue />
+              : jobs.map((job) => <DownloadCard key={job.id} job={job} onCancel={cancelJob} />)
+            }
+          </>
+        )}
+
+        {activeTab === 'queue' && (
+          <>
+            {queueItems.length === 0
+              ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' as const, gap: 8, padding: 40 }}>
+                  <div style={{ fontSize: 32, opacity: .15 }}>⏳</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>Acquisition queue is empty</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center' as const }}>Items added via the API appear here</div>
+                </div>
+              )
+              : queueItems.map(item => (
+                  <QueueCard
+                    key={item.queue_id}
+                    item={item}
+                    onCancel={id => {
+                      cancelQueueItem(id).catch(() => {}).finally(() => {
+                        listQueue().then(setQueueItems).catch(() => {})
+                      })
+                    }}
+                  />
+                ))
+            }
+          </>
+        )}
+
+        {activeTab === 'catalog' && (
+          <>
+            {catalogAssets.length === 0
+              ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' as const, gap: 8, padding: 40 }}>
+                  <div style={{ fontSize: 32, opacity: .15 }}>🗂</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>No assets in catalog</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center' as const }}>Completed downloads are automatically registered here</div>
+                </div>
+              )
+              : catalogAssets.map(asset => (
+                  <CatalogAssetCard
+                    key={asset.asset_id}
+                    asset={asset}
+                    onArchive={id => {
+                      archiveCatalogAsset(id).catch(() => {}).finally(() => {
+                        listCatalog().then(setCatalogAssets).catch(() => {})
+                      })
+                    }}
+                    onDelete={id => {
+                      deleteCatalogAsset(id).catch(() => {}).finally(() => {
+                        listCatalog().then(setCatalogAssets).catch(() => {})
+                      })
+                    }}
+                  />
+                ))
+            }
+          </>
+        )}
       </div>
     </div>
   )
