@@ -369,3 +369,21 @@ def prune_old_download_jobs(max_age_days: int) -> dict:
         )
         return {"removed": cur.rowcount}
 
+
+def prune_expired_catalog_assets(max_age_days: int) -> dict:
+    """Archive/delete asset_catalog entries whose expires_at timestamp has passed."""
+    if max_age_days <= 0:
+        return {"archived": 0, "deleted": 0, "errors": 0}
+    try:
+        from app.features.download.catalog.service import _catalog_service
+        from app.features.download.storage.asset_store import get_asset_store
+        from app.features.download.lifecycle.manager import LifecycleManager
+        mgr = LifecycleManager(store=get_asset_store(), catalog=_catalog_service)
+        return mgr.prune_expired_assets(max_age_days)
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger("app.maintenance").warning(
+            "prune_expired_catalog_assets failed: %s", exc
+        )
+        return {"archived": 0, "deleted": 0, "errors": 1}
+

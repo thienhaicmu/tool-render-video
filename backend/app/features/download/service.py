@@ -133,8 +133,22 @@ class DownloadService:
 
         dl_job_start(job_id, url=url, platform=_platform, quality=quality, cookies=_cookie_src)
 
+        _cs = None          # CatalogService handle — set only if registration succeeds
+        _asset_id: str | None = None
+
         try:
             update_download_job(job_id, status="downloading", progress=1)
+
+            # Non-fatal catalog registration
+            try:
+                from app.features.download.catalog.service import _catalog_service
+                _cs = _catalog_service
+                _ast = _cs.register_or_get(url, platform=_platform, quality=quality)
+                _asset_id = _ast["asset_id"]
+                _cs.link_download_job(_asset_id, job_id)
+                _cs.transition(_asset_id, "downloading")
+            except Exception as _cat_exc:
+                logger.debug("catalog.register skipped job=%s: %s", job_id, _cat_exc)
 
             _writer = _ThrottledWriter(job_id)
 
@@ -161,6 +175,26 @@ class DownloadService:
                 filesize=result["filesize"],
             )
             update_download_job(job_id, progress=100, speed_str="", eta_str="")
+
+            # Non-fatal catalog mark_ready
+            try:
+                if _cs and _asset_id:
+                    from app.db.catalog_repo import update_asset as _upd
+                    _cs.transition(_asset_id, "ready")
+                    _upd(
+                        _asset_id,
+                        storage_path=result["output_path"],
+                        filename=result["filename"],
+                        filesize=result["filesize"],
+                        storage_tier="raw",
+                        title=result["title"],
+                        duration=result["duration"],
+                        height=result["height"],
+                        fps=result["fps"],
+                    )
+            except Exception:
+                pass
+
             logger.info(
                 "download.done  job_id=%s  platform=%s  file=%s  size_bytes=%s  elapsed_ms=%d",
                 job_id, _platform, result["filename"], result["filesize"], _elapsed_ms,
@@ -177,6 +211,13 @@ class DownloadService:
                 exc_info=True,
             )
             dl_job_fail(job_id, error=msg, platform=_platform)
+
+            # Non-fatal catalog failure transition
+            try:
+                if _cs and _asset_id:
+                    _cs.transition(_asset_id, "failed")
+            except Exception:
+                pass
 
         finally:
             self._unregister(job_id)

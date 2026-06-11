@@ -15,6 +15,7 @@ from app.services.maintenance import (
     prune_preview_dirs,
     prune_render_cache,
     prune_render_temp_dirs,
+    prune_expired_catalog_assets,
     prune_text_overlay_dir,
     prune_xtts_cache,
     recover_interrupted_downloads,
@@ -139,6 +140,8 @@ app.include_router(platform_downloader_router)
 app.include_router(feedback_router)
 app.include_router(metrics_router)  # Sprint 6.C: Prometheus /metrics endpoint
 app.include_router(settings_router)  # Sprint 3-FE: /api/settings/creator-context
+from app.features.download.catalog.router import router as catalog_router
+app.include_router(catalog_router)
 # v2 API routes — disabled by setting ENABLE_V2=0
 if os.getenv("ENABLE_V2", "1") != "0":
     try:
@@ -230,6 +233,7 @@ def _run_periodic_cleanup():
             _retention_days = _db_days if _db_days is not None else _JOB_RETENTION_DAYS
             result_jobs = prune_old_jobs(_retention_days)
             prune_old_download_jobs(_retention_days)
+            prune_expired_catalog_assets(_retention_days)
             _cleanup_logger.info(
                 "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d "
                 "xtts_removed=%d overlay_removed=%d cache_removed=%d cache_freed_mb=%.1f "
