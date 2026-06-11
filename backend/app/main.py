@@ -282,6 +282,9 @@ def startup():
     recover_pending_render_jobs()
     # Reset any download jobs left in 'downloading' state from previous server run
     recover_interrupted_downloads()
+    # Start background acquisition queue scheduler
+    from app.features.download.catalog.scheduler import _scheduler as _acq_scheduler
+    _acq_scheduler.start()
     start_warmup()  # pre-download Whisper models + check deps in background
     # Pre-load Whisper model into RAM so first job doesn't pay the 5-15s load cost.
     # Uses WARMUP_WHISPER_MODEL env var (default "small" = balanced preset).
