@@ -214,7 +214,7 @@ def refresh_cookies():
                               "use Import File instead."}
     except Exception as exc:
         logger.error("refresh_cookies: failed — %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Cookie extraction failed: {exc}") from exc
+        raise HTTPException(status_code=503, detail=f"Cookie extraction failed: {exc}") from exc
 
 
 class ImportCookiesRequest(BaseModel):
@@ -263,7 +263,7 @@ def import_cookies(req: ImportCookiesRequest):
         return _cookie_status_response()
     except Exception as exc:
         logger.error("import_cookies: failed — %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to import: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Failed to copy cookie file — check disk space/permissions: {exc}") from exc
 
 
 def _cookie_status_response() -> dict:

@@ -3,7 +3,7 @@ import type { Lang } from '../ClipStudio'
 import {
   listJobs, startDownload, cancelJob,
   platformLabel, platformColor, formatFilesize,
-  listQueue, cancelQueueItem,
+  listQueue, cancelQueueItem, addToQueue,
   listCatalog, archiveCatalogAsset, deleteCatalogAsset,
 } from '@/api/platformDownloader'
 import type { DownloadJob, QueueItem, CatalogAsset } from '@/api/platformDownloader'
@@ -370,6 +370,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
   const [activeTab, setActiveTab]   = useState<DlTab>('jobs')
   const [queueItems, setQueueItems] = useState<QueueItem[]>([])
   const [catalogAssets, setCatalogAssets] = useState<CatalogAsset[]>([])
+  const [submitMode, setSubmitMode] = useState<'direct' | 'queue'>('direct')
   const pollRef                     = useRef<ReturnType<typeof setInterval> | null>(null)
   const inputRef                    = useRef<HTMLInputElement>(null)
 
@@ -422,9 +423,15 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
     setAdding(true)
     setError(null)
     try {
-      await startDownload(v, outputDir || 'output', quality)
-      setUrl('')
-      await refresh()
+      if (submitMode === 'queue') {
+        await addToQueue(v, { quality })
+        setUrl('')
+        setActiveTab('queue')
+      } else {
+        await startDownload(v, outputDir || 'output', quality)
+        setUrl('')
+        await refresh()
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start download')
     } finally {
@@ -658,6 +665,24 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
           </div>
         )}
 
+        {/* Submit mode toggle */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+          {(['direct', 'queue'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setSubmitMode(mode)}
+              style={{
+                padding: '4px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                fontSize: 10, fontWeight: 600, transition: 'all .12s',
+                background: submitMode === mode ? 'rgba(123,97,255,.22)' : 'rgba(255,255,255,.04)',
+                color: submitMode === mode ? 'var(--accent)' : 'var(--text-3)',
+              }}
+            >
+              {mode === 'direct' ? '↓ Direct' : '⏳ Queue'}
+            </button>
+          ))}
+        </div>
+
         {/* URL input */}
         <div style={{
           display: 'flex',
@@ -726,7 +751,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
           >
             {adding ? (
               <span style={{ display: 'inline-block', animation: 'dl-spin .8s linear infinite' }}>⟳</span>
-            ) : '↓'} {adding ? 'Adding…' : 'Add'}
+            ) : submitMode === 'queue' ? '⏳' : '↓'} {adding ? 'Adding…' : submitMode === 'queue' ? 'Queue' : 'Add'}
           </button>
         </div>
 

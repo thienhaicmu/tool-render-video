@@ -25,7 +25,7 @@ DEFAULT_PROVIDER = "gemini"
 # When LLM_FALLBACK_ENABLED=1, a None result from the primary provider
 # triggers sequential fallback through the remaining SUPPORTED_PROVIDERS.
 # Default OFF — preserves existing behavior for all current deployments.
-_LLM_FALLBACK_ENABLED: bool = os.getenv("LLM_FALLBACK_ENABLED", "0") == "1"
+_LLM_FALLBACK_ENABLED: bool = os.getenv("LLM_FALLBACK_ENABLED", "1") == "1"
 
 
 def _get_provider_impl(provider_name: str):
