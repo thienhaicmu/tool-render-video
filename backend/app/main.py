@@ -10,12 +10,14 @@ from app.db.connection import init_db
 from app.services.channel_service import ensure_channel
 from app.services.maintenance import (
     prune_job_logs,
+    prune_old_download_jobs,
     prune_old_jobs,
     prune_preview_dirs,
     prune_render_cache,
     prune_render_temp_dirs,
     prune_text_overlay_dir,
     prune_xtts_cache,
+    recover_interrupted_downloads,
 )
 from app.core.config import APP_DATA_DIR, CACHE_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR
 from app.core.logging_setup import configure_logging as _configure_logging
@@ -227,6 +229,7 @@ def _run_periodic_cleanup():
                 _cleanup_logger.warning("data_retention read failed: %s", _exc)
             _retention_days = _db_days if _db_days is not None else _JOB_RETENTION_DAYS
             result_jobs = prune_old_jobs(_retention_days)
+            prune_old_download_jobs(_retention_days)
             _cleanup_logger.info(
                 "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d "
                 "xtts_removed=%d overlay_removed=%d cache_removed=%d cache_freed_mb=%.1f "
@@ -273,6 +276,8 @@ def startup():
     prune_text_overlay_dir(get_text_overlay_temp_dir(), max_age_days=7)
     # Re-queue any render jobs that were interrupted by a previous server restart
     recover_pending_render_jobs()
+    # Reset any download jobs left in 'downloading' state from previous server run
+    recover_interrupted_downloads()
     start_warmup()  # pre-download Whisper models + check deps in background
     # Pre-load Whisper model into RAM so first job doesn't pay the 5-15s load cost.
     # Uses WARMUP_WHISPER_MODEL env var (default "small" = balanced preset).

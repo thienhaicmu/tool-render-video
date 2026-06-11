@@ -1,16 +1,14 @@
 """Downloader feature router — /api/downloader/* endpoints.
 
 Migrated from routes/platform_downloader.py.
-Handles: start download, batch download, job status, cancel, WebSocket progress.
+All download execution is delegated to DownloadService (_service).
 """
 from __future__ import annotations
 
 import asyncio
 import ipaddress
 import logging
-import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -20,18 +18,18 @@ from pydantic import BaseModel
 from app.db.download_repo import (
     create_download_job,
     delete_download_job,
+    find_active_job_for_url,
     get_download_job,
     list_download_jobs,
     update_download_job,
 )
-from app.features.download.engine import download_video, get_video_info
+from app.features.download.engine import get_video_info
 from app.features.download.engine.platform_detect import detect_platform, is_allowed_url
+from app.features.download.service import _service
 
 logger = logging.getLogger("app.downloader")
 
 router = APIRouter(prefix="/api/downloader", tags=["downloader"])
-
-_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="platform-dl")
 
 
 # ── Security helpers ──────────────────────────────────────────────────────────
@@ -67,28 +65,21 @@ def _validate_output_dir(raw: str) -> Path:
     p = Path(raw).expanduser()
     if not p.is_absolute():
         p = (Path.cwd() / p).resolve()
+    else:
+        p = p.resolve()
+    try:
+        from app.core.config import APP_DATA_DIR
+        p.relative_to(Path(APP_DATA_DIR).resolve())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="output_dir must be inside the application data directory",
+        )
     try:
         p.mkdir(parents=True, exist_ok=True)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Cannot create output folder: {exc}") from exc
     return p
-
-
-def _friendly_error(exc: Exception) -> str:
-    text = str(exc or "").lower()
-    if "unsupported" in text or "invalid url" in text:
-        return "Unsupported link"
-    if "private" in text or "unavailable" in text or "not available" in text:
-        return "Private or unavailable video"
-    if "login" in text or "sign in" in text or "cookies" in text:
-        return "Login required — video is age-restricted or private"
-    if "copyright" in text or "blocked" in text:
-        return "Video is not available in your region"
-    if "network" in text or "connection" in text or "timeout" in text:
-        return "Network error — check your connection and try again"
-    if "no video formats" in text or "format" in text:
-        return "No downloadable format found for this video"
-    return "Download failed — please try again"
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -105,72 +96,6 @@ class BatchDownloadStartRequest(BaseModel):
     quality: str = "best"
 
 
-# ── Background worker ─────────────────────────────────────────────────────────
-
-def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -> None:
-    from app.core.tracing import dl_job_start, dl_job_done, dl_job_fail
-
-    _t_start = time.monotonic()
-    _platform = platform or "unknown"
-
-    # Detect cookie source for trace
-    import os as _os
-    from pathlib import Path as _Path
-    _cookie_src = "none"
-    if (_os.getenv("YTDLP_COOKIEFILE") or "").strip():
-        _cookie_src = "file"
-    else:
-        try:
-            from app.core.config import COOKIES_DIR as _CD
-            if (_CD / "youtube_cookies.txt").is_file():
-                _cookie_src = "auto"
-        except Exception:
-            pass
-        if _cookie_src == "none" and (_os.getenv("YTDLP_COOKIES_FROM_BROWSER") or "").strip():
-            _cookie_src = "browser"
-
-    dl_job_start(job_id, url=url, platform=_platform, quality="best", cookies=_cookie_src)
-
-    try:
-        update_download_job(job_id, status="downloading", progress=1)
-
-        def _on_progress(pct: int, speed: str, eta: str):
-            update_download_job(job_id, progress=pct, speed_str=speed, eta_str=eta)
-
-        result = download_video(job_id, url, output_dir, on_progress=_on_progress)
-
-        _elapsed_ms = int((time.monotonic() - _t_start) * 1000)
-        update_download_job(
-            job_id,
-            status="done",
-            progress=100,
-            speed_str="",
-            eta_str="",
-            title=result["title"],
-            output_path=result["output_path"],
-            filename=result["filename"],
-            height=result["height"],
-            fps=result["fps"],
-            duration=result["duration"],
-            filesize=result["filesize"],
-        )
-        logger.info(
-            "download.done  job_id=%s  platform=%s  file=%s  size_bytes=%s  elapsed_ms=%d",
-            job_id, _platform, result["filename"], result["filesize"], _elapsed_ms,
-        )
-        dl_job_done(job_id, filename=result["filename"], filesize=result["filesize"], platform=_platform)
-    except Exception as exc:
-        _elapsed_ms = int((time.monotonic() - _t_start) * 1000)
-        msg = _friendly_error(exc)
-        update_download_job(job_id, status="failed", error_msg=msg, progress=0)
-        logger.error(
-            "download.failed  job_id=%s  platform=%s  url=%s  elapsed_ms=%d  friendly=%r  raw=%s",
-            job_id, _platform, url, _elapsed_ms, msg, exc,
-            exc_info=True,
-        )
-        dl_job_fail(job_id, error=msg, platform=_platform)
-
-
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/info")
@@ -184,10 +109,13 @@ def get_info(url: str):
 def start_download(req: DownloadStartRequest):
     url = _validate_download_url(req.url)
     output_dir = _validate_output_dir(req.output_dir)
+    existing = find_active_job_for_url(url)
+    if existing:
+        return {"job_id": existing["id"], "platform": existing.get("platform", ""), "duplicate": True}
     job_id = str(uuid.uuid4())
     platform = detect_platform(url)
     create_download_job(job_id, url, platform, str(output_dir))
-    _EXECUTOR.submit(_run_download, job_id, url, output_dir, platform)
+    _service.submit(job_id, url, output_dir, quality=req.quality, platform=platform)
     return {"job_id": job_id, "platform": platform}
 
 
@@ -203,10 +131,14 @@ def start_batch(req: BatchDownloadStartRequest):
             url = _validate_download_url(url)
         except HTTPException:
             continue
+        existing = find_active_job_for_url(url)
+        if existing:
+            job_ids.append({"job_id": existing["id"], "url": url, "platform": existing.get("platform", ""), "duplicate": True})
+            continue
         job_id = str(uuid.uuid4())
         platform = detect_platform(url)
         create_download_job(job_id, url, platform, str(output_dir))
-        _EXECUTOR.submit(_run_download, job_id, url, output_dir, platform)
+        _service.submit(job_id, url, output_dir, quality=req.quality, platform=platform)
         job_ids.append({"job_id": job_id, "url": url, "platform": platform})
     return {"jobs": job_ids}
 
@@ -230,7 +162,8 @@ def cancel_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Download job not found")
     if job.get("status") in ("queued", "downloading"):
-        update_download_job(job_id, status="failed", error_msg="Cancelled by user")
+        _service.cancel(job_id)
+        update_download_job(job_id, status="cancelled", error_msg="Cancelled by user")
     delete_download_job(job_id)
     return {"ok": True}
 
@@ -245,7 +178,7 @@ async def job_progress_ws(websocket: WebSocket, job_id: str):
                 await websocket.send_json({"error": "not_found"})
                 break
             await websocket.send_json(job)
-            if job.get("status") in ("done", "failed"):
+            if job.get("status") in ("done", "failed", "cancelled"):
                 break
             await asyncio.sleep(0.5)
     except WebSocketDisconnect:
@@ -308,7 +241,6 @@ def import_cookies(req: ImportCookiesRequest):
     if src.stat().st_size == 0:
         raise HTTPException(status_code=400, detail="File is empty")
 
-    # Validate Netscape format
     try:
         first_line = src.read_text(encoding="utf-8", errors="ignore").splitlines()[0]
         if "Netscape" not in first_line and "HTTP Cookie" not in first_line:

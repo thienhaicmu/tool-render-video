@@ -345,3 +345,27 @@ def prune_job_logs(channels_dir: Path, keep_last: int = 30, older_than_days: int
         "older_than_days": older_than_days,
     }
 
+
+def recover_interrupted_downloads() -> dict:
+    """Reset any download stuck in 'downloading' back to 'failed' on startup."""
+    from app.db.connection import db_conn
+    with db_conn() as conn:
+        cur = conn.execute(
+            "UPDATE download_jobs SET status='failed', error_msg='Interrupted by restart', "
+            "updated_at=datetime('now') WHERE status='downloading'"
+        )
+        return {"recovered": cur.rowcount}
+
+
+def prune_old_download_jobs(max_age_days: int) -> dict:
+    """Delete old completed/failed/cancelled download records older than max_age_days."""
+    if max_age_days <= 0:
+        return {"removed": 0}
+    from app.db.connection import db_conn
+    with db_conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM download_jobs WHERE status IN ('done','failed','cancelled') "
+            f"AND updated_at < datetime('now', '-{max_age_days} days')"
+        )
+        return {"removed": cur.rowcount}
+
