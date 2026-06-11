@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 
 class DownloadAdapter(ABC):
@@ -30,16 +30,20 @@ class DownloadAdapter(ABC):
         *,
         quality: str = "best",
         cancel_event: Optional[threading.Event] = None,
+        progress_callback: Optional[Callable[[int, str, str], None]] = None,
         context: str = "download",
     ) -> dict:
         """Download video from the platform URL to output_dir.
 
         Returns dict with keys:
-            filepath  str  — absolute path to downloaded file
-            title     str  — video title
-            duration  int  — duration in seconds
-            platform  str  — platform name ("youtube", "tiktok", ...)
-            url       str  — original URL
+            filepath         str   — absolute path to downloaded file
+            title            str   — video title
+            slug             str   — slugified title
+            duration         int   — duration in seconds
+            selected_height  int   — actual download resolution (pixels)
+            selected_fps     float — actual frame rate
+            platform         str   — platform name ("youtube", "tiktok", ...)
+            url              str   — original URL
 
         Raises:
             RuntimeError: download failed

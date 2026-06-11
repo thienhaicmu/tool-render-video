@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from .base import DownloadAdapter
 
@@ -30,8 +30,14 @@ class FacebookAdapter(DownloadAdapter):
         *,
         quality: str = "best",
         cancel_event: Optional[threading.Event] = None,
+        progress_callback: Optional[Callable[[int, str, str], None]] = None,
         context: str = "download",
     ) -> dict:
         from app.features.download.engine.downloader import download_youtube
-        result = download_youtube(url, output_dir, context=context, cancel_event=cancel_event)
+        result = download_youtube(
+            url, output_dir,
+            context=context,
+            cancel_event=cancel_event,
+            progress_callback=progress_callback,
+        )
         return {**result, "platform": "facebook", "url": url}

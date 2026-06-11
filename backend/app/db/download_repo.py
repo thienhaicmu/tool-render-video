@@ -72,3 +72,30 @@ def delete_download_job(job_id: str) -> None:
     with db_conn() as conn:
         conn.execute("DELETE FROM download_jobs WHERE id = ?", (job_id,))
         conn.commit()
+
+
+def find_active_job_for_url(url: str) -> dict | None:
+    """Return an existing queued/downloading job for this URL, or None."""
+    with db_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM download_jobs WHERE url = ? AND status IN ('queued', 'downloading') LIMIT 1",
+            (url,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def complete_download_job(job_id: str, **fields: Any) -> bool:
+    """Set status='done' only if currently 'downloading' (race-safe). Returns True if applied."""
+    allowed = {"output_path", "filename", "title", "duration", "height", "fps", "filesize"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    updates["status"] = "done"
+    updates["updated_at"] = _utc_now_iso()
+    cols = ", ".join(f"{k} = ?" for k in updates)
+    vals = list(updates.values()) + [job_id]
+    with db_conn() as conn:
+        cur = conn.execute(
+            f"UPDATE download_jobs SET {cols} WHERE id = ? AND status = 'downloading'",
+            vals,
+        )
+        conn.commit()
+    return cur.rowcount > 0

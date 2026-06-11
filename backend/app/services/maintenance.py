@@ -345,3 +345,45 @@ def prune_job_logs(channels_dir: Path, keep_last: int = 30, older_than_days: int
         "older_than_days": older_than_days,
     }
 
+
+def recover_interrupted_downloads() -> dict:
+    """Reset any download stuck in 'downloading' back to 'failed' on startup."""
+    from app.db.connection import db_conn
+    with db_conn() as conn:
+        cur = conn.execute(
+            "UPDATE download_jobs SET status='failed', error_msg='Interrupted by restart', "
+            "updated_at=datetime('now') WHERE status='downloading'"
+        )
+        return {"recovered": cur.rowcount}
+
+
+def prune_old_download_jobs(max_age_days: int) -> dict:
+    """Delete old completed/failed/cancelled download records older than max_age_days."""
+    if max_age_days <= 0:
+        return {"removed": 0}
+    from app.db.connection import db_conn
+    with db_conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM download_jobs WHERE status IN ('done','failed','cancelled') "
+            f"AND updated_at < datetime('now', '-{max_age_days} days')"
+        )
+        return {"removed": cur.rowcount}
+
+
+def prune_expired_catalog_assets(max_age_days: int) -> dict:
+    """Archive/delete asset_catalog entries whose expires_at timestamp has passed."""
+    if max_age_days <= 0:
+        return {"archived": 0, "deleted": 0, "errors": 0}
+    try:
+        from app.features.download.catalog.service import _catalog_service
+        from app.features.download.storage.asset_store import get_asset_store
+        from app.features.download.lifecycle.manager import LifecycleManager
+        mgr = LifecycleManager(store=get_asset_store(), catalog=_catalog_service)
+        return mgr.prune_expired_assets(max_age_days)
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger("app.maintenance").warning(
+            "prune_expired_catalog_assets failed: %s", exc
+        )
+        return {"archived": 0, "deleted": 0, "errors": 1}
+
