@@ -296,3 +296,13 @@ def clear_part_output(job_id: str, part_no: int) -> None:
             (job_id, part_no),
         )
         conn.commit()
+
+
+def update_part_output_path(job_id: str, part_no: int, new_path: str) -> None:
+    """Update output_file to a new path (used by archive move operation)."""
+    with db_conn() as conn:
+        conn.execute(
+            "UPDATE job_parts SET output_file=?, updated_at=CURRENT_TIMESTAMP WHERE job_id=? AND part_no=?",
+            (new_path, job_id, part_no),
+        )
+        conn.commit()

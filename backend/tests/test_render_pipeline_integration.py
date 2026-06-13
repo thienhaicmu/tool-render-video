@@ -270,6 +270,15 @@ def test_run_render_pipeline_drives_two_part_render_to_done(_pipeline_sandbox, m
     payload = _build_minimal_payload(_pipeline_sandbox["output_dir"])
     scored = _build_fake_scored_segments()
 
+    # ── Pin the LLM_EMIT_RENDER_PLAN flag to True ────────────────────────
+    # test_llm_emit_render_plan_flag_off_when_zero (test_render_pipeline_contract.py)
+    # calls importlib.reload() with LLM_EMIT_RENDER_PLAN=0, which permanently
+    # mutates _FEATURE_LLM_EMIT_RENDER_PLAN=False on the cached module object.
+    # monkeypatch restores the env var but not the module attribute. Pin it
+    # explicitly here so this test is order-independent.
+    import app.features.render.engine.pipeline.render_pipeline as _rp_mod
+    monkeypatch.setattr(_rp_mod, "_FEATURE_LLM_EMIT_RENDER_PLAN", True)
+
     # ── Patch the 6 boundary functions ──────────────────────────────────
     rp = "app.features.render.engine.pipeline.render_pipeline"
 

@@ -38,6 +38,7 @@ from app.db.jobs_repo import (
     list_job_parts,
     list_job_parts_bulk,
     list_jobs,
+    update_part_output_path,
 )
 
 logger = logging.getLogger("app.routes.storage")
@@ -223,4 +224,83 @@ def cleanup_storage(body: CleanupRequest) -> dict:
         "jobs_cleaned": jobs_cleaned,
         "files_deleted": total_deleted,
         "freed_bytes": total_freed,
+    }
+
+
+# ── Phase T — Output File Archive ─────────────────────────────────────────────
+
+class ArchiveRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    archive_dir: str = Field(..., min_length=1, description="Destination directory for archived files")
+
+
+@router.post("/api/jobs/{job_id}/outputs/archive")
+def archive_job_outputs(job_id: str, body: ArchiveRequest) -> dict:
+    """Move output files for one job to archive_dir, updating DB paths.
+
+    Unlike DELETE (which removes files), archive preserves the files at a new
+    location and updates the output_file column to the new path so job history
+    remains accurate. The job DB row is never touched (Sacred Contract #7).
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+
+    archive_path = Path(body.archive_dir.strip())
+    try:
+        archive_path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot create archive directory: {exc}",
+        )
+
+    parts = list_job_parts(job_id)
+    moved = 0
+    skipped = 0
+    failed = 0
+    results: list[dict] = []
+
+    for part in parts:
+        output_file = str(part.get("output_file") or "").strip()
+        part_no = int(part.get("part_no") or 0)
+        if not output_file:
+            continue
+
+        src = Path(output_file)
+        if not src.is_file():
+            skipped += 1
+            results.append({"part_no": part_no, "status": "skipped", "reason": "file_not_found"})
+            continue
+
+        dest = archive_path / src.name
+        # If dest already exists, append part_no to avoid collision
+        if dest.exists():
+            dest = archive_path / f"part_{part_no:03d}_{src.name}"
+
+        try:
+            src.rename(dest)
+            update_part_output_path(job_id, part_no, str(dest))
+            moved += 1
+            results.append({"part_no": part_no, "status": "moved", "new_path": str(dest)})
+        except OSError as exc:
+            logger.warning(
+                "storage.archive: failed to move %s → %s: %s",
+                src, dest, exc,
+            )
+            failed += 1
+            results.append({"part_no": part_no, "status": "failed", "reason": str(exc)})
+
+    logger.info(
+        "storage.archive: job_id=%s moved=%d skipped=%d failed=%d archive_dir=%s",
+        job_id, moved, skipped, failed, archive_path,
+    )
+    return {
+        "job_id":      job_id,
+        "archive_dir": str(archive_path),
+        "moved":       moved,
+        "skipped":     skipped,
+        "failed":      failed,
+        "parts":       results,
     }

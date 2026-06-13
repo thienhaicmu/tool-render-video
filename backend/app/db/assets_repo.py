@@ -100,11 +100,51 @@ def get_asset_by_path(file_path: str) -> Optional[Asset]:
     return Asset.from_row(dict(row)) if row else None
 
 
-def list_assets(limit: int = 100, offset: int = 0) -> list[Asset]:
+def list_assets(
+    limit: int = 100,
+    offset: int = 0,
+    *,
+    content_type: str = "",
+    language: str = "",
+    min_duration: float = 0.0,
+    max_duration: float = 0.0,
+    q: str = "",
+) -> list[Asset]:
+    """Return assets matching the optional filter params, newest first.
+
+    Phase Q: content_type, language, min_duration, max_duration, q (title LIKE search).
+    All filters are optional; omitting them returns all assets (original behaviour).
+    """
+    where: list[str] = []
+    params: list = []
+
+    if content_type.strip():
+        where.append("content_type = ?")
+        params.append(content_type.strip())
+
+    if language.strip():
+        where.append("language = ?")
+        params.append(language.strip())
+
+    if min_duration > 0:
+        where.append("duration_sec >= ?")
+        params.append(min_duration)
+
+    if max_duration > 0:
+        where.append("duration_sec <= ?")
+        params.append(max_duration)
+
+    if q.strip():
+        where.append("title LIKE ?")
+        params.append(f"%{q.strip()}%")
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    params.extend([limit, offset])
+
     with db_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM assets ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            (limit, offset),
+            f"SELECT * FROM assets {where_sql} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            params,
         ).fetchall()
     return [Asset.from_row(dict(r)) for r in rows]
 
