@@ -60,6 +60,7 @@ from app.features.render.engine.pipeline.pipeline_segment_selection import (
     _PLATFORM_PROFILES,
     _get_effective_playback_speed,
 )
+from app.features.render.engine.stages.part_render_plan_resolvers import _resolve_pacing_speed_delta
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 from app.features.render.engine.stages.part_render_context import PartRenderContext
 from app.db.jobs_repo import upsert_job_part
@@ -169,9 +170,8 @@ def run_cut_stage(
 
     _effective_end = seg['end']
 
-    _part_platform_delta = float(
-        _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)
-    )
+    _pacing_delta_cut, _platform_delta_cut = _resolve_pacing_speed_delta(ctx, idx, ctx.target_platform)
+    _part_platform_delta = _pacing_delta_cut + _platform_delta_cut
     _part_timeline = TimelineMap(
         source_start=float(_effective_start),
         source_end=float(_effective_end),

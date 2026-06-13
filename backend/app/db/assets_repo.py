@@ -35,8 +35,8 @@ def upsert_asset(asset_id: str, file_path: str, original_url: str = "", title: s
             return str(row["asset_id"])
         conn.execute(
             """
-            INSERT INTO assets (asset_id, file_path, original_url, title, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO assets (asset_id, file_path, original_url, title, created_at, status)
+            VALUES (?, ?, ?, ?, ?, 'pending')
             """,
             (asset_id, file_path, original_url or "", title or "", _utc_now_iso()),
         )
@@ -70,7 +70,8 @@ def update_asset_enrichment(
                 content_type             = ?,
                 transcription_cache_path = ?,
                 thumbnail_path           = ?,
-                enriched_at              = ?
+                enriched_at              = ?,
+                status                   = 'ready'
             WHERE asset_id = ?
             """,
             (
@@ -82,6 +83,19 @@ def update_asset_enrichment(
             ),
         )
         conn.commit()
+
+
+def update_asset_status(asset_id: str, status: str) -> None:
+    """Update the lifecycle status of an asset. Never raises."""
+    try:
+        with db_conn() as conn:
+            conn.execute(
+                "UPDATE assets SET status = ? WHERE asset_id = ?",
+                (status, asset_id),
+            )
+            conn.commit()
+    except Exception:
+        logger.warning("update_asset_status failed asset_id=%s status=%s", asset_id, status, exc_info=True)
 
 
 def get_asset(asset_id: str) -> Optional[Asset]:

@@ -306,3 +306,123 @@ def update_part_output_path(job_id: str, part_no: int, new_path: str) -> None:
             (new_path, job_id, part_no),
         )
         conn.commit()
+
+
+def update_job_part_cover_quality(job_id: str, part_no: int, reasons: list) -> None:
+    """Persist cover frame quality tags for a job part (Phase V2).
+
+    Stores the quality reason list (e.g. ["sharp_frame", "good_exposure"])
+    returned by thumbnail_quality.select_best_thumbnail() as JSON so
+    per-channel visual quality trends can be aggregated by
+    get_channel_cover_quality_summary(). Never raises.
+    """
+    import json
+    try:
+        with db_conn() as conn:
+            conn.execute(
+                "UPDATE job_parts SET cover_quality_json = ?, updated_at = CURRENT_TIMESTAMP "
+                "WHERE job_id = ? AND part_no = ?",
+                (json.dumps(reasons), job_id, part_no),
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.warning("update_job_part_cover_quality failed job_id=%s part_no=%s: %s", job_id, part_no, exc)
+
+
+def get_channel_segment_repeat_rate(channel_code: str, limit: int = 200) -> dict:
+    """Compute segment repeat rate for a channel (Phase V3 — Content Fingerprinting).
+
+    Identifies (asset_id, start_sec, end_sec) tuples that appear in more than
+    one render for the channel. A high repeat rate signals content recycling.
+    Only considers parts where jobs.asset_id is known (non-null, non-empty).
+
+    Returns:
+      segment_repeat_pct  float — fraction of unique segment positions reused (0.0–1.0)
+      repeat_sample_size  int   — count of unique (asset, start, end) groups analysed
+
+    Never raises — returns zeros on error or no data.
+    """
+    _empty = {"segment_repeat_pct": 0.0, "repeat_sample_size": 0}
+    try:
+        with db_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    COUNT(*)                                   AS total_groups,
+                    SUM(CASE WHEN cnt > 1 THEN 1 ELSE 0 END)  AS repeated_groups
+                FROM (
+                    SELECT j.asset_id, jp.start_sec, jp.end_sec, COUNT(*) AS cnt
+                    FROM job_parts jp
+                    JOIN jobs j ON j.job_id = jp.job_id
+                    WHERE j.channel_code = ?
+                      AND j.asset_id IS NOT NULL
+                      AND j.asset_id != ''
+                    GROUP BY j.asset_id, jp.start_sec, jp.end_sec
+                    LIMIT ?
+                ) sub
+                """,
+                (channel_code, limit),
+            ).fetchone()
+        if row is None or row[0] == 0:
+            return _empty
+        total = int(row[0])
+        repeated = int(row[1] or 0)
+        return {
+            "segment_repeat_pct": round(repeated / total, 4),
+            "repeat_sample_size": total,
+        }
+    except Exception as exc:
+        logger.warning(
+            "get_channel_segment_repeat_rate failed channel=%s: %s", channel_code, exc
+        )
+        return _empty
+
+
+def get_channel_cover_quality_summary(channel_code: str, limit: int = 100) -> dict:
+    """Aggregate cover quality tags from recent completed parts for a channel.
+
+    Returns:
+      pct_sharp_cover    float  — fraction of parts with "sharp_frame" tag (0.0–1.0)
+      pct_face_cover     float  — fraction with "good_face_visibility" tag (0.0–1.0)
+      quality_sample_size int   — number of parts with quality data considered
+
+    Never raises — returns zeros on error or no data.
+    """
+    import json
+    _empty = {"pct_sharp_cover": 0.0, "pct_face_cover": 0.0, "quality_sample_size": 0}
+    try:
+        with db_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT jp.cover_quality_json
+                FROM job_parts jp
+                JOIN jobs j ON j.job_id = jp.job_id
+                WHERE j.channel_code = ?
+                  AND jp.cover_quality_json IS NOT NULL
+                ORDER BY jp.updated_at DESC
+                LIMIT ?
+                """,
+                (channel_code, limit),
+            ).fetchall()
+        if not rows:
+            return _empty
+        total = len(rows)
+        sharp_count = 0
+        face_count = 0
+        for r in rows:
+            try:
+                tags = json.loads(r[0])
+                if "sharp_frame" in tags:
+                    sharp_count += 1
+                if "good_face_visibility" in tags:
+                    face_count += 1
+            except Exception:
+                pass
+        return {
+            "pct_sharp_cover": round(sharp_count / total, 4),
+            "pct_face_cover": round(face_count / total, 4),
+            "quality_sample_size": total,
+        }
+    except Exception as exc:
+        logger.warning("get_channel_cover_quality_summary failed channel=%s: %s", channel_code, exc)
+        return _empty

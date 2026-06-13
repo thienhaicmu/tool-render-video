@@ -143,7 +143,7 @@ def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -
         # Phase C — register file in asset library (never blocks, never raises).
         _asset_id: str | None = None
         try:
-            from app.db.assets_repo import upsert_asset
+            from app.db.assets_repo import upsert_asset, update_asset_status
             from app.features.download.engine.enrichment import enrich_asset
             _output_path = result.get("output_path") or ""
             if _output_path:
@@ -153,6 +153,7 @@ def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -
                     original_url=url,
                     title=result.get("title") or "",
                 )
+                update_asset_status(_asset_id, "enriching")
                 _EXECUTOR.submit(enrich_asset, _asset_id, _output_path)
         except Exception:
             logger.warning("download: asset registration failed job_id=%s", job_id, exc_info=True)

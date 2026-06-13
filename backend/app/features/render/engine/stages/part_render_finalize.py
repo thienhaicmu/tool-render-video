@@ -129,6 +129,7 @@ from app.features.render.engine.pipeline.pipeline_segment_selection import (
     _PLATFORM_PROFILES,
     _get_effective_playback_speed,
 )
+from app.features.render.engine.stages.part_render_plan_resolvers import _resolve_pacing_speed_delta
 from app.features.render.engine.pipeline.qa_pipeline import (
     _assess_output_quality,
     _validate_render_output,
@@ -326,11 +327,13 @@ def run_part_finalize(
         (_effective_duration / _render_speed) - _micro_pacing_trim_sec + _remotion_intro_sec,
     )
     _speed_ratio = round(_expected_final_duration * 1000 / max(_encode_ms, 1), 2)
+    _log_pacing_delta, _log_platform_delta = _resolve_pacing_speed_delta(ctx, idx, ctx.target_platform)
     _job_log(
         ctx.effective_channel, ctx.job_id,
         f"playback_speed_resolution part={idx} "
         f"payload_speed={float(ctx.payload.playback_speed or 1.0):.4f} "
-        f"platform_delta={_PLATFORM_PROFILES.get(ctx.target_platform, {}).get('speed_delta', 0.0):.4f} "
+        f"pacing_delta={_log_pacing_delta:.4f} "
+        f"platform_delta={_log_platform_delta:.4f} "
         f"effective_speed={_render_speed:.4f} "
         f"target_platform={ctx.target_platform} "
         f"source_duration={_part_timeline.source_duration:.3f}s "

@@ -146,6 +146,7 @@ from app.features.render.engine.stages.part_render_plan_resolvers import (  # no
     _resolve_cta_audio_from_plan,
     _ALLOWED_CTA_TYPES_FROM_PLAN,
     _resolve_cta_type_from_plan,
+    _inc_editorial_override,
 )
 
 # ── Sprint 1/2: pacing / speech_density → karaoke words_per_group ────────────
@@ -642,6 +643,11 @@ def prepare_part_assets(
                     #   4. Library default ("auto" → content-type fallback).
                     if _cta_type == "auto" and _plan_cta_type and _plan_cta_type != "auto":
                         _cta_type = _plan_cta_type
+                    elif _plan_cta_type and _plan_cta_type != "auto":
+                        # Operator's explicit non-auto cta_type takes priority.
+                        # Phase U3: record the override so operators can see
+                        # how often their channel config suppresses AI intent.
+                        _inc_editorial_override("cta_type")
                     # Option C: AI hook_type biases auto cta_type before library lookup.
                     _hook_type_hint = str(seg.get("hook_type") or "").strip().lower()
                     if _cta_type == "auto" and _hook_type_hint:

@@ -64,6 +64,7 @@ from app.features.render.engine.pipeline.camera_strategy import CameraStrategy
 from app.features.render.engine.pipeline.part_plan import PartExecutionPlan
 from app.features.render.engine.pipeline.pipeline_cache import _render_cache_key
 from app.features.render.engine.pipeline.pipeline_segment_selection import _PLATFORM_PROFILES
+from app.features.render.engine.stages.part_render_plan_resolvers import _resolve_pacing_speed_delta
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _render_progress_timer
 from app.features.render.engine.stages.part_render_context import PartRenderContext
 from app.features.render.engine.encoder.ffmpeg_helpers import (
@@ -347,8 +348,10 @@ def run_render_preflight(
         voice_enabled=bool(getattr(ctx.payload, "voice_enabled", False)),
         voice_source=str(getattr(ctx.payload, "voice_source", "none")),
         playback_speed=float(
-            max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.0)
-                   + _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)))
+            max(0.5, min(1.5,
+                float(ctx.payload.playback_speed or 1.0)
+                + sum(_resolve_pacing_speed_delta(ctx, idx, ctx.target_platform))
+            ))
         ),
         zoom_burst=_zoom_burst,
     )

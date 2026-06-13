@@ -218,6 +218,53 @@ def _resolve_cta_type_from_plan(ctx: PartRenderContext) -> str:
     return ""
 
 
+# Phase U1 — Platform Ownership Resolution (2026-06-13).
+# When ClipPlan.pacing is set (fast/medium/slow), the AI owns per-clip
+# speed and the platform profile is demoted to a soft nudge clamped to
+# ±_PLATFORM_SOFT_CAP. When pacing is empty or ctx has no render_plan,
+# returns (0.0, full_platform_delta) — byte-for-byte pre-U1 behaviour
+# (Sacred Contract #2).
+_PACING_TO_SPEED_DELTA: dict[str, float] = {
+    "fast":   +0.08,
+    "medium":  0.00,
+    "slow":   -0.06,
+}
+_PLATFORM_SOFT_CAP = 0.02
+
+
+def _resolve_pacing_speed_delta(
+    ctx: "PartRenderContext",
+    idx: int,
+    target_platform: str = "",
+) -> tuple[float, float]:
+    """Return (pacing_delta, effective_platform_delta) for playback speed.
+
+    idx is 1-based (matches process_one_part's enumerate(start=1) convention).
+    Never raises — returns (0.0, full_platform_delta) on any error
+    (Sacred Contract #3 spirit for RenderPlan consumers).
+    """
+    try:
+        from app.features.render.engine.pipeline.pipeline_segment_selection import _PLATFORM_PROFILES
+        full_platform_delta: float = float(
+            _PLATFORM_PROFILES.get(target_platform, {}).get("speed_delta", 0.0)
+        )
+        rp = getattr(ctx, "render_plan", None)
+        if rp is not None and idx > 0:
+            clips = getattr(rp, "clips", None) or []
+            if idx - 1 < len(clips):
+                pacing = (getattr(clips[idx - 1], "pacing", "") or "").strip().lower()
+                if pacing in _PACING_TO_SPEED_DELTA:
+                    ai_delta = _PACING_TO_SPEED_DELTA[pacing]
+                    soft_platform = max(
+                        -_PLATFORM_SOFT_CAP,
+                        min(_PLATFORM_SOFT_CAP, full_platform_delta),
+                    )
+                    return ai_delta, soft_platform
+        return 0.0, full_platform_delta
+    except Exception:
+        return 0.0, 0.0
+
+
 __all__ = [
     "_RENDER_PLAN_ALLOWED_SUBTITLE_STYLES",
     "_resolve_subtitle_style_from_plan",
@@ -229,4 +276,7 @@ __all__ = [
     "_resolve_cta_audio_from_plan",
     "_ALLOWED_CTA_TYPES_FROM_PLAN",
     "_resolve_cta_type_from_plan",
+    "_PACING_TO_SPEED_DELTA",
+    "_PLATFORM_SOFT_CAP",
+    "_resolve_pacing_speed_delta",
 ]

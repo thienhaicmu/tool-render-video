@@ -132,6 +132,14 @@ def _smart_output_stem(hook_text: str, source_title: str, job_id: str) -> str:
 # Cover frame selection
 # ---------------------------------------------------------------------------
 
+# Phase U3 — AI cover hint soft authority.
+# When ClipPlan.cover_offset_ratio is set (>0), the AI candidate receives
+# this bonus so it wins over heuristic positions in close-call scoring.
+# Value (2.0) is intentionally below the subtitle penalty (-6.0) so a
+# frame coinciding with a subtitle block still loses even with the bonus.
+AI_COVER_HINT_BONUS = 2.0
+
+
 def _select_cover_frame_time(
     clip_duration: float,
     hook_score: float,
@@ -160,9 +168,14 @@ def _select_cover_frame_time(
 
     # S3.3 RC6: advisory hint adds at most one extra candidate.
     # Deduplicates against existing candidates before appending.
+    # Phase U3: track _ai_hint_t separately so the scoring loop can
+    # apply AI_COVER_HINT_BONUS even when the hint lands on an
+    # existing fixed candidate (dedup prevented a new append).
+    _ai_hint_t: float | None = None
     if cover_hint_ratio is not None:
         try:
             _hint_t = round(max(0.5, min(dur - 0.5, dur * float(cover_hint_ratio))), 3)
+            _ai_hint_t = _hint_t
             if _hint_t not in candidates:
                 candidates.append(_hint_t)
         except (TypeError, ValueError):
@@ -201,6 +214,12 @@ def _select_cover_frame_time(
         # Subtitle penalty: avoid frames during the first subtitle block.
         if sub_s >= 0 and sub_e > sub_s and sub_s <= t <= sub_e:
             score -= 6.0
+
+        # Phase U3: AI cover hint soft authority — bonus when AI explicitly
+        # nominated this frame. Smaller than subtitle penalty so a
+        # text-heavy AI-hinted frame still loses.
+        if _ai_hint_t is not None and t == _ai_hint_t:
+            score += AI_COVER_HINT_BONUS
 
         if score > best_score:
             best_score = score

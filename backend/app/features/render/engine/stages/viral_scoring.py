@@ -7,7 +7,7 @@ and tone profiles.  The SAME input text produces different scores,
 different tiers, and different reasons in each market.
 
 Usage:
-    from backend.app.services.viral_scoring import score_part_for_market
+    from app.features.render.engine.stages.viral_scoring import score_part_for_market
 
     result = score_part_for_market(
         "Stop doing this if you want to make money",

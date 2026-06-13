@@ -75,7 +75,7 @@ from app.features.render.engine.pipeline.render_events import (
     _safe_unlink,
 )
 from app.features.render.engine.stages.part_render_context import PartRenderContext
-from app.db.jobs_repo import upsert_job_part
+from app.db.jobs_repo import update_job_part_cover_quality, upsert_job_part
 from app.features.render.engine.encoder.ffmpeg_helpers import extract_thumbnail_frame
 
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5a).
@@ -169,6 +169,12 @@ def run_part_done(
                 logger.debug("s4_thumbnail_select_ms part=%d ms=%d offset=%.3f", idx, _thumb_ms, _cover_offset)
             except Exception as _s43_exc:
                 logger.debug("s4_thumbnail_quality_failed part=%d: %s", idx, _s43_exc)
+        # Phase V2: persist quality tags for per-channel signal aggregation.
+        if _cover_quality_reasons:
+            try:
+                update_job_part_cover_quality(ctx.job_id, idx, _cover_quality_reasons)
+            except Exception:
+                pass
         if not _cover_bytes:
             _cover_bytes = extract_thumbnail_frame(str(final_part), _cover_offset, width=640)
         if _cover_bytes:

@@ -143,56 +143,80 @@ def get_feedback_signals(
       sample_size        int        — total feedback rows considered
     Never raises — returns empty signals dict on any error.
     """
-    _empty: dict = {
+    _base: dict = {
         "liked_hook_types": [],
         "avoided_hook_types": [],
         "preferred_duration": None,
         "sample_size": 0,
     }
     if not (channel_code or "").strip():
-        return _empty
+        return _base
+
+    result: dict = dict(_base)
+
+    # Clip feedback aggregation — independent of V1/V2 signal extensions below.
     try:
         records = list_feedback_for_channel(channel_code, goal=goal, limit=limit)
-        if not records:
-            return _empty
+        if records:
+            # Net score per hook_type: +1 per like, -1 per dislike.
+            hook_net: dict[str, int] = {}
+            liked_durations: list[float] = []
+            for r in records:
+                ht = (r.get("hook_type") or "none").strip()
+                if ht and ht != "none":
+                    hook_net[ht] = hook_net.get(ht, 0) + int(r.get("rating") or 0)
+                if r.get("rating") == 1:
+                    dur = float(r.get("duration_sec") or 0.0)
+                    if dur > 0:
+                        liked_durations.append(dur)
 
-        # Net score per hook_type: +1 per like, -1 per dislike.
-        hook_net: dict[str, int] = {}
-        liked_durations: list[float] = []
-        for r in records:
-            ht = (r.get("hook_type") or "none").strip()
-            if ht and ht != "none":
-                hook_net[ht] = hook_net.get(ht, 0) + int(r.get("rating") or 0)
-            if r.get("rating") == 1:
-                dur = float(r.get("duration_sec") or 0.0)
-                if dur > 0:
-                    liked_durations.append(dur)
+            liked_hooks = sorted(
+                [ht for ht, net in hook_net.items() if net > 0],
+                key=lambda h: hook_net[h], reverse=True,
+            )
+            avoided_hooks = sorted(
+                [ht for ht, net in hook_net.items() if net < 0],
+                key=lambda h: hook_net[h],
+            )
 
-        liked_hooks = sorted(
-            [ht for ht, net in hook_net.items() if net > 0],
-            key=lambda h: hook_net[h], reverse=True,
-        )
-        avoided_hooks = sorted(
-            [ht for ht, net in hook_net.items() if net < 0],
-            key=lambda h: hook_net[h],
-        )
+            preferred_duration = None
+            if liked_durations:
+                liked_durations.sort()
+                p10 = liked_durations[max(0, int(len(liked_durations) * 0.10))]
+                p90 = liked_durations[min(len(liked_durations) - 1, int(len(liked_durations) * 0.90))]
+                preferred_duration = (round(p10, 1), round(p90, 1))
 
-        preferred_duration = None
-        if liked_durations:
-            liked_durations.sort()
-            p10 = liked_durations[max(0, int(len(liked_durations) * 0.10))]
-            p90 = liked_durations[min(len(liked_durations) - 1, int(len(liked_durations) * 0.90))]
-            preferred_duration = (round(p10, 1), round(p90, 1))
-
-        return {
-            "liked_hook_types": liked_hooks[:5],
-            "avoided_hook_types": avoided_hooks[:3],
-            "preferred_duration": preferred_duration,
-            "sample_size": len(records),
-        }
+            result.update({
+                "liked_hook_types": liked_hooks[:5],
+                "avoided_hook_types": avoided_hooks[:3],
+                "preferred_duration": preferred_duration,
+                "sample_size": len(records),
+            })
     except Exception as exc:
-        logger.warning("get_feedback_signals failed: %s", exc)
-        return _empty
+        logger.warning("get_feedback_signals clip aggregation failed: %s", exc)
+
+    # Phase V1: platform performance signals (independent of clip feedback).
+    try:
+        from app.db.platform_metrics_repo import get_channel_platform_summary
+        result.update(get_channel_platform_summary(channel_code))
+    except Exception:
+        pass
+
+    # Phase V2: cover quality signals (independent of clip feedback).
+    try:
+        from app.db.jobs_repo import get_channel_cover_quality_summary
+        result.update(get_channel_cover_quality_summary(channel_code))
+    except Exception:
+        pass
+
+    # Phase V3: segment repeat rate — content fingerprinting signal.
+    try:
+        from app.db.jobs_repo import get_channel_segment_repeat_rate
+        result.update(get_channel_segment_repeat_rate(channel_code))
+    except Exception:
+        pass
+
+    return result
 
 
 def delete_clip_feedback(job_id: str, part_no: int) -> bool:

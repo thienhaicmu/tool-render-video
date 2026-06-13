@@ -34,12 +34,19 @@ def enrich_asset(asset_id: str, file_path: str) -> None:
     so it does not block the download response.
     """
     try:
+        from app.db.assets_repo import update_asset_status
+        update_asset_status(asset_id, "enriching")
         _do_enrich(asset_id, file_path)
     except Exception:
         logger.warning(
             "enrichment: unexpected error asset_id=%s file=%s",
             asset_id, file_path, exc_info=True,
         )
+        try:
+            from app.db.assets_repo import update_asset_status as _uas
+            _uas(asset_id, "failed")
+        except Exception:
+            pass
 
 
 def _do_enrich(asset_id: str, file_path: str) -> None:

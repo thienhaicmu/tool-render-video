@@ -1,10 +1,12 @@
 """
-routes/feedback.py — Clip feedback API (Phase 6).
+routes/feedback.py — Clip feedback API (Phase 6) + Platform Metrics ingestion (Phase V1).
 
 POST /api/feedback/jobs/{job_id}/parts/{part_no}  — submit or update a rating
 GET  /api/feedback/jobs/{job_id}/parts/{part_no}  — get rating for one part
 GET  /api/feedback/channel/{channel_code}          — list feedback for a channel
 DELETE /api/feedback/jobs/{job_id}/parts/{part_no} — remove a rating
+POST /api/feedback/platform-metrics               — ingest push-based platform data
+GET  /api/feedback/platform-metrics/{channel_code} — aggregated platform performance
 
 These routes are append-only from the UI perspective: the frontend POSTs when the
 user clicks 👍/👎 and GETs to restore button state on reload.
@@ -12,7 +14,7 @@ user clicks 👍/👎 and GETs to restore button state on reload.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -22,6 +24,11 @@ from app.db.feedback_repo import (
     get_clip_feedback,
     list_feedback_for_channel,
     upsert_clip_feedback,
+)
+from app.db.platform_metrics_repo import (
+    get_channel_platform_summary,
+    list_platform_metrics,
+    upsert_platform_metric,
 )
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
@@ -63,6 +70,28 @@ class ChannelFeedbackSummary(BaseModel):
     disliked: int
     hook_type_scores: dict[str, float]   # hook_type → net score (likes - dislikes)
     avg_liked_position: Optional[float]  # 0-1, None if no liked clips with duration info
+
+
+class PlatformMetricRecord(BaseModel):
+    channel_code: str = Field(..., description="Channel identifier")
+    platform: str = Field(..., description="tiktok / instagram / youtube / …")
+    post_id: str = Field("", description="Platform-specific post ID (empty if unknown)")
+    watch_pct: float = Field(0.0, ge=0.0, le=1.0, description="Average watch-through 0.0–1.0")
+    ctr: float = Field(0.0, ge=0.0, le=1.0, description="Click-through rate 0.0–1.0")
+    impressions: int = Field(0, ge=0, description="Raw impression count")
+    recorded_at: str = Field("", description="ISO-8601 UTC when data was collected")
+
+
+class PlatformMetricsBatchRequest(BaseModel):
+    metrics: List[PlatformMetricRecord] = Field(..., min_length=1)
+
+
+class PlatformMetricsSummaryResponse(BaseModel):
+    channel_code: str
+    platform: str
+    avg_watch_pct: float
+    avg_ctr: float
+    platform_sample_size: int
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -142,4 +171,50 @@ async def channel_feedback_summary(channel_code: str, goal: str = ""):
         disliked=len(disliked),
         hook_type_scores=hook_scores,
         avg_liked_position=avg_pos,
+    )
+
+
+# ── Platform Metrics (Phase V1) ───────────────────────────────────────────────
+
+@router.post("/platform-metrics", status_code=201)
+async def ingest_platform_metrics(body: PlatformMetricsBatchRequest):
+    """Ingest push-based platform performance data (watch-time, CTR).
+
+    Accepts a batch of metric records. External tools (Zapier, scripts) POST
+    to this endpoint after collecting data from the platform's analytics API.
+    No OAuth or platform credentials required — push-based only.
+    """
+    failed = 0
+    for m in body.metrics:
+        ok = upsert_platform_metric(
+            channel_code=m.channel_code,
+            platform=m.platform,
+            post_id=m.post_id,
+            watch_pct=m.watch_pct,
+            ctr=m.ctr,
+            impressions=m.impressions,
+            recorded_at=m.recorded_at,
+        )
+        if not ok:
+            failed += 1
+
+    if failed == len(body.metrics):
+        raise HTTPException(status_code=500, detail="All metric inserts failed")
+
+    return {"ingested": len(body.metrics) - failed, "failed": failed}
+
+
+@router.get(
+    "/platform-metrics/{channel_code}",
+    response_model=PlatformMetricsSummaryResponse,
+)
+async def get_platform_metrics_summary(channel_code: str, platform: str = ""):
+    """Return aggregated platform performance summary for a channel."""
+    summary = get_channel_platform_summary(channel_code, platform=platform)
+    return PlatformMetricsSummaryResponse(
+        channel_code=channel_code,
+        platform=platform,
+        avg_watch_pct=summary["avg_watch_pct"],
+        avg_ctr=summary["avg_ctr"],
+        platform_sample_size=summary["platform_sample_size"],
     )

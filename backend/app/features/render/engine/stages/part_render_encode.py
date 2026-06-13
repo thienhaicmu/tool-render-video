@@ -23,6 +23,7 @@ from pathlib import Path
 from app.domain.manifests import BaseClipManifest
 from app.domain.timeline import TimelineMap
 from app.features.render.engine.pipeline.pipeline_segment_selection import _PLATFORM_PROFILES
+from app.features.render.engine.stages.part_render_plan_resolvers import _resolve_pacing_speed_delta
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 from app.features.render.engine.stages.part_render_context import PartRenderContext
 from app.features.render.engine.stages.part_render_setup import RenderPreflightResult
@@ -77,10 +78,12 @@ def run_render_encode(
     _motion_ck = preflight.motion_ck
     _motion_crop_fallback = preflight.motion_crop_fallback
 
+    _pacing_delta, _platform_delta = _resolve_pacing_speed_delta(ctx, idx, ctx.target_platform)
     _resolved_playback_speed = float(
         seg.get("variant_playback_speed")
-        or max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.0)
-               + _PLATFORM_PROFILES.get(ctx.target_platform, {}).get("speed_delta", 0.0)))
+        or max(0.5, min(1.5,
+            float(ctx.payload.playback_speed or 1.0) + _pacing_delta + _platform_delta
+        ))
     )
     # Sprint 1: Use resolved camera strategy values from RenderPlan (preflight)
     # instead of raw ctx.payload.*. Closes the pre-existing gap where the resolver

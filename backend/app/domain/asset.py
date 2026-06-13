@@ -32,6 +32,8 @@ class Asset:
     thumbnail_path: Optional[str] = None
     created_at: str = ""
     enriched_at: Optional[str] = None
+    # Phase U2 — explicit lifecycle state: pending|enriching|ready|failed
+    status: str = "pending"
 
     # ── Serialisation ────────────────────────────────────────────────────
 
@@ -60,6 +62,7 @@ class Asset:
             thumbnail_path=row.get("thumbnail_path") or None,
             created_at=str(row.get("created_at") or ""),
             enriched_at=row.get("enriched_at") or None,
+            status=str(row.get("status") or "pending"),
         )
 
 
