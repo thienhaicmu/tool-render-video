@@ -115,6 +115,8 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     #     `narration_style`. Validated then never read.
     # `target_duration` is intentionally KEPT in the Public surface —
     # it is targeted for wiring into the LLM prompt by T2.4 (Sprint 2).
+    # Asset Library — Phase C. FE can link a render to a registered asset.
+    "asset_id",
     # Platform / market
     "target_platform", "ai_target_market",
     # Multi-variant + CTA

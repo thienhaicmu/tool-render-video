@@ -155,6 +155,22 @@ def parse_render_plan_response(
         # contract from this entry point.
         if not plan.clips:
             return None
+
+        # Phase A — visibility: warn when AI left key editorial fields empty so
+        # operators can tell when the render engine is making the decision instead.
+        _empty = []
+        if not (plan.subtitle_policy.style or "").strip():
+            _empty.append("subtitle_policy.style")
+        if not (plan.camera_strategy.reframe_mode or "").strip():
+            _empty.append("camera_strategy.reframe_mode")
+        if plan.audio_plan.bgm_enabled is None:
+            _empty.append("audio_plan.bgm_enabled")
+        if _empty:
+            logger.warning(
+                "llm_parser: AI left editorial fields empty — engine will decide: %s",
+                ", ".join(_empty),
+            )
+
         return plan
 
     except Exception as exc:

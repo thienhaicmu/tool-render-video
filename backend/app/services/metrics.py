@@ -165,6 +165,17 @@ if _AVAILABLE:
         registry=REGISTRY,
     )
 
+    # Phase A — AI/Render boundary visibility.
+    # Tracks how often the render engine overrides an empty or invalid AI
+    # field with its own editorial fallback.  field label: the RenderPlan
+    # field that was missing (e.g. "subtitle_style", "reframe_mode").
+    RENDER_ENGINE_EDITORIAL_OVERRIDES = Counter(
+        "render_engine_editorial_overrides_total",
+        "Times the render engine used its own editorial fallback because AI left a field empty",
+        ["field"],
+        registry=REGISTRY,
+    )
+
 else:
     REGISTRY = None  # type: ignore[assignment]
 
@@ -181,3 +192,4 @@ else:
     LLM_RENDER_PLAN_CALLS = _NoOpMetric()     # type: ignore[assignment]
     LLM_RENDER_PLAN_LATENCY = _NoOpMetric()   # type: ignore[assignment]
     LLM_SEGMENTS_SELECTED = _NoOpMetric()     # type: ignore[assignment]
+    RENDER_ENGINE_EDITORIAL_OVERRIDES = _NoOpMetric()  # type: ignore[assignment]

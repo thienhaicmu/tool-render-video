@@ -78,9 +78,9 @@ def _build_editorial_hint(payload: Any) -> str:
     # pattern used by the builder itself). The builder already returns
     # None on any internal error; we belt-and-braces here so even a
     # raised import failure can't propagate.
+    _channel_code = (getattr(payload, "channel_code", "") or "").strip()
     try:
         from app.features.render.ai.context.builder import build_creator_context
-        _channel_code = (getattr(payload, "channel_code", "") or "").strip()
         creator_ctx = build_creator_context(channel_code=_channel_code)
         if creator_ctx is not None:
             creator_hint = creator_ctx.to_prompt_hint()
@@ -88,6 +88,22 @@ def _build_editorial_hint(payload: Any) -> str:
                 parts.append(creator_hint)
     except Exception as exc:
         logger.warning("llm_stage: creator context hint append failed: %s", exc)
+
+    # Phase D — append feedback signals so AI personalises clip selection
+    # based on what this channel's viewers have liked/disliked before.
+    # Skipped silently when channel_code is empty or feedback table is empty.
+    # Sacred Contract #3: entire block is wrapped — never raises.
+    if _channel_code:
+        try:
+            from app.db.feedback_repo import get_feedback_signals
+            from app.features.render.ai.feedback.signals import build_signals
+            _raw = get_feedback_signals(channel_code=_channel_code)
+            _signals = build_signals(_raw)
+            _fhint = _signals.to_prompt_hint()
+            if _fhint:
+                parts.append(_fhint)
+        except Exception as exc:
+            logger.warning("llm_stage: feedback signals append failed: %s", exc)
 
     return " ".join(parts)
 

@@ -140,6 +140,23 @@ def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -
         result = download_video(job_id, url, output_dir, on_progress=_on_progress)
 
         _elapsed_ms = int((time.monotonic() - _t_start) * 1000)
+        # Phase C — register file in asset library (never blocks, never raises).
+        _asset_id: str | None = None
+        try:
+            from app.db.assets_repo import upsert_asset
+            from app.features.download.engine.enrichment import enrich_asset
+            _output_path = result.get("output_path") or ""
+            if _output_path:
+                _asset_id = upsert_asset(
+                    asset_id=str(uuid.uuid4()),
+                    file_path=_output_path,
+                    original_url=url,
+                    title=result.get("title") or "",
+                )
+                _EXECUTOR.submit(enrich_asset, _asset_id, _output_path)
+        except Exception:
+            logger.warning("download: asset registration failed job_id=%s", job_id, exc_info=True)
+
         update_download_job(
             job_id,
             status="done",
@@ -153,10 +170,11 @@ def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -
             fps=result["fps"],
             duration=result["duration"],
             filesize=result["filesize"],
+            asset_id=_asset_id,
         )
         logger.info(
-            "download.done  job_id=%s  platform=%s  file=%s  size_bytes=%s  elapsed_ms=%d",
-            job_id, _platform, result["filename"], result["filesize"], _elapsed_ms,
+            "download.done  job_id=%s  platform=%s  file=%s  size_bytes=%s  elapsed_ms=%d  asset_id=%s",
+            job_id, _platform, result["filename"], result["filesize"], _elapsed_ms, _asset_id,
         )
         dl_job_done(job_id, filename=result["filename"], filesize=result["filesize"], platform=_platform)
     except Exception as exc:

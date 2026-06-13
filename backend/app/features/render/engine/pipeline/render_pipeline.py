@@ -730,6 +730,13 @@ def run_render_pipeline(
                         # in models/render.py; we coerce None -> None.
                         clip_lock=getattr(payload, "clip_lock", None) or None,
                         clip_exclude=getattr(payload, "clip_exclude", None) or None,
+                        # Phase B — pass target_platform so AI prompt receives
+                        # platform editorial guidance (tiktok/youtube_shorts/
+                        # instagram_reels).  "" (default for historical payloads)
+                        # suppresses the section — backward-compatible.
+                        target_platform=str(
+                            getattr(payload, "target_platform", "") or ""
+                        ).lower(),
                     )
                     if _render_plan is not None:
                         _emit_render_event(

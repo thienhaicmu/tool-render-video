@@ -99,8 +99,8 @@ def test_render_request_field_count_unchanged():
     field_count = len(RenderRequest.model_fields)
     # 151 fields after output_mode removal (2026-06-09 — field was unused,
     # always "manual", all callers cleaned up). Previously 152 at MT-2 close.
-    assert field_count == 151, (
-        f"RenderRequest now has {field_count} fields (was 151 after output_mode removal). "
+    assert field_count == 152, (
+        f"RenderRequest now has {field_count} fields (was 152 after Phase C asset_id addition). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

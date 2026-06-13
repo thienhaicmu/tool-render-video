@@ -60,6 +60,7 @@ def select_render_plan(
     target_duration: int = 0,
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
+    target_platform: str = "",
 ) -> Optional["RenderPlan"]:
     """Dispatch RenderPlan emission to the named LLM provider.
 
@@ -108,6 +109,7 @@ def select_render_plan(
         target_duration=target_duration,
         clip_lock=clip_lock,
         clip_exclude=clip_exclude,
+        target_platform=target_platform,
     )
 
     for _p in chain:

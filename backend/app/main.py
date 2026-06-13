@@ -31,6 +31,14 @@ from app.features.download.router import router as platform_downloader_router
 from app.routes.feedback import router as feedback_router
 from app.routes.metrics import router as metrics_router
 from app.routes.settings import router as settings_router
+from app.routes.assets import router as assets_router
+from app.routes.presets import router as presets_router
+from app.routes.outputs import router as outputs_router
+from app.routes.analytics import router as analytics_router
+from app.routes.channels_context import router as channels_context_router
+from app.routes.batch_render import router as batch_render_router
+from app.routes.thumbnails import router as thumbnails_router
+from app.routes.storage import router as storage_router
 from app.jobs.manager import recover_pending_render_jobs, shutdown as shutdown_job_manager
 from app.services.warmup import start_warmup, get_status as warmup_status
 from app.core.ui_gate import resolve_static_directory
@@ -137,6 +145,14 @@ app.include_router(platform_downloader_router)
 app.include_router(feedback_router)
 app.include_router(metrics_router)  # Sprint 6.C: Prometheus /metrics endpoint
 app.include_router(settings_router)  # Sprint 3-FE: /api/settings/creator-context
+app.include_router(assets_router)   # Phase C: Asset Library
+app.include_router(presets_router)  # Phase E: Smart Render Presets
+app.include_router(outputs_router)   # Phase F: Multi-Output Compare & Export
+app.include_router(analytics_router) # Phase G: Analytics Dashboard API
+app.include_router(channels_context_router) # Phase I: Per-Channel Creator Context
+app.include_router(batch_render_router)    # Phase K: Batch Render from Asset Library
+app.include_router(thumbnails_router)      # Phase J: Output Thumbnail API
+app.include_router(storage_router)         # Phase L: Disk Usage & Cleanup
 # v2 API routes — disabled by setting ENABLE_V2=0
 if os.getenv("ENABLE_V2", "1") != "0":
     try:
@@ -252,6 +268,12 @@ def startup():
     _configure_error_log_filter()
     init_db()
     _check_db_fallback_at_startup()
+    # Phase E: seed built-in render presets (idempotent — safe on every restart).
+    try:
+        from app.services.preset_seeder import seed_builtin_presets
+        seed_builtin_presets()
+    except Exception as _se:
+        logging.getLogger("app.startup").warning("preset_seeder import failed: %s", _se)
     ensure_channel("k1")
     keep_last = int(os.getenv("LOG_KEEP_LAST", "30"))
     older_days = int(os.getenv("LOG_KEEP_DAYS", "10"))

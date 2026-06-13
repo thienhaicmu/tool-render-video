@@ -48,6 +48,7 @@ def select_render_plan(
     target_duration: int = 0,
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
+    target_platform: str = "",
 ) -> Optional[RenderPlan]:
     """Send SRT to OpenAI and return a RenderPlan emitted in one pass.
 
@@ -74,6 +75,7 @@ def select_render_plan(
             target_duration=target_duration,
             clip_lock=clip_lock,
             clip_exclude=clip_exclude,
+            target_platform=target_platform,
         )
     except Exception as exc:
         logger.warning("openai_client: select_render_plan unexpected error — %s", exc, exc_info=True)
@@ -93,6 +95,7 @@ def _run_render_plan(
     target_duration: int = 0,
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
+    target_platform: str = "",
 ) -> Optional[RenderPlan]:
     if not _OPENAI_SDK:
         logger.warning("openai_client: openai SDK not installed (render_plan path)")
@@ -115,6 +118,7 @@ def _run_render_plan(
         target_duration=target_duration,
         clip_lock=clip_lock,
         clip_exclude=clip_exclude,
+        target_platform=target_platform,
     )
 
     resolved_model = model or _DEFAULT_MODEL

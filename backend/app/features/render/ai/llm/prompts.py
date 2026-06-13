@@ -25,6 +25,38 @@ _SRT_BLOCK_NUM_RE = _re.compile(r"^\d+\s*$")
 # most-permissive provider would truncate. Override via PROMPTS_MAX_SRT_CHARS.
 MAX_SRT_CHARS = int(_os.getenv("PROMPTS_MAX_SRT_CHARS", "60000"))
 
+# Phase B — per-platform editorial guidance injected into the prompt when
+# target_platform is set.  Each entry is a concise paragraph appended as a
+# PLATFORM GUIDANCE section.  Empty platform (or unknown value) suppresses
+# the section entirely — backward-compat with all callers that never set it.
+_PLATFORM_PROMPT_HINTS: dict[str, str] = {
+    "tiktok": (
+        "Target platform: TikTok. "
+        "Prefer clips with energetic pacing and an immediately grabbing hook. "
+        "subtitle_policy.style MUST be \"viral\" unless the content is clearly "
+        "educational (then \"clean\") or storytelling-driven (then \"story\"). "
+        "Set motion_aware_crop=true for mobile-first vertical framing. "
+        "Aim for hook_intensity >= 0.7 on the top-ranked clip."
+    ),
+    "youtube_shorts": (
+        "Target platform: YouTube Shorts. "
+        "Prefer clear, informative clips that reward curiosity. "
+        "subtitle_policy.style MUST be \"clean\" unless content is commentary/reaction "
+        "(then \"viral\"). "
+        "Clip duration MUST NOT exceed 60 seconds — truncate the end before the payoff "
+        "drops if necessary. "
+        "Avoid over-aggressive hooks; YouTube rewards retention over shock."
+    ),
+    "instagram_reels": (
+        "Target platform: Instagram Reels. "
+        "Prefer polished, aesthetically pleasing clips with a slightly slower pace than TikTok. "
+        "subtitle_policy.style MUST be \"story\" or \"clean\". "
+        "Avoid aggressive shock hooks — favor emotional peaks, beauty moments, or "
+        "thoughtful insights. "
+        "motion_aware_crop=true for clean subject framing."
+    ),
+}
+
 
 def _srt_to_seconds_format(srt_content: str) -> str:
     """Convert SRT timestamps to [start_sec - end_sec] format.
@@ -250,7 +282,7 @@ FIELD RULES:
     sentence     = full sentence appears at once (slow/cinematic)
     phrase       = 3–5 word groups (default for most content)
 - audio_plan.bgm_mood: energetic | calm | emotional | hype | "" = no BGM preference
-- audio_plan.bgm_volume: dB gain relative to vocal track (0.0 = platform default, -6.0 = softer){editorial_section}{target_duration_section}
+- audio_plan.bgm_volume: dB gain relative to vocal track (0.0 = platform default, -6.0 = softer){editorial_section}{target_duration_section}{target_platform_section}
 
 ⚠️ FINAL VERIFICATION — before responding, check EVERY clip:
    • {min_sec} ≤ (end - start) ≤ {max_sec}  →  if any clip fails this, fix or remove it
@@ -297,6 +329,7 @@ def build_render_plan_prompt(
     target_duration: int = 0,
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
+    target_platform: str = "",
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for LLM RenderPlan emission.
 
@@ -361,6 +394,16 @@ def build_render_plan_prompt(
     # {start_sec, end_sec} (floats, seconds). Empty list / None
     # suppresses the section — back-compat with all pre-Strategic-1
     # callers that don't pass the kwargs.
+    # Phase B — platform guidance section.  Suppressed when target_platform
+    # is empty (default) so the prompt is byte-for-byte identical to the
+    # pre-Phase-B baseline for all callers that don't pass the kwarg.
+    _plat_key = (target_platform or "").strip().lower()
+    target_platform_section = (
+        f"\n\n─── PLATFORM GUIDANCE ───\n{_PLATFORM_PROMPT_HINTS[_plat_key]}"
+        if _plat_key in _PLATFORM_PROMPT_HINTS
+        else ""
+    )
+
     clip_lock_section = _format_range_section(
         clip_lock,
         header="HARD LOCKED RANGES",
@@ -396,6 +439,7 @@ def build_render_plan_prompt(
         example_end=example_end,
         editorial_section=editorial_section,
         target_duration_section=target_duration_section,
+        target_platform_section=target_platform_section,
         clip_lock_section=clip_lock_section,
         clip_exclude_section=clip_exclude_section,
     )

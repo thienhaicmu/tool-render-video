@@ -39,6 +39,7 @@ def update_download_job(job_id: str, **fields: Any) -> None:
         "status", "progress", "speed_str", "eta_str",
         "output_path", "filename", "title",
         "duration", "height", "fps", "filesize", "error_msg",
+        "asset_id",
     }
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:

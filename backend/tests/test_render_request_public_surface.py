@@ -123,9 +123,9 @@ def test_public_field_count_pinned():
     from app.models.render import RenderRequest
     from app.models.render_public import BE_ONLY_FIELDS, FE_FACING_FIELDS
 
-    assert len(FE_FACING_FIELDS) == 70, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    assert len(FE_FACING_FIELDS) == 71, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
     assert len(BE_ONLY_FIELDS)   == 81, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
-    assert len(RenderRequest.model_fields) == 151, (
+    assert len(RenderRequest.model_fields) == 152, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
     )

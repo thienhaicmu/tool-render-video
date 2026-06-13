@@ -26,9 +26,24 @@ from app.core.config import APP_DATA_DIR
 
 _RENDER_CACHE_TTL_SEC = 72 * 3600  # 72 h
 
+# When set to "1", _transcription_cache_get/put also maintain a sha256-keyed
+# entry under cache/transcription/content/ so a re-downloaded file (same
+# audio, different path or mtime) hits the cache instead of re-running Whisper.
+# Off by default — opt-in via WHISPER_CONTENT_HASH_CACHE=1.
+_CONTENT_HASH_CACHE: bool = os.getenv("WHISPER_CONTENT_HASH_CACHE", "0") == "1"
+
 
 def _render_cache_key(*parts) -> str:
     return hashlib.md5("|".join(str(p) for p in parts).encode()).hexdigest()
+
+
+def _content_hash(path: str, read_bytes: int = 1_048_576) -> str | None:
+    """SHA-256 of the first ``read_bytes`` of *path*. Returns None on any error."""
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read(read_bytes)).hexdigest()
+    except Exception:
+        return None
 
 
 # Audit FINDING-BR14 helpers — atomic write via temp + os.replace.
@@ -90,6 +105,19 @@ def _scene_cache_put(source_path: str, scenes: list) -> None:
 
 def _transcription_cache_get(source_path: str, model_name: str, cache_suffix: str) -> Path | None:
     try:
+        # Content-hash lookup (opt-in via WHISPER_CONTENT_HASH_CACHE=1). Checked
+        # first so re-downloaded files with different paths or mtimes still hit.
+        if _CONTENT_HASH_CACHE:
+            h = _content_hash(source_path)
+            if h is not None:
+                ck = _render_cache_key(h, model_name, cache_suffix)
+                content_file = APP_DATA_DIR / "cache" / "transcription" / "content" / f"{ck}.srt"
+                if content_file.exists():
+                    if time.time() - content_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
+                        content_file.unlink(missing_ok=True)
+                    else:
+                        return content_file
+
         sp = Path(source_path)
         if not sp.exists():
             return None
@@ -116,6 +144,16 @@ def _transcription_cache_put(source_path: str, model_name: str, cache_suffix: st
         cache_dir = APP_DATA_DIR / "cache" / "transcription"
         cache_dir.mkdir(parents=True, exist_ok=True)
         _atomic_copy2(srt_path, cache_dir / f"{key}.srt")
+
+        # Also populate the content-hash cache when enabled so future lookups by
+        # either path hit (even if the file is re-downloaded to a different path).
+        if _CONTENT_HASH_CACHE:
+            h = _content_hash(source_path)
+            if h is not None:
+                ck = _render_cache_key(h, model_name, cache_suffix)
+                content_dir = cache_dir / "content"
+                content_dir.mkdir(parents=True, exist_ok=True)
+                _atomic_copy2(srt_path, content_dir / f"{ck}.srt")
     except Exception:
         pass
 

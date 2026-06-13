@@ -158,6 +158,16 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
     from app.jobs import cancel as cancel_registry
     from app.services.metrics import RENDER_JOB_DURATION, RENDER_JOBS_TOTAL
 
+    # Phase C — Asset Library: persist asset_id on the job row if provided.
+    # Never raises — asset linkage must not block or fail a render.
+    _asset_id = (getattr(payload, "asset_id", None) or "").strip()
+    if _asset_id:
+        try:
+            from app.db.jobs_repo import update_job_asset_id
+            update_job_asset_id(job_id, _asset_id)
+        except Exception:
+            pass
+
     ev = cancel_registry.register(job_id)
     # Sprint 6.C: instrument terminal status + wallclock per job. `final_status`
     # starts as "succeeded" because the happy path falls through the try block

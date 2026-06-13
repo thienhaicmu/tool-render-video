@@ -59,9 +59,15 @@ def _resolve_subtitle_style_from_plan(
     Empty string in either plan field means "inherit from next level"
     (the same semantic as SubtitlePolicy). Invalid style values soft-fall
     back to the caller's legacy resolution (Sacred Contract #3).
+
+    Phase A: when the render engine falls back (source_tag "fallback" or
+    "fallback_invalid_style") because the AI left subtitle_style empty,
+    the RENDER_ENGINE_EDITORIAL_OVERRIDES metric is incremented so
+    operators can see how often the engine makes the editorial call.
     """
     rp = getattr(ctx, "render_plan", None)
     if rp is None:
+        _inc_editorial_override("subtitle_style")
         return fallback_value, "fallback"
     # Per-clip override (Sprint 4.E extension)
     if part_no > 0:
@@ -76,10 +82,21 @@ def _resolve_subtitle_style_from_plan(
     # Global subtitle_policy fallback
     plan_style = (rp.subtitle_policy.style or "").strip()
     if not plan_style:
+        _inc_editorial_override("subtitle_style")
         return fallback_value, "fallback"
     if plan_style not in _RENDER_PLAN_ALLOWED_SUBTITLE_STYLES:
+        _inc_editorial_override("subtitle_style")
         return fallback_value, "fallback_invalid_style"
     return plan_style, "render_plan"
+
+
+def _inc_editorial_override(field: str) -> None:
+    """Increment the editorial-override counter. Never raises (metric must not crash render)."""
+    try:
+        from app.services.metrics import RENDER_ENGINE_EDITORIAL_OVERRIDES
+        RENDER_ENGINE_EDITORIAL_OVERRIDES.labels(field=field).inc()
+    except Exception:
+        pass
 
 
 def _resolve_market_from_plan(ctx: PartRenderContext) -> str:

@@ -135,6 +135,25 @@ def channel_score_summary(channel_code: str, since: "str | None" = None) -> list
         return []
 
 
+def list_ab_scores_for_job(job_id: str) -> dict[int, dict]:
+    """Return all score rows for a job keyed by part_no. Returns {} on error.
+
+    Phase F — Multi-Output Compare. Used by the outputs endpoint to merge
+    rank/score data with job_parts output_file paths.
+    """
+    try:
+        from app.db.connection import db_conn
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM render_ab_scores WHERE job_id = ? ORDER BY output_rank ASC",
+                (job_id,),
+            ).fetchall()
+        return {int(r["part_no"]): dict(r) for r in rows}
+    except Exception as exc:
+        logger.warning("list_ab_scores_for_job(%r) failed: %s", job_id, exc)
+        return {}
+
+
 def delete_job_scores(job_id: str) -> int:
     """Delete all score rows for a job. Returns row count deleted, 0 on error."""
     try:

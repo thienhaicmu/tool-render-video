@@ -123,6 +123,9 @@ export interface RenderRequest {
   reup_bgm_path?: string | null
   playback_speed?: number
 
+  // Asset Library — Phase C
+  asset_id?: string | null
+
   // Editor session (UI controls)
   edit_session_id?: string | null
   edit_trim_in?: number
@@ -404,6 +407,160 @@ export interface JobsHistoryResponse {
   limit: number
   offset: number
   has_more: boolean
+}
+
+// ── Analytics Dashboard (Phase G) ────────────────────────────────────────────
+
+export interface AnalyticsOverview {
+  jobs: { completed: number; failed: number; running: number; total: number }
+  feedback: { liked: number; disliked: number; total: number; like_rate: number }
+  scores: { avg_viral: number; avg_hook: number; avg_retention: number; avg_rank_score: number; total_clips: number }
+  editorial_overrides: Record<string, number>
+}
+
+export interface ScoreTrendPoint {
+  date: string
+  avg_viral: number
+  avg_hook: number
+  avg_retention: number
+  avg_rank_score: number
+  count: number
+}
+
+export interface FeedbackByHookPoint {
+  hook_type: string
+  likes: number
+  dislikes: number
+  total: number
+  like_rate: number
+}
+
+export interface JobTrendPoint {
+  date: string
+  completed: number
+  failed: number
+  total: number
+}
+
+// ── Multi-Output Compare & Export (Phase F) ──────────────────────────────────
+
+export interface OutputItem {
+  part_no: number
+  part_name: string
+  status: string
+  output_rank: number
+  output_rank_score: number
+  is_best_output: boolean
+  viral_score: number
+  hook_score: number
+  retention_score: number
+  start_sec: number
+  end_sec: number
+  duration: number
+  output_file: string
+  file_exists: boolean
+  file_size_bytes: number
+}
+
+export interface OutputsResponse {
+  job_id: string
+  total_parts: number
+  completed_parts: number
+  outputs: OutputItem[]
+}
+
+// ── Render Presets (Phase E) ──────────────────────────────────────────────────
+
+export interface RenderPresetParams {
+  output_count?: number
+  target_platform?: 'tiktok' | 'youtube_shorts' | 'instagram_reels'
+  target_duration?: number
+  video_type?: 'auto' | 'viral' | 'storytelling' | 'educational' | 'emotional' | 'high_retention'
+  hook_strength?: 'aggressive' | 'balanced' | 'soft'
+  add_subtitle?: boolean
+  subtitle_style?: string
+  llm_enabled?: boolean
+  ai_provider?: 'gemini' | 'openai' | 'claude'
+  ai_clip_min_duration_sec?: number
+  ai_clip_max_duration_sec?: number
+}
+
+export interface RenderPreset {
+  preset_id: string
+  name: string
+  description: string
+  channel_code: string
+  platform: string
+  params: RenderPresetParams
+  is_builtin: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface PresetsResponse {
+  presets: RenderPreset[]
+}
+
+// ── Disk Usage & Cleanup (Phase L) ───────────────────────────────────────────
+
+export interface StorageStatusBucket {
+  bytes: number
+  files: number
+  jobs: number
+}
+
+export interface StorageSummary {
+  total_bytes: number
+  total_files: number
+  orphaned_db_refs: number
+  by_status: Record<string, StorageStatusBucket>
+}
+
+export interface OutputDeleteResponse {
+  job_id: string
+  deleted_files: number
+  freed_bytes: number
+  missing_files: number
+}
+
+export interface StorageCleanupResponse {
+  jobs_cleaned: number
+  files_deleted: number
+  freed_bytes: number
+}
+
+// ── Batch Render (Phase K) ────────────────────────────────────────────────────
+
+export interface BatchRenderJobResult {
+  asset_id: string
+  job_id: string
+  status: 'queued' | 'skipped'
+  error?: string
+}
+
+export interface BatchRenderResponse {
+  total: number
+  queued: number
+  skipped: number
+  jobs: BatchRenderJobResult[]
+}
+
+// ── Per-Channel Creator Context (Phase I) ────────────────────────────────────
+
+export interface CreatorContextPayload {
+  creator_id: string
+  channel_name: string
+  brand_voice: string
+  target_audience: string
+  content_pillars: string[]
+  market: string
+  language: string
+  notes: string
+}
+
+export interface CreatorContextEnvelope {
+  is_configured: boolean
+  creator_context: CreatorContextPayload
 }
 
 // ── Queue status ──────────────────────────────────────────────────────────────

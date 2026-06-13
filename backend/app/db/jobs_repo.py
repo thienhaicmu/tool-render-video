@@ -222,6 +222,16 @@ def upsert_job_part(job_id: str, part_no: int, part_name: str, status: str,
     conn.commit()
 
 
+def update_job_asset_id(job_id: str, asset_id: str) -> None:
+    """Link a render job to an Asset Library record. Phase C — Asset Library."""
+    with db_conn() as conn:
+        conn.execute(
+            "UPDATE jobs SET asset_id = ? WHERE job_id = ?",
+            (asset_id, job_id),
+        )
+        conn.commit()
+
+
 def get_job(job_id: str):
     with db_conn() as conn:
         row = conn.execute('SELECT * FROM jobs WHERE job_id = ?', (job_id,)).fetchone()

@@ -422,7 +422,8 @@ class WhisperXAdapter:
             import whisperx  # noqa: PLC0415
 
             device, compute_type = _detect_fw_device_compute()
-            batch_size = 8 if device == "cuda" else 4
+            _default_bs = "8" if device == "cuda" else "4"
+            batch_size = max(1, int(os.getenv("WHISPER_BATCH_SIZE", _default_bs)))
             _model_name = model_name or "large-v3"
 
             model = whisperx.load_model(

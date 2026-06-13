@@ -100,3 +100,10 @@ CLAUDE_API_KEY       : str  = os.getenv("CLAUDE_API_KEY", "")
 # need a larger value. The startup write-check uses timeout=5 (uncontended)
 # and is intentionally excluded from this setting.
 DB_TIMEOUT           : int  = int(os.getenv("DB_TIMEOUT", "30"))
+
+# Whisper / transcription tuning (see adapters.py + pipeline_cache.py):
+#   WHISPER_BATCH_SIZE          — WhisperX batch_size override. Default: 8 (CUDA) / 4 (CPU).
+#   WHISPER_CONTENT_HASH_CACHE  — Set to "1" to enable sha256-keyed transcription result cache
+#                                 that survives re-downloads to different paths (default: off).
+#   WHISPER_MODEL_CACHE_MAX     — Max OpenAI-whisper models in LRU cache (default: 2).
+#   FW_MODEL_CACHE_MAX          — Max faster-whisper models in LRU cache (default: 2).

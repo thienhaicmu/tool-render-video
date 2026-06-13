@@ -185,6 +185,10 @@ class RenderRequest(BaseModel):
     max_parallel_parts: int = 0
     retry_count: int = 2
 
+    # Asset Library — Phase C. Links this render job to a registered asset.
+    # None = no asset association (backward-compat default).
+    asset_id: Optional[str] = None
+
     # Editor session
     edit_session_id: Optional[str] = None
     edit_trim_in: float = 0

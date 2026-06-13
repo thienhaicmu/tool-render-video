@@ -126,6 +126,75 @@ def list_feedback_for_channel(
         return []
 
 
+def get_feedback_signals(
+    channel_code: str,
+    goal: str = "",
+    limit: int = 100,
+) -> dict:
+    """Return aggregated preference signals from recent feedback for a channel.
+
+    Phase D — Creator Feedback Loop. Aggregates liked vs disliked hook_types
+    and clip duration preferences so the LLM prompt can be personalised.
+
+    Returns a dict with keys:
+      liked_hook_types   list[str]  — hook types with net positive rating, desc order
+      avoided_hook_types list[str]  — hook types with net negative rating, desc order
+      preferred_duration tuple|None — (min_sec, max_sec) of liked clips, or None
+      sample_size        int        — total feedback rows considered
+    Never raises — returns empty signals dict on any error.
+    """
+    _empty: dict = {
+        "liked_hook_types": [],
+        "avoided_hook_types": [],
+        "preferred_duration": None,
+        "sample_size": 0,
+    }
+    if not (channel_code or "").strip():
+        return _empty
+    try:
+        records = list_feedback_for_channel(channel_code, goal=goal, limit=limit)
+        if not records:
+            return _empty
+
+        # Net score per hook_type: +1 per like, -1 per dislike.
+        hook_net: dict[str, int] = {}
+        liked_durations: list[float] = []
+        for r in records:
+            ht = (r.get("hook_type") or "none").strip()
+            if ht and ht != "none":
+                hook_net[ht] = hook_net.get(ht, 0) + int(r.get("rating") or 0)
+            if r.get("rating") == 1:
+                dur = float(r.get("duration_sec") or 0.0)
+                if dur > 0:
+                    liked_durations.append(dur)
+
+        liked_hooks = sorted(
+            [ht for ht, net in hook_net.items() if net > 0],
+            key=lambda h: hook_net[h], reverse=True,
+        )
+        avoided_hooks = sorted(
+            [ht for ht, net in hook_net.items() if net < 0],
+            key=lambda h: hook_net[h],
+        )
+
+        preferred_duration = None
+        if liked_durations:
+            liked_durations.sort()
+            p10 = liked_durations[max(0, int(len(liked_durations) * 0.10))]
+            p90 = liked_durations[min(len(liked_durations) - 1, int(len(liked_durations) * 0.90))]
+            preferred_duration = (round(p10, 1), round(p90, 1))
+
+        return {
+            "liked_hook_types": liked_hooks[:5],
+            "avoided_hook_types": avoided_hooks[:3],
+            "preferred_duration": preferred_duration,
+            "sample_size": len(records),
+        }
+    except Exception as exc:
+        logger.warning("get_feedback_signals failed: %s", exc)
+        return _empty
+
+
 def delete_clip_feedback(job_id: str, part_no: int) -> bool:
     """Remove a feedback record. Returns True on success."""
     try:
