@@ -257,7 +257,7 @@ _PRESETS: dict[str, ASSPreset] = {
         id="dark_card", font_default="Montserrat", base_font_size=38,
         primary_color="&H00FFFFFF", secondary_color="&H0000FFFF",
         outline_color="&H00000000",
-        # back_color: C8 alpha â‰ˆ 78% opaque black box
+        # back_color: C8 alpha ≈ 78% opaque black box
         back_color="&HC8000000",
         bold=-1, border_style=3, outline_default=14, shadow_default=0,
         alignment=2, margin_l=30, margin_r=30, wrap_max_em=17.0,

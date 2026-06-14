@@ -33,13 +33,13 @@ Contents (preserved in original source order):
 
   Scoring function:
     _score_subject_candidate(subject, frame_w, frame_h, previous_subject)
-        Weighted sum of area_score (Ã—1.2), center_score (Ã—0.9),
-        edge_score (Ã—0.6), stability_score (Ã—1.0).
+        Weighted sum of area_score (×1.2), center_score (×0.9),
+        edge_score (×0.6), stability_score (×1.0).
 
   Cross-frame identity check:
     _same_subject(a, b)
         Distance-based identity test: same subject if center distance
-        â‰¤ max(24px, max(a.w, a.h, b.w, b.h) Ã— 0.75).
+        ≤ max(24px, max(a.w, a.h, b.w, b.h) × 0.75).
 
 Internal-only — no external imports of these 8 symbols today. The module
 is re-exported from motion_crop.py so existing internal call sites

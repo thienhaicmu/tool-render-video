@@ -14,7 +14,7 @@ def slice_srt_to_output_timeline(
     Output-timeline subtitles are required because base_clip.mp4 has already
     been re-clocked from source time by setpts=PTS/speed in render_base_clip().
     Divides each timestamp by timeline.effective_speed after rebasing to zero,
-    so subtitle 10 s at 1.15Ã— speed appears at â‰ˆ 8.70 s in the output clip.
+    so subtitle 10 s at 1.15× speed appears at ≈ 8.70 s in the output clip.
 
     Returns the same metadata dict as slice_srt_by_time().
     """

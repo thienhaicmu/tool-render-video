@@ -31,7 +31,7 @@ logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)
 # where ``gemini-2.5-pro`` doesn't — almost certainly a typo for Flash.
 _DEFAULT_MODEL = os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 
-# 60K chars â‰ˆ 15K tokens — captures ~30 min of dense Vietnamese speech.
+# 60K chars ≈ 15K tokens — captures ~30 min of dense Vietnamese speech.
 _MAX_SRT_CHARS = int(os.getenv("GEMINI_MAX_SRT_CHARS", "60000"))
 
 # Hard upper bound on a single Gemini request — prevents the SDK from

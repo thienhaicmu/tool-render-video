@@ -13,7 +13,7 @@ Block responsibilities (in order):
      resulting trim would leave < 3.0 s of clip. Emits
      `silence_trim_applied` event when applied.
   3. detect_bad_first_frame visual scan. When trim is feasible
-     (clip still â‰¥ 3.0 s after combined offset), sets
+     (clip still ≥ 3.0 s after combined offset), sets
      force_accurate_cut=True and emits `first_frame_shift_applied`.
   4. TimelineMap + BaseClipManifest construction (timeline manifest
      pre-cut snapshot — written to disk).

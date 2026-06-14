@@ -6,7 +6,7 @@ build/migrate the baseline schema; this runner then applies any newer
 migrations recorded in numbered files under backend/app/db/migration_steps/.
 
 File convention:
-  - Filename matches regex `[0-9]+_.+\.py`, e.g. `0002_add_user_prefs.py`
+  - Filename matches regex `[0-9]+_.+\\.py`, e.g. `0002_add_user_prefs.py`
   - Module exports:
         VERSION: int        — unique, monotonically increasing
         NAME:    str        — short slug describing the migration

@@ -10,7 +10,7 @@ Contents (preserved in original source order, two logical sub-blocks):
   MediaPipe face block:
     _mp_face_detector, _mp_face_detector_initialized — per-process state.
     _get_mp_detector() — lazy-load MediaPipe FaceDetection (full-range
-      model, confidence â‰¥ 0.5). Returns None when MediaPipe is unavailable.
+      model, confidence ≥ 0.5). Returns None when MediaPipe is unavailable.
     _detect_mediapipe_faces(frame_bgr_small, scale) — return absolute
       (x, y, w, h) boxes in _det_frame coordinates. Returns [] on any failure.
     _has_subject_in_sample(video_path, sample_count=24) — sparse-frame
@@ -38,7 +38,7 @@ Contents (preserved in original source order, two logical sub-blocks):
       (list of (x, y, w, h), kind: "face"|"body"|"none").
 
 Note on `_pick_best_subject`:
-  The original plan Â§3.5a listed `_pick_best_subject` here. It is NOT
+  The original plan §3.5a listed `_pick_best_subject` here. It is NOT
   moved in this commit because it depends on `_score_subject_candidate`,
   which the plan assigns to phase 3.5b. Extracting `_pick_best_subject`
   alone would require an `import ... from app.features.render.engine.motion`
@@ -92,7 +92,7 @@ def _get_mp_detector():
     try:
         import mediapipe as mp  # noqa: PLC0415
         _mp_face_detector = mp.solutions.face_detection.FaceDetection(
-            model_selection=1,           # full-range model (â‰¤5m) — detects wide shots and small faces
+            model_selection=1,           # full-range model (≤5m) — detects wide shots and small faces
             min_detection_confidence=0.5,
         )
         logger.info("mediapipe_face_detection_loaded model=full_range confidence_threshold=0.5")

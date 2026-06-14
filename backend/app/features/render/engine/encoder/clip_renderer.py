@@ -404,7 +404,7 @@ def render_part(
         # Montage/vlog: keep 0.08 s — hard cuts are intentional in fast-paced content.
         # Speech-heavy (interview/commentary/tutorial): allow up to 0.20 s so the
         # edit feels less jarring when the subject is talking continuously.
-        # Floor at 0.03 s (â‰ˆ 1 frame at 30fps) prevents pure hard cuts.
+        # Floor at 0.03 s (≈ 1 frame at 30fps) prevents pure hard cuts.
         _FADE_CAP_BY_TYPE: dict[str, float] = {
             "interview": 0.20, "commentary": 0.20, "tutorial": 0.20,
         }

@@ -169,7 +169,7 @@ _render_active_count: list[int] = [0]   # mutable int; guarded by _render_active
 # _render_progress_timer → moved to app.features.render.engine.pipeline.render_events (Phase 4D)
 
 
-# HIGH_MOTION_MIN_SCORE, HIGH_MOTION_MIN_KEEP â†' moved to pipeline_pre_render (Phase A-6)
+# HIGH_MOTION_MIN_SCORE, HIGH_MOTION_MIN_KEEP → moved to pipeline_pre_render (Phase A-6)
 # _JOB_LOG_DIRS, _job_log, _append_json_line, _render_error_code, _emit_render_event
 # → moved to app.features.render.engine.pipeline.render_events (Phase 4B)
 

@@ -44,7 +44,7 @@ Sacred Contracts honored:
        events emitted with error_code=VOICE001, render continues.
   - #6 _emit_render_event signature: 8 call sites preserved verbatim
        (voice_tts_started, voice_tts_completed, voice_translated_subtitle_tts_started,
-       voice_translated_subtitle_tts_completed, voice_failed [Ã—3 instances],
+       voice_translated_subtitle_tts_completed, voice_failed [×3 instances],
        voice_subtitle_source_missing, voice_mix_started, voice_mix_completed)
        — total 9 emit events when counting both VOICE001 paths.
   - #7 Sole DB writer: 0 upsert_job_part calls.

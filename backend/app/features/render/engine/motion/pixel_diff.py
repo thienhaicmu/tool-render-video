@@ -7,7 +7,7 @@ Sprint 7.1 (2026-06-05) — renamed from ``legacy.py`` to
 auditors into thinking the module was dead code (it is NOT — three
 live render-path callers depend on it; see
 ``docs/review/SPRINT_7_1_MOTION_RENAME_2026-06-05.md`` and
-``docs/review/DEAD_CODE_PURGE_BLOCKERS_2026-06-05.md`` Â§4).
+``docs/review/DEAD_CODE_PURGE_BLOCKERS_2026-06-05.md`` §4).
 File contents unchanged — pure rename + comment refresh.
 
 Sprint 6.D-3.7 — extracted verbatim from motion_crop.py

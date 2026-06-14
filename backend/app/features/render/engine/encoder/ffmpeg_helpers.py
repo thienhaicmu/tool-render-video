@@ -696,7 +696,7 @@ def resolve_target_dimensions(aspect_ratio: str) -> tuple[int, int]:
     """Return (width, height) output canvas for the given aspect_ratio string.
 
     Supported values: "1:1", "9:16", "16:9", "3:4", "4:5".
-    Unknown values fall through to the portrait default (1080Ã—1440).
+    Unknown values fall through to the portrait default (1080×1440).
     """
     ar = (aspect_ratio or "").strip()
     if ar == "1:1":

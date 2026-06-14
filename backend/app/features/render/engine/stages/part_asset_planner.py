@@ -47,7 +47,7 @@ Sacred Contracts touched:
        app.services.db unchanged.
 
 LOC budget note (Sprint 6.D-3.6b pattern):
-  ~610 LOC single commit — 2Ã— the Â§7 advisory cap of 300. The
+  ~610 LOC single commit — 2× the §7 advisory cap of 300. The
   function is a single internally-cohesive Layer-7 sequence with
   30+ mutable state vars flowing across all sections; no clean
   interior seam exists. Cohesion preferred over the LOC guideline.
@@ -250,9 +250,17 @@ def prepare_part_assets(
             # who relied on the old "small" default can pin it back. Final
             # defensive fallback to "small" if the tuned dict is missing
             # the key for any reason.
+            # Cap at "medium": large/large-v2/large-v3 on a 15-60s clip gives
+            # no accuracy benefit over medium but can deadlock on first load
+            # (ctranslate2 model download) while the source-level model is
+            # still resident in memory. SUBTITLE_PER_PART_MODEL env var
+            # still overrides this cap (e.g. to pin "large-v3" explicitly).
+            _LARGE_MODELS = frozenset({"large", "large-v1", "large-v2", "large-v3"})
+            _tuned_model = ctx.tuned.get("whisper_model", "small")
+            _default_part_model = "medium" if _tuned_model in _LARGE_MODELS else _tuned_model
             _part_trans_model = os.getenv(
                 "SUBTITLE_PER_PART_MODEL",
-                ctx.tuned.get("whisper_model", "small"),
+                _default_part_model,
             )
             try:
                 transcribe_with_adapter(

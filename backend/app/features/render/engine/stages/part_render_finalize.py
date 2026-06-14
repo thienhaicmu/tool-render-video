@@ -3,7 +3,7 @@
 Sprint 6.D-2.5c — extracted verbatim from stages/part_renderer.py
 (lines 298-728 of the post-2.5b file). No logic changes; pure relocation.
 
-âš ï¸  CRITICAL TIER per docs/SPRINT_6D_PLAN.md Â§10 and CLAUDE.md
+⚠️  CRITICAL TIER per docs/SPRINT_6D_PLAN.md §10 and CLAUDE.md
    Blast Radius. This module contains the Sacred Contract #8
    (qa_pipeline never bypassed) surface — `_validate_render_output`
    and `_assess_output_quality` calls must remain verbatim with
@@ -30,7 +30,7 @@ Block responsibilities (in order):
      per-part-done info log with encode_ms/expected/speed_ratio.
   5. Market viral scoring (_mv_score_part) — wrapped in try/except
      (see "Known-bug preservation" below).
-  6. Combined score computation (viral Ã— market Ã— hook weighted).
+  6. Combined score computation (viral × market × hook weighted).
   7. RenderOutputResult construction — Layer 8→9 boundary dataclass
      per docs/RENDER_PIPELINE.md.
   8. Sacred Contract #8 surface — `_validate_render_output`:
@@ -99,11 +99,11 @@ Cycle risk: NONE.
   domain.timeline, services.manifest_writer, services.render_engine).
 
 LOC budget note:
-  ~431 LOC moved — 43% over the Â§7 advisory cap of 300. Justified by:
+  ~431 LOC moved — 43% over the §7 advisory cap of 300. Justified by:
   (a) cohesion — Layer 8→9 boundary is one logical sequence;
   (b) Sacred Contract #8 concentration — splitting would create
       artificial seams through the qa_pipeline validation surface;
-  (c) plan Â§11 changelog entry 3 explicitly approved this scope.
+  (c) plan §11 changelog entry 3 explicitly approved this scope.
 
 Logger note (same pattern as 6.D-2.1 through 2.5d):
   `logger = logging.getLogger("app.render")` preserved verbatim.

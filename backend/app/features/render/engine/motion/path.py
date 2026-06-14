@@ -83,7 +83,7 @@ def build_subject_path(
 
     Algorithm:
     1. Every `subject_detect_interval` frames: run face → body detection on a
-       half-size frame (4Ã— faster), pick the best subject.
+       half-size frame (4× faster), pick the best subject.
     2. Between detections: use CSRT tracker (fast, robust to occlusion).
     3. If tracker drifts or loses target, re-detect on next interval.
     4. Build raw (cx, cy) path, apply Gaussian smoothing, then velocity limit.

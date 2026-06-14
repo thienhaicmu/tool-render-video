@@ -739,7 +739,7 @@ def render_motion_aware_crop(
             raise RuntimeError(f"Cannot open input video: {input_path}")
         # Sprint 7.8 — seek cap to window start. Forward-skim alignment
         # for VBR/keyframe-edge sources is bounded inside the loop below
-        # (180 frames â‰ˆ 3s at 60fps). force_accurate_cut on the FFmpeg
+        # (180 frames ≈ 3s at 60fps). force_accurate_cut on the FFmpeg
         # side is the operator escape if frame-precise alignment matters.
         if _fuse_window_mode and _window_start_frame > 0:
             cap.set(cv2.CAP_PROP_POS_FRAMES, float(_window_start_frame))

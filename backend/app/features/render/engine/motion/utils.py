@@ -36,7 +36,7 @@ app.services.motion_crop so all existing import paths keep working.
 
 Deferred-import note (ffprobe_video_info / has_audio_stream):
   Both helpers do a deferred `from app.features.render.engine.encoder.ffmpeg_helpers import ...`
-  inside the function body to break the encoder â†” motion_crop
+  inside the function body to break the encoder ↔ motion_crop
   module-level circular dependency (encoder modules import
   render_motion_aware_crop from motion_crop at their module top). Keep
   the imports deferred — moving them to module top here would
@@ -122,7 +122,7 @@ def ffprobe_video_info(video_path: str) -> Tuple[int, int, float]:
     same unmodified file.  Falls back to fps=30.0 when the probe cannot determine
     a valid frame rate.
 
-    Deferred import used to break the render_engine â†” motion_crop module-level
+    Deferred import used to break the render_engine ↔ motion_crop module-level
     circular dependency (render_engine imports motion_crop at its own module level).
     """
     from app.features.render.engine.encoder.ffmpeg_helpers import probe_video_metadata

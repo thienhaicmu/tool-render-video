@@ -9,7 +9,7 @@ Contents:
   - `_ByteTrackSubject` (class) — single-subject tracker with velocity
     state. predict() advances position by velocity (with 0.90 damping).
     update(box, gain=0.5) lerps toward measurement, rejects with IoU<0.10
-    after â‰¥3 coast frames. Eliminates two problems from the OpenCV-tracker-
+    after ≥3 coast frames. Eliminates two problems from the OpenCV-tracker-
     only approach: (1) static last_subject hold replaced by velocity-
     predicted position, (2) unchecked tracker drift caught by IoU gate.
   - `_create_tracker()` — OpenCV tracker factory: tries KCF first (fastest),
@@ -52,7 +52,7 @@ class _ByteTrackSubject:
     Maintains (cx, cy, w, h, vx, vy) state between detections.
     predict() advances position by velocity (with gentle damping).
     update() lerps toward measurement and computes new velocity.
-    Rejects measurements with IoU < 0.10 after â‰¥3 coast frames.
+    Rejects measurements with IoU < 0.10 after ≥3 coast frames.
 
     Eliminates two problems from the OpenCV-tracker-only approach:
       1. Static last_subject hold → replaced by velocity-predicted position.

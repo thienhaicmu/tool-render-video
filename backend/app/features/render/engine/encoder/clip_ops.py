@@ -168,7 +168,7 @@ def detect_bad_first_frame(
     The returned shift is always in the range (0.0, max_shift_sec].
     A minimum of 3 s of content is always preserved after the shift.
 
-    pix_th=0.06 catches near-black frames (â‰¤6% average brightness) that a
+    pix_th=0.06 catches near-black frames (≤6% average brightness) that a
     10% threshold would miss (e.g. very dark intros or fade-from-black sequences).
     """
     clip_dur = max(0.0, float(end_sec) - float(start_sec))
@@ -306,9 +306,9 @@ def apply_micro_pacing(
 
     def _target_dur(dur: float, mul: float = 1.0) -> float:
         # PART A+B: preserve more of medium/long silences — they are more likely intentional.
-        # Short (â‰¤0.5s): breath pause     → keep 0.20s  (was 0.15s for â‰¤0.7s)
-        # Medium (â‰¤0.9s): rhythm pause    → keep 0.30s  (was 0.25s for â‰¤1.2s)
-        # Long (â‰¤1.5s): emphasis/sentence → keep 0.45s  (was 0.40s for >1.2s)
+        # Short (≤0.5s): breath pause     → keep 0.20s  (was 0.15s for ≤0.7s)
+        # Medium (≤0.9s): rhythm pause    → keep 0.30s  (was 0.25s for ≤1.2s)
+        # Long (≤1.5s): emphasis/sentence → keep 0.45s  (was 0.40s for >1.2s)
         # Dead air (>1.5s): genuine gap   → keep 0.50s
         if dur <= 0.5:
             base = 0.20

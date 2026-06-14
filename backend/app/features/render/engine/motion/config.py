@@ -32,7 +32,7 @@ from dataclasses import dataclass
 
 _CONTENT_TYPE_TRACKING: dict[str, dict] = {
     # interview/commentary/tutorial: speech-heavy, face is primary subject.
-    # Detect MORE often (0.5Ã—) so tracker loss over 8 frames max, not 32.
+    # Detect MORE often (0.5×) so tracker loss over 8 frames max, not 32.
     # Slower pan + stronger EMA keep the camera stable between detections.
     "interview":    {"detect_interval_mul": 0.5, "ema_mul": 0.65, "pan_speed_mul": 0.70},
     "commentary":   {"detect_interval_mul": 0.5, "ema_mul": 0.80, "pan_speed_mul": 0.85},

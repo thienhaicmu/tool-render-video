@@ -243,7 +243,7 @@ def format_hook_subtitle(text: str) -> str:
 
     - Normalises whitespace and collapses newlines to one line
     - Returns original unchanged when text < 20 chars
-    - For short segments (â‰¤ 4 words): uppercases detected emphasis words in place
+    - For short segments (≤ 4 words): uppercases detected emphasis words in place
     - For longer segments: splits into max 2 lines and uppercases the leading phrase
     """
     text = re.sub(r"\s+", " ", text.replace("\n", " ").strip())
@@ -260,12 +260,12 @@ def format_hook_subtitle(text: str) -> str:
         return " ".join(w.upper() if _is_emphasis(w) else w for w in words)
 
     # Find emphasis anchor in first 6 words to set the split point for line 1
-    split_at = min(4, total - 2)  # default: ~4 words on line 1, â‰¥2 on line 2
+    split_at = min(4, total - 2)  # default: ~4 words on line 1, ≥2 on line 2
     for i in range(min(6, total - 1)):
         if _is_emphasis(words[i]):
             split_at = i + 1
 
-    # Clamp: line 1 = 2–6 words, line 2 always has â‰¥ 1 word
+    # Clamp: line 1 = 2–6 words, line 2 always has ≥ 1 word
     split_at = max(2, min(split_at, 6, total - 1))
 
     line1 = " ".join(words[:split_at]).upper()

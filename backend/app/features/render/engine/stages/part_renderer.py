@@ -52,7 +52,7 @@ from app.features.render.engine.stages.part_cut import CutStageResult, run_cut_s
 # warning) extracted to a dedicated module. The encode-progress thread
 # is STARTED inside run_render_preflight and the caller is responsible
 # for encode_stop.set() + encode_timer.join() after the FFmpeg render
-# completes. Plan Â§3.2 phase 2.4 was re-scoped here because the original
+# completes. Plan §3.2 phase 2.4 was re-scoped here because the original
 # TRANSCRIBE scope was already absorbed into prepare_part_assets (2.2).
 from app.features.render.engine.stages.part_render_setup import (
     RenderPreflightResult,  # noqa: F401 (re-exported)

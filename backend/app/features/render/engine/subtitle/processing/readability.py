@@ -228,7 +228,7 @@ def _semantic_wrap_block(text: str, max_em: float) -> str:
 
     Avoids:
     - Orphan: a single word stranded alone on line 2 → skip split entirely
-    - Widow: a very short trailing word (â‰¤ 3 chars) on line 2 → shift split right
+    - Widow: a very short trailing word (≤ 3 chars) on line 2 → shift split right
     """
     if "\n" in text or _approx_visual_width(text) <= max_em:
         return text
@@ -380,7 +380,7 @@ def _find_phrase_split(words: list[str], max_words: int) -> int:
       2. Before a clause-starting conjunction nearest the midpoint.
       3. Visual-weight midpoint fallback.
 
-    Always returns 1 â‰¤ i < len(words).
+    Always returns 1 ≤ i < len(words).
     """
     n = len(words)
     if n < 2:
@@ -428,7 +428,7 @@ def _split_block_semantic(
     max_words: int,
     min_display_sec: float,
 ) -> list[dict]:
-    """Recursively split one SRT block into â‰¤max_words chunks, redistributing timing."""
+    """Recursively split one SRT block into ≤max_words chunks, redistributing timing."""
     words = text.split()
     n = len(words)
     if n <= max_words:
@@ -471,7 +471,7 @@ def resegment_srt_for_readability(
       1. Density check: blocks with >max_wps words/sec OR >max_words are split
       2. Semantic split at phrase boundaries (punctuation > conjunction > midpoint)
       3. Timing redistribution proportional to word count
-      4. Minimum display enforcement (â‰¥min_display_sec per block)
+      4. Minimum display enforcement (≥min_display_sec per block)
       5. Gap-fill: sub-gap-fill-sec gaps between consecutive blocks are closed
       6. Clamp: ensure no block extends past its successor's start
 

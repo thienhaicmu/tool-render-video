@@ -206,7 +206,7 @@ def run_llm_pre_render(
                 channel_code=effective_channel, job_id=job_id,
                 event="llm_pipeline.transcription.progress",
                 level="INFO",
-                message=f"Whisper started (model={_model}, etaâ‰ˆ{_eta_sec:.0f}s)",
+                message=f"Whisper started (model={_model}, eta≈{_eta_sec:.0f}s)",
                 step="render.llm_pipeline.transcribe",
                 context={
                     "model": _model, "engine": _engine,

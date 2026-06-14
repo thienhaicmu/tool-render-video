@@ -10,7 +10,7 @@ base-clip/motion-crop/render_part_smart FFmpeg core (Sprint 6.D-2.5
 target).
 
 Scope re-cast note:
-  Plan Â§3.2 originally listed phase 2.4 as "TRANSCRIBE stage block".
+  Plan §3.2 originally listed phase 2.4 as "TRANSCRIBE stage block".
   By the time phase 2.4 ran, all TRANSCRIBE logic had already been
   absorbed into prepare_part_assets (Sprint 6.D-2.2) — no separate
   TRANSCRIBE block remained in process_one_part. Phase 2.4 was

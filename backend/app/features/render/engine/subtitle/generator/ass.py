@@ -429,7 +429,7 @@ def render_subtitle_preview(
         else:
             vf = f"ass='{safe_ass}'"
 
-        # Dark background (0x111827 â‰ˆ slate-900) — mimics a video frame.
+        # Dark background (0x111827 ≈ slate-900) — mimics a video frame.
         # r=1 → one frame at PTS=0, subtitle at t=0 is visible.
         cmd = [
             get_ffmpeg_bin(), "-y",

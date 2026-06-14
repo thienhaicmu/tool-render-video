@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Regression tests for Unicode/encoding correctness across the render pipeline.
 
 These tests verify that Vietnamese, CJK, Arabic, emoji, and smart-quote text
@@ -54,13 +55,23 @@ ALL_UNICODE_SAMPLES = [
 # Mojibake indicators: these sequences must NOT appear in any Python source file.
 # They are the mojibake equivalents of common punctuation encoded as CP1252 reread as UTF-8.
 MOJIBAKE_CLASS_A = [
-    "â€”",   # â€" = em-dash mojibake
-    "â€“",   # â€" = en-dash mojibake
-    "â€¦",   # â€¦ = ellipsis mojibake
-    "â†’",   # â†' = right-arrow mojibake
-    "â€˜",   # â€˜ = left-single-quote mojibake
-    "â€™",   # â€™ = right-single-quote mojibake
-    "â€œ",   # â€œ = left-double-quote mojibake
+    bytes([0xE2, 0x80, 0x94]).decode("cp1252"),   # em-dash mojibake
+    bytes([0xE2, 0x80, 0x93]).decode("cp1252"),   # en-dash mojibake
+    bytes([0xE2, 0x80, 0xA6]).decode("cp1252"),   # ellipsis mojibake
+    bytes([0xE2, 0x86, 0x92]).decode("cp1252"),   # right-arrow mojibake
+    bytes([0xE2, 0x80, 0x98]).decode("cp1252"),   # left-single-quote mojibake
+    bytes([0xE2, 0x80, 0x99]).decode("cp1252"),   # right-single-quote mojibake
+    bytes([0xE2, 0x80, 0x9C]).decode("cp1252"),   # left-double-quote mojibake
+]
+
+# CLASS-B mojibake: math/symbol characters affected by the UTF-8 -> CP1252 re-read bug.
+MOJIBAKE_CLASS_B: list[str] = [
+    bytes([0xE2, 0x89, 0x88]).decode("cp1252"),   # approx-equal sign U+2248 (approx=)
+    bytes([0xE2, 0x89, 0xA4]).decode("cp1252"),   # less-or-equal sign U+2264 (<=)
+    bytes([0xE2, 0x89, 0xA5]).decode("cp1252"),   # greater-or-equal sign U+2265 (>=)
+    bytes([0xC3, 0x97]).decode("cp1252"),          # multiplication sign U+00D7 (x)
+    bytes([0xE2, 0x86, 0x94]).decode("cp1252"),   # left-right arrow U+2194 (<->)
+    bytes([0xC2, 0xA7]).decode("cp1252"),          # section sign U+00A7 (section)
 ]
 
 
@@ -77,7 +88,7 @@ def _make_srt_content(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# SRT round-trip: Unicode must survive read → write → read
+# SRT round-trip: Unicode must survive read -> write -> read
 # ---------------------------------------------------------------------------
 
 class TestSrtUnicodeRoundTrip:
@@ -234,11 +245,33 @@ class TestSourceFileMojibake:
 
         if found:
             details = "\n".join(
-                f"  {f.relative_to(Path(__file__).resolve().parents[1])}:{ln} — {pat!r}"
+                f"  {f.relative_to(Path(__file__).resolve().parents[1])}:{ln} -- {pat!r}"
                 for f, pat, ln in found[:20]
             )
             pytest.fail(
                 f"Mojibake (CLASS A) found in {len(found)} location(s):\n{details}"
+            )
+
+    def test_no_mojibake_class_b_in_source_files(self):
+        """Verify no CLASS-B mojibake sequences (math/symbol) in any .py source file under app/."""
+        found: list[tuple[Path, str, int]] = []
+        for py_file in self._iter_python_files():
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                pytest.fail(f"Non-UTF-8 file detected: {py_file}")
+            for pattern in MOJIBAKE_CLASS_B:
+                for lineno, line in enumerate(content.splitlines(), start=1):
+                    if pattern in line:
+                        found.append((py_file, pattern, lineno))
+
+        if found:
+            details = "\n".join(
+                f"  {f.relative_to(Path(__file__).resolve().parents[1])}:{ln} -- {pat!r}"
+                for f, pat, ln in found[:20]
+            )
+            pytest.fail(
+                f"Mojibake (CLASS B) found in {len(found)} location(s):\n{details}"
             )
 
     def test_all_source_files_are_utf8(self):
@@ -330,7 +363,7 @@ class TestSrtTimestampFormat:
         for seconds in [0.0, 1.5, 90.123, 3661.0, 7322.999]:
             ts = format_srt_timestamp(seconds)
             parsed = parse_srt_timestamp(ts)
-            assert abs(parsed - seconds) < 0.002, f"Roundtrip lost precision at {seconds}s: {ts!r} → {parsed}"
+            assert abs(parsed - seconds) < 0.002, f"Roundtrip lost precision at {seconds}s: {ts!r} -> {parsed}"
 
 
 # ---------------------------------------------------------------------------
@@ -353,4 +386,4 @@ class TestAssEscapeUnicode:
     def test_ass_escape_preserves_all_unicode_samples(self, sample):
         from app.features.render.engine.subtitle.generator.ass import _ass_escape_text
         result = _ass_escape_text(sample)
-        assert result == sample, f"_ass_escape_text corrupted: {sample!r} → {result!r}"
+        assert result == sample, f"_ass_escape_text corrupted: {sample!r} -> {result!r}"
