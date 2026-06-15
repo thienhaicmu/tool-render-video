@@ -119,6 +119,27 @@ def _validate_output_dir(payload: RenderRequest):
             status_code=400,
             detail=f"output_dir exists but is not a directory: {payload.output_dir}",
         )
+    # Bug N6 (audit 2026-06-15): probe write access on the nearest existing
+    # ancestor so the pipeline doesn't fail 60 s into a render with a
+    # cryptic OSError. Walks up the tree until we find a directory that
+    # exists (output_dir may not be created yet — that's fine, the pipeline
+    # will mkdir it). We only need to confirm the parent is writable.
+    import os as _os_n6
+    probe = resolved if resolved.exists() else resolved.parent
+    while probe and not probe.exists():
+        nxt = probe.parent
+        if nxt == probe:
+            break
+        probe = nxt
+    if probe.exists() and not _os_n6.access(str(probe), _os_n6.W_OK):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"output_dir is not writable: {payload.output_dir} "
+                f"(no write permission on {probe}). "
+                "Pick a different folder or fix the permissions."
+            ),
+        )
 
 
 def _validate_render_source(payload: RenderRequest):

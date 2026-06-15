@@ -182,6 +182,25 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   async function goToConfigure() {
     if (sources.length === 0) return
     const src = sources[0]
+    // Bug #6 fix: verify the file still exists on disk before going through
+    // the prepare-source flow. Without this check, a file that was renamed
+    // or deleted after the user picked it surfaces as a cryptic FFmpeg
+    // error 60 seconds into prepare-source instead of an instant
+    // "file not found" with the option to re-pick. Uses the Electron IPC
+    // `pathExists` (preload.js); in pure-web mode the check is skipped and
+    // the backend's own existence check (_validate_render_source) is the
+    // safety net.
+    if (window.electronAPI?.pathExists) {
+      const exists = await window.electronAPI.pathExists(src.value)
+      if (exists === false) {
+        setPrepareError(
+          lang === 'VI'
+            ? `File không tìm thấy: "${src.value}". Có thể bị đổi tên hoặc xoá. Chọn file khác.`
+            : `File not found: "${src.value}". It may have been moved or deleted. Pick another.`,
+        )
+        return
+      }
+    }
     prepareCancelledRef.current = false
     const abort = new AbortController()
     prepareAbortRef.current = abort
@@ -233,9 +252,44 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   // ── Render actions ──────────────────────────────────────────────────────────
   async function handleStartRender() {
     if (isSubmitting) return  // hard guard against double-submit
+    const src = sources[0]
+    // Bug #7 fix: pre-flight validate before the POST so we surface clear,
+    // localised errors at click time instead of waiting for the backend to
+    // reject. Same checks the backend runs in _validate_render_source +
+    // _validate_output_dir, mirrored here for instant feedback.
+    if (!src || !(src.value || '').trim()) {
+      setSubmitError(lang === 'VI' ? 'Chưa chọn file nguồn.' : 'No source file selected.')
+      return
+    }
+    if (window.electronAPI?.pathExists) {
+      const exists = await window.electronAPI.pathExists(src.value)
+      if (exists === false) {
+        setSubmitError(
+          lang === 'VI'
+            ? `File nguồn không còn tồn tại: ${src.value}`
+            : `Source file no longer exists: ${src.value}`,
+        )
+        return
+      }
+    }
+    if (!(cfg.outputDir || '').trim()) {
+      setSubmitError(lang === 'VI' ? 'Chưa chọn thư mục lưu (Save folder).' : 'Save folder is empty.')
+      return
+    }
+    if (cfg.minSec > cfg.maxSec) {
+      setSubmitError(
+        lang === 'VI'
+          ? `Min clip duration (${cfg.minSec}s) lớn hơn max (${cfg.maxSec}s).`
+          : `Min clip duration (${cfg.minSec}s) is greater than max (${cfg.maxSec}s).`,
+      )
+      return
+    }
+    if (cfg.outputCount < 1) {
+      setSubmitError(lang === 'VI' ? 'Số clip xuất ra phải ≥ 1.' : 'Output count must be ≥ 1.')
+      return
+    }
     setIsSubmitting(true)
     setSubmitError(null)
-    const src = sources[0]
     const payload: RenderRequest = {
       source_mode:       'local',
       source_video_path: src.value,
@@ -398,7 +452,35 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     finally { setIsRetrying(false) }
   }
 
-  function handleNewRender() {
+  async function handleNewRender() {
+    // Bug #8 fix: if there's still an active render in the queue (running or
+    // queued), starting a new flow only sets the user up for an HTTP 409 at
+    // submit time. Confirm + offer monitor instead. The user can still
+    // proceed if they explicitly want to (e.g. they're going to pick a
+    // DIFFERENT source — server dedup keys on source path, not just any
+    // active job).
+    try {
+      const res = await getJobHistory(10, 0)
+      const active = res.items.find(
+        (j) => j.status === 'running' || j.status === 'queued',
+      )
+      if (active) {
+        const msg = lang === 'VI'
+          ? `Vẫn còn render đang chạy: ${active.title || active.job_id.slice(0, 8)}. Mở màn theo dõi job đó? (OK = mở · Cancel = bắt đầu render mới)`
+          : `A render is still running: ${active.title || active.job_id.slice(0, 8)}. Open its monitor? (OK = open · Cancel = start a new render)`
+        if (window.confirm(msg)) {
+          setJobId(active.job_id)
+          setStep(3)
+          return
+        }
+        // User chose to proceed — fall through and start fresh. Backend dedup
+        // will still block if they pick the same source path; that's now
+        // handled by the 409→navigate path in handleStartRender.
+      }
+    } catch {
+      // backend unreachable — proceed with reset; user will discover the
+      // issue when they try to submit.
+    }
     setStep(1); setSources([]); setJobId(null)
     setPrepareResult(null); setParts([]); setPartScores({}); setQualityReports({})
     // Reset submit guard so the next Start-Render click is accepted.

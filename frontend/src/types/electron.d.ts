@@ -14,6 +14,9 @@ interface ElectronAPI {
   openPath?: (path: string) => Promise<void> | void
   /** Open a native file picker for cookies.txt, returns the chosen path or null. */
   pickCookiesFile?: () => Promise<string | null>
+  /** Check whether a path exists on disk. Returns null on IPC failure
+   *  (caller should treat that as "unknown — skip the check"). */
+  pathExists?: (path: string) => Promise<boolean | null>
 }
 
 declare global {
