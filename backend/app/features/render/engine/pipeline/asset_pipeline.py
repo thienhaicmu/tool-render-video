@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.models.schemas import RenderRequest
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log, _safe_unlink
+from app.features.render.engine.encoder.ffmpeg_helpers import probe_video_metadata
 from app.features.render.engine.pipeline.remotion_adapter import (
     append_outro_clip,
     apply_logo_watermark,
@@ -111,10 +112,10 @@ def _maybe_prepend_asset_intro(
     effective_channel: str,
     job_id: str,
     part_no: int,
-) -> None:
+) -> float:
     intro_path_raw = str(getattr(payload, "asset_intro_path", None) or "").strip()
     if not intro_path_raw:
-        return
+        return 0.0
     intro_path = Path(intro_path_raw)
     if not intro_path.exists() or intro_path.stat().st_size <= 0:
         _job_log(effective_channel, job_id,
@@ -123,24 +124,28 @@ def _maybe_prepend_asset_intro(
                            event="asset_missing", level="WARNING",
                            message=f"UP27 asset intro missing, skipped part={part_no}",
                            step="render.asset", context={"type": "intro", "part_no": part_no})
-        return
+        return 0.0
+    _intro_dur = float(probe_video_metadata(str(intro_path)).get("duration") or 0.0)
     concat_path = final_part.with_name(f"{final_part.stem}.with_asset_intro.mp4")
     try:
         merged = prepend_intro_clip(str(final_part), str(intro_path), str(concat_path))
         if merged:
             os.replace(merged, final_part)
             _job_log(effective_channel, job_id,
-                     f"asset_applied type=intro part={part_no} file={intro_path.name}")
+                     f"asset_applied type=intro part={part_no} file={intro_path.name} dur={_intro_dur:.2f}s")
             _emit_render_event(channel_code=effective_channel, job_id=job_id,
                                event="asset_applied", level="INFO",
                                message=f"UP27 creator intro sting applied part={part_no}",
                                step="render.asset", context={"type": "intro", "part_no": part_no})
+            return _intro_dur
         else:
             _job_log(effective_channel, job_id,
                      f"asset_skipped type=intro part={part_no} reason=concat_failed", kind="warning")
+            return 0.0
     except Exception as exc:
         _job_log(effective_channel, job_id,
                  f"asset_error type=intro part={part_no} error={exc}", kind="warning")
+        return 0.0
     finally:
         _safe_unlink(concat_path)
 
@@ -152,10 +157,10 @@ def _maybe_append_asset_outro(
     effective_channel: str,
     job_id: str,
     part_no: int,
-) -> None:
+) -> float:
     outro_path_raw = str(getattr(payload, "asset_outro_path", None) or "").strip()
     if not outro_path_raw:
-        return
+        return 0.0
     outro_path = Path(outro_path_raw)
     if not outro_path.exists() or outro_path.stat().st_size <= 0:
         _job_log(effective_channel, job_id,
@@ -164,24 +169,28 @@ def _maybe_append_asset_outro(
                            event="asset_missing", level="WARNING",
                            message=f"UP27 asset outro missing, skipped part={part_no}",
                            step="render.asset", context={"type": "outro", "part_no": part_no})
-        return
+        return 0.0
+    _outro_dur = float(probe_video_metadata(str(outro_path)).get("duration") or 0.0)
     concat_path = final_part.with_name(f"{final_part.stem}.with_asset_outro.mp4")
     try:
         merged = append_outro_clip(str(final_part), str(outro_path), str(concat_path))
         if merged:
             os.replace(merged, final_part)
             _job_log(effective_channel, job_id,
-                     f"asset_applied type=outro part={part_no} file={outro_path.name}")
+                     f"asset_applied type=outro part={part_no} file={outro_path.name} dur={_outro_dur:.2f}s")
             _emit_render_event(channel_code=effective_channel, job_id=job_id,
                                event="asset_applied", level="INFO",
                                message=f"UP27 creator outro applied part={part_no}",
                                step="render.asset", context={"type": "outro", "part_no": part_no})
+            return _outro_dur
         else:
             _job_log(effective_channel, job_id,
                      f"asset_skipped type=outro part={part_no} reason=concat_failed", kind="warning")
+            return 0.0
     except Exception as exc:
         _job_log(effective_channel, job_id,
                  f"asset_error type=outro part={part_no} error={exc}", kind="warning")
+        return 0.0
     finally:
         _safe_unlink(concat_path)
 

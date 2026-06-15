@@ -316,15 +316,16 @@ def run_part_finalize(
         hook_text=ctx.hook_applied_text or None,
         source_title=str(ctx.source.get("title") or ""),
     )
-    _maybe_prepend_asset_intro(final_part, ctx.payload,
+    _asset_intro_sec = _maybe_prepend_asset_intro(final_part, ctx.payload,
         effective_channel=ctx.effective_channel, job_id=ctx.job_id, part_no=idx)
-    _maybe_append_asset_outro(final_part, ctx.payload,
+    _asset_outro_sec = _maybe_append_asset_outro(final_part, ctx.payload,
         effective_channel=ctx.effective_channel, job_id=ctx.job_id, part_no=idx)
     _maybe_apply_asset_logo(final_part, ctx.payload,
         effective_channel=ctx.effective_channel, job_id=ctx.job_id, part_no=idx)
     _expected_final_duration = max(
         0.0,
-        (_effective_duration / _render_speed) - _micro_pacing_trim_sec + _remotion_intro_sec,
+        (_effective_duration / _render_speed) - _micro_pacing_trim_sec
+        + _remotion_intro_sec + _asset_intro_sec + _asset_outro_sec,
     )
     _speed_ratio = round(_expected_final_duration * 1000 / max(_encode_ms, 1), 2)
     _log_pacing_delta, _log_platform_delta = _resolve_pacing_speed_delta(ctx, idx, ctx.target_platform)
