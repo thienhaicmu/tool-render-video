@@ -7,6 +7,14 @@ mediapipe
 # faster-whisper: 4x faster than openai-whisper on the same model+device.
 faster-whisper
 whisperx
+# CUDA 12 runtime DLLs bundled by pip (cublas64_12.dll, cudnn*.dll, nvrtc).
+# Required for faster-whisper / ctranslate2 GPU acceleration on Windows when
+# the system has only the NVIDIA driver (no CUDA Toolkit). Without these,
+# ctranslate2 fails with "Library cublas64_12.dll is not found" and the
+# adapter falls back to openai-whisper CPU (~5-10x slower).
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
+nvidia-cuda-nvrtc-cu12
 # Cloud LLM providers for segment selection.
 # Each is optional; install the one matching your configured ai_provider.
 openai>=1.0.0              # ai_provider=openai

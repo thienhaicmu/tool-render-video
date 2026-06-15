@@ -13,17 +13,26 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* Inter — enable contextual alternates + stylistic sets used by Linear/Vercel.
+     cv11: curved single-storey 'a', ss03: curved 'l'. Looks softer at UI sizes. */
+  font-feature-settings: 'cv11', 'ss01', 'ss03', 'cv02';
+  font-variant-ligatures: contextual;
 }
 
 body {
   font-family: var(--font-family-base);
-  font-size: var(--font-size-base);
+  font-size: var(--text-base);
   font-weight: var(--font-weight-normal);
   line-height: var(--line-height-normal);
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-primary);
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+  background-color: var(--surface-base);
   min-height: 100vh;
   overflow-x: hidden;
+  /* Smooth theme switch — colors/borders/backgrounds only, not layout */
+  transition:
+    background-color var(--duration-normal) var(--ease-default),
+    color var(--duration-normal) var(--ease-default);
 }
 
 #root {
@@ -37,78 +46,143 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
-  color: var(--color-text-primary);
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
 }
 
+h1 { font-size: var(--font-size-3xl); letter-spacing: -0.025em; }
+h2 { font-size: var(--font-size-2xl); letter-spacing: -0.02em; }
+h3 { font-size: var(--font-size-xl);  letter-spacing: -0.015em; }
+h4 { font-size: var(--font-size-lg); }
+h5 { font-size: var(--font-size-md); }
+h6 { font-size: var(--font-size-base); }
+
 p {
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   line-height: var(--line-height-normal);
 }
 
 a {
-  color: var(--color-accent);
+  color: var(--accent-primary);
   text-decoration: none;
   transition: color var(--duration-fast) var(--ease-default);
 }
 
 a:hover {
-  color: var(--color-accent-hover);
+  color: var(--accent-hover);
+}
+
+code, pre, kbd, samp {
+  font-family: var(--font-family-mono);
+  font-feature-settings: 'liga' 0, 'calt' 0;
+  font-size: 0.92em;
+}
+
+/* Tabular numerals — for counts, durations, scores. Apply with .tnum or
+   directly on numeric labels via inline style if needed. */
+.tnum,
+.font-mono {
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Form elements ────────────────────────────────────────────────────────── */
 
 button {
   font-family: inherit;
+  font-feature-settings: inherit;
   cursor: pointer;
   border: none;
   background: none;
+  color: inherit;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 input,
 textarea,
 select {
   font-family: inherit;
-  font-size: var(--font-size-base);
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  font-feature-settings: inherit;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  background-color: var(--surface-input);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
   outline: none;
-  transition: border-color var(--duration-fast) var(--ease-default),
-              box-shadow var(--duration-fast) var(--ease-default);
+  transition:
+    border-color var(--duration-fast) var(--ease-default),
+    box-shadow var(--duration-fast) var(--ease-default),
+    background-color var(--duration-fast) var(--ease-default);
+}
+
+input:hover:not(:disabled):not(:focus),
+textarea:hover:not(:disabled):not(:focus),
+select:hover:not(:disabled):not(:focus) {
+  border-color: var(--border-strong);
 }
 
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: var(--color-border-focus);
+  border-color: var(--accent-primary);
   box-shadow: var(--shadow-accent);
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: var(--color-text-disabled);
+  color: var(--text-disabled);
+}
+
+/* Selection */
+::selection {
+  background-color: var(--accent-subtle-hover);
+  color: var(--text-primary);
 }
 
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-bg-surface);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
+  background: var(--border-default);
   border-radius: var(--radius-full);
+  border: 2px solid var(--surface-base);
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-disabled);
+  background: var(--border-strong);
+  background-clip: padding-box;
+  border: 2px solid var(--surface-base);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
 }
 
 /* ── Utilities ────────────────────────────────────────────────────────────── */
@@ -123,4 +197,14 @@ textarea::placeholder {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border-width: 0;
+}
+
+/* Disable theme transition for users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

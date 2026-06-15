@@ -111,7 +111,7 @@ function NavGroup({ items, activePanel, hoveredItem, setHoveredItem, setActivePa
         const isActive  = activePanel === item.panel
         const isHovered = hoveredItem === item.panel
 
-        const bgColor   = isActive ? 'var(--accent-subtle)' : isHovered ? 'rgba(255,255,255,0.05)' : 'transparent'
+        const bgColor   = isActive ? 'var(--accent-subtle)' : isHovered ? 'var(--surface-card-hover)' : 'transparent'
         const textColor = isActive ? 'var(--accent-primary)' : isHovered ? 'var(--text-primary)' : 'var(--text-secondary)'
 
         return (

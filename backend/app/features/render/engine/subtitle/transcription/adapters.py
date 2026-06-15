@@ -79,7 +79,7 @@ class SubtitleTranscriptionAdapter(Protocol):
         language: str | None = None,
         beam_size: int | None = None,
         vad_filter: bool = False,
-        condition_on_previous_text: bool = True,
+        condition_on_previous_text: bool = False,
     ) -> SubtitleTranscriptionResult:
         ...
 
@@ -283,7 +283,7 @@ class DefaultWhisperAdapter:
         language: str | None = None,
         beam_size: int | None = None,
         vad_filter: bool = False,
-        condition_on_previous_text: bool = True,
+        condition_on_previous_text: bool = False,
     ) -> SubtitleTranscriptionResult:
         start = time.perf_counter()
         transcribe_to_srt(
@@ -327,7 +327,7 @@ class FasterWhisperAdapter:
         language: str | None = None,
         beam_size: int | None = None,
         vad_filter: bool = False,
-        condition_on_previous_text: bool = True,
+        condition_on_previous_text: bool = False,
     ) -> SubtitleTranscriptionResult:
         start = time.perf_counter()
 
@@ -352,6 +352,15 @@ class FasterWhisperAdapter:
                 "word_timestamps": highlight_per_word,
                 "vad_filter": vad_filter,
                 "condition_on_previous_text": condition_on_previous_text,
+                # Hallucination defense: when faster-whisper's compression-ratio
+                # or log-prob threshold trips (it detects repetitive output),
+                # decoder retries with progressively higher sampling temperature
+                # instead of looping on greedy decode forever. Tuple matches
+                # openai-whisper's documented anti-hallucination schedule.
+                "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+                # compression_ratio_threshold / log_prob_threshold / no_speech_threshold
+                # use faster-whisper library defaults (2.4 / -1.0 / 0.6) which
+                # are already correct — explicit None would disable detection.
             }
             if language is not None:
                 _fw_kwargs["language"] = language
@@ -404,7 +413,7 @@ class WhisperXAdapter:
         language: str | None = None,
         beam_size: int | None = None,
         vad_filter: bool = False,
-        condition_on_previous_text: bool = True,
+        condition_on_previous_text: bool = False,
     ) -> SubtitleTranscriptionResult:
         start = time.perf_counter()
         _forced_language = language  # caller hint; None = auto-detect
@@ -500,10 +509,20 @@ def transcribe_with_adapter(
     language: str | None = None,
     beam_size: int | None = None,
     vad_filter: bool = False,
-    condition_on_previous_text: bool = True,
+    condition_on_previous_text: bool = False,
     logger=None,
 ) -> SubtitleTranscriptionResult:
     """Route transcription to the appropriate adapter.
+
+    ``condition_on_previous_text`` default changed from True → False on
+    2026-06-15: matches the Sprint 6 H3 fix that llm_pipeline already adopts
+    explicitly. Conditioning on prior text causes Whisper to enter infinite
+    hallucination loops on per-part clips (silence/music/repetitive audio
+    segments), making decoder produce phantom tokens indefinitely while GPU
+    sits idle. Disabling it loses a small amount of long-range context but
+    eliminates the loop bug. Callers that explicitly want the old behavior
+    can pass ``condition_on_previous_text=True``.
+
 
     engine="default"
         Transparent upgrade: uses FasterWhisperAdapter when faster-whisper is

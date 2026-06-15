@@ -198,9 +198,16 @@ elif STATIC_DIR.is_dir():
 # Applied only when STATIC_UI_VERSION=v2 to avoid breaking the legacy UI.
 # Allows same-origin scripts/styles, WebSocket connections, and blob/data URIs
 # for video/audio media. Inline styles are permitted for the React runtime.
+# SHA-256 hash of the inline theme pre-paint script in frontend/index.html.
+# The script reads localStorage + matchMedia and sets <html data-theme>
+# before the CSS bundle parses, preventing a light/dark flash. If you ever
+# edit that <script> block (even whitespace), recompute this hash — browser
+# DevTools console prints the expected value on CSP violation.
+_THEME_PREPAINT_SHA = "'sha256-w97FU5igB+JMs+1x07PUGg7ZVRM+bybC/sOSNuZdYKk='"
+
 _CSP_V2 = (
     "default-src 'self'; "
-    "script-src 'self'; "
+    f"script-src 'self' {_THEME_PREPAINT_SHA}; "
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
     "img-src 'self' data: blob: https://img.youtube.com; "
     "media-src 'self' blob:; "

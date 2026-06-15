@@ -27,6 +27,12 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const [prepareError, setPrepareError]   = useState<string | null>(null)
   const prepareCancelledRef               = useRef(false)
   const prepareAbortRef                   = useRef<AbortController | null>(null)
+  // isSubmitting locks the Start-Render button while a POST /api/render/process
+  // is in flight. Without this, a double-click (or two clicks across a slow
+  // network round-trip) submits two identical render jobs with different
+  // UUIDs — backend's job_id dedup doesn't catch it because the IDs differ.
+  // See bug investigation 2026-06-15 (jobs 68b83de8 + fab6af2b on same source).
+  const [isSubmitting, setIsSubmitting]   = useState(false)
 
   const [cfgTab, setCfgTab] = useState<CfgTab>('ai')
   const [cfg, setCfg] = useState<ConfigState>(() => ({
@@ -197,6 +203,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
 
   // ── Render actions ──────────────────────────────────────────────────────────
   async function handleStartRender() {
+    if (isSubmitting) return  // hard guard against double-submit
+    setIsSubmitting(true)
     setSubmitError(null)
     const src = sources[0]
     const payload: RenderRequest = {
@@ -282,8 +290,24 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       const id = await submitRender(payload)
       setJobId(id)
       setStep(3)
+      // intentional: do NOT reset isSubmitting on success — step changed
+      // to 3 so the Configure-screen button unmounts. Resetting would race
+      // with React's commit and let a stray click resubmit before unmount.
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : 'Failed to start render')
+      // Extract a user-friendly message. Backend dedup (409) returns a
+      // detail string explaining the duplicate is already running; surface
+      // it verbatim instead of "API error 409: …".
+      let msg = 'Failed to start render'
+      if (e && typeof e === 'object' && 'status' in e && 'detail' in e) {
+        const apiErr = e as { status: number; detail: unknown }
+        msg = typeof apiErr.detail === 'string'
+          ? apiErr.detail
+          : JSON.stringify(apiErr.detail)
+      } else if (e instanceof Error) {
+        msg = e.message
+      }
+      setSubmitError(msg)
+      setIsSubmitting(false)  // re-enable on failure so user can retry
     }
   }
 
@@ -323,6 +347,10 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   function handleNewRender() {
     setStep(1); setSources([]); setJobId(null)
     setPrepareResult(null); setParts([]); setPartScores({}); setQualityReports({})
+    // Reset submit guard so the next Start-Render click is accepted.
+    // Without this the button stays disabled after returning from Result.
+    setIsSubmitting(false)
+    setSubmitError(null)
   }
 
   const stepMeta = [
@@ -385,42 +413,210 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
           {/* STEP 1 */}
           <div className={`step-screen${step === 1 ? ' active' : ''}`}>
             <div className="src-screen">
-              <div className="src-headline">
-                <h1>{t.srcHeadline}</h1>
-                <p>{t.srcDesc}</p>
+              {/* Atmospheric background — violet/pink blobs + grid */}
+              <div className="src-bg" aria-hidden="true">
+                <div className="src-bg-blob src-bg-blob-1" />
+                <div className="src-bg-blob src-bg-blob-2" />
+                <div className="src-bg-grid" />
               </div>
-              <div className="src-cards">
-                <div className="src-card highlight" onClick={async () => {
-                  const picked = await window.electronAPI?.pickVideoFile?.()
-                  if (picked) setSources([{ value: picked }])
-                  else fileInputRef.current?.click()
-                }}>
-                  <div className="src-card-icon">📁</div>
-                  <div className="src-card-title">{t.srcLocalTitle}</div>
-                  <div className="src-card-desc">{t.srcLocalDesc}</div>
-                  <span className="src-card-badge">MP4 · MOV · MKV · WEBM</span>
+
+              <div className="src-content">
+                {/* Eyebrow chip + hero */}
+                <div className="src-hero">
+                  <span className="src-eyebrow">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/>
+                    </svg>
+                    {lang === 'VI' ? 'AI sẵn sàng' : 'AI ready to clip'}
+                  </span>
+                  <h1 className="src-hero-title">
+                    {lang === 'VI'
+                      ? <>Cắt video dài thành <span className="src-grad-word">clip viral</span>.</>
+                      : <>Turn long videos into <span className="src-grad-word">viral clips</span>.</>}
+                  </h1>
+                  <p className="src-hero-sub">
+                    {lang === 'VI'
+                      ? 'Thả file lên đây — AI sẽ phân tích, chọn khoảnh khắc hay nhất và xuất clip sẵn sàng cho TikTok, Reels và Shorts.'
+                      : 'Drop a file and let AI pick the best moments. Ready for TikTok, Reels and Shorts in minutes.'}
+                  </p>
                 </div>
-              </div>
-              {sources.length > 0 && (
-                <div className="src-list">
-                  <div className="src-list-head">{t.srcAdded}</div>
-                  {sources.map((s, i) => (
-                    <div key={i} className="src-item">
-                      <div className="src-item-thumb">📄</div>
-                      <div className="src-item-info">
-                        <div className="src-item-url">{s.value}</div>
-                        <div className="src-item-meta">{lang === 'VI' ? 'File trên máy' : 'Local File'}</div>
-                      </div>
-                      <button className="src-item-del" onClick={() => removeSource(i)}>×</button>
+
+                {/* Drop zone — illustrated */}
+                <div className="src-cards">
+                  <button
+                    type="button"
+                    className={`src-card highlight${sources.length > 0 ? ' has-file' : ''}`}
+                    onClick={async () => {
+                      const picked = await window.electronAPI?.pickVideoFile?.()
+                      if (picked) setSources([{ value: picked }])
+                      else fileInputRef.current?.click()
+                    }}
+                  >
+                    <div className="src-illu" aria-hidden="true">
+                      <svg width="120" height="96" viewBox="0 0 120 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                          <linearGradient id="gradFrame" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0" stopColor="#8b5cf6"/>
+                            <stop offset="1" stopColor="#ec4899"/>
+                          </linearGradient>
+                          <linearGradient id="gradPlay" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0" stopColor="#ffffff" stopOpacity="0.95"/>
+                            <stop offset="1" stopColor="#ffffff" stopOpacity="0.85"/>
+                          </linearGradient>
+                          <filter id="dropGlow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="2"/>
+                          </filter>
+                        </defs>
+                        {/* Back frame */}
+                        <rect x="14" y="20" width="68" height="50" rx="10" fill="url(#gradFrame)" opacity="0.30" transform="rotate(-8 48 45)"/>
+                        {/* Middle frame */}
+                        <rect x="22" y="14" width="72" height="56" rx="11" fill="url(#gradFrame)" opacity="0.55" transform="rotate(-3 58 42)"/>
+                        {/* Top frame with play */}
+                        <rect x="30" y="10" width="78" height="62" rx="12" fill="url(#gradFrame)"/>
+                        <circle cx="69" cy="41" r="18" fill="rgba(255,255,255,0.16)"/>
+                        <path d="M64 33l14 8-14 8z" fill="url(#gradPlay)"/>
+                        {/* Sparkles */}
+                        <g fill="#fff" opacity="0.9">
+                          <path d="M104 18l1.5 3.5L109 23l-3.5 1.5L104 28l-1.5-3.5L99 23l3.5-1.5z"/>
+                          <path d="M16 70l1 2.4L19.4 73.4l-2.4 1L16 76.8l-1-2.4L12.6 73.4l2.4-1z"/>
+                          <circle cx="110" cy="50" r="1.6"/>
+                          <circle cx="8" cy="32" r="1.4"/>
+                        </g>
+                      </svg>
                     </div>
-                  ))}
+                    <div className="src-card-body">
+                      <div className="src-card-title">
+                        {lang === 'VI' ? 'Thả file vào đây' : 'Drop your video here'}
+                      </div>
+                      <div className="src-card-desc">
+                        {lang === 'VI' ? 'hoặc bấm để chọn từ máy' : 'or click to browse your computer'}
+                      </div>
+                    </div>
+                    <div className="src-card-meta">
+                      <span className="src-card-badge">MP4 · MOV · MKV · WEBM</span>
+                      <span className="src-card-dot" aria-hidden="true">·</span>
+                      <span className="src-card-hint">{lang === 'VI' ? 'Khuyến nghị ≤ 4K · 2 GB' : 'Recommended ≤ 4K · 2 GB'}</span>
+                    </div>
+                    <div className="src-card-shine" aria-hidden="true" />
+                  </button>
                 </div>
-              )}
-              {prepareError && (
-                <div style={{ width: '100%', maxWidth: '760px', padding: '10px 14px', background: 'rgba(232,64,122,.1)', border: '1px solid rgba(232,64,122,.3)', fontSize: '12px', color: 'var(--fail)' }}>
-                  ⚠ {prepareError}
+
+                {/* Platform support row */}
+                <div className="src-platforms">
+                  <span className="src-platforms-label">
+                    {lang === 'VI' ? 'Sẵn sàng đăng lên' : 'Ready to publish on'}
+                  </span>
+                  <div className="src-platforms-list">
+                    <span className="src-platform" data-p="youtube">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M23 12s0-3.7-.5-5.5c-.3-1-1-1.8-2-2C18.7 4 12 4 12 4s-6.7 0-8.5.5c-1 .2-1.7 1-2 2C1 8.3 1 12 1 12s0 3.7.5 5.5c.3 1 1 1.8 2 2 1.8.5 8.5.5 8.5.5s6.7 0 8.5-.5c1-.2 1.7-1 2-2 .5-1.8.5-5.5.5-5.5zM10 15.5v-7l6 3.5-6 3.5z"/></svg>
+                      YouTube
+                    </span>
+                    <span className="src-platform" data-p="tiktok">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3v3.4a5 5 0 0 0 4 3.4v3.6a8.6 8.6 0 0 1-4-1.2v7c0 3.5-2.7 5.8-6 5.8-3 0-5.5-2.4-5.5-5.4S7 14 10 14c.5 0 1 .1 1.5.2v3.5c-.5-.2-1-.3-1.5-.3-1.2 0-2.2 1-2.2 2.2 0 1.2 1 2.2 2.2 2.2 1.3 0 2.5-.9 2.5-2.4V3H16z"/></svg>
+                      TikTok
+                    </span>
+                    <span className="src-platform" data-p="instagram">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c2.7 0 3 0 4.1.1 1 0 1.6.2 2 .3.5.2.9.4 1.3.8.4.4.6.8.8 1.3.1.4.3 1 .3 2C20.6 7.6 20.6 8 20.6 12s0 4.4-.1 5.5c0 1-.2 1.6-.3 2-.2.5-.4.9-.8 1.3-.4.4-.8.6-1.3.8-.4.1-1 .3-2 .3-1.1.1-1.4.1-4.1.1s-3 0-4.1-.1c-1 0-1.6-.2-2-.3-.5-.2-.9-.4-1.3-.8-.4-.4-.6-.8-.8-1.3-.1-.4-.3-1-.3-2-.1-1.1-.1-1.4-.1-5.4s0-4.4.1-5.5c0-1 .2-1.6.3-2 .2-.5.4-.9.8-1.3.4-.4.8-.6 1.3-.8.4-.1 1-.3 2-.3C8.6 2 9 2 12 2zm0 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm6.4-.3a1.2 1.2 0 1 0-2.4 0 1.2 1.2 0 0 0 2.4 0zM12 9.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6z"/></svg>
+                      Instagram
+                    </span>
+                    <span className="src-platform" data-p="facebook">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12a10 10 0 1 0-11.6 9.9V15h-2.5v-3h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.5 3h-2.3v6.9A10 10 0 0 0 22 12z"/></svg>
+                      Facebook
+                    </span>
+                  </div>
                 </div>
-              )}
+
+                {/* Added file list */}
+                {sources.length > 0 && (
+                  <div className="src-list">
+                    <div className="src-list-head">
+                      <span className="src-list-count">{sources.length}</span>
+                      <span>{t.srcAdded}</span>
+                      <span className="src-list-ok" aria-hidden="true">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 12l5 5L20 7"/>
+                        </svg>
+                        {lang === 'VI' ? 'Sẵn sàng' : 'Ready'}
+                      </span>
+                    </div>
+                    {sources.map((s, i) => {
+                      const filename = s.value.split(/[\\/]/).pop() || s.value
+                      const folder = s.value.slice(0, s.value.length - filename.length).replace(/[\\/]+$/, '')
+                      const ext = (filename.split('.').pop() || '').toUpperCase().slice(0, 4)
+                      return (
+                        <div key={i} className="src-item">
+                          <span className="src-item-thumb" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="2" y="6" width="14" height="12" rx="2"/>
+                              <path d="M16 10l6-3v10l-6-3z"/>
+                            </svg>
+                          </span>
+                          <div className="src-item-info">
+                            <div className="src-item-url" title={s.value}>{filename}</div>
+                            <div className="src-item-meta">
+                              {ext && <span className="src-item-tag">{ext}</span>}
+                              <span className="src-item-folder" title={folder}>{folder || (lang === 'VI' ? 'File trên máy' : 'Local file')}</span>
+                            </div>
+                          </div>
+                          <button className="src-item-del" onClick={() => removeSource(i)} aria-label="Remove" title={lang === 'VI' ? 'Xoá' : 'Remove'}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M18 6 6 18M6 6l12 12"/>
+                            </svg>
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* What happens next — visual step preview */}
+                <div className="src-next">
+                  <div className="src-next-head">{lang === 'VI' ? 'Các bước tiếp theo' : 'What happens next'}</div>
+                  <ol className="src-next-list">
+                    <li className="src-next-item">
+                      <span className="src-next-num">2</span>
+                      <div className="src-next-text">
+                        <div className="src-next-title">{lang === 'VI' ? 'Thiết lập' : 'Configure'}</div>
+                        <div className="src-next-desc">{lang === 'VI' ? 'Chọn preset, tỷ lệ, kiểu phụ đề' : 'Pick preset, ratio, subtitle style'}</div>
+                      </div>
+                    </li>
+                    <li className="src-next-sep" aria-hidden="true">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 6l6 6-6 6"/>
+                      </svg>
+                    </li>
+                    <li className="src-next-item">
+                      <span className="src-next-num">3</span>
+                      <div className="src-next-text">
+                        <div className="src-next-title">{lang === 'VI' ? 'AI render' : 'AI render'}</div>
+                        <div className="src-next-desc">{lang === 'VI' ? 'AI phân tích & cắt clip' : 'AI analyzes & cuts clips'}</div>
+                      </div>
+                    </li>
+                    <li className="src-next-sep" aria-hidden="true">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 6l6 6-6 6"/>
+                      </svg>
+                    </li>
+                    <li className="src-next-item">
+                      <span className="src-next-num">4</span>
+                      <div className="src-next-text">
+                        <div className="src-next-title">{lang === 'VI' ? 'Kết quả' : 'Results'}</div>
+                        <div className="src-next-desc">{lang === 'VI' ? 'Tải clip về để đăng' : 'Export & publish-ready'}</div>
+                      </div>
+                    </li>
+                  </ol>
+                </div>
+
+                {prepareError && (
+                  <div className="src-error">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 8v4M12 16h.01"/>
+                    </svg>
+                    <span>{prepareError}</span>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="screen-footer">
               <div className="screen-footer-info">{t.stepOf(1)}</div>
@@ -449,7 +645,13 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                   : <span>{t.stepOf(2)}</span>
                 }
               </div>
-              <button className="btn-next" onClick={handleStartRender}>{t.btnStartRender}</button>
+              <button
+                className="btn-next"
+                disabled={isSubmitting}
+                onClick={handleStartRender}
+              >
+                {isSubmitting ? (lang === 'VI' ? 'Đang gửi…' : 'Starting…') : t.btnStartRender}
+              </button>
             </div>
           </div>
 

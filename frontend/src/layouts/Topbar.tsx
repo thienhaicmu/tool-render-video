@@ -1,8 +1,9 @@
 /**
- * Topbar — Product wordmark, connection status, warmup/AI status badge.
+ * Topbar — product wordmark, theme toggle, AI warmup status, connection.
  */
 import React, { useEffect, useState } from 'react'
 import { apiFetch } from '../api/client'
+import { ThemeToggle } from '../components/ui/ThemeToggle'
 
 interface WarmupStatus {
   model?: string
@@ -10,6 +11,8 @@ interface WarmupStatus {
   loaded?: boolean
   ready?: boolean
 }
+
+// ── Topbar ───────────────────────────────────────────────────────────────────
 
 export function Topbar() {
   const [warmupStatus, setWarmupStatus] = useState<WarmupStatus | null>(null)
@@ -54,6 +57,8 @@ export function Topbar() {
       </div>
 
       <div style={styles.right}>
+        <ThemeToggle />
+
         {warmupStatus && (
           <span
             style={{
@@ -64,19 +69,33 @@ export function Topbar() {
             }}
             title={`AI/Warmup: ${warmupStatus.status ?? 'unknown'}`}
           >
+            <span
+              style={{
+                ...styles.statusDot,
+                backgroundColor: warmupStatus.loaded || warmupStatus.ready
+                  ? 'var(--status-success)'
+                  : 'var(--status-warning)',
+              }}
+            />
             AI {warmupStatus.loaded || warmupStatus.ready ? 'Ready' : 'Loading'}
           </span>
         )}
 
-        <div
+        <span
           style={{
-            ...styles.connectionDot,
-            backgroundColor: isConnected
-              ? 'var(--status-success)'
-              : 'var(--status-error)',
+            ...styles.statusBadge,
+            ...(isConnected ? styles.statusBadgeReady : styles.statusBadgeError),
           }}
           title={isConnected ? 'Backend connected' : 'Backend disconnected'}
-        />
+        >
+          <span
+            style={{
+              ...styles.statusDot,
+              backgroundColor: isConnected ? 'var(--status-success)' : 'var(--status-error)',
+            }}
+          />
+          {isConnected ? 'Connected' : 'Offline'}
+        </span>
       </div>
     </header>
   )
@@ -90,7 +109,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0 var(--space-6)',
+    padding: '0 var(--space-5)',
     flexShrink: 0,
     position: 'sticky',
     top: 0,
@@ -106,29 +125,39 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 'var(--weight-semibold)' as unknown as number,
     color: 'var(--text-primary)',
     fontFamily: 'var(--font-ui)',
+    letterSpacing: '-0.015em',
   },
   right: {
     display: 'flex',
     alignItems: 'center',
-    gap: 'var(--space-3)',
+    gap: 'var(--space-2)',
   },
   statusBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
     fontSize: 'var(--text-xs)',
-    padding: '2px var(--space-2)',
+    fontWeight: 'var(--weight-medium)' as unknown as number,
+    padding: '4px 8px',
+    height: 24,
     borderRadius: 'var(--radius-full)',
+    border: '1px solid var(--border-subtle)',
+    backgroundColor: 'var(--surface-card)',
   },
   statusBadgeReady: {
-    color: 'var(--status-success)',
-    backgroundColor: 'var(--status-success-bg)',
+    color: 'var(--text-secondary)',
   },
   statusBadgeLoading: {
     color: 'var(--status-warning)',
-    backgroundColor: 'var(--status-warning-bg)',
   },
-  connectionDot: {
-    width: '8px',
-    height: '8px',
+  statusBadgeError: {
+    color: 'var(--status-error)',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
     borderRadius: '50%',
-    transition: `background-color var(--duration-panel)`,
+    flexShrink: 0,
+    transition: 'background-color var(--duration-panel)',
   },
 }

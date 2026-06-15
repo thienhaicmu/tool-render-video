@@ -3,6 +3,7 @@ import './ClipStudio.css'
 import { RenderWorkflow } from './render/RenderWorkflow'
 import { DownloadTab } from './download/DownloadTab'
 import { HistoryTab } from './history/HistoryTab'
+import { ThemeToggle } from '../../components/ui/ThemeToggle'
 
 type Tab = 'render' | 'download' | 'history'
 export type Lang = 'EN' | 'VI'
@@ -23,7 +24,8 @@ export function ClipStudio() {
       {/* Topbar */}
       <header className="cs-topbar">
         <span className="cs-brand">
-          AI<span className="cs-brand-pulse" />CLIP
+          <span className="cs-brand-mark">✦</span>
+          AI Clip Studio
         </span>
 
         <nav className="cs-nav">
@@ -31,23 +33,24 @@ export function ClipStudio() {
             className={`cs-nav-tab${activeTab === 'render' ? ' active' : ''}`}
             onClick={() => setActiveTab('render')}
           >
-            RENDER
+            Render
           </button>
           <button
             className={`cs-nav-tab${activeTab === 'download' ? ' active' : ''}`}
             onClick={() => setActiveTab('download')}
           >
-            DOWNLOAD
+            Download
           </button>
           <button
             className={`cs-nav-tab${activeTab === 'history' ? ' active' : ''}`}
             onClick={() => setActiveTab('history')}
           >
-            HISTORY
+            History
           </button>
         </nav>
 
         <div className="cs-topbar-right">
+          <ThemeToggle size="sm" />
           <div className="cs-lang-sw">
             <button className={`cs-lang-btn${lang === 'EN' ? ' active' : ''}`} onClick={() => setLang('EN')}>EN</button>
             <button className={`cs-lang-btn${lang === 'VI' ? ' active' : ''}`} onClick={() => setLang('VI')}>VI</button>

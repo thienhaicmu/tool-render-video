@@ -33,6 +33,25 @@ from app.features.render.engine.encoder.ffmpeg_helpers import set_thread_cancel_
 logger = logging.getLogger("app.render")
 
 
+def _stage_begin(job_id: str, idx: int, name: str) -> float:
+    """Emit STAGE_BEGIN INFO log + return t0 for elapsed measurement.
+
+    Per-part observability hook (added to surface mid-stage hangs that
+    were silent before — e.g. Whisper per-part transcription deadlocks).
+    No effect on state machine or return values; pure logging.
+    """
+    logger.info("[%s][part=%d] STAGE_BEGIN %s", job_id[:8], idx, name)
+    return time.perf_counter()
+
+
+def _stage_end(job_id: str, idx: int, name: str, t0: float) -> None:
+    """Emit STAGE_END INFO log with elapsed seconds. Pair with _stage_begin."""
+    logger.info(
+        "[%s][part=%d] STAGE_END   %-9s elapsed=%.1fs",
+        job_id[:8], idx, name, time.perf_counter() - t0,
+    )
+
+
 
 # Sprint 6.D-2.1: PartRenderContext dataclass extracted to a dedicated
 # module. Re-exported here so existing external consumers
@@ -221,7 +240,9 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
     # app.features.render.engine.stages.part_cut.run_cut_stage. All 9 returned
     # fields are aliased back to their original local names so the
     # downstream RENDER block stays byte-for-byte unchanged.
+    _t_stage = _stage_begin(ctx.job_id, idx, "cut")
     _cut = run_cut_stage(ctx, idx, seg, raw_part, part_name, final_part)
+    _stage_end(ctx.job_id, idx, "cut", _t_stage)
     _trim_offset         = _cut.trim_offset
     _effective_start     = _cut.effective_start
     _effective_end       = _cut.effective_end
@@ -232,12 +253,14 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
     _cut_ms              = _cut.cut_ms
     _first_frame_scan_ms = _cut.first_frame_scan_ms
 
+    _t_stage = _stage_begin(ctx.job_id, idx, "assets")
     (_part_assets, _srt_count, _srt_meta,
      _hook_subtitle_formatted, _subtitle_ass_ms) = prepare_part_assets(
         ctx, idx, seg, srt_part, ass_part, translated_srt_part,
         _effective_start, _part_manifest, part_name, final_part,
         raw_part,
     )
+    _stage_end(ctx.job_id, idx, "assets", _t_stage)
     part_subtitle_enabled = _part_assets.subtitle_enabled
     _part_text_layers = list(_part_assets.text_layers)
     _part_text_layers_overlay = list(_part_assets.text_layers_overlay)
@@ -253,11 +276,13 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
     # feature-flag warning) moved to part_render_setup.run_render_preflight.
     # 13 returned fields aliased back to original local names so the
     # downstream FFmpeg core block stays byte-for-byte unchanged.
+    _t_stage = _stage_begin(ctx.job_id, idx, "preflight")
     _preflight = run_render_preflight(
         ctx, idx, seg, part_name, str(final_part),
         _effective_start, _trim_offset, _visual_trim,
         _force_accurate_cut, part_subtitle_enabled,
     )
+    _stage_end(ctx.job_id, idx, "preflight", _t_stage)
     _vf_ct                = _preflight.vf_ct
     _vf_crf_delta         = _preflight.vf_crf_delta
     _part_video_crf       = _preflight.part_video_crf
@@ -277,6 +302,7 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
     # recovery + visual_finish_applied) moved to part_render_encode.run_render_encode.
     # The single returned field is aliased back to its original local name
     # so the downstream voice/mix/finalize blocks stay byte-for-byte unchanged.
+    _t_stage = _stage_begin(ctx.job_id, idx, "encode")
     _encode = run_render_encode(
         ctx, idx, seg, raw_part, ass_part, final_part,
         part_subtitle_enabled, overlay_title,
@@ -284,20 +310,24 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
         _part_text_layers, _part_text_layers_overlay,
         _effective_subtitle_style, _preflight,
     )
+    _stage_end(ctx.job_id, idx, "encode", _t_stage)
     _render_ms = _encode.render_ms
     # Sprint 6.D-2.5b: Voice TTS + audio mix block (subtitle and
     # translated_subtitle paths + mix_narration_audio with atomic file
     # swap) moved to part_voice_mix.run_part_voice_mix. Side-effect-only:
     # mutates ctx.voice_part_tts_attempts / voice_mix_ok, manifest.narration_path,
     # and overwrites final_part in-place when narration was generated.
+    _t_stage = _stage_begin(ctx.job_id, idx, "voice_mix")
     run_part_voice_mix(
         ctx, idx, seg, srt_part, translated_srt_part, final_part, _part_manifest,
     )
+    _stage_end(ctx.job_id, idx, "voice_mix", _t_stage)
     # Sprint 6.D-2.5c: Finalize block (micro-pacing + intro/outro/logo +
     # duration math + scoring + Sacred Contract #8 qa_pipeline validation)
     # moved to part_render_finalize.run_part_finalize. The helper raises
     # RuntimeError on validation failure — propagates up to the per-part
     # worker in pipeline_render_loop which records the failure.
+    _t_stage = _stage_begin(ctx.job_id, idx, "finalize")
     run_part_finalize(
         ctx, idx, seg, srt_part, ass_part, final_part,
         part_subtitle_enabled, _hook_overlay_applied_for_part,
@@ -306,13 +336,21 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
         _t_part_start, _cut_ms, _first_frame_scan_ms, _subtitle_ass_ms,
         _preflight, _encode,
     )
+    _stage_end(ctx.job_id, idx, "finalize", _t_stage)
     # Sprint 6.D-2.5d: Per-part DONE block (quality intelligence +
     # cover frame + JobPartStage.DONE terminal upsert + cleanup +
     # return dict) moved to part_done.run_part_done. The function
     # returns the dict shape that process_one_part has always handed
     # back to its caller (pipeline_render_loop.run_render_loop).
-    return run_part_done(
+    _t_stage = _stage_begin(ctx.job_id, idx, "done")
+    _result = run_part_done(
         ctx, idx, seg, raw_part, srt_part, ass_part, final_part,
         part_name, _srt_meta, _variant_type, part_subtitle_enabled,
     )
+    _stage_end(ctx.job_id, idx, "done", _t_stage)
+    logger.info(
+        "[%s][part=%d] PART_DONE total_elapsed=%.1fs",
+        ctx.job_id[:8], idx, time.perf_counter() - _t_part_start,
+    )
+    return _result
 

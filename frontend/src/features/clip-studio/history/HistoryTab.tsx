@@ -7,16 +7,16 @@ const FILTERS = ['All', 'Done', 'Failed', 'Running'] as const
 type Filter = typeof FILTERS[number]
 
 const S: Record<string, { color: string; bg: string; border: string; label: string; icon: string }> = {
-  completed:             { color: 'var(--ok)', bg: 'rgba(0,200,150,.12)',   border: 'rgba(0,200,150,.25)',   label: 'Done',        icon: '✓' },
-  completed_with_errors: { color: 'var(--warn)', bg: 'rgba(240,160,32,.12)',  border: 'rgba(240,160,32,.25)',  label: 'Partial',     icon: '⚠' },
-  failed:                { color: 'var(--fail)', bg: 'rgba(232,64,122,.12)',  border: 'rgba(232,64,122,.25)',  label: 'Failed',      icon: '✕' },
-  running:               { color: 'var(--accent)', bg: 'rgba(123,97,255,.12)',  border: 'rgba(123,97,255,.3)',   label: 'Running',     icon: '⟳' },
-  queued:                { color: 'var(--text-2)', bg: 'rgba(138,147,176,.10)', border: 'rgba(138,147,176,.2)',  label: 'Queued',      icon: '○' },
-  interrupted:           { color: 'var(--warn)', bg: 'rgba(240,160,32,.12)',  border: 'rgba(240,160,32,.25)',  label: 'Interrupted', icon: '!' },
-  cancelled:             { color: 'var(--text-3)', bg: 'rgba(74,82,112,.10)',   border: 'rgba(74,82,112,.2)',    label: 'Cancelled',   icon: '—' },
-  cancelling:            { color: 'var(--text-3)', bg: 'rgba(74,82,112,.10)',   border: 'rgba(74,82,112,.2)',    label: 'Cancelling',  icon: '…' },
+  completed:             { color: 'var(--ok)', bg: 'rgba(var(--ok-rgb),.12)',   border: 'rgba(var(--ok-rgb),.25)',   label: 'Done',        icon: '✓' },
+  completed_with_errors: { color: 'var(--warn)', bg: 'rgba(var(--warn-rgb),.12)',  border: 'rgba(var(--warn-rgb),.25)',  label: 'Partial',     icon: '⚠' },
+  failed:                { color: 'var(--fail)', bg: 'rgba(var(--fail-rgb),.12)',  border: 'rgba(var(--fail-rgb),.25)',  label: 'Failed',      icon: '✕' },
+  running:               { color: 'var(--accent)', bg: 'rgba(var(--accent-rgb),.12)',  border: 'rgba(var(--accent-rgb),.3)',   label: 'Running',     icon: '⟳' },
+  queued:                { color: 'var(--text-2)', bg: 'rgba(var(--text-rgb),.10)', border: 'rgba(var(--text-rgb),.2)',  label: 'Queued',      icon: '○' },
+  interrupted:           { color: 'var(--warn)', bg: 'rgba(var(--warn-rgb),.12)',  border: 'rgba(var(--warn-rgb),.25)',  label: 'Interrupted', icon: '!' },
+  cancelled:             { color: 'var(--text-3)', bg: 'rgba(var(--text-rgb),.10)',   border: 'rgba(var(--text-rgb),.2)',    label: 'Cancelled',   icon: '—' },
+  cancelling:            { color: 'var(--text-3)', bg: 'rgba(var(--text-rgb),.10)',   border: 'rgba(var(--text-rgb),.2)',    label: 'Cancelling',  icon: '…' },
 }
-const sm = (s: string) => S[s] ?? { color: 'var(--text-2)', bg: 'rgba(138,147,176,.10)', border: 'rgba(138,147,176,.2)', label: s.replace(/_/g, ' '), icon: '?' }
+const sm = (s: string) => S[s] ?? { color: 'var(--text-2)', bg: 'rgba(var(--text-rgb),.10)', border: 'rgba(var(--text-rgb),.2)', label: s.replace(/_/g, ' '), icon: '?' }
 
 function fmtDate(raw: string) {
   const d = new Date(raw)
@@ -68,8 +68,8 @@ function JobRow({ job, onOpen }: { job: HistoryItem; onOpen: (j: HistoryItem) =>
         gap: 10,
         padding: '0 20px',
         minHeight: 64,
-        background: hov ? '#161C2C' : isRunning ? 'rgba(123,97,255,.04)' : 'transparent',
-        borderBottom: '1px solid rgba(255,255,255,.04)',
+        background: hov ? 'var(--surface-card-hover)' : isRunning ? 'rgba(var(--accent-rgb),.04)' : 'transparent',
+        borderBottom: '1px solid var(--border-subtle)',
         cursor: 'pointer',
         transition: 'background .12s',
         position: 'relative' as const,
@@ -109,8 +109,8 @@ function JobRow({ job, onOpen }: { job: HistoryItem; onOpen: (j: HistoryItem) =>
           {job.completed_count > 0 && (
             <span style={{
               fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10,
-              background: 'rgba(0,200,150,.1)', color: 'var(--ok)',
-              border: '1px solid rgba(0,200,150,.2)',
+              background: 'rgba(var(--ok-rgb),.1)', color: 'var(--ok)',
+              border: '1px solid rgba(var(--ok-rgb),.2)',
             }}>
               ✓ {job.completed_count} clip{job.completed_count !== 1 ? 's' : ''}
             </span>
@@ -118,8 +118,8 @@ function JobRow({ job, onOpen }: { job: HistoryItem; onOpen: (j: HistoryItem) =>
           {job.failed_count > 0 && (
             <span style={{
               fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10,
-              background: 'rgba(232,64,122,.1)', color: 'var(--fail)',
-              border: '1px solid rgba(232,64,122,.2)',
+              background: 'rgba(var(--fail-rgb),.1)', color: 'var(--fail)',
+              border: '1px solid rgba(var(--fail-rgb),.2)',
             }}>
               ✕ {job.failed_count} failed
             </span>
@@ -132,16 +132,17 @@ function JobRow({ job, onOpen }: { job: HistoryItem; onOpen: (j: HistoryItem) =>
 
       {/* Progress bar (running only) */}
       {isRunning && job.total_count > 0 && (
-        <div style={{ width: 64, flexShrink: 0 }}>
-          <div style={{ height: 4, borderRadius: 2, background: 'rgba(123,97,255,.15)', overflow: 'hidden' }}>
+        <div style={{ width: 72, flexShrink: 0 }}>
+          <div style={{ height: 5, borderRadius: 999, background: 'var(--surface-card-hover)', overflow: 'hidden' }}>
             <div style={{
-              height: '100%', borderRadius: 2,
+              height: '100%', borderRadius: 999,
               width: `${pct}%`,
-              background: 'linear-gradient(90deg,var(--accent),var(--cyan))',
+              background: 'var(--brand-gradient)',
+              boxShadow: '0 0 8px rgba(139,92,246,.45)',
               transition: 'width .4s ease',
             }} />
           </div>
-          <div style={{ fontSize: 9, color: 'var(--accent)', textAlign: 'center' as const, marginTop: 2 }}>{pct}%</div>
+          <div style={{ fontSize: 10, fontFamily: 'var(--font-family-mono)', fontWeight: 600, color: 'var(--accent-primary)', textAlign: 'center' as const, marginTop: 3 }}>{pct}%</div>
         </div>
       )}
 
@@ -171,12 +172,12 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
       padding: '8px 20px 6px',
       fontSize: 10, fontWeight: 700, color: 'var(--text-3)',
       letterSpacing: '.08em', textTransform: 'uppercase' as const,
-      borderBottom: '1px solid rgba(255,255,255,.04)',
+      borderBottom: '1px solid var(--border-subtle)',
       display: 'flex', alignItems: 'center', gap: 8,
-      background: '#090C13',
+      background: 'var(--surface-base)',
     }}>
       {label}
-      <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 8, background: 'rgba(255,255,255,.06)', color: 'var(--text-2)' }}>
+      <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 8, background: 'var(--border-subtle)', color: 'var(--text-2)' }}>
         {count}
       </span>
     </div>
@@ -193,15 +194,15 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
       <div
         style={{
           width: 340, height: '100%',
-          background: '#111622',
-          borderLeft: '1px solid #1C2438',
+          background: 'var(--surface-card)',
+          borderLeft: '1px solid var(--border-default)',
           display: 'flex', flexDirection: 'column' as const,
-          boxShadow: '-12px 0 48px rgba(0,0,0,.6)',
+          boxShadow: '-12px 0 48px var(--surface-overlay)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer header */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #1C2438', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
               {job.title || job.source_hint || 'Render Job'}
@@ -212,14 +213,14 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
         </div>
 
         {/* Stats grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: '#1C2438', margin: 16, borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--border-default)', margin: 16, borderRadius: 10, overflow: 'hidden' }}>
           {[
             { label: 'Status', value: st.label, color: st.color },
             { label: 'Clips done', value: `${job.completed_count}`, color: 'var(--ok)' },
             { label: 'Failed', value: `${job.failed_count}`, color: job.failed_count > 0 ? 'var(--fail)' : 'var(--text-3)' },
             { label: 'Total', value: `${job.total_count}`, color: 'var(--text-1)' },
           ].map(({ label, value, color }) => (
-            <div key={label} style={{ background: '#111622', padding: '12px 14px' }}>
+            <div key={label} style={{ background: 'var(--surface-card)', padding: '12px 14px' }}>
               <div style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 4 }}>{label}</div>
               <div style={{ fontSize: 16, fontWeight: 700, color }}>{value}</div>
             </div>
@@ -230,7 +231,7 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
         {job.summary_text && (
           <div style={{ padding: '0 16px 16px' }}>
             <div style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 6 }}>Summary</div>
-            <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.6, background: '#0D1019', padding: '10px 12px', borderRadius: 8, border: '1px solid #1C2438' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.6, background: 'var(--surface-panel)', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border-default)' }}>
               {job.summary_text}
             </div>
           </div>
@@ -242,8 +243,8 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
             <div style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 6 }}>Output folder</div>
             <div style={{
               fontSize: 10, color: 'var(--text-2)', fontFamily: 'monospace',
-              background: '#0D1019', padding: '8px 10px', borderRadius: 6,
-              border: '1px solid #1C2438', wordBreak: 'break-all' as const,
+              background: 'var(--surface-panel)', padding: '8px 10px', borderRadius: 6,
+              border: '1px solid var(--border-default)', wordBreak: 'break-all' as const,
             }}>
               {job.output_dir}
             </div>
@@ -256,8 +257,8 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
             <button
               onClick={() => { navigator.clipboard.writeText(job.output_dir!).catch(() => {}) }}
               style={{
-                padding: '10px', borderRadius: 8, background: '#161C2C',
-                border: '1px solid #2A3558', color: 'var(--text-1)', fontSize: 11,
+                padding: '10px', borderRadius: 8, background: 'var(--surface-card-hover)',
+                border: '1px solid var(--border-strong)', color: 'var(--text-1)', fontSize: 11,
                 fontWeight: 600, cursor: 'pointer',
               }}
             >
@@ -316,7 +317,7 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
   const { today, yesterday, older } = groupByDate(filtered)
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden', background: '#090C13' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden', background: 'var(--surface-base)' }}>
       <style>{`
         @keyframes hist-spin { to { transform: rotate(360deg) } }
         @keyframes hist-pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
@@ -324,27 +325,42 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
 
       {/* Header */}
       <div style={{
-        padding: '14px 20px 12px',
-        borderBottom: '1px solid #1C2438',
+        padding: '18px 24px 14px',
+        borderBottom: '1px solid var(--border-subtle)',
         flexShrink: 0,
-        background: '#0D1019',
+        background: 'var(--surface-panel)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-.01em' }}>History</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 28, height: 28, borderRadius: 8,
+            background: 'var(--brand-gradient)',
+            color: '#fff', flexShrink: 0,
+            boxShadow: '0 1px 0 rgba(255,255,255,.3) inset, 0 2px 8px rgba(139,92,246,.35)',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M12 7v5l3 2"/>
+            </svg>
+          </span>
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 1 }}>
+            <span style={{ fontFamily: 'var(--font-family-display)', fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-.02em', lineHeight: 1.2 }}>History</span>
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>All your render jobs in one place</span>
+          </div>
 
           <div style={{ display: 'flex', gap: 6, marginLeft: 4 }}>
             {runningCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(123,97,255,.15)', color: 'var(--accent)', border: '1px solid rgba(123,97,255,.3)' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(var(--accent-rgb),.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),.3)' }}>
                 {runningCount} running
               </span>
             )}
             {doneCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(0,200,150,.1)', color: 'var(--ok)' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(var(--ok-rgb),.1)', color: 'var(--ok)' }}>
                 {doneCount} done
               </span>
             )}
             {failedCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(232,64,122,.1)', color: 'var(--fail)' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(var(--fail-rgb),.1)', color: 'var(--fail)' }}>
                 {failedCount} failed
               </span>
             )}
@@ -361,17 +377,21 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* Filter tabs */}
-          <div style={{ display: 'flex', background: '#0D1019', borderRadius: 8, border: '1px solid #1C2438', padding: 2, gap: 2 }}>
+          <div style={{ display: 'flex', background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--border-subtle)', padding: 3, gap: 2 }}>
             {FILTERS.map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 style={{
-                  padding: '4px 12px', borderRadius: 6, cursor: 'pointer', border: 'none',
-                  background: filter === f ? '#1B2235' : 'transparent',
-                  color: filter === f ? 'var(--text-1)' : 'var(--text-3)',
-                  fontSize: 11, fontWeight: 700,
+                  padding: '5px 14px', borderRadius: 7, cursor: 'pointer', border: 'none',
+                  background: filter === f
+                    ? 'linear-gradient(135deg, rgba(139,92,246,.14), rgba(236,72,153,.12))'
+                    : 'transparent',
+                  color: filter === f ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                  boxShadow: filter === f ? '0 0 0 1px color-mix(in srgb, var(--accent-primary) 25%, transparent) inset' : 'none',
+                  fontSize: 12, fontWeight: 600,
                   transition: 'all .12s',
+                  letterSpacing: '-.005em',
                 }}
               >
                 {f}
@@ -381,7 +401,7 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
 
           <div style={{
             marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
-            background: '#0D1019', border: '1px solid #1C2438', borderRadius: 8, padding: '0 10px',
+            background: 'var(--surface-panel)', border: '1px solid var(--border-default)', borderRadius: 8, padding: '0 10px',
             height: 32,
           }}>
             <span style={{ fontSize: 11, color: 'var(--text-3)' }}>🔍</span>
@@ -407,11 +427,35 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
           <div style={{ padding: 40, textAlign: 'center' as const, color: 'var(--fail)', fontSize: 12 }}>⚠ {error}</div>
         )}
         {!loading && !error && filtered.length === 0 && (
-          <div style={{ padding: 60, textAlign: 'center' as const, color: 'var(--text-3)' }}>
-            <div style={{ fontSize: 32, marginBottom: 12, opacity: .3 }}>📋</div>
-            <div style={{ fontSize: 13, marginBottom: 6 }}>No jobs found</div>
-            <div style={{ fontSize: 11, opacity: .6 }}>
-              {search || filter !== 'All' ? 'Try adjusting your filter' : 'Render jobs will appear here'}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', gap: 18, padding: 56, minHeight: 360 }}>
+            <div
+              aria-hidden="true"
+              style={{
+                width: 96, height: 96, borderRadius: 24,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'var(--brand-gradient-soft)',
+                border: '1px solid color-mix(in srgb, var(--accent-primary) 22%, transparent)',
+                color: 'var(--accent-primary)',
+                boxShadow: '0 1px 0 rgba(255,255,255,.4) inset, 0 10px 28px rgba(139,92,246,.16)',
+              }}
+            >
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M12 7v5l3 2"/>
+              </svg>
+            </div>
+            <div style={{ textAlign: 'center' as const, maxWidth: 340, display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
+              <div style={{
+                fontFamily: 'var(--font-family-display)', fontSize: 18, fontWeight: 600,
+                color: 'var(--text-primary)', letterSpacing: '-.02em', lineHeight: 1.25,
+              }}>
+                {search || filter !== 'All' ? 'No matches' : 'No render jobs yet'}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
+                {search || filter !== 'All'
+                  ? 'Try clearing the filter or search.'
+                  : 'Your finished and in-progress renders will appear here.'}
+              </div>
             </div>
           </div>
         )}

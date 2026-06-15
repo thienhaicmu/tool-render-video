@@ -207,11 +207,26 @@ def _transcribe_with_model(
     model = get_whisper_model(model_name)
     transcribe_lock = _get_transcribe_lock(model_name)
 
+    # Anti-hallucination defaults (2026-06-15) — passed to model.transcribe()
+    # via _transcribe_with_retry. Mirrors faster-whisper adapter so behavior
+    # is consistent across engines. See adapters.transcribe_with_adapter
+    # docstring for the rationale. Callers can still override by passing
+    # the same kwargs explicitly into _transcribe_with_retry.
+    _antihalluc = {
+        "condition_on_previous_text": False,
+        "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+        # compression_ratio_threshold / logprob_threshold / no_speech_threshold
+        # use openai-whisper defaults (2.4 / -1.0 / 0.6) — those values are
+        # what the temperature fallback schedule checks against.
+    }
+
     if highlight_per_word:
         try:
             result = _transcribe_with_retry(
                 model, audio_path, retries=retry_count,
-                transcribe_lock=transcribe_lock, word_timestamps=True,
+                transcribe_lock=transcribe_lock,
+                word_timestamps=True,
+                **_antihalluc,
             )
             _write_word_level_srt(result, srt_path)
             return result
@@ -223,6 +238,7 @@ def _transcribe_with_model(
 
     result = _transcribe_with_retry(
         model, audio_path, retries=retry_count, transcribe_lock=transcribe_lock,
+        **_antihalluc,
     )
     _write_segment_level_srt(result, srt_path)
     return result

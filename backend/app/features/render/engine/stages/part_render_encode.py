@@ -99,6 +99,15 @@ def run_render_encode(
             reframe_mode=_effective_reframe,
             tracker_hint=preflight.camera_strategy.tracker_hint,
         )
+    # Per-part observability hook: emit INFO log before ffmpeg encode kicks
+    # off so operators can correlate slow/hung encodes with NVENC semaphore
+    # contention. Heartbeat already provided by preflight.encode_timer thread.
+    logger.info(
+        "[%s][part=%d] encode.start codec=%s crf=%d motion_crop=%s zoom_burst=%s subs=%s",
+        ctx.job_id[:8], idx, ctx.payload.video_codec, _part_video_crf,
+        _effective_motion_crop, preflight.camera_strategy.zoom_burst,
+        part_subtitle_enabled,
+    )
     try:
         render_part_smart(
             str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if ctx.payload.add_title_overlay else "",
@@ -141,6 +150,10 @@ def run_render_encode(
                 _render_ms, idx, ctx.payload.video_codec, _effective_motion_crop,
                 preflight.camera_strategy.tracker_hint or "auto",
                 preflight.camera_strategy.zoom_burst)
+    logger.info(
+        "[%s][part=%d] encode.done elapsed=%.1fs",
+        ctx.job_id[:8], idx, _render_ms / 1000.0,
+    )
     part_manifest.rendered_path = str(final_part)
     write_manifest(ctx.work_dir, part_manifest)
     if _motion_ck:

@@ -86,7 +86,7 @@ from app.features.render.engine.stages.part_render_context import PartRenderCont
 from app.db.jobs_repo import upsert_job_part
 from app.features.render.engine.stages.manifest_writer import write_manifest
 from app.features.render.engine.subtitle.generator.ass import srt_to_ass_bounce, srt_to_ass_karaoke
-from app.features.render.engine.subtitle.generator.srt import parse_srt_blocks, write_srt_blocks
+from app.features.render.engine.subtitle.generator.srt import parse_srt_blocks, slice_srt_by_time, write_srt_blocks
 from app.features.render.engine.subtitle.processing.readability import (
     resegment_srt_for_readability,
     subtitle_emphasis_pass,
@@ -240,57 +240,127 @@ def prepare_part_assets(
         _srt_source_is_fresh = needs_srt
         if needs_srt:
             _t_part_transcribe = time.perf_counter()
-            _part_trans_engine = getattr(ctx.payload, "subtitle_transcription_engine", "default")
-            # Sprint 6 P1 N.2 (H3 quality fix from Whisper defer audit):
-            # default the per-part Whisper model to whatever the source-level
-            # Whisper resolved to (ctx.tuned["whisper_model"]), so users on
-            # quality/best profiles don't silently get per-part subtitles
-            # capped at "small" while their source-level SRT is "large-v3".
-            # Explicit SUBTITLE_PER_PART_MODEL env var still wins so anyone
-            # who relied on the old "small" default can pin it back. Final
-            # defensive fallback to "small" if the tuned dict is missing
-            # the key for any reason.
-            # Cap at "medium": large/large-v2/large-v3 on a 15-60s clip gives
-            # no accuracy benefit over medium but can deadlock on first load
-            # (ctranslate2 model download) while the source-level model is
-            # still resident in memory. SUBTITLE_PER_PART_MODEL env var
-            # still overrides this cap (e.g. to pin "large-v3" explicitly).
-            _LARGE_MODELS = frozenset({"large", "large-v1", "large-v2", "large-v3"})
-            _tuned_model = ctx.tuned.get("whisper_model", "small")
-            _default_part_model = "medium" if _tuned_model in _LARGE_MODELS else _tuned_model
-            _part_trans_model = os.getenv(
-                "SUBTITLE_PER_PART_MODEL",
-                _default_part_model,
-            )
-            try:
-                transcribe_with_adapter(
-                    str(raw_part),
-                    str(srt_part),
-                    engine=_part_trans_engine,
-                    model_name=_part_trans_model,
-                    retry_count=0,
-                    highlight_per_word=bool(getattr(ctx.payload, "highlight_per_word", False)),
-                    logger=logger,
+            _part_trans_engine = "slice"
+            _part_trans_model = "full_srt"
+            _used_slice = False
+            # ── FAST PATH: slice from full-video SRT ────────────────────────
+            # The full-video Whisper already ran successfully in llm_pipeline
+            # (~2.7x realtime, all corner cases handled). Re-transcribing
+            # per-part wastes time AND has caused hallucination loops on
+            # certain audio segments — Whisper enters an infinite decode loop
+            # producing zero output (GPU idle, no log progress for 15+ min).
+            # Slicing the existing SRT is a few milliseconds and reuses the
+            # work already done. Documented in docs/RENDER_PIPELINE.md but
+            # never implemented for subtitle gen until now (was already used
+            # in part_voice_mix for narration text).
+            if (
+                ctx.full_srt_available
+                and ctx.full_srt
+                and ctx.full_srt.exists()
+                and ctx.full_srt.stat().st_size > 0
+            ):
+                try:
+                    slice_srt_by_time(
+                        str(ctx.full_srt),
+                        str(srt_part),
+                        seg["start"],
+                        seg["end"],
+                        rebase_to_zero=True,
+                    )
+                    _used_slice = True
+                    logger.info(
+                        "[%s][part=%d] subtitle.sliced_from_full elapsed=%.3fs range=[%.1f,%.1f]",
+                        ctx.job_id[:8], idx,
+                        time.perf_counter() - _t_part_transcribe,
+                        float(seg["start"]), float(seg["end"]),
+                    )
+                except Exception as _slice_exc:
+                    logger.warning(
+                        "[%s][part=%d] subtitle.slice_failed: %s — falling back to per-part whisper",
+                        ctx.job_id[:8], idx, _slice_exc,
+                    )
+                    _used_slice = False
+            # ── FALLBACK PATH: per-part Whisper transcribe ──────────────────
+            # Used only when full_srt is unavailable (offline mode, prior
+            # whisper failure, or transcription disabled at source level).
+            # Has hallucination guards via the adapter (Phase B).
+            if not _used_slice:
+                _part_trans_engine = getattr(ctx.payload, "subtitle_transcription_engine", "default")
+                # Sprint 6 P1 N.2 (H3 quality fix from Whisper defer audit):
+                # default the per-part Whisper model to whatever the source-level
+                # Whisper resolved to (ctx.tuned["whisper_model"]). Cap at
+                # "medium" to avoid ctranslate2 model-load deadlock.
+                _LARGE_MODELS = frozenset({"large", "large-v1", "large-v2", "large-v3"})
+                _tuned_model = ctx.tuned.get("whisper_model", "small")
+                _default_part_model = "medium" if _tuned_model in _LARGE_MODELS else _tuned_model
+                _part_trans_model = os.getenv(
+                    "SUBTITLE_PER_PART_MODEL",
+                    _default_part_model,
                 )
-            except Exception as _part_trans_exc:
-                logger.warning("per_part_transcription_failed part=%d: %s", idx, _part_trans_exc)
-                _job_log(ctx.effective_channel, ctx.job_id,
-                         f"per_part_transcription_failed part_no={idx}: {_part_trans_exc}", kind="warning")
-                _emit_render_event(
-                    channel_code=ctx.effective_channel,
-                    job_id=ctx.job_id,
-                    event="subtitle_transcription_failed",
-                    level="WARNING",
-                    message=f"Subtitle skipped for part {idx}: per-part transcription failed",
-                    step="subtitle.transcribe_part",
-                    context={"part_no": idx, "error": str(_part_trans_exc)},
+                # Per-part observability hook: heartbeat thread emits an alive
+                # line every 10s so an infinite decode loop is visible in logs.
+                import threading as _threading
+                logger.info(
+                    "[%s][part=%d] whisper.start model=%s engine=%s audio=%s duration=%.1fs",
+                    ctx.job_id[:8], idx, _part_trans_model, _part_trans_engine,
+                    raw_part.name, float(seg.get("duration") or 0.0),
                 )
-                needs_srt = False
-                needs_ass = False
-                _srt_source_is_fresh = False
+                _whisper_alive_stop = _threading.Event()
+
+                def _whisper_alive_tick() -> None:
+                    while not _whisper_alive_stop.wait(10.0):
+                        _elapsed = time.perf_counter() - _t_part_transcribe
+                        logger.info(
+                            "[%s][part=%d] whisper.alive elapsed=%.1fs",
+                            ctx.job_id[:8], idx, _elapsed,
+                        )
+
+                _whisper_alive_thread = _threading.Thread(
+                    target=_whisper_alive_tick,
+                    daemon=True,
+                    name=f"whisper-alive-{ctx.job_id[:8]}-{idx}",
+                )
+                _whisper_alive_thread.start()
+                try:
+                    transcribe_with_adapter(
+                        str(raw_part),
+                        str(srt_part),
+                        engine=_part_trans_engine,
+                        model_name=_part_trans_model,
+                        retry_count=0,
+                        highlight_per_word=bool(getattr(ctx.payload, "highlight_per_word", False)),
+                        logger=logger,
+                    )
+                except Exception as _part_trans_exc:
+                    logger.warning("per_part_transcription_failed part=%d: %s", idx, _part_trans_exc)
+                    _job_log(ctx.effective_channel, ctx.job_id,
+                             f"per_part_transcription_failed part_no={idx}: {_part_trans_exc}", kind="warning")
+                    _emit_render_event(
+                        channel_code=ctx.effective_channel,
+                        job_id=ctx.job_id,
+                        event="subtitle_transcription_failed",
+                        level="WARNING",
+                        message=f"Subtitle skipped for part {idx}: per-part transcription failed",
+                        step="subtitle.transcribe_part",
+                        context={"part_no": idx, "error": str(_part_trans_exc)},
+                    )
+                    needs_srt = False
+                    needs_ass = False
+                    _srt_source_is_fresh = False
+                finally:
+                    _whisper_alive_stop.set()
+                    try:
+                        _whisper_alive_thread.join(timeout=1.0)
+                    except Exception:
+                        pass
             _part_trans_ms = int((time.perf_counter() - _t_part_transcribe) * 1000)
             _srt_meta = _read_srt_meta(str(srt_part)) if srt_part.exists() and srt_part.stat().st_size > 0 else {}
             _srt_count = _srt_meta.get("subtitle_count", 0)
+            logger.info(
+                "[%s][part=%d] subtitle.ready engine=%s model=%s elapsed=%.1fs srt_segments=%d",
+                ctx.job_id[:8], idx, _part_trans_engine, _part_trans_model,
+                _part_trans_ms / 1000.0, _srt_count,
+            )
             _job_log(
                 ctx.effective_channel, ctx.job_id,
                 f"subtitle_part_transcribed part_no={idx} model={_part_trans_model} "

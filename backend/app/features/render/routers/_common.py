@@ -222,6 +222,37 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         cancel_registry.unregister(job_id)
 
 
+def _find_active_duplicate_source(channel_code: str, source_path: str) -> str | None:
+    """Return job_id of an active (running/queued) job with the same source, or None.
+
+    Defense against accidental double-submit from the UI: each POST /process
+    generates a fresh UUID, so the queue's job_id dedup doesn't catch two
+    rapid clicks on the same source. This walks the recent jobs and rejects
+    a new submit when an identical source is already in flight on the same
+    channel. Resume/retry paths bypass this (they reuse an existing job_id
+    and shouldn't be dedup'd against themselves).
+    """
+    src = (source_path or "").strip()
+    if not src:
+        return None
+    from app.db.jobs_repo import list_jobs_page
+    # Scan the most recent 30 jobs — active queue is bounded by
+    # MAX_CONCURRENT_JOBS (default cpu//2) so duplicates can only live
+    # in a short tail.
+    for j in list_jobs_page(30, 0):
+        if (j.get("status") or "") not in ("running", "queued"):
+            continue
+        if (j.get("channel_code") or "") != channel_code:
+            continue
+        try:
+            stored = json.loads(j.get("payload_json") or "{}")
+        except Exception:
+            continue
+        if (stored.get("source_video_path") or "").strip() == src:
+            return j.get("job_id")
+    return None
+
+
 def _queue_render_job(
     job_id: str,
     effective_channel: str,
@@ -237,6 +268,24 @@ def _queue_render_job(
     """
     if is_running(job_id):
         raise HTTPException(status_code=409, detail="Render job is already running")
+
+    # Source-path dedup (Layer 2 defense — fresh /process only, not resume/retry).
+    # When the FE submits the same source twice with different UUIDs (e.g. user
+    # double-clicks the Start-Render button across a slow network), the
+    # queue-level job_id dedup misses it because the IDs differ. Catch it here
+    # by comparing source_video_path + channel against recently-active jobs.
+    if not resume_mode:
+        dup_job = _find_active_duplicate_source(
+            effective_channel, payload.source_video_path or ""
+        )
+        if dup_job and dup_job != job_id:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "A render job for this source is already in progress "
+                    f"(job_id={dup_job}). Wait for it to finish or cancel it first."
+                ),
+            )
     previous = get_job(job_id)
     upsert_job(
         job_id,

@@ -1,4 +1,8 @@
-/* ── Clip Studio App Shell — matches ui-prototype.html exactly ──────────── */
+/* ── Clip Studio shell ─────────────────────────────────────────────────────
+   Linear/Vercel-style chrome: clean Inter typography, no gradients,
+   subtle borders, neutral grays. Drives the cs-shell topbar + content +
+   status bar across both light and dark themes.
+*/
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 .cs-root {
@@ -8,16 +12,14 @@
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  font-family: var(--fb);
-  background: var(--bg-void);
-  color: var(--text-1);
-  font-size: 13px;
-  line-height: 1.5;
+  font-family: var(--font-family-base);
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  line-height: var(--line-height-normal);
+  font-feature-settings: 'cv11', 'ss01', 'ss03', 'cv02';
+  letter-spacing: -0.005em;
 }
-
-::-webkit-scrollbar{width:4px;height:4px}
-::-webkit-scrollbar-track{background:var(--bg-base)}
-::-webkit-scrollbar-thumb{background:var(--border-hi)}
 
 /* ── Topbar ──────────────────────────────────────────────────────────────── */
 .cs-topbar {
@@ -25,152 +27,167 @@
   align-items: center;
   height: 52px;
   min-height: 52px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
-  padding: 0 20px;
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 var(--space-4);
   position: relative;
   z-index: 100;
   gap: 0;
   flex-shrink: 0;
 }
-.cs-topbar::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--grad);
-  opacity: 0.4;
-}
 
 .cs-brand {
-  font-family: var(--fo);
-  font-size: 12px;
-  font-weight: 700;
-  background: var(--grad);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: 2px;
-  margin-right: 36px;
+  font-family: var(--font-family-base);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+  margin-right: var(--space-6);
   white-space: nowrap;
   user-select: none;
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  gap: 8px;
+  -webkit-background-clip: initial;
+  -webkit-text-fill-color: initial;
+  background: none;
 }
 
-.cs-brand-pulse {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  background: var(--cyan);
-  border-radius: 50%;
-  margin: 0 4px 2px;
-  vertical-align: middle;
-  animation: cs-blink 2s infinite;
-  flex-shrink: 0;
-  -webkit-text-fill-color: initial;
+.cs-brand-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--brand-gradient);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.30) inset,
+    0 2px 8px rgba(139, 92, 246, 0.35);
 }
-@keyframes cs-blink {
-  0%,100% { opacity: 1; }
-  50%      { opacity: 0.2; }
-}
+
+/* Legacy pulsing dot — hide it. Kept the element so existing JSX still
+   renders without modification; the redesigned wordmark uses .cs-brand-mark
+   instead. */
+.cs-brand-pulse { display: none; }
 
 .cs-nav {
   display: flex;
-  gap: 0;
+  align-items: center;
+  gap: 2px;
 }
 
 .cs-nav-tab {
-  font-family: var(--fh);
+  font-family: var(--font-family-base);
   font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  padding: 0 24px;
-  height: 52px;
-  color: var(--text-3);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  text-transform: none;
+  padding: 6px 12px;
+  height: 32px;
+  color: var(--text-tertiary);
   background: transparent;
   border: none;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  position: relative;
-  transition: color 0.2s;
-  display: flex;
+  transition: color 0.15s var(--ease-default), background-color 0.15s var(--ease-default);
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  position: static;
 }
-.cs-nav-tab:hover { color: var(--text-2); }
-.cs-nav-tab.active { color: var(--text-1); }
-.cs-nav-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--grad);
+.cs-nav-tab:hover { color: var(--text-primary); background: var(--surface-card-hover); }
+.cs-nav-tab.active {
+  color: var(--text-primary);
+  background: linear-gradient(135deg,
+    rgba(139, 92, 246, 0.14),
+    rgba(236, 72, 153, 0.12));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 25%, transparent) inset;
 }
+.cs-nav-tab.active::after { display: none; }
+
+.cs-topbar::after { display: none; }
+
+/* Render the nav labels in title case via CSS — keeps JSX text uppercased
+   so any logic that compares strings still works. */
+.cs-nav-tab { text-transform: capitalize; }
 
 .cs-nav-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  background: var(--accent);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: var(--accent-primary);
   color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  font-variant-numeric: tabular-nums;
 }
 
 .cs-topbar-right {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .cs-lang-sw {
-  display: flex;
-  gap: 0;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
 }
 .cs-lang-btn {
-  font-family: var(--fh);
+  font-family: var(--font-family-base);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  padding: 4px 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  padding: 0 8px;
+  height: 22px;
+  min-width: 28px;
   cursor: pointer;
   border: none;
   background: transparent;
-  color: var(--text-3);
-  transition: all 0.15s;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-sm);
+  transition: all 0.12s var(--ease-default);
 }
+.cs-lang-btn:hover { color: var(--text-primary); }
 .cs-lang-btn.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .cs-top-icon {
-  width: 30px;
-  height: 30px;
-  display: flex;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
   cursor: pointer;
-  color: var(--text-2);
-  transition: all 0.15s;
-  font-size: 14px;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-md);
+  transition: all 0.12s var(--ease-default);
 }
 .cs-top-icon:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--surface-card-hover);
+  border-color: var(--border-default);
+  color: var(--text-primary);
 }
 
 /* ── Content ─────────────────────────────────────────────────────────────── */
@@ -180,6 +197,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  background: var(--surface-base);
 }
 
 .cs-tab-pane { display: none; flex: 1; overflow: hidden; flex-direction: column; }
@@ -187,37 +205,45 @@
 
 /* ── Status bar ──────────────────────────────────────────────────────────── */
 .cs-sbar {
-  height: 24px;
-  min-height: 24px;
-  background: var(--bg-void);
-  border-top: 1px solid var(--border);
+  height: 28px;
+  min-height: 28px;
+  background: var(--surface-panel);
+  border-top: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  padding: 0 16px;
-  gap: 16px;
+  padding: 0 var(--space-4);
+  gap: var(--space-4);
   overflow: hidden;
   flex-shrink: 0;
+  font-feature-settings: 'tnum';
 }
 .cs-sb {
-  font-size: 10px;
-  color: var(--text-3);
-  display: flex;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   white-space: nowrap;
+  font-weight: 500;
 }
 .cs-sb-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.cs-sb-dot.ok   { background: var(--ok);   animation: cs-blink 3s infinite; }
-.cs-sb-dot.warn { background: var(--warn); }
-.cs-sb-dot.off  { background: var(--text-3); }
+.cs-sb-dot.ok   { background: var(--status-success); animation: none; }
+.cs-sb-dot.warn { background: var(--status-warning); }
+.cs-sb-dot.off  { background: var(--text-disabled); }
 .cs-sb-endpoint {
   margin-left: auto;
-  font-size: 10px;
-  color: var(--text-3);
-  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-family-mono);
+  font-feature-settings: 'tnum';
+}
+
+@keyframes cs-blink {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.3; }
 }

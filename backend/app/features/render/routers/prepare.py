@@ -251,9 +251,30 @@ def preview_transcript(session_id: str):
                 check=True,
             )
 
-        from app.features.render.engine.subtitle.transcription.whisper import get_whisper_model
+        # openai-whisper's model.transcribe() mutates KV-cache state on the
+        # shared module-level singleton model. Without serialization across
+        # concurrent sessions, a second call inherits stale K/V tensors from
+        # the first → PyTorch broadcast error "tensor a (N) vs tensor b (3)
+        # at non-singleton dimension 3" inside MultiHeadAttention.
+        # Use the module-level transcribe lock that adapter callers already
+        # rely on (whisper._get_transcribe_lock) to serialize on model_name.
+        from app.features.render.engine.subtitle.transcription.whisper import (
+            get_whisper_model,
+            _get_transcribe_lock,
+        )
         model = get_whisper_model("tiny")
-        result = model.transcribe(str(audio_path), fp16=False, verbose=False)
+        with _get_transcribe_lock("tiny"):
+            # Hallucination defense (mirrors engine/subtitle/transcription/whisper.py):
+            # disable previous-text conditioning + temperature fallback schedule
+            # so the decoder breaks out of phantom-token loops instead of
+            # spinning forever on silence/music segments.
+            result = model.transcribe(
+                str(audio_path),
+                fp16=False,
+                verbose=False,
+                condition_on_previous_text=False,
+                temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            )
         segments = [
             {
                 "start": round(float(s["start"]), 3),

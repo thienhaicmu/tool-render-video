@@ -1,47 +1,69 @@
 /**
  * Render Studio — Design Token System
- * Theme: Cinematic dark UI, premium desktop app
+ *
+ * Two themes:
+ *   :root              → light (default)
+ *   [data-theme="dark"]→ dark
+ *
+ * Visual direction: Linear / Vercel — minimal, high contrast, indigo accent.
+ *
+ * Backward compatibility:
+ *   Every token name used elsewhere in the codebase is preserved. Legacy
+ *   names (--color-*) and B5-spec names (--surface-*, --accent-*) are
+ *   defined side-by-side and resolved per-theme. The .cs-root prototype
+ *   tokens (--cs-*, --bg-base, --accent, etc.) remain dark-only — they
+ *   live inside a scoped HTML prototype that was authored dark-first.
  */
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   STATIC TOKENS — identical across themes
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 :root {
-  /* ── Colors ────────────────────────────────────────────────────────────── */
+  /* ── Typography ───────────────────────────────────────────────────────── */
+  --font-family-base:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-family-display: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-mono:    'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  --font-ui:             var(--font-family-base);
+  --font-display:        var(--font-family-display);
+  --font-mono:           var(--font-family-mono);
 
-  /* Backgrounds */
-  --color-bg-primary:    #0A0A0F;
-  --color-bg-surface:    #111118;
-  --color-bg-elevated:   #18181F;
-  --color-bg-overlay:    #1E1E28;
-  --color-bg-hover:      #22222E;
+  /* legacy aliases */
+  --font-size-xs:   11px;
+  --font-size-sm:   12px;
+  --font-size-base: 13px;
+  --font-size-md:   14px;
+  --font-size-lg:   16px;
+  --font-size-xl:   18px;
+  --font-size-2xl:  22px;
+  --font-size-3xl:  28px;
 
-  /* Accent — electric purple */
-  --color-accent:        #6C63FF;
-  --color-accent-hover:  #7B74FF;
-  --color-accent-muted:  rgba(108, 99, 255, 0.15);
-  --color-accent-teal:   #00D4AA;
+  /* B5-spec aliases */
+  --text-xs:       11px;
+  --text-sm:       12px;
+  --text-base:     13px;
+  --text-md:       14px;
+  --text-lg:       16px;
+  --text-xl:       20px;
+  --text-2xl:      24px;
+  --text-score-xl: 64px;
 
-  /* Text */
-  --color-text-primary:   #E8E8F0;
-  --color-text-secondary: #8888A0;
-  --color-text-disabled:  #444455;
-  --color-text-inverse:   #0A0A0F;
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+  --weight-regular:       400;
+  --weight-medium:        500;
+  --weight-semibold:      600;
 
-  /* Border */
-  --color-border:        #2A2A38;
-  --color-border-strong: #3A3A4A;
-  --color-border-focus:  #6C63FF;
+  --line-height-tight:  1.25;
+  --line-height-normal: 1.5;
+  --line-height-loose:  1.75;
+  --leading-tight:      1.2;
+  --leading-normal:     1.45;
+  --leading-relaxed:    1.6;
 
-  /* Status */
-  --color-success:       #22C55E;
-  --color-success-muted: rgba(34, 197, 94, 0.12);
-  --color-warning:       #F59E0B;
-  --color-warning-muted: rgba(245, 158, 11, 0.12);
-  --color-error:         #EF4444;
-  --color-error-muted:   rgba(239, 68, 68, 0.12);
-  --color-info:          #3B82F6;
-  --color-info-muted:    rgba(59, 130, 246, 0.12);
-
-  /* ── Spacing (4px base scale) ──────────────────────────────────────────── */
-
+  /* ── Spacing (4px base) ───────────────────────────────────────────────── */
   --space-1:  4px;
   --space-2:  8px;
   --space-3:  12px;
@@ -54,32 +76,9 @@
   --space-10: 40px;
   --space-11: 44px;
   --space-12: 48px;
+  --space-16: 64px;
 
-  /* ── Typography ────────────────────────────────────────────────────────── */
-
-  --font-family-base: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-
-  --font-size-xs:   11px;
-  --font-size-sm:   12px;
-  --font-size-base: 14px;
-  --font-size-md:   15px;
-  --font-size-lg:   16px;
-  --font-size-xl:   18px;
-  --font-size-2xl:  22px;
-  --font-size-3xl:  28px;
-
-  --font-weight-normal:   400;
-  --font-weight-medium:   500;
-  --font-weight-semibold: 600;
-  --font-weight-bold:     700;
-
-  --line-height-tight:  1.25;
-  --line-height-normal: 1.5;
-  --line-height-loose:  1.75;
-
-  /* ── Border radius ─────────────────────────────────────────────────────── */
-
+  /* ── Radius ───────────────────────────────────────────────────────────── */
   --radius-sm:   4px;
   --radius-md:   6px;
   --radius-lg:   8px;
@@ -87,34 +86,33 @@
   --radius-2xl:  16px;
   --radius-full: 9999px;
 
-  /* ── Shadows ───────────────────────────────────────────────────────────── */
+  /* ── Motion ───────────────────────────────────────────────────────────── */
+  --duration-instant: 100ms;
+  --duration-fast:    150ms;
+  --duration-normal:  200ms;
+  --duration-slow:    300ms;
+  --duration-card:    300ms;
+  --duration-score:   400ms;
+  --duration-panel:   220ms;
+  --duration-step:    200ms;
+  --duration-sidebar: 220ms;
+  --ease-default:     cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in:          cubic-bezier(0.4, 0, 1, 1);
+  --ease-out:         cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out:      cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring:      cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.5);
-  --shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.6);
-  --shadow-xl:  0 16px 48px rgba(0, 0, 0, 0.7);
-  --shadow-accent: 0 0 0 3px rgba(108, 99, 255, 0.35);
-
-  /* ── Motion ────────────────────────────────────────────────────────────── */
-
-  --duration-fast:   150ms;
-  --duration-normal: 250ms;
-  --duration-slow:   400ms;
-  --ease-default:    cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-in:         cubic-bezier(0.4, 0, 1, 1);
-  --ease-out:        cubic-bezier(0, 0, 0.2, 1);
-  --ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
-
-  /* ── Layout ────────────────────────────────────────────────────────────── */
-
-  --sidebar-width:          240px;
+  /* ── Layout ───────────────────────────────────────────────────────────── */
+  --sidebar-width:           220px;
   --sidebar-collapsed-width: 56px;
-  --topbar-height:           52px;
+  --inspector-width:         320px;
+  --topbar-height:           48px;
+  --step-strip-height:       40px;
+  --bottom-panel-height:     240px;
   --content-max-width:       1200px;
   --panel-min-width:         320px;
 
-  /* ── Z-index scale ─────────────────────────────────────────────────────── */
-
+  /* ── Z-index ──────────────────────────────────────────────────────────── */
   --z-base:    0;
   --z-raised:  10;
   --z-overlay: 100;
@@ -122,135 +120,280 @@
   --z-toast:   300;
 }
 
-/* ═══════════════════════════════════════════════════
-   B5 SPEC TOKENS — AI Clip Studio Design System B3.6
-   Source: docs/design/tokens.css
-   Old tokens above are preserved for backward compat.
-   ═══════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME (default)
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
+  color-scheme: light;
 
-  /* ── Surfaces ─────────────────────────────────────────── */
-  --surface-base:         #0a0a0c;   /* app background */
-  --surface-panel:        #111116;   /* sidebar, inspector, topbar */
-  --surface-card:         #1c1c24;   /* clip cards, list rows */
-  --surface-card-hover:   #24242e;   /* hover state for cards/rows */
-  --surface-input:        #101014;   /* text inputs, dropdowns */
-  --surface-overlay:      rgba(8, 8, 11, 0.88); /* modals, popovers */
+  /* ── Surfaces — warm off-white (Captions/OpusClip) ────────────────────── */
+  --surface-base:        #fafaf9;
+  --surface-panel:       #ffffff;
+  --surface-card:        #ffffff;
+  --surface-card-hover:  #f5f3ff;
+  --surface-input:       #ffffff;
+  --surface-overlay:     rgba(20, 14, 35, 0.55);
 
-  /* ── Borders ───────────────────────────────────────────── */
-  --border-subtle:        rgba(255,255,255,.06);
-  --border-default:       rgba(255,255,255,.10);
-  --border-strong:        rgba(255,255,255,.18);
-  --border-focus:         rgba(77, 124, 255, 0.6);
+  /* Legacy --color-bg-* aliases */
+  --color-bg-primary:  var(--surface-base);
+  --color-bg-base:     var(--surface-base);
+  --color-bg-surface:  var(--surface-panel);
+  --color-bg-elevated: var(--surface-card);
+  --color-bg-overlay:  var(--surface-overlay);
+  --color-bg-hover:    var(--surface-card-hover);
 
-  /* ── Text ──────────────────────────────────────────────── */
-  --text-primary:         #f0f0f6;
-  --text-secondary:       #c8c8d8;
-  --text-tertiary:        #8888a0;
-  --text-disabled:        #3A4252;
-  --text-inverse:         #0a0a0c;
+  /* ── Borders ──────────────────────────────────────────────────────────── */
+  --border-subtle:  rgba(0, 0, 0, 0.06);
+  --border-default: rgba(0, 0, 0, 0.10);
+  --border-strong:  rgba(0, 0, 0, 0.16);
+  --border-focus:   rgba(91, 91, 214, 0.45);
 
-  /* ── Accent — primary interactive ─────────────────────── */
-  --accent-primary:       #4D7CFF;
-  --accent-hover:         #6B92FF;
-  --accent-pressed:       #3D66E0;
-  --accent-subtle:        rgba(77, 124, 255, 0.12);
-  --accent-subtle-hover:  rgba(77, 124, 255, 0.20);
+  /* Legacy aliases */
+  --color-border:        var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-focus:  var(--border-focus);
+  --border:              var(--border-default);
 
-  /* ── AI identity ───────────────────────────────────────── */
-  --ai-active:            #a855f7;
-  --ai-hover:             #c084fc;
-  --ai-subtle:            rgba(168, 85, 247, 0.12);
-  --ai-glow:              rgba(168, 85, 247, 0.20);
-  --ai-border:            rgba(168, 85, 247, 0.35);
+  /* ── Text ─────────────────────────────────────────────────────────────── */
+  --text-primary:   #0a0a0a;
+  --text-secondary: #404040;
+  --text-tertiary:  #737373;
+  --text-disabled:  #a3a3a3;
+  --text-inverse:   #ffffff;
 
-  /* ── Status semantic ───────────────────────────────────── */
-  --status-running:       #4D7CFF;
-  --status-running-bg:    rgba(77, 124, 255, 0.10);
-  --status-success:       #34C878;
-  --status-success-bg:    rgba(52, 200, 120, 0.10);
-  --status-warning:       #F5A623;
-  --status-warning-bg:    rgba(245, 166, 35, 0.10);
-  --status-error:         #E05252;
-  --status-error-bg:      rgba(224, 82, 82, 0.10);
-  --status-partial:       #E08A3A;
-  --status-partial-bg:    rgba(224, 138, 58, 0.10);
-  --status-queued:        #5E6A7E;
-  --status-queued-bg:     rgba(94, 106, 126, 0.10);
-  --status-interrupted:   #F5A623;
+  /* Legacy aliases */
+  --color-text-primary:   var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted:     var(--text-tertiary);
+  --color-text-disabled:  var(--text-disabled);
+  --color-text-inverse:   var(--text-inverse);
 
-  /* ── Score ─────────────────────────────────────────────── */
-  --score-high:           #34C878;   /* ≥70 */
-  --score-mid:            #F5A623;   /* 40–69 */
-  --score-low:            #E05252;   /* <40 */
-  --score-track-bg:       #1A1F2C;
+  /* ── Brand accent — Violet (OpusClip-style) ───────────────────────────── */
+  --accent-primary:      #8b5cf6;
+  --accent-hover:        #7c3aed;
+  --accent-pressed:      #6d28d9;
+  --accent-subtle:       rgba(139, 92, 246, 0.10);
+  --accent-subtle-hover: rgba(139, 92, 246, 0.16);
+  --accent-rgb:          139, 92, 246;
 
-  /* ── Sprint 10 token expansion ─────────────────────────────
-     Added for hex literals previously inline in components. Each maps to
-     a semantic role rather than a literal color name so future palette
-     drift won't have to chase every call site again. */
-  --status-waiting:       #6b7280;   /* clip "waiting"/queued color (Tailwind gray-500) */
-  --confidence-mid:       #eab308;   /* AI confidence tier "moderate" indicator (Tailwind yellow-500) */
+  /* Secondary brand — Pink (gradient partner) */
+  --brand-pink:          #ec4899;
+  --brand-pink-rgb:      236, 72, 153;
 
-  /* ── Typography ─────────────────────────────────────────── */
-  --font-ui:              'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono:            'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  /* Brand gradients — used by hero, buttons, illustrations */
+  --brand-gradient:        linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  --brand-gradient-soft:   linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(236, 72, 153, 0.10) 100%);
+  --brand-gradient-button: linear-gradient(135deg, #8b5cf6 0%, #d946ef 50%, #ec4899 100%);
+  --brand-gradient-text:   linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
 
-  --text-xs:              11px;
-  --text-sm:              12px;
-  --text-base:            13px;
-  --text-md:              14px;
-  --text-lg:              16px;
-  --text-xl:              20px;
-  --text-2xl:             24px;
-  --text-score-xl:        64px;   /* big score reveal */
+  /* RGB triplets enabling rgba(var(--X-rgb), opacity) overlays. */
+  --ai-rgb:      139, 92, 246;
+  --ok-rgb:      22, 163, 74;
+  --warn-rgb:    217, 119, 6;
+  --fail-rgb:    220, 38, 38;
+  --text-rgb:    10, 10, 10;
 
-  --weight-regular:       400;
-  --weight-medium:        500;
-  --weight-semibold:      600;
+  /* Platform brand colors (used by inline platform dots/badges) */
+  --p-youtube:   #ff0000;
+  --p-tiktok:    #25f4ee;
+  --p-tiktok-2:  #fe2c55;
+  --p-instagram: linear-gradient(135deg, #fa7e1e, #d62976, #962fbf, #4f5bd5);
+  --p-facebook:  #1877f2;
+  --p-twitter:   #000000;
 
-  --leading-tight:        1.2;
-  --leading-normal:       1.4;
-  --leading-relaxed:      1.6;
+  /* Legacy aliases */
+  --color-accent:       var(--accent-primary);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-subtle);
+  --color-accent-teal:  #0d9488;
 
-  /* ── Spacing (4px base) ─────────────────────────────────── */
-  /* Note: --space-1 through --space-12 already defined above; adding extras */
-  --space-16:             64px;
+  /* ── AI identity — pink-magenta, brand gradient partner ───────────────── */
+  --ai-active: #ec4899;
+  --ai-hover:  #db2777;
+  --ai-subtle: rgba(236, 72, 153, 0.10);
+  --ai-glow:   rgba(236, 72, 153, 0.18);
+  --ai-border: rgba(236, 72, 153, 0.30);
 
-  /* ── Radius ─────────────────────────────────────────────── */
-  /* Note: --radius-sm/md/lg/xl already defined above; adding spec alias */
-  --radius-full:          9999px;
+  /* ── Status semantic ──────────────────────────────────────────────────── */
+  --status-running:    var(--accent-primary);
+  --status-running-bg: rgba(91, 91, 214, 0.08);
+  --status-success:    #16a34a;
+  --status-success-bg: rgba(22, 163, 74, 0.10);
+  --status-warning:    #d97706;
+  --status-warning-bg: rgba(217, 119, 6, 0.10);
+  --status-error:      #dc2626;
+  --status-error-bg:   rgba(220, 38, 38, 0.10);
+  --status-partial:    #ea580c;
+  --status-partial-bg: rgba(234, 88, 12, 0.10);
+  --status-queued:     #71717a;
+  --status-queued-bg:  rgba(113, 113, 122, 0.10);
+  --status-interrupted:#d97706;
+  --status-waiting:    #71717a;
+  --confidence-mid:    #ca8a04;
 
-  /* ── Fixed layout — desktop only ───────────────────────── */
-  --sidebar-width:        220px;
-  --inspector-width:      320px;
-  --topbar-height:        48px;
-  --bottom-panel-height:  240px;
-  --step-strip-height:    40px;
+  /* Legacy --color-* status */
+  --color-success:       var(--status-success);
+  --color-success-muted: var(--status-success-bg);
+  --color-warning:       var(--status-warning);
+  --color-warning-muted: var(--status-warning-bg);
+  --color-error:         var(--status-error);
+  --color-error-muted:   var(--status-error-bg);
+  --color-info:          #2563eb;
+  --color-info-muted:    rgba(37, 99, 235, 0.10);
 
-  /* ── Motion ─────────────────────────────────────────────── */
-  --duration-instant:     100ms;
-  --duration-card:        300ms;   /* clip card appearance */
-  --duration-score:       400ms;   /* score count-up */
-  --duration-panel:       250ms;   /* panel slide */
-  --duration-step:        200ms;   /* step strip transition */
-  --duration-sidebar:     220ms;   /* sidebar collapse */
+  /* ── Score ─────────────────────────────────────────────────────────────── */
+  --score-high:     #16a34a;
+  --score-mid:      #d97706;
+  --score-low:      #dc2626;
+  --score-track-bg: #e5e5e5;
 
-  --ease-out:             cubic-bezier(0.0, 0.0, 0.2, 1.0);
-  --ease-in-out:          cubic-bezier(0.4, 0.0, 0.2, 1.0);
-  --ease-spring:          cubic-bezier(0.34, 1.56, 0.64, 1.0);
-
-  /* ── Elevation ──────────────────────────────────────────── */
-  --shadow-card:          0 1px 3px rgba(0, 0, 0, 0.45);
-  --shadow-panel:         0 2px 8px rgba(0, 0, 0, 0.55);
-  --shadow-modal:         0 8px 32px rgba(0, 0, 0, 0.72);
-  --shadow-tooltip:       0 2px 6px rgba(0, 0, 0, 0.60);
+  /* ── Shadows — soft, low-key (Linear-ish) ─────────────────────────────── */
+  --shadow-sm:      0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md:      0 2px 8px rgba(15, 23, 42, 0.08);
+  --shadow-lg:      0 8px 24px rgba(15, 23, 42, 0.10);
+  --shadow-xl:      0 16px 48px rgba(15, 23, 42, 0.14);
+  --shadow-card:    0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-panel:   0 1px 3px rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.06);
+  --shadow-modal:   0 16px 48px rgba(15, 23, 42, 0.18), 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-tooltip: 0 4px 12px rgba(15, 23, 42, 0.12);
+  --shadow-accent:  0 0 0 3px rgba(91, 91, 214, 0.18);
 }
 
-/* ═══════════════════════════════════════════════════
-   CLIP STUDIO TOKENS — matches design/ui-prototype.html
-   ═══════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   DARK THEME
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* ── Surfaces — dark with violet undertone ────────────────────────────── */
+  --surface-base:        #0c0a14;
+  --surface-panel:       #14111f;
+  --surface-card:        #1a1626;
+  --surface-card-hover:  #221c30;
+  --surface-input:       #110e1a;
+  --surface-overlay:     rgba(0, 0, 0, 0.72);
+
+  --color-bg-primary:  var(--surface-base);
+  --color-bg-base:     var(--surface-base);
+  --color-bg-surface:  var(--surface-panel);
+  --color-bg-elevated: var(--surface-card);
+  --color-bg-overlay:  var(--surface-overlay);
+  --color-bg-hover:    var(--surface-card-hover);
+
+  /* ── Borders ──────────────────────────────────────────────────────────── */
+  --border-subtle:  rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong:  rgba(255, 255, 255, 0.16);
+  --border-focus:   rgba(124, 124, 240, 0.55);
+
+  --color-border:        var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-focus:  var(--border-focus);
+  --border:              var(--border-default);
+
+  /* ── Text — slight violet tint for warmth ─────────────────────────────── */
+  --text-primary:   #f5f3ff;
+  --text-secondary: #d8d4e8;
+  --text-tertiary:  #a09bb5;
+  --text-disabled:  #524d68;
+  --text-inverse:   #0c0a14;
+
+  --color-text-primary:   var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted:     var(--text-tertiary);
+  --color-text-disabled:  var(--text-disabled);
+  --color-text-inverse:   var(--text-inverse);
+
+  /* ── Brand accent — lifted violet for dark bg ─────────────────────────── */
+  --accent-primary:      #a78bfa;
+  --accent-hover:        #b89bfc;
+  --accent-pressed:      #8b5cf6;
+  --accent-subtle:       rgba(167, 139, 250, 0.16);
+  --accent-subtle-hover: rgba(167, 139, 250, 0.24);
+  --accent-rgb:          167, 139, 250;
+
+  --brand-pink:          #f472b6;
+  --brand-pink-rgb:      244, 114, 182;
+
+  --brand-gradient:        linear-gradient(135deg, #a78bfa 0%, #f472b6 100%);
+  --brand-gradient-soft:   linear-gradient(135deg, rgba(167, 139, 250, 0.18) 0%, rgba(244, 114, 182, 0.14) 100%);
+  --brand-gradient-button: linear-gradient(135deg, #a78bfa 0%, #e879f9 50%, #f472b6 100%);
+  --brand-gradient-text:   linear-gradient(135deg, #c4b5fd 0%, #f9a8d4 100%);
+
+  --ai-rgb:      244, 114, 182;
+  --ok-rgb:      34, 197, 94;
+  --warn-rgb:    245, 158, 11;
+  --fail-rgb:    239, 68, 68;
+  --text-rgb:    245, 243, 255;
+
+  --color-accent:       var(--accent-primary);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-subtle);
+  --color-accent-teal:  #14b8a6;
+
+  /* ── AI identity — pink-magenta gradient partner ──────────────────────── */
+  --ai-active: #f472b6;
+  --ai-hover:  #ec4899;
+  --ai-subtle: rgba(244, 114, 182, 0.16);
+  --ai-glow:   rgba(244, 114, 182, 0.26);
+  --ai-border: rgba(244, 114, 182, 0.35);
+
+  /* ── Status semantic ──────────────────────────────────────────────────── */
+  --status-running:    var(--accent-primary);
+  --status-running-bg: rgba(124, 124, 240, 0.12);
+  --status-success:    #22c55e;
+  --status-success-bg: rgba(34, 197, 94, 0.12);
+  --status-warning:    #f59e0b;
+  --status-warning-bg: rgba(245, 158, 11, 0.12);
+  --status-error:      #ef4444;
+  --status-error-bg:   rgba(239, 68, 68, 0.12);
+  --status-partial:    #f97316;
+  --status-partial-bg: rgba(249, 115, 22, 0.12);
+  --status-queued:     #71717a;
+  --status-queued-bg:  rgba(113, 113, 122, 0.14);
+  --status-interrupted:#f59e0b;
+  --status-waiting:    #71717a;
+  --confidence-mid:    #eab308;
+
+  --color-success:       var(--status-success);
+  --color-success-muted: var(--status-success-bg);
+  --color-warning:       var(--status-warning);
+  --color-warning-muted: var(--status-warning-bg);
+  --color-error:         var(--status-error);
+  --color-error-muted:   var(--status-error-bg);
+  --color-info:          #3b82f6;
+  --color-info-muted:    rgba(59, 130, 246, 0.14);
+
+  /* ── Score ─────────────────────────────────────────────────────────────── */
+  --score-high:     #22c55e;
+  --score-mid:      #f59e0b;
+  --score-low:      #ef4444;
+  --score-track-bg: #1f1f23;
+
+  /* ── Shadows — deeper, denser on dark ─────────────────────────────────── */
+  --shadow-sm:      0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md:      0 4px 12px rgba(0, 0, 0, 0.50);
+  --shadow-lg:      0 8px 24px rgba(0, 0, 0, 0.60);
+  --shadow-xl:      0 16px 48px rgba(0, 0, 0, 0.70);
+  --shadow-card:    0 1px 3px rgba(0, 0, 0, 0.50);
+  --shadow-panel:   0 2px 8px rgba(0, 0, 0, 0.55);
+  --shadow-modal:   0 8px 32px rgba(0, 0, 0, 0.72);
+  --shadow-tooltip: 0 2px 6px rgba(0, 0, 0, 0.60);
+  --shadow-accent:  0 0 0 3px rgba(124, 124, 240, 0.32);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CLIP-STUDIO PROTOTYPE TOKENS (.cs-root scope, dark-only)
+   ═══════════════════════════════════════════════════════════════════════════
+   These tokens drive the cinematic clip-studio prototype layout. They are
+   intentionally dark-themed regardless of app theme — the prototype was
+   authored dark-first and the light treatment for clip-studio is a separate
+   pass. To follow app theme later, scope these under .cs-root or move them
+   into theme blocks above.
+*/
+
 :root {
   /* Surfaces */
   --cs-bg-void:    #05070A;
@@ -288,7 +431,7 @@
   --cs-fh: 'Rajdhani', sans-serif;
   --cs-fb: 'Inter', sans-serif;
 
-  /* Aliases matching prototype variable names — used inside .cs-root scope */
+  /* Aliases used inside .cs-root */
   --accent:      #7B61FF;
   --accent-hi:   #9B85FF;
   --accent-dim:  rgba(123, 97, 255, 0.15);
@@ -302,7 +445,6 @@
   --bg-card:     #111622;
   --bg-hover:    #161C2C;
   --bg-active:   #1B2235;
-  --border:      #1C2438;
   --border-hi:   #2A3558;
   --text-1:      #EEF0F8;
   --text-2:      #8A93B0;
@@ -313,4 +455,60 @@
   --fh:          'Rajdhani', sans-serif;
   --fb:          'Inter', sans-serif;
   --fo:          'Orbitron', monospace;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — clip-studio prototype overrides
+   ═══════════════════════════════════════════════════════════════════════════
+   Override the cs-* + prototype-alias tokens when the user picks light mode.
+   The cinematic Orbitron/Rajdhani type stays — only the palette shifts to a
+   bright, neutral Linear-style canvas so the same shell works in both modes.
+*/
+
+[data-theme="light"] {
+  /* cs-* tokens */
+  --cs-bg-void:    #fafafa;
+  --cs-bg-base:    #f4f4f5;
+  --cs-bg-panel:   #ffffff;
+  --cs-bg-card:    #ffffff;
+  --cs-bg-hover:   #f5f5f5;
+  --cs-bg-active:  #ededed;
+  --cs-border:     rgba(0, 0, 0, 0.08);
+  --cs-border-hi:  rgba(0, 0, 0, 0.14);
+  --cs-accent:     #5b5bd6;
+  --cs-accent-hi:  #6e6ee6;
+  --cs-accent-dim: rgba(91, 91, 214, 0.10);
+  --cs-cyan:       #0891b2;
+  --cs-cyan-dim:   rgba(8, 145, 178, 0.10);
+  --cs-grad:       linear-gradient(135deg, #5b5bd6, #0891b2);
+  --cs-grad-btn:   linear-gradient(135deg, #4f4fc7, #0e7490);
+  --cs-text-1:     #0a0a0a;
+  --cs-text-2:     #525252;
+  --cs-text-3:     #a1a1aa;
+  --cs-ok:         #16a34a;
+  --cs-warn:       #d97706;
+  --cs-fail:       #dc2626;
+
+  /* Bare aliases used inside .cs-root */
+  --accent:        #5b5bd6;
+  --accent-hi:     #6e6ee6;
+  --accent-dim:    rgba(91, 91, 214, 0.10);
+  --cyan:          #0891b2;
+  --cyan-dim:      rgba(8, 145, 178, 0.10);
+  --grad:          linear-gradient(135deg, #5b5bd6, #0891b2);
+  --grad-btn:      linear-gradient(135deg, #4f4fc7, #0e7490);
+  --bg-void:       #fafafa;
+  --bg-base:       #f4f4f5;
+  --bg-panel:      #ffffff;
+  --bg-card:       #ffffff;
+  --bg-hover:      #f5f5f5;
+  --bg-active:     #ededed;
+  --border:        rgba(0, 0, 0, 0.08);
+  --border-hi:     rgba(0, 0, 0, 0.14);
+  --text-1:        #0a0a0a;
+  --text-2:        #525252;
+  --text-3:        #a1a1aa;
+  --ok:            #16a34a;
+  --warn:          #d97706;
+  --fail:          #dc2626;
 }
