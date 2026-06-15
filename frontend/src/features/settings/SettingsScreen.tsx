@@ -10,6 +10,10 @@ import {
   getDataRetention,
   putDataRetention,
 } from '@/api/dataRetention'
+import {
+  getDefaultOutputDir,
+  putDefaultOutputDir,
+} from '@/api/outputDir'
 
 interface CacheInfo {
   total_mb: number
@@ -94,7 +98,11 @@ const _inputStyle: React.CSSProperties = {
   fontSize: 12,
   borderRadius: 6,
   border: '1px solid var(--border)',
-  background: 'var(--bg)',
+  // Bug fix 2026-06-15: was `var(--bg)` which is NOT defined in tokens.css
+  // (only the prefixed prototype aliases --bg-base / --bg-card / etc. exist).
+  // Inputs were rendering on the surrounding card's background instead of
+  // the dedicated input surface.
+  background: 'var(--surface-input)',
   color: 'var(--text-1)',
   fontFamily: 'inherit',
   outline: 'none',
@@ -337,6 +345,185 @@ function CreatorContextSection() {
 }
 
 
+// OutputDirSection (audit 2026-06-15): backend endpoints
+// /api/settings/output-dir (GET + PUT) existed since Sprint 3 but there
+// was no FE form to set the default. Until now creators only got their
+// output_dir saved as a side-effect of the first POST /render/process —
+// they couldn't pre-configure it. With the gear icon now wired to
+// Settings (N4), this section is the obvious place to add it.
+function OutputDirSection() {
+  const [path, setPath] = useState<string>('')
+  const [isConfigured, setIsConfigured] = useState<boolean>(false)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [saving, setSaving] = useState<boolean>(false)
+  const [saveResult, setSaveResult] = useState<string | null>(null)
+
+  const fetchValue = useCallback(async () => {
+    setLoading(true)
+    try {
+      const env = await getDefaultOutputDir()
+      setPath(env.path || '')
+      setIsConfigured(env.is_configured)
+    } catch {
+      setPath('')
+      setIsConfigured(false)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchValue() }, [fetchValue])
+
+  async function handlePick() {
+    const dir = await window.electronAPI?.pickDirectory?.()
+    if (dir) {
+      setPath(dir)
+      setSaveResult(null)
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setSaveResult(null)
+    try {
+      const env = await putDefaultOutputDir(path.trim() || null)
+      setPath(env.path || '')
+      setIsConfigured(env.is_configured)
+      setSaveResult(env.is_configured ? 'Đã lưu' : 'Đã xoá mặc định')
+    } catch {
+      setSaveResult('Lưu thất bại')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleClear() {
+    if (!window.confirm('Xoá thư mục lưu mặc định?')) return
+    setSaving(true)
+    setSaveResult(null)
+    try {
+      const env = await putDefaultOutputDir(null)
+      setPath('')
+      setIsConfigured(env.is_configured)
+      setSaveResult('Đã xoá mặc định')
+    } catch {
+      setSaveResult('Xoá thất bại')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        padding: '16px 18px',
+      }}
+    >
+      <SectionTitle>
+        Thư mục lưu mặc định{' '}
+        <span
+          style={{
+            marginLeft: 8,
+            fontSize: 9,
+            fontWeight: 700,
+            padding: '2px 6px',
+            borderRadius: 4,
+            background: isConfigured ? 'rgba(var(--ok-rgb),.12)' : 'rgba(var(--text-rgb),.10)',
+            color: isConfigured ? 'var(--ok)' : 'var(--text-3)',
+            letterSpacing: '.04em',
+          }}
+        >
+          {isConfigured ? 'ĐÃ CẤU HÌNH' : 'CHƯA CẤU HÌNH'}
+        </span>
+      </SectionTitle>
+      {loading ? (
+        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Đang tải…</div>
+      ) : (
+        <>
+          <FormRow
+            label="Thư mục output"
+            hint="Render mới sẽ dùng thư mục này nếu Configure không đặt thư mục riêng."
+          >
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type="text"
+                value={path}
+                onChange={(e) => { setPath(e.target.value); setSaveResult(null) }}
+                placeholder="D:\Output\Channel"
+                style={{ ..._inputStyle, flex: 1 }}
+              />
+              <button
+                onClick={handlePick}
+                style={{
+                  padding: '0 12px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-hover)',
+                  color: 'var(--text-1)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Chọn…
+              </button>
+            </div>
+          </FormRow>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                padding: '6px 16px',
+                borderRadius: 7,
+                fontSize: 11,
+                fontWeight: 700,
+                fontFamily: 'var(--font-family-base)',
+                letterSpacing: '.04em',
+                border: '1px solid rgba(var(--accent-rgb),.4)',
+                background: 'rgba(var(--accent-rgb),.10)',
+                color: 'var(--accent)',
+                cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? 0.5 : 1,
+              }}
+            >
+              {saving ? 'Đang lưu…' : 'Lưu'}
+            </button>
+            <button
+              onClick={handleClear}
+              disabled={saving || !isConfigured}
+              style={{
+                padding: '6px 16px',
+                borderRadius: 7,
+                fontSize: 11,
+                fontWeight: 700,
+                fontFamily: 'var(--font-family-base)',
+                letterSpacing: '.04em',
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                color: 'var(--text-3)',
+                cursor: saving || !isConfigured ? 'not-allowed' : 'pointer',
+                opacity: saving || !isConfigured ? 0.5 : 1,
+              }}
+            >
+              Xoá mặc định
+            </button>
+            {saveResult ? (
+              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{saveResult}</span>
+            ) : null}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+
 // Batch 10R (MT-7 UI): Settings section for the job-retention auto-prune
 // setting (backend wiring shipped in Batch 10A as ST-12). Keeps the
 // same shape as CreatorContextSection so reviewers can diff them.
@@ -530,6 +717,8 @@ export function SettingsScreen() {
       </div>
 
       <CreatorContextSection />
+
+      <OutputDirSection />
 
       <DataRetentionSection />
 
