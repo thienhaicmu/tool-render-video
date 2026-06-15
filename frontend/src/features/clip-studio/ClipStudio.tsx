@@ -70,7 +70,7 @@ export function ClipStudio() {
           <DownloadTab lang={lang} />
         </div>
         <div className={`cs-tab-pane${activeTab === 'history'  ? ' active' : ''}`}>
-          <HistoryTab lang={lang} />
+          <HistoryTab lang={lang} onSwitchToRender={() => setActiveTab('render')} />
         </div>
       </div>
 

@@ -6,7 +6,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useRenderSocket } from '@/hooks/useRenderSocket'
 import { prepareSource, cancelRender, cancelPrepareSource, retryRender, resumeRender } from '@/api/render'
 import type { PrepareSourceResponse } from '@/api/render'
-import { getJobParts, getJobQualitySummary, getJobRanking } from '@/api/jobs'
+import { getJobHistory, getJobParts, getJobQualitySummary, getJobRanking } from '@/api/jobs'
 import type { RenderRequest, JobPart, QualityReport, PartRankResult } from '@/types/api'
 import { useT, ERROR_KIND_KEY, ERROR_FIX_STEPS } from './i18n'
 import type { Step, CfgTab, ConfigState, Source } from './types'
@@ -84,6 +84,35 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const addNotification = useUIStore((s) => s.addNotification)
   const { stage, jobStatus, progress, jobMessage, isTerminal, isReconnecting: wsReconnecting, liveParts, error: wsError, errorKind } = useRenderSocket(jobId)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // ── Auto-reattach to active job on mount ────────────────────────────────────
+  // Bug fix 2026-06-15: when the user navigates away from the Rendering
+  // screen (e.g. clicks History tab, then comes back to Render), the local
+  // jobId is null and they land on Step 1 (Source). Clicking Start Render
+  // hits the server dedup with HTTP 409 because the previous job is still
+  // running. Detect that on mount and jump straight to the rendering view
+  // so the user can monitor / cancel without bouncing through Source.
+  useEffect(() => {
+    if (jobId) return // already attached
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await getJobHistory(10, 0)
+        if (cancelled) return
+        const active = res.items.find(
+          (j) => j.status === 'running' || j.status === 'queued',
+        )
+        if (active) {
+          setJobId(active.job_id)
+          setStep(3)
+        }
+      } catch {
+        // backend unreachable — let user proceed via normal flow
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!jobId || !isTerminal) return
@@ -298,16 +327,41 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       // detail string explaining the duplicate is already running; surface
       // it verbatim instead of "API error 409: …".
       let msg = 'Failed to start render'
+      let dupJobId: string | null = null
       if (e && typeof e === 'object' && 'status' in e && 'detail' in e) {
         const apiErr = e as { status: number; detail: unknown }
         msg = typeof apiErr.detail === 'string'
           ? apiErr.detail
           : JSON.stringify(apiErr.detail)
+        // On 409 dedup the detail looks like:
+        //   "A render job for this source is already in progress
+        //    (job_id=<uuid>). Wait for it to finish or cancel it first."
+        // Extract the uuid and jump straight to that job's rendering
+        // screen — re-using the running job is what the user actually
+        // wants 99% of the time. They can still cancel from there.
+        if (apiErr.status === 409 && typeof apiErr.detail === 'string') {
+          const m = apiErr.detail.match(/job_id=([0-9a-f-]{36})/i)
+          if (m) dupJobId = m[1]
+        }
       } else if (e instanceof Error) {
         msg = e.message
       }
-      setSubmitError(msg)
-      setIsSubmitting(false)  // re-enable on failure so user can retry
+      if (dupJobId) {
+        setJobId(dupJobId)
+        setStep(3)
+        setIsSubmitting(false)
+        addNotification({
+          type: 'info',
+          title: lang === 'VI' ? 'Mở job đang chạy' : 'Opened active job',
+          message: lang === 'VI'
+            ? 'Job render cho source này đang chạy — đã chuyển sang màn theo dõi.'
+            : 'A render for this source is already running — switched to monitor view.',
+          duration: 5000,
+        })
+      } else {
+        setSubmitError(msg)
+        setIsSubmitting(false)  // re-enable on failure so user can retry
+      }
     }
   }
 

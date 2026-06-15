@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Lang } from '../ClipStudio'
 import { getJobHistory } from '@/api/jobs'
+import { cancelRender, resumeRender } from '@/api/render'
 import type { HistoryItem } from '@/types/api'
 
 const FILTERS = ['All', 'Done', 'Failed', 'Running'] as const
@@ -51,15 +52,31 @@ function ProgressRing({ done, total, color }: { done: number; total: number; col
   )
 }
 
-function JobRow({ job, onOpen }: { job: HistoryItem; onOpen: (j: HistoryItem) => void }) {
+function JobRow({
+  job, onOpen, onCancel, onMonitor,
+}: {
+  job: HistoryItem
+  onOpen: (j: HistoryItem) => void
+  onCancel: (j: HistoryItem) => void
+  onMonitor: (j: HistoryItem) => void
+}) {
   const st = sm(job.status)
   const isRunning = job.status === 'running'
+  const isQueued = job.status === 'queued'
   const [hov, setHov] = useState(false)
   const pct = isRunning && job.total_count > 0 ? Math.round((job.completed_count / job.total_count) * 100) : 0
 
+  // Bug #3 fix: a running job's row should jump straight to the Rendering
+  // screen (monitor view) on click; non-active rows open the detail drawer
+  // as before.
+  const handleRowClick = () => {
+    if (isRunning || isQueued) onMonitor(job)
+    else onOpen(job)
+  }
+
   return (
     <div
-      onClick={() => onOpen(job)}
+      onClick={handleRowClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
@@ -160,8 +177,32 @@ function JobRow({ job, onOpen }: { job: HistoryItem; onOpen: (j: HistoryItem) =>
         {st.label.toUpperCase()}
       </span>
 
-      {/* Arrow */}
-      <span style={{ fontSize: 10, color: 'var(--text-3)', opacity: hov ? 1 : 0, transition: 'opacity .1s', flexShrink: 0 }}>›</span>
+      {/* Row actions — Bug #3 fix: cancel button surfaces directly on running
+          rows so the user can stop a runaway job from History without first
+          having to navigate into the Rendering screen. */}
+      {(isRunning || isQueued) && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onCancel(job) }}
+          title="Cancel render"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            height: 26, padding: '0 10px', borderRadius: 999,
+            background: 'var(--status-error-bg)',
+            color: 'var(--status-error)',
+            border: '1px solid color-mix(in srgb, var(--status-error) 30%, transparent)',
+            fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            flexShrink: 0, transition: 'all .12s',
+            letterSpacing: '-.005em',
+          }}
+        >
+          ✕ Cancel
+        </button>
+      )}
+
+      {/* Arrow — chevron hint on hover only for non-active rows */}
+      {!(isRunning || isQueued) && (
+        <span style={{ fontSize: 10, color: 'var(--text-3)', opacity: hov ? 1 : 0, transition: 'opacity .1s', flexShrink: 0 }}>›</span>
+      )}
     </div>
   )
 }
@@ -184,8 +225,18 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
   )
 }
 
-function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void }) {
+function DetailDrawer({
+  job, onClose, onCancel, onResume, onMonitor,
+}: {
+  job: HistoryItem
+  onClose: () => void
+  onCancel: (j: HistoryItem) => void
+  onResume: (j: HistoryItem) => void
+  onMonitor: (j: HistoryItem) => void
+}) {
   const st = sm(job.status)
+  const isActive = job.status === 'running' || job.status === 'queued'
+  const isInterrupted = job.status === 'interrupted' || job.status === 'failed'
   return (
     <div style={{
       position: 'fixed' as const, inset: 0, zIndex: 999,
@@ -251,8 +302,50 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
           </div>
         )}
 
-        {/* Actions */}
+        {/* Actions — Bug #4 fix: status-aware controls so running jobs can
+            be cancelled / monitored and interrupted jobs can be resumed
+            directly from the drawer (previously only "Copy output path"
+            was available, which was useless for active jobs). */}
         <div style={{ padding: '0 16px', marginTop: 'auto', paddingBottom: 20, display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+          {isActive && (
+            <>
+              <button
+                onClick={() => { onMonitor(job); onClose() }}
+                style={{
+                  padding: '11px', borderRadius: 8, background: 'var(--brand-gradient-button)',
+                  border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  boxShadow: '0 1px 0 rgba(255,255,255,.25) inset, 0 2px 8px rgba(139,92,246,.30)',
+                  letterSpacing: '-.005em',
+                }}
+              >
+                ⟳ Open render monitor
+              </button>
+              <button
+                onClick={() => { onCancel(job); onClose() }}
+                style={{
+                  padding: '10px', borderRadius: 8, background: 'transparent',
+                  border: '1px solid var(--status-error)',
+                  color: 'var(--status-error)',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                ✕ Cancel render
+              </button>
+            </>
+          )}
+          {isInterrupted && (
+            <button
+              onClick={() => { onResume(job); onClose() }}
+              style={{
+                padding: '11px', borderRadius: 8, background: 'var(--brand-gradient-button)',
+                border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                boxShadow: '0 1px 0 rgba(255,255,255,.25) inset, 0 2px 8px rgba(139,92,246,.30)',
+                letterSpacing: '-.005em',
+              }}
+            >
+              ↻ Resume from last
+            </button>
+          )}
           {job.can_open_folder && job.output_dir && (
             <button
               onClick={() => { navigator.clipboard.writeText(job.output_dir!).catch(() => {}) }}
@@ -273,7 +366,14 @@ function DetailDrawer({ job, onClose }: { job: HistoryItem; onClose: () => void 
 
 const POLL_MS = 5000
 
-export function HistoryTab({ lang: _lang }: { lang: Lang }) {
+interface HistoryTabProps {
+  lang: Lang
+  /** Switch the cs-shell active tab. Used to jump to the Render tab when
+   *  user opens a running job from History so they can monitor / cancel. */
+  onSwitchToRender?: () => void
+}
+
+export function HistoryTab({ lang: _lang, onSwitchToRender }: HistoryTabProps) {
   const [filter, setFilter]     = useState<Filter>('All')
   const [search, setSearch]     = useState('')
   const [jobs, setJobs]         = useState<HistoryItem[]>([])
@@ -291,6 +391,36 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
       setError(e instanceof Error ? e.message : 'Failed to load history')
     }
   }, [])
+
+  // Cancel an active job from History row / drawer. Optimistic-only — the
+  // poll loop (5s) will reflect the status flip to 'cancelling' → 'cancelled'.
+  const handleCancel = useCallback(async (j: HistoryItem) => {
+    try {
+      await cancelRender(j.job_id)
+      // Optimistic local update so the row immediately shows 'cancelling'
+      setJobs((prev) => prev.map((x) => x.job_id === j.job_id ? { ...x, status: 'cancelling' } : x))
+    } catch {
+      // Ignore — next poll will surface the real status.
+    }
+  }, [])
+
+  // Resume an interrupted/failed job — backend creates a fresh job_id
+  // continuing from the last successful part. Switch to Render tab so the
+  // user can monitor the resumed run.
+  const handleResume = useCallback(async (j: HistoryItem) => {
+    try {
+      await resumeRender(j.job_id)
+      onSwitchToRender?.()
+    } catch {
+      // Surface as a banner — leave row in current state.
+    }
+  }, [onSwitchToRender])
+
+  // Open the Render tab so RenderWorkflow's on-mount auto-reattach detects
+  // this active job and lands on the Rendering monitor screen.
+  const handleMonitor = useCallback((_j: HistoryItem) => {
+    onSwitchToRender?.()
+  }, [onSwitchToRender])
 
   useEffect(() => {
     setLoading(true)
@@ -465,19 +595,19 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
             {today.length > 0 && (
               <>
                 <SectionHeader label="Today" count={today.length} />
-                {today.map((j) => <JobRow key={j.job_id} job={j} onOpen={setSelected} />)}
+                {today.map((j) => <JobRow key={j.job_id} job={j} onOpen={setSelected} onCancel={handleCancel} onMonitor={handleMonitor} />)}
               </>
             )}
             {yesterday.length > 0 && (
               <>
                 <SectionHeader label="Yesterday" count={yesterday.length} />
-                {yesterday.map((j) => <JobRow key={j.job_id} job={j} onOpen={setSelected} />)}
+                {yesterday.map((j) => <JobRow key={j.job_id} job={j} onOpen={setSelected} onCancel={handleCancel} onMonitor={handleMonitor} />)}
               </>
             )}
             {older.length > 0 && (
               <>
                 <SectionHeader label="Older" count={older.length} />
-                {older.map((j) => <JobRow key={j.job_id} job={j} onOpen={setSelected} />)}
+                {older.map((j) => <JobRow key={j.job_id} job={j} onOpen={setSelected} onCancel={handleCancel} onMonitor={handleMonitor} />)}
               </>
             )}
           </>
@@ -485,7 +615,15 @@ export function HistoryTab({ lang: _lang }: { lang: Lang }) {
       </div>
 
       {/* Detail drawer */}
-      {selected && <DetailDrawer job={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <DetailDrawer
+          job={selected}
+          onClose={() => setSelected(null)}
+          onCancel={handleCancel}
+          onResume={handleResume}
+          onMonitor={handleMonitor}
+        />
+      )}
     </div>
   )
 }
