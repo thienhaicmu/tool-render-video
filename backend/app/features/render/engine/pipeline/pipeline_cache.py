@@ -303,6 +303,7 @@ def _llm_plan_cache_key(
     target_duration: int,
     clip_lock_repr: str,
     clip_exclude_repr: str,
+    language: str = "auto",
 ) -> str:
     """MD5 of the LLM inputs that fully determine the RenderPlan output."""
     srt_head = srt_content[:8192]  # first 8KB captures structure without full content
@@ -311,6 +312,7 @@ def _llm_plan_cache_key(
         target_platform, provider, model or "",
         editorial_hint or "", target_duration,
         clip_lock_repr, clip_exclude_repr,
+        language or "auto",
     )
 
 

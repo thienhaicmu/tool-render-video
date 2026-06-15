@@ -760,6 +760,7 @@ def run_render_pipeline(
                         target_duration=_llm_target_dur,
                         clip_lock_repr=str(_llm_clip_lock),
                         clip_exclude_repr=str(_llm_clip_excl),
+                        language=getattr(payload, "llm_language", "auto") or "auto",
                     )
                     _cached_plan_json = _llm_plan_cache_get(_llm_cache_key)
                     if _cached_plan_json:
