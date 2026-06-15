@@ -9,58 +9,32 @@
  * the active tab to Render — RenderWorkflow's own auto-reattach hook then
  * lands the user on the monitor view.
  */
-import { useEffect, useRef, useState } from 'react'
-import { getJobHistory } from '@/api/jobs'
-import type { HistoryItem } from '@/types/api'
-
-const POLL_MS = 4000
+import { useActiveJobs } from '@/stores/jobsStore'
 
 interface ActiveJobBadgeProps {
   onClick: () => void
 }
 
 export function ActiveJobBadge({ onClick }: ActiveJobBadgeProps) {
-  const [primary, setPrimary] = useState<HistoryItem | null>(null)
-  const [count, setCount] = useState(0)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Subscribes to the shared jobs store. The store owns the 4 s poll;
+  // mounting this component bumps the refcount, unmounting decrements
+  // it, and the interval is alive while any one subscriber is mounted.
+  const { active, activeCount } = useActiveJobs()
 
-  useEffect(() => {
-    let cancelled = false
-    const tick = async () => {
-      try {
-        const res = await getJobHistory(10, 0)
-        if (cancelled) return
-        const active = res.items.filter(
-          (j) => j.status === 'running' || j.status === 'queued',
-        )
-        setCount(active.length)
-        setPrimary(active[0] ?? null)
-      } catch {
-        // backend unreachable — keep last known
-      }
-    }
-    tick()
-    pollRef.current = setInterval(tick, POLL_MS)
-    return () => {
-      cancelled = true
-      if (pollRef.current) clearInterval(pollRef.current)
-    }
-  }, [])
+  if (activeCount === 0 || !active) return null
 
-  if (count === 0 || !primary) return null
-
-  const pct = Math.max(0, Math.min(100, primary.progress_percent || 0))
-  const label = primary.status === 'queued'
+  const pct = Math.max(0, Math.min(100, active.progress_percent || 0))
+  const label = active.status === 'queued'
     ? 'Queued'
-    : count > 1
-      ? `${count} rendering`
+    : activeCount > 1
+      ? `${activeCount} rendering`
       : `Rendering · ${pct}%`
 
   return (
     <button
       type="button"
       onClick={onClick}
-      title={primary.title || primary.source_hint || 'Active render job'}
+      title={active.title || active.source_hint || 'Active render job'}
       style={{
         position: 'relative',
         display: 'inline-flex',

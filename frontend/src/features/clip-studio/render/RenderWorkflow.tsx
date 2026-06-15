@@ -3,10 +3,11 @@ import './RenderWorkflow.css'
 import type { Lang } from '../ClipStudio'
 import { useRenderStore } from '@/stores/renderStore'
 import { useUIStore } from '@/stores/uiStore'
+import { useJobsStore } from '@/stores/jobsStore'
 import { useRenderSocket } from '@/hooks/useRenderSocket'
 import { prepareSource, cancelRender, cancelPrepareSource, retryRender, resumeRender } from '@/api/render'
 import type { PrepareSourceResponse } from '@/api/render'
-import { getJobHistory, getJobParts, getJobQualitySummary, getJobRanking } from '@/api/jobs'
+import { getJobParts, getJobQualitySummary, getJobRanking } from '@/api/jobs'
 import type { RenderRequest, JobPart, QualityReport, PartRankResult } from '@/types/api'
 import { useT, ERROR_KIND_KEY, ERROR_FIX_STEPS } from './i18n'
 import type { Step, CfgTab, ConfigState, Source } from './types'
@@ -92,27 +93,20 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   // hits the server dedup with HTTP 409 because the previous job is still
   // running. Detect that on mount and jump straight to the rendering view
   // so the user can monitor / cancel without bouncing through Source.
+  //
+  // Subscribes to the shared jobs store so we don't fire an extra
+  // /api/jobs/history GET when ActiveJobBadge + HistoryTab already poll
+  // it; we just pick up their already-fetched `active` value on first
+  // non-null render after mount.
+  const activeJob = useJobsStore((s) => s.active)
   useEffect(() => {
     if (jobId) return // already attached
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await getJobHistory(10, 0)
-        if (cancelled) return
-        const active = res.items.find(
-          (j) => j.status === 'running' || j.status === 'queued',
-        )
-        if (active) {
-          setJobId(active.job_id)
-          setStep(3)
-        }
-      } catch {
-        // backend unreachable — let user proceed via normal flow
-      }
-    })()
-    return () => { cancelled = true }
+    if (activeJob) {
+      setJobId(activeJob.job_id)
+      setStep(3)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [activeJob])
 
   useEffect(() => {
     if (!jobId || !isTerminal) return
@@ -478,12 +472,11 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     // submit time. Confirm + offer monitor instead. The user can still
     // proceed if they explicitly want to (e.g. they're going to pick a
     // DIFFERENT source — server dedup keys on source path, not just any
-    // active job).
+    // active job). Reads the shared jobs store rather than firing its own
+    // /api/jobs/history GET (the store is polled at 4 s so `active` is
+    // at most that stale, which is fine for a confirmation dialog).
     try {
-      const res = await getJobHistory(10, 0)
-      const active = res.items.find(
-        (j) => j.status === 'running' || j.status === 'queued',
-      )
+      const active = useJobsStore.getState().active
       if (active) {
         const msg = lang === 'VI'
           ? `Vẫn còn render đang chạy: ${active.title || active.job_id.slice(0, 8)}. Mở màn theo dõi job đó? (OK = mở · Cancel = bắt đầu render mới)`

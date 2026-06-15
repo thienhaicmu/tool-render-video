@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import type { Lang } from '../ClipStudio'
-import { getJobHistory } from '@/api/jobs'
 import { cancelRender, resumeRender } from '@/api/render'
+import { useActiveJobs, useJobsStore } from '@/stores/jobsStore'
 import type { HistoryItem } from '@/types/api'
 
 const FILTERS = ['All', 'Done', 'Failed', 'Running'] as const
@@ -428,8 +428,6 @@ function DetailDrawer({
   )
 }
 
-const POLL_MS = 5000
-
 interface HistoryTabProps {
   lang: Lang
   /** Switch the cs-shell active tab. Used to jump to the Render tab when
@@ -440,33 +438,30 @@ interface HistoryTabProps {
 export function HistoryTab({ lang: _lang, onSwitchToRender }: HistoryTabProps) {
   const [filter, setFilter]     = useState<Filter>('All')
   const [search, setSearch]     = useState('')
-  const [jobs, setJobs]         = useState<HistoryItem[]>([])
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState<string | null>(null)
   const [selected, setSelected] = useState<HistoryItem | null>(null)
-  const pollRef                 = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const refresh = useCallback(async () => {
-    try {
-      const res = await getJobHistory(100, 0)
-      setJobs(res.items)
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load history')
-    }
-  }, [])
+  // Subscribe to the shared jobs store. The store owns the 4 s poll —
+  // ActiveJobBadge + RenderWorkflow auto-reattach share the same fetch,
+  // so we no longer triple-poll /api/jobs/history.
+  const { items: jobs, loading, error, refresh } = useActiveJobs()
 
   // Cancel an active job from History row / drawer. Optimistic-only — the
-  // poll loop (5s) will reflect the status flip to 'cancelling' → 'cancelled'.
+  // shared poll loop will reflect the status flip to 'cancelling' →
+  // 'cancelled' within at most 4 s; the explicit refresh() below shortens
+  // that to ~one network round-trip.
   const handleCancel = useCallback(async (j: HistoryItem) => {
     try {
       await cancelRender(j.job_id)
-      // Optimistic local update so the row immediately shows 'cancelling'
-      setJobs((prev) => prev.map((x) => x.job_id === j.job_id ? { ...x, status: 'cancelling' } : x))
+      // Optimistic local update via the shared store so the row immediately
+      // shows 'cancelling'.
+      useJobsStore.setState((s) => ({
+        items: s.items.map((x) => x.job_id === j.job_id ? { ...x, status: 'cancelling' } : x),
+      }))
+      refresh()
     } catch {
       // Ignore — next poll will surface the real status.
     }
-  }, [])
+  }, [refresh])
 
   // Resume an interrupted/failed job — backend creates a fresh job_id
   // continuing from the last successful part. Switch to Render tab so the
@@ -475,23 +470,17 @@ export function HistoryTab({ lang: _lang, onSwitchToRender }: HistoryTabProps) {
     try {
       await resumeRender(j.job_id)
       onSwitchToRender?.()
+      refresh()
     } catch {
       // Surface as a banner — leave row in current state.
     }
-  }, [onSwitchToRender])
+  }, [onSwitchToRender, refresh])
 
   // Open the Render tab so RenderWorkflow's on-mount auto-reattach detects
   // this active job and lands on the Rendering monitor screen.
   const handleMonitor = useCallback((_j: HistoryItem) => {
     onSwitchToRender?.()
   }, [onSwitchToRender])
-
-  useEffect(() => {
-    setLoading(true)
-    refresh().finally(() => setLoading(false))
-    pollRef.current = setInterval(refresh, POLL_MS)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [refresh])
 
   const filtered = jobs.filter((j) => {
     if (filter === 'Done'    && !j.status.startsWith('completed')) return false
@@ -561,7 +550,7 @@ export function HistoryTab({ lang: _lang, onSwitchToRender }: HistoryTabProps) {
           </div>
 
           <button
-            onClick={() => { setLoading(true); refresh().finally(() => setLoading(false)) }}
+            onClick={() => { refresh() }}
             title="Refresh"
             style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 14, cursor: 'pointer', padding: 4, lineHeight: 1 }}
           >
