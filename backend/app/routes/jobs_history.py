@@ -211,6 +211,12 @@ def _normalize_history_item(row: dict, *, parts_lookup: "dict[str, list] | None"
         "can_open_folder": bool(output_dir),
         "can_retry": kind == "download" and failed > 0 and base_status not in {"running", "queued"},
         "can_rerun": kind == "render",
+        # T2 visibility (audit 2026-06-15): expose job-level progress_percent
+        # and the latest progress message so History rows + cs-shell topbar
+        # badge can render a live progress bar / ETA without making a
+        # second round-trip per row.
+        "progress_percent": int(row.get("progress_percent") or 0),
+        "message": str(row.get("message") or ""),
     }
 
 

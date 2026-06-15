@@ -64,7 +64,38 @@ function JobRow({
   const isRunning = job.status === 'running'
   const isQueued = job.status === 'queued'
   const [hov, setHov] = useState(false)
-  const pct = isRunning && job.total_count > 0 ? Math.round((job.completed_count / job.total_count) * 100) : 0
+  // Bug #10 fix: use the job-level progress_percent (added 2026-06-15 to
+  // /api/jobs/history). Falls back to parts-based ratio for older API
+  // responses that pre-dated the field. Job-level progress works for
+  // every stage (transcribing, scene_detection, etc.) — the parts ratio
+  // only works after segment_building.
+  const pct = isRunning
+    ? Math.max(
+        0,
+        Math.min(
+          100,
+          job.progress_percent ||
+            (job.total_count > 0
+              ? Math.round((job.completed_count / job.total_count) * 100)
+              : 0),
+        ),
+      )
+    : 0
+  // Bug #11 fix: derive a coarse ETA from elapsed time + progress %. Only
+  // useful once progress is > 3% (numeric noise floor) and < 99%.
+  const etaSec = (() => {
+    if (!isRunning || pct < 3 || pct >= 99) return 0
+    const startedAt = Date.parse(job.created_at)
+    if (!Number.isFinite(startedAt)) return 0
+    const elapsedSec = (Date.now() - startedAt) / 1000
+    if (elapsedSec < 5) return 0
+    return Math.max(0, Math.round((elapsedSec * (100 - pct)) / pct))
+  })()
+  const etaLabel = etaSec > 0
+    ? etaSec >= 60
+      ? `~${Math.round(etaSec / 60)}m left`
+      : `~${etaSec}s left`
+    : ''
 
   // Bug #3 fix: a running job's row should jump straight to the Rendering
   // screen (monitor view) on click; non-active rows open the detail drawer
@@ -147,9 +178,11 @@ function JobRow({
         </div>
       </div>
 
-      {/* Progress bar (running only) */}
-      {isRunning && job.total_count > 0 && (
-        <div style={{ width: 72, flexShrink: 0 }}>
+      {/* Progress bar (running) — Bug #10/#11 fix: always show when running
+          (uses job.progress_percent so it works for every stage) + ETA
+          label derived from elapsed × (100-pct)/pct. */}
+      {isRunning && (
+        <div style={{ width: 96, flexShrink: 0 }}>
           <div style={{ height: 5, borderRadius: 999, background: 'var(--surface-card-hover)', overflow: 'hidden' }}>
             <div style={{
               height: '100%', borderRadius: 999,
@@ -159,7 +192,19 @@ function JobRow({
               transition: 'width .4s ease',
             }} />
           </div>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-family-mono)', fontWeight: 600, color: 'var(--accent-primary)', textAlign: 'center' as const, marginTop: 3 }}>{pct}%</div>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            marginTop: 3, gap: 4,
+          }}>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-family-mono)', fontWeight: 600, color: 'var(--accent-primary)' }}>
+              {pct}%
+            </span>
+            {etaLabel && (
+              <span style={{ fontSize: 9, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' as const, fontFamily: 'var(--font-family-mono)' }}>
+                {etaLabel}
+              </span>
+            )}
+          </div>
         </div>
       )}
 

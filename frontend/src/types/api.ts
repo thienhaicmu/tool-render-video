@@ -400,6 +400,10 @@ export interface HistoryItem {
   can_open_folder: boolean
   can_retry: boolean
   can_rerun: boolean
+  /** Job-level progress (0-100). Added 2026-06-15 (T2 visibility). */
+  progress_percent: number
+  /** Latest stage message (e.g. "Whisper transcribing… 120s elapsed"). */
+  message: string
 }
 
 export interface JobsHistoryResponse {

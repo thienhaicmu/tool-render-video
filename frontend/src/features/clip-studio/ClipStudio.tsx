@@ -4,6 +4,7 @@ import { RenderWorkflow } from './render/RenderWorkflow'
 import { DownloadTab } from './download/DownloadTab'
 import { HistoryTab } from './history/HistoryTab'
 import { ThemeToggle } from '../../components/ui/ThemeToggle'
+import { ActiveJobBadge } from './ActiveJobBadge'
 
 type Tab = 'render' | 'download' | 'history'
 export type Lang = 'EN' | 'VI'
@@ -50,6 +51,7 @@ export function ClipStudio() {
         </nav>
 
         <div className="cs-topbar-right">
+          <ActiveJobBadge onClick={() => setActiveTab('render')} />
           <ThemeToggle size="sm" />
           <div className="cs-lang-sw">
             <button className={`cs-lang-btn${lang === 'EN' ? ' active' : ''}`} onClick={() => setLang('EN')}>EN</button>
