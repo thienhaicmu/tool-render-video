@@ -121,6 +121,19 @@ os.environ.setdefault("TEMP", str(_DATA_DIR / "tmp"))
 os.environ.setdefault("TMP",  str(_DATA_DIR / "tmp"))
 (_DATA_DIR / "tmp").mkdir(parents=True, exist_ok=True)
 
+# fontconfig — prevent libass/FFmpeg Access Violation (0xC0000005) on Windows.
+# libass calls fontconfig which calls FcConfigGetFilename(NULL) → returns NULL path
+# → null dereference crash when FONTCONFIG_FILE is not set in the environment.
+_fontconfig_dir = _DATA_DIR / "fontconfig"
+_fontconfig_dir.mkdir(parents=True, exist_ok=True)
+_fontconfig_conf = _fontconfig_dir / "fonts.conf"
+if not _fontconfig_conf.exists():
+    _fontconfig_conf.write_text(
+        '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig></fontconfig>\n',
+        encoding="utf-8",
+    )
+os.environ.setdefault("FONTCONFIG_FILE", str(_fontconfig_conf))
+
 app = FastAPI(title="YT TikTok Desktop Local Platform")
 app.include_router(render_router)
 app.include_router(jobs_router)

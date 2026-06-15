@@ -191,6 +191,8 @@ def get_custom_fonts_dir() -> str | None:
     candidates = [
         here.parents[2] / "fonts",
         here.parents[3] / "fonts",
+        here.parents[4] / "fonts",
+        here.parents[5] / "fonts",
     ]
     for candidate in candidates:
         if candidate.exists():

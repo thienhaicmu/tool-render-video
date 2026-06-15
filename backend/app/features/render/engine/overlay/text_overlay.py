@@ -139,6 +139,8 @@ def _custom_fonts_dir() -> Path | None:
     candidates = [
         here.parents[2] / "fonts",
         here.parents[3] / "fonts",
+        here.parents[4] / "fonts",
+        here.parents[5] / "fonts",
     ]
     for p in candidates:
         if p.exists():
