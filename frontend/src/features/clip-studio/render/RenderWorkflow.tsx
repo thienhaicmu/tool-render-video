@@ -452,6 +452,26 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     finally { setIsRetrying(false) }
   }
 
+  // N2: re-render the same source with the same Configure step settings.
+  // Keeps sources + cfg + prepareResult; only resets the live job-tracking
+  // state. Jumps to Step 2 (Configure) so the user can optionally tweak a
+  // setting before clicking Start Render — feels safer than skipping
+  // straight to submit. The Source step is skipped entirely because the
+  // file pick + prepare-source from the original flow already validated
+  // the same source.
+  function handleRerenderSameConfig() {
+    setStep(2)
+    setJobId(null)
+    setParts([])
+    setPartScores({})
+    setPartRanks({})
+    setQualityReports({})
+    setQualityLoadFailed(false)
+    setAllDataLoaded(false)
+    setIsSubmitting(false)
+    setSubmitError(null)
+  }
+
   async function handleNewRender() {
     // Bug #8 fix: if there's still an active render in the queue (running or
     // queued), starting a new flow only sets the user up for an HTTP 409 at
@@ -901,13 +921,48 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
             </ErrorBoundary>
             <div className="screen-footer">
               <button className="btn-back" onClick={() => setStep(3)}>{t.btnBackRendering}</button>
-              <div className="screen-footer-info">
+              <div className="screen-footer-info" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 {doneParts.length > 0
                   ? <><span style={{ color: 'var(--ok)' }}>✓ </span><span>{t.resClipsReady(doneParts.length)}</span></>
                   : <span>{t.stepRes}</span>
                 }
+                {/* N1 (audit 2026-06-15): one-click open of the output folder
+                    via shell:openPath IPC. Only shows when the job actually
+                    has an output_dir written. */}
+                {cfg.outputDir && (
+                  <button
+                    onClick={() => { window.electronAPI?.openPath?.(cfg.outputDir) }}
+                    title={cfg.outputDir}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '6px 12px', borderRadius: 999,
+                      background: 'var(--surface-card-hover)',
+                      border: '1px solid var(--border-default)',
+                      color: 'var(--text-primary)', fontSize: 12, fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+                    </svg>
+                    {lang === 'VI' ? 'Mở thư mục' : 'Open folder'}
+                  </button>
+                )}
               </div>
-              <button className="btn-next" onClick={handleNewRender}>{t.btnNewRender}</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {/* N2 (audit 2026-06-15): re-render the same source with the
+                    same config — saves the user from walking Source →
+                    Configure again when iterating on a video. */}
+                <button
+                  className="btn-back"
+                  onClick={handleRerenderSameConfig}
+                  disabled={!sources.length || isSubmitting}
+                  title={lang === 'VI' ? 'Render lại cùng cấu hình' : 'Re-render with same config'}
+                >
+                  ↻ {lang === 'VI' ? 'Render lại' : 'Render again'}
+                </button>
+                <button className="btn-next" onClick={handleNewRender}>{t.btnNewRender}</button>
+              </div>
             </div>
           </div>
         </>

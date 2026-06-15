@@ -5,6 +5,7 @@ import { DownloadTab } from './download/DownloadTab'
 import { HistoryTab } from './history/HistoryTab'
 import { ThemeToggle } from '../../components/ui/ThemeToggle'
 import { ActiveJobBadge } from './ActiveJobBadge'
+import { useUIStore } from '../../stores/uiStore'
 
 type Tab = 'render' | 'download' | 'history'
 export type Lang = 'EN' | 'VI'
@@ -19,6 +20,10 @@ const SettingsIcon = () => (
 export function ClipStudio() {
   const [activeTab, setActiveTab] = useState<Tab>('render')
   const [lang, setLang] = useState<Lang>('EN')
+  // N4 (audit 2026-06-15): Settings gear icon was previously a dead button
+  // with no onClick. Wire it to switch the global active panel to
+  // 'settings' so AppShell takes over and renders SettingsScreen.
+  const setActivePanel = useUIStore((s) => s.setActivePanel)
 
   return (
     <div className="cs-root">
@@ -57,7 +62,11 @@ export function ClipStudio() {
             <button className={`cs-lang-btn${lang === 'EN' ? ' active' : ''}`} onClick={() => setLang('EN')}>EN</button>
             <button className={`cs-lang-btn${lang === 'VI' ? ' active' : ''}`} onClick={() => setLang('VI')}>VI</button>
           </div>
-          <button className="cs-top-icon" title="Settings">
+          <button
+            className="cs-top-icon"
+            title="Settings"
+            onClick={() => setActivePanel('settings')}
+          >
             <SettingsIcon />
           </button>
         </div>

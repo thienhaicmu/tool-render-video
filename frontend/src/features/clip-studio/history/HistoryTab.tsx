@@ -392,16 +392,35 @@ function DetailDrawer({
             </button>
           )}
           {job.can_open_folder && job.output_dir && (
-            <button
-              onClick={() => { navigator.clipboard.writeText(job.output_dir!).catch(() => {}) }}
-              style={{
-                padding: '10px', borderRadius: 8, background: 'var(--surface-card-hover)',
-                border: '1px solid var(--border-strong)', color: 'var(--text-1)', fontSize: 11,
-                fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              Copy output path
-            </button>
+            <>
+              {/* N1 (audit 2026-06-15): native folder open via Electron IPC.
+                  Was previously only "Copy output path" — required user to
+                  Win+E, paste, navigate manually. */}
+              <button
+                onClick={() => { window.electronAPI?.openPath?.(job.output_dir!) }}
+                style={{
+                  padding: '11px', borderRadius: 8, background: 'var(--surface-card-hover)',
+                  border: '1px solid var(--border-strong)', color: 'var(--text-primary)',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+                </svg>
+                Open folder
+              </button>
+              <button
+                onClick={() => { navigator.clipboard.writeText(job.output_dir!).catch(() => {}) }}
+                style={{
+                  padding: '8px', borderRadius: 8, background: 'transparent',
+                  border: '1px solid var(--border-default)', color: 'var(--text-tertiary)', fontSize: 11,
+                  fontWeight: 500, cursor: 'pointer',
+                }}
+              >
+                Copy path
+              </button>
+            </>
           )}
         </div>
       </div>
