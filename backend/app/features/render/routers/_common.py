@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 import uuid
@@ -140,6 +141,42 @@ def _validate_output_dir(payload: RenderRequest):
                 "Pick a different folder or fix the permissions."
             ),
         )
+    # N8 (audit 2026-06-15): probe free disk space on the output partition so
+    # a render that would fill the disk halfway through gets rejected at
+    # submit time with a clear message instead of failing 20 minutes in with
+    # an OSError. The thresholds below are conservative — we don't know the
+    # exact source size yet, but anything < 256 MB free is guaranteed to
+    # break, and < 2 GB will run the cache pruner constantly. Both numbers
+    # are env-overridable for unusual deployments (test fixtures on small
+    # tmpfs, etc.).
+    import shutil as _shutil_n8
+    _min_free_mb_hard = int(os.getenv("RENDER_MIN_FREE_DISK_MB", "256"))
+    _min_free_mb_warn = int(os.getenv("RENDER_WARN_FREE_DISK_MB", "2048"))
+    try:
+        _usage = _shutil_n8.disk_usage(str(probe))
+        _free_mb = _usage.free // (1024 * 1024)
+        if _free_mb < _min_free_mb_hard:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"output_dir partition has only {_free_mb} MB free. "
+                    f"Render requires at least {_min_free_mb_hard} MB. "
+                    "Free up space on the drive or pick a different folder."
+                ),
+            )
+        if _free_mb < _min_free_mb_warn:
+            logger.warning(
+                "output_dir partition low on space: only %s MB free (< %s MB warn). "
+                "Render may exhaust disk mid-pipeline.",
+                _free_mb, _min_free_mb_warn,
+            )
+    except HTTPException:
+        raise
+    except Exception as _disk_exc:
+        # disk_usage can fail on network shares or permission-restricted paths.
+        # Don't block the render — log and let the pipeline discover the
+        # OSError naturally if disk really is full.
+        logger.warning("disk space probe failed for %s: %s", probe, _disk_exc)
 
 
 def _validate_render_source(payload: RenderRequest):

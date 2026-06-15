@@ -254,13 +254,20 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
 
 // Sprint 5.7: wrapped in React.memo at export below. See StepConfigure for rationale.
 function StepRenderingBase({
-  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, wsError, wsReconnecting, t, aspectRatio,
+  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, wsError, wsReconnecting, wsPolling, t, aspectRatio,
   aiAnalysisMode, aiCloudProvider,
 }: {
   jobId: string | null; stage: string; jobStatus: string
   progress: WsProgressSummary | null; jobMessage: string
   isTerminal: boolean; liveParts: JobPart[]
-  wsError: string | null; wsReconnecting?: boolean; t: Strings; aspectRatio: string
+  wsError: string | null
+  wsReconnecting?: boolean
+  // N5 (2026-06-15): true while the WebSocket has exhausted its reconnect
+  // budget and the hook is falling back to 5 s HTTP polling. UI was
+  // silently swallowing this state — user saw no difference, just
+  // slower-than-usual progress updates.
+  wsPolling?: boolean
+  t: Strings; aspectRatio: string
   aiAnalysisMode?: string; aiCloudProvider?: string
 }) {
   const pct         = progress?.overall_progress_percent ?? 0
@@ -394,9 +401,23 @@ function StepRenderingBase({
         </div>
       )}
 
-      {!isTerminal && (wsReconnecting || wsError) && (
-        <div style={{ padding: '8px 16px', background: 'rgba(234,179,8,.1)', borderBottom: '1px solid rgba(234,179,8,.2)', fontSize: '11px', color: 'var(--warn)', flexShrink: 0 }}>
-          {wsReconnecting ? `↻ ${t.rndWsReconnecting}` : `⚠ ${t.rndWsError}`}
+      {!isTerminal && (wsReconnecting || wsError || wsPolling) && (
+        <div style={{
+          padding: '8px 16px',
+          background: wsPolling
+            ? 'rgba(var(--accent-rgb),.08)'
+            : 'rgba(234,179,8,.1)',
+          borderBottom: `1px solid ${wsPolling ? 'rgba(var(--accent-rgb),.20)' : 'rgba(234,179,8,.2)'}`,
+          fontSize: '11px',
+          color: wsPolling ? 'var(--accent)' : 'var(--warn)',
+          flexShrink: 0,
+        }}>
+          {wsReconnecting
+            ? `↻ ${t.rndWsReconnecting}`
+            : wsPolling
+              // N5 (2026-06-15): WS exhausted reconnect → 5 s HTTP polling.
+              ? '⟳ Live updates unavailable — polling every 5s (progress will be slower)'
+              : `⚠ ${t.rndWsError}`}
         </div>
       )}
 

@@ -83,7 +83,12 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
 
   const { submitRender } = useRenderStore()
   const addNotification = useUIStore((s) => s.addNotification)
-  const { stage, jobStatus, progress, jobMessage, isTerminal, isReconnecting: wsReconnecting, liveParts, error: wsError, errorKind } = useRenderSocket(jobId)
+  const {
+    stage, jobStatus, progress, jobMessage, isTerminal,
+    isReconnecting: wsReconnecting,
+    isPolling:      wsPolling,
+    liveParts, error: wsError, errorKind,
+  } = useRenderSocket(jobId)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ── Auto-reattach to active job on mount ────────────────────────────────────
@@ -817,6 +822,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 liveParts={liveParts}
                 wsError={wsError}
                 wsReconnecting={wsReconnecting}
+                wsPolling={wsPolling}
                 t={t}
                 aspectRatio={RATIO_INFO[cfg.ratio].api}
                 aiAnalysisMode={cfg.aiAnalysisMode}
