@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from 'react'
 import { apiFetch } from '../api/client'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
+import { useUIStore } from '../stores/uiStore'
 
 interface WarmupStatus {
   model?: string
@@ -17,6 +18,10 @@ interface WarmupStatus {
 export function Topbar() {
   const [warmupStatus, setWarmupStatus] = useState<WarmupStatus | null>(null)
   const [isConnected, setIsConnected] = useState(false)
+  // #9 Dual-shell consistency (audit 2026-06-15): brand mark click jumps
+  // back to clip-studio so users who landed on Settings (via the cs-shell
+  // gear icon) have an obvious way back without needing the Sidebar.
+  const setActivePanel = useUIStore((s) => s.setActivePanel)
 
   useEffect(() => {
     let cancelled = false
@@ -53,7 +58,15 @@ export function Topbar() {
   return (
     <header style={styles.topbar}>
       <div style={styles.left}>
-        <span style={styles.wordmark}>AI Clip Studio</span>
+        <button
+          type="button"
+          onClick={() => setActivePanel('clip-studio')}
+          style={styles.brand}
+          title="Back to Studio"
+        >
+          <span style={styles.brandMark} aria-hidden="true">✦</span>
+          <span style={styles.wordmark}>AI Clip Studio</span>
+        </button>
       </div>
 
       <div style={styles.right}>
@@ -119,6 +132,32 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--space-4)',
+  },
+  brand: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: 0,
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'inherit',
+  },
+  brandMark: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    background: 'var(--brand-gradient)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 700,
+    letterSpacing: '-0.04em',
+    lineHeight: 1,
+    boxShadow:
+      '0 1px 0 rgba(255, 255, 255, 0.30) inset, 0 2px 8px rgba(139, 92, 246, 0.35)',
   },
   wordmark: {
     fontSize: 'var(--text-md)',

@@ -192,7 +192,7 @@ function CreatorContextSection() {
             fontWeight: 700,
             padding: '2px 6px',
             borderRadius: 4,
-            background: isConfigured ? 'rgba(0,200,150,.12)' : 'rgba(138,147,176,.10)',
+            background: isConfigured ? 'rgba(var(--ok-rgb),.12)' : 'rgba(var(--text-rgb),.10)',
             color: isConfigured ? 'var(--ok)' : 'var(--text-3)',
             letterSpacing: '.04em',
           }}
@@ -288,10 +288,10 @@ function CreatorContextSection() {
                 borderRadius: 7,
                 fontSize: 11,
                 fontWeight: 700,
-                fontFamily: 'var(--fh)',
+                fontFamily: 'var(--font-family-base)',
                 letterSpacing: '.04em',
-                border: '1px solid rgba(123,97,255,.4)',
-                background: 'rgba(123,97,255,.10)',
+                border: '1px solid rgba(var(--accent-rgb),.4)',
+                background: 'rgba(var(--accent-rgb),.10)',
                 color: 'var(--accent)',
                 cursor: saving ? 'not-allowed' : 'pointer',
                 opacity: saving ? 0.5 : 1,
@@ -308,7 +308,7 @@ function CreatorContextSection() {
                 borderRadius: 7,
                 fontSize: 11,
                 fontWeight: 700,
-                fontFamily: 'var(--fh)',
+                fontFamily: 'var(--font-family-base)',
                 letterSpacing: '.04em',
                 border: '1px solid var(--border)',
                 background: 'transparent',
@@ -404,8 +404,8 @@ function DataRetentionSection() {
             padding: '2px 6px',
             borderRadius: 4,
             background: isConfigured && days > 0
-              ? 'rgba(0,200,150,.12)'
-              : 'rgba(138,147,176,.10)',
+              ? 'rgba(var(--ok-rgb),.12)'
+              : 'rgba(var(--text-rgb),.10)',
             color: isConfigured && days > 0 ? 'var(--ok)' : 'var(--text-3)',
             letterSpacing: '.04em',
           }}
@@ -448,10 +448,10 @@ function DataRetentionSection() {
                 borderRadius: 7,
                 fontSize: 11,
                 fontWeight: 700,
-                fontFamily: 'var(--fh)',
+                fontFamily: 'var(--font-family-base)',
                 letterSpacing: '.04em',
-                border: '1px solid rgba(123,97,255,.4)',
-                background: 'rgba(123,97,255,.10)',
+                border: '1px solid rgba(var(--accent-rgb),.4)',
+                background: 'rgba(var(--accent-rgb),.10)',
                 color: 'var(--accent)',
                 cursor: saving ? 'not-allowed' : 'pointer',
                 opacity: saving ? 0.5 : 1,
@@ -521,7 +521,7 @@ export function SettingsScreen() {
 
       {/* Header */}
       <div>
-        <div style={{ fontFamily: 'var(--fh)', fontSize: 16, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.5px' }}>
+        <div style={{ fontFamily: 'var(--font-family-base)', fontSize: 16, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.5px' }}>
           CÀI ĐẶT
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
@@ -552,8 +552,8 @@ export function SettingsScreen() {
                 disabled={clearing}
                 style={{
                   padding: '6px 16px', borderRadius: 7, fontSize: 11, fontWeight: 700,
-                  fontFamily: 'var(--fh)', letterSpacing: '.04em',
-                  border: '1px solid rgba(232,64,122,.4)', background: 'rgba(232,64,122,.08)',
+                  fontFamily: 'var(--font-family-base)', letterSpacing: '.04em',
+                  border: '1px solid rgba(var(--fail-rgb),.4)', background: 'rgba(var(--fail-rgb),.08)',
                   color: 'var(--fail)', cursor: clearing ? 'not-allowed' : 'pointer',
                   opacity: clearing ? .5 : 1,
                 }}
