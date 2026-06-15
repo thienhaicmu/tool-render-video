@@ -47,6 +47,7 @@ Logger note (same pattern as 6.D-2.1 / 6.D-2.2):
 """
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import os
 import time
@@ -108,11 +109,31 @@ def run_cut_stage(
     """
     _trim_offset = 0.0
     _cut_ms = _first_frame_scan_ms = 0
+    _src = str(ctx.source_path)
 
-    try:
-        _trim_offset = detect_silence_trim_offset(str(ctx.source_path), seg["start"], seg["end"])
-    except Exception:
-        _trim_offset = 0.0
+    # Run silence scan and first-frame scan in parallel with the original seg["start"].
+    # Fast path (~70% of parts): silence=0 → first-frame result reused directly,
+    # saving 100-500 ms vs sequential execution.
+    # Slow path (~30% of parts): silence>0 shifts _effective_start → first-frame
+    # re-runs with the adjusted start (one extra ~100 ms scan).
+    _t_ff = time.perf_counter()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as _scan_pool:
+        _sil_fut = _scan_pool.submit(
+            detect_silence_trim_offset, _src, seg["start"], seg["end"]
+        )
+        _ff_fut = _scan_pool.submit(
+            detect_bad_first_frame, _src, seg["start"], seg["end"]
+        )
+        try:
+            _trim_offset = _sil_fut.result()
+        except Exception:
+            _trim_offset = 0.0
+        try:
+            _visual_trim_at_base = _ff_fut.result()
+        except Exception:
+            _visual_trim_at_base = 0.0
+    _first_frame_scan_ms = int((time.perf_counter() - _t_ff) * 1000)
+
     if _trim_offset > 0 and (seg["end"] - seg["start"] - _trim_offset) < 3.0:
         _trim_offset = 0.0
     if _trim_offset > 0:
@@ -135,14 +156,20 @@ def run_cut_stage(
 
     _visual_trim = 0.0
     _force_accurate_cut = False
-    try:
-        logger.info("first_frame_scan_started part_no=%d effective_start=%.3f", idx, _effective_start)
-        _t_ff = time.perf_counter()
-        _visual_trim = detect_bad_first_frame(str(ctx.source_path), _effective_start, seg["end"])
-        _first_frame_scan_ms = int((time.perf_counter() - _t_ff) * 1000)
-        logger.info("first_frame_scan_ms=%d part=%d shift=%.3f", _first_frame_scan_ms, idx, _visual_trim)
-    except Exception:
-        _visual_trim = 0.0
+    if _trim_offset == 0.0:
+        # Fast path: no silence shift — parallel first-frame result is valid as-is
+        _visual_trim = _visual_trim_at_base
+        logger.info("first_frame_scan_ms=%d part=%d shift=%.3f (parallel)", _first_frame_scan_ms, idx, _visual_trim)
+    else:
+        # Slow path: silence shifted the start — re-scan first-frame with adjusted start
+        logger.info("first_frame_scan_started part_no=%d effective_start=%.3f (re-scan after silence)", idx, _effective_start)
+        _t_ff2 = time.perf_counter()
+        try:
+            _visual_trim = detect_bad_first_frame(_src, _effective_start, seg["end"])
+        except Exception:
+            _visual_trim = 0.0
+        _first_frame_scan_ms += int((time.perf_counter() - _t_ff2) * 1000)
+        logger.info("first_frame_scan_ms=%d part=%d shift=%.3f (re-scan)", _first_frame_scan_ms, idx, _visual_trim)
     if _visual_trim > 0:
         _candidate_total = _trim_offset + _visual_trim
         if (seg["end"] - seg["start"] - _candidate_total) >= 3.0:
@@ -175,7 +202,7 @@ def run_cut_stage(
     _part_timeline = TimelineMap(
         source_start=float(_effective_start),
         source_end=float(_effective_end),
-        effective_speed=_get_effective_playback_speed(ctx.payload, ctx.target_platform),
+        effective_speed=max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.0) + _part_platform_delta)),
         trim_offset=float(_trim_offset),
     )
     _part_manifest = BaseClipManifest(
@@ -202,8 +229,6 @@ def run_cut_stage(
         ai_selected=False,
         ai_speed_hint=None,
     )
-    write_manifest(ctx.work_dir, _part_manifest)
-
     upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
 
     if not (ctx.payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):

@@ -305,7 +305,13 @@ def run_part_finalize(
     _encode_ms = int((time.perf_counter() - _t_encode) * 1000)
     _total_part_ms = int((time.perf_counter() - _t_part_start) * 1000)
     _effective_duration = max(0.0, float(seg["end"]) - float(_effective_start))
-    _render_speed = _get_effective_playback_speed(ctx.payload, ctx.target_platform)
+    # Use the same speed formula as the encoder so expected_duration matches
+    # what FFmpeg actually produced. When AI sets clip pacing, encoder uses
+    # base + pacing_delta + soft_platform_delta (capped at ±PLATFORM_SOFT_CAP).
+    # _get_effective_playback_speed uses the full platform delta, which diverges
+    # when AI pacing is active → expected < actual → RN001 false-fail.
+    _log_pacing_delta, _log_platform_delta = _resolve_pacing_speed_delta(ctx, idx, ctx.target_platform)
+    _render_speed = max(0.5, min(1.5, float(ctx.payload.playback_speed or 1.0) + _log_pacing_delta + _log_platform_delta))
     _remotion_intro_sec = _maybe_prepend_remotion_hook_intro(
         final_part,
         ctx.payload,
@@ -328,7 +334,6 @@ def run_part_finalize(
         + _remotion_intro_sec + _asset_intro_sec + _asset_outro_sec,
     )
     _speed_ratio = round(_expected_final_duration * 1000 / max(_encode_ms, 1), 2)
-    _log_pacing_delta, _log_platform_delta = _resolve_pacing_speed_delta(ctx, idx, ctx.target_platform)
     _job_log(
         ctx.effective_channel, ctx.job_id,
         f"playback_speed_resolution part={idx} "

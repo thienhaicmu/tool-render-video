@@ -30,7 +30,7 @@ _RENDER_CACHE_TTL_SEC = 72 * 3600  # 72 h
 # entry under cache/transcription/content/ so a re-downloaded file (same
 # audio, different path or mtime) hits the cache instead of re-running Whisper.
 # Off by default — opt-in via WHISPER_CONTENT_HASH_CACHE=1.
-_CONTENT_HASH_CACHE: bool = os.getenv("WHISPER_CONTENT_HASH_CACHE", "0") == "1"
+_CONTENT_HASH_CACHE: bool = os.getenv("WHISPER_CONTENT_HASH_CACHE", "1") == "1"
 
 
 def _render_cache_key(*parts) -> str:
@@ -277,5 +277,64 @@ def _score_cache_put(key: str, scored: list) -> None:
         cache_dir = APP_DATA_DIR / "cache" / "segment_scores"
         cache_dir.mkdir(parents=True, exist_ok=True)
         _atomic_write_text(cache_dir / f"{key}.json", json.dumps(scored))
+    except Exception:
+        pass
+
+
+# ── LLM RenderPlan response cache ────────────────────────────────────────────
+# Caches the JSON output of _llm_select_render_plan() keyed on the parameters
+# that fully determine the LLM's output. A cache hit skips the 5-30s API call.
+# TTL matches other render caches (72h).
+#
+# Distinct from the resume path (OPT-06 / get_render_plan): OPT-06 skips the
+# LLM when retrying the *same job_id*. This cache skips the LLM when the
+# *same content* is rendered again (different job_id, any changed settings
+# beyond the key params still produce a cache miss).
+
+def _llm_plan_cache_key(
+    srt_content: str,
+    output_count: int,
+    min_sec: float,
+    max_sec: float,
+    target_platform: str,
+    provider: str,
+    model: str,
+    editorial_hint: str,
+    target_duration: int,
+    clip_lock_repr: str,
+    clip_exclude_repr: str,
+) -> str:
+    """MD5 of the LLM inputs that fully determine the RenderPlan output."""
+    srt_head = srt_content[:8192]  # first 8KB captures structure without full content
+    return _render_cache_key(
+        srt_head, output_count, round(min_sec, 1), round(max_sec, 1),
+        target_platform, provider, model or "",
+        editorial_hint or "", target_duration,
+        clip_lock_repr, clip_exclude_repr,
+    )
+
+
+def _llm_plan_cache_get(key: str) -> str | None:
+    """Return cached RenderPlan JSON string, or None on miss / stale / error."""
+    try:
+        cache_file = APP_DATA_DIR / "cache" / "llm_plan" / f"{key}.json"
+        if not cache_file.exists():
+            return None
+        if time.time() - cache_file.stat().st_mtime > _RENDER_CACHE_TTL_SEC:
+            cache_file.unlink(missing_ok=True)
+            return None
+        return cache_file.read_text(encoding="utf-8")
+    except Exception:
+        return None
+
+
+def _llm_plan_cache_put(key: str, plan_json: str) -> None:
+    """Atomic write of RenderPlan JSON to cache/llm_plan/{key}.json."""
+    try:
+        if not plan_json:
+            return
+        cache_dir = APP_DATA_DIR / "cache" / "llm_plan"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        _atomic_write_text(cache_dir / f"{key}.json", plan_json)
     except Exception:
         pass

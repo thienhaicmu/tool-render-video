@@ -255,11 +255,12 @@ def _resolve_pacing_speed_delta(
                 pacing = (getattr(clips[idx - 1], "pacing", "") or "").strip().lower()
                 if pacing in _PACING_TO_SPEED_DELTA:
                     ai_delta = _PACING_TO_SPEED_DELTA[pacing]
-                    soft_platform = max(
-                        -_PLATFORM_SOFT_CAP,
-                        min(_PLATFORM_SOFT_CAP, full_platform_delta),
-                    )
-                    return ai_delta, soft_platform
+                    # AI pacing is additive on top of the full platform delta,
+                    # not a replacement. Returning full_platform_delta ensures
+                    # the encoder/validator both produce output at
+                    # base + pacing_delta + platform_delta, so output duration
+                    # stays within the user's desired range for the platform.
+                    return ai_delta, full_platform_delta
         return 0.0, full_platform_delta
     except Exception:
         return 0.0, 0.0

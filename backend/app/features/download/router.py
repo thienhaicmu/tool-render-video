@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -31,7 +32,13 @@ logger = logging.getLogger("app.downloader")
 
 router = APIRouter(prefix="/api/downloader", tags=["downloader"])
 
-_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="platform-dl")
+_DOWNLOAD_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="dl-main")
+_ENRICH_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dl-enrich")
+
+# In-flight dedup: prevents duplicate downloads when the same URL is submitted
+# twice before the first job finishes. url → job_id, cleared in _run_download finally.
+_INFLIGHT_URLS: dict[str, str] = {}
+_INFLIGHT_LOCK = threading.Lock()
 
 
 # ── Security helpers ──────────────────────────────────────────────────────────
@@ -154,7 +161,7 @@ def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -
                     title=result.get("title") or "",
                 )
                 update_asset_status(_asset_id, "enriching")
-                _EXECUTOR.submit(enrich_asset, _asset_id, _output_path)
+                _ENRICH_EXECUTOR.submit(enrich_asset, _asset_id, _output_path)
         except Exception:
             logger.warning("download: asset registration failed job_id=%s", job_id, exc_info=True)
 
@@ -188,6 +195,9 @@ def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -
             exc_info=True,
         )
         dl_job_fail(job_id, error=msg, platform=_platform)
+    finally:
+        with _INFLIGHT_LOCK:
+            _INFLIGHT_URLS.pop(url, None)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -202,11 +212,17 @@ def get_info(url: str):
 @router.post("/start")
 def start_download(req: DownloadStartRequest):
     url = _validate_download_url(req.url)
-    output_dir = _validate_output_dir(req.output_dir)
-    job_id = str(uuid.uuid4())
-    platform = detect_platform(url)
-    create_download_job(job_id, url, platform, str(output_dir))
-    _EXECUTOR.submit(_run_download, job_id, url, output_dir, platform)
+    with _INFLIGHT_LOCK:
+        if url in _INFLIGHT_URLS:
+            existing_id = _INFLIGHT_URLS[url]
+            logger.info("download: dedup hit url=%s existing_job=%s", url, existing_id)
+            return {"job_id": existing_id, "platform": detect_platform(url), "dedup": True}
+        output_dir = _validate_output_dir(req.output_dir)
+        job_id = str(uuid.uuid4())
+        platform = detect_platform(url)
+        _INFLIGHT_URLS[url] = job_id
+        create_download_job(job_id, url, platform, str(output_dir))
+    _DOWNLOAD_EXECUTOR.submit(_run_download, job_id, url, output_dir, platform)
     return {"job_id": job_id, "platform": platform}
 
 
@@ -225,7 +241,7 @@ def start_batch(req: BatchDownloadStartRequest):
         job_id = str(uuid.uuid4())
         platform = detect_platform(url)
         create_download_job(job_id, url, platform, str(output_dir))
-        _EXECUTOR.submit(_run_download, job_id, url, output_dir, platform)
+        _DOWNLOAD_EXECUTOR.submit(_run_download, job_id, url, output_dir, platform)
         job_ids.append({"job_id": job_id, "url": url, "platform": platform})
     return {"jobs": job_ids}
 
@@ -266,7 +282,7 @@ async def job_progress_ws(websocket: WebSocket, job_id: str):
             await websocket.send_json(job)
             if job.get("status") in ("done", "failed"):
                 break
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
     except WebSocketDisconnect:
         pass
     except Exception as exc:

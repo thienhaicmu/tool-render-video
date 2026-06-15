@@ -89,6 +89,7 @@ from app.features.render.engine.pipeline.pipeline_ranking import (
     _compute_output_ranking_entry,
     _resolve_rank_from_plan,
 )
+from app.features.render.engine.pipeline.pipeline_segment_selection import _get_effective_playback_speed as _get_llm_speed
 from app.features.render.engine.pipeline.pipeline_config import (
     _resolve_profile,
     _probe_video_duration,  # noqa: F401 (re-exported for routes/render.py)
@@ -99,7 +100,7 @@ from app.features.render.engine.pipeline.pipeline_config import (
 # None and the Sprint 4.E/F/G stage resolvers fall back to the legacy
 # payload-derived logic — Sacred Contract #2 baseline preservation.
 from app.features.render.ai.llm import select_render_plan as _llm_select_render_plan
-from app.db.jobs_repo import update_render_plan
+from app.db.jobs_repo import get_render_plan, update_render_plan
 
 
 # Sprint 4.D — feature flag: when ON (default since Sprint 7.6a), ask the LLM
@@ -661,7 +662,34 @@ def run_render_pipeline(
         # Outer try/except is the Sacred Contract #3 belt-and-braces.
         _render_plan = None
         try:
-            if _FEATURE_LLM_EMIT_RENDER_PLAN:
+            # Resume path: when retrying/resuming a job that already ran the LLM,
+            # load the persisted RenderPlan from DB and skip the LLM call entirely.
+            # This saves 5-30s of LLM latency + API token cost on every retry.
+            if _FEATURE_LLM_EMIT_RENDER_PLAN and getattr(payload, "resume_from_last", False):
+                try:
+                    from app.domain.render_plan import RenderPlan as _RP
+                    _existing_json = get_render_plan(job_id)
+                    if _existing_json:
+                        _render_plan = _RP.from_json(_existing_json)
+                        if _render_plan is not None:
+                            logger.info(
+                                "render_plan: resume hit — reusing persisted plan (clips=%d, skip LLM)",
+                                len(_render_plan.clips),
+                            )
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="render.plan.resumed",
+                                level="INFO",
+                                message=f"RenderPlan loaded from DB (resume — LLM skipped, clips={len(_render_plan.clips)})",
+                                step="render.llm_pipeline",
+                                context={"clips_count": len(_render_plan.clips), "reason": "resume_from_last"},
+                            )
+                except Exception as _resume_exc:
+                    logger.warning("render_plan: resume load failed (non-fatal): %s", _resume_exc)
+                    _render_plan = None
+
+            if _render_plan is None and _FEATURE_LLM_EMIT_RENDER_PLAN:
                 try:
                     from app.core import config as _ai_cfg
                     _ai_provider = (getattr(payload, "ai_provider", "") or "").strip().lower() \
@@ -699,45 +727,81 @@ def run_render_pipeline(
                         _ai_editorial_hint = _build_editorial_hint(payload)
                     except Exception:
                         _ai_editorial_hint = ""
-                    logger.info(
-                        "render_plan: LLM_EMIT_RENDER_PLAN=1 — attempting AI emission (provider=%s)",
-                        _ai_provider,
+                    # OPT-02: LLM plan cache — skip API call when same content
+                    # was rendered before (different job_id, same params).
+                    from app.features.render.engine.pipeline.pipeline_cache import (
+                        _llm_plan_cache_get,
+                        _llm_plan_cache_put,
+                        _llm_plan_cache_key,
                     )
-                    _render_plan = _llm_select_render_plan(
-                        provider=_ai_provider,
+                    from app.domain.render_plan import RenderPlan as _RP_cache
+                    _llm_out_count = int(getattr(payload, "output_count", 1) or 1)
+                    _llm_model = str(getattr(payload, "llm_model", "") or "")
+                    _llm_target_dur = int(getattr(payload, "target_duration", 0) or 0)
+                    _llm_clip_lock = getattr(payload, "clip_lock", None) or None
+                    _llm_clip_excl = getattr(payload, "clip_exclude", None) or None
+                    _llm_tgt_plat = str(getattr(payload, "target_platform", "") or "").lower()
+                    # Scale source-clip duration limits by the platform speed so the
+                    # AI selects segments that produce outputs within the user's desired
+                    # duration range after rendering. e.g. user wants 45–60s output on
+                    # TikTok (1.08×) → tell AI to find 48.6–64.8s source segments.
+                    _llm_plat_speed = _get_llm_speed(payload, _llm_tgt_plat)
+                    _llm_min_sec = float(_seg_min_sec) * _llm_plat_speed
+                    _llm_max_sec = float(_seg_max_sec) * _llm_plat_speed
+                    _llm_cache_key = _llm_plan_cache_key(
                         srt_content=_ai_srt_content,
-                        output_count=int(getattr(payload, "output_count", 1) or 1),
-                        min_sec=float(_seg_min_sec),
-                        max_sec=float(_seg_max_sec),
-                        video_duration=_ai_video_duration,
-                        api_key=_ai_api_key,
-                        model=getattr(payload, "llm_model", None) or None,
-                        language=getattr(payload, "llm_language", "auto") or "auto",
+                        output_count=_llm_out_count,
+                        min_sec=_llm_min_sec,
+                        max_sec=_llm_max_sec,
+                        target_platform=_llm_tgt_plat,
+                        provider=_ai_provider,
+                        model=_llm_model,
                         editorial_hint=_ai_editorial_hint,
-                        # T2.4 — Audit 2026-06-08 closure (Batch A V8-A1).
-                        # Surface the creator's target_duration to the LLM
-                        # as a soft total-duration budget. 0 (default for
-                        # historical payloads that never set it) suppresses
-                        # the prompt section — backward-compatible.
-                        target_duration=int(getattr(payload, "target_duration", 0) or 0),
-                        # Strategic-1 — Audit 2026-06-08 closure (Batch A
-                        # V8-A12 / UP26 Pro Timeline Steering). Pass the
-                        # creator's lock/exclude ranges to the LLM as
-                        # hard constraints. None / empty (default for
-                        # historical payloads that never set them)
-                        # suppresses both prompt sections — backward-
-                        # compatible. The fields are Optional[list[dict]]
-                        # in models/render.py; we coerce None -> None.
-                        clip_lock=getattr(payload, "clip_lock", None) or None,
-                        clip_exclude=getattr(payload, "clip_exclude", None) or None,
-                        # Phase B — pass target_platform so AI prompt receives
-                        # platform editorial guidance (tiktok/youtube_shorts/
-                        # instagram_reels).  "" (default for historical payloads)
-                        # suppresses the section — backward-compatible.
-                        target_platform=str(
-                            getattr(payload, "target_platform", "") or ""
-                        ).lower(),
+                        target_duration=_llm_target_dur,
+                        clip_lock_repr=str(_llm_clip_lock),
+                        clip_exclude_repr=str(_llm_clip_excl),
                     )
+                    _cached_plan_json = _llm_plan_cache_get(_llm_cache_key)
+                    if _cached_plan_json:
+                        _render_plan = _RP_cache.from_json(_cached_plan_json)
+                        if _render_plan is not None:
+                            logger.info(
+                                "render_plan: llm_cache hit — skipping LLM call (clips=%d)",
+                                len(_render_plan.clips),
+                            )
+                            _emit_render_event(
+                                channel_code=effective_channel,
+                                job_id=job_id,
+                                event="render.plan.cache_hit",
+                                level="INFO",
+                                message=f"RenderPlan from LLM cache (clips={len(_render_plan.clips)}, LLM skipped)",
+                                step="render.llm_pipeline",
+                                context={"clips_count": len(_render_plan.clips), "reason": "llm_response_cache"},
+                            )
+
+                    if _render_plan is None:
+                        logger.info(
+                            "render_plan: LLM_EMIT_RENDER_PLAN=1 — attempting AI emission (provider=%s)",
+                            _ai_provider,
+                        )
+                        _render_plan = _llm_select_render_plan(
+                            provider=_ai_provider,
+                            srt_content=_ai_srt_content,
+                            output_count=_llm_out_count,
+                            min_sec=_llm_min_sec,
+                            max_sec=_llm_max_sec,
+                            video_duration=_ai_video_duration,
+                            api_key=_ai_api_key,
+                            model=getattr(payload, "llm_model", None) or None,
+                            language=getattr(payload, "llm_language", "auto") or "auto",
+                            editorial_hint=_ai_editorial_hint,
+                            target_duration=_llm_target_dur,
+                            clip_lock=_llm_clip_lock,
+                            clip_exclude=_llm_clip_excl,
+                            target_platform=_llm_tgt_plat,
+                        )
+                        if _render_plan is not None:
+                            _llm_plan_cache_put(_llm_cache_key, _render_plan.to_json())
                     if _render_plan is not None:
                         _emit_render_event(
                             channel_code=effective_channel,
@@ -1147,13 +1211,15 @@ def run_render_pipeline(
         #   ffmpeg; this competes directly with parallel workers on CPU.
         # - reup_mode: BGM audio subprocess; moderate overhead on CPU.
         if gpu_ready:
-            # GPU handles encode; CPU cost per worker is low.
-            # Only penalise the pre-pass operations that stay on CPU.
+            # GPU handles encode; CPU is free during the NVENC encode phase.
+            # motion_aware_crop is a CPU pre-pass that finishes BEFORE ffmpeg starts;
+            # while clip N is encoding on GPU, clip N+1 can run motion_crop on CPU
+            # without conflict — so it does NOT count as a parallel penalty here.
+            # Only reup_mode (BGM audio subprocess) overlaps with encode on CPU.
             cpu_extra = sum([
-                bool(payload.motion_aware_crop),
                 bool(payload.reup_mode),
             ])
-            heavy_penalty = min(cpu_extra, 2)
+            heavy_penalty = min(cpu_extra, 1)
             base = max(2, cpu_total // 3)
             hard_ceiling = 6
         else:
@@ -1580,11 +1646,14 @@ def run_render_pipeline(
         return
     finally:
         if payload.cleanup_temp_files:
-            try:
-                shutil.rmtree(work_dir, ignore_errors=True)
-                _job_log(effective_channel, job_id, "Temporary files cleaned")
-            except Exception as cleanup_err:
-                _job_log(effective_channel, job_id, f"Temp cleanup warning: {cleanup_err}")
+            def _bg_cleanup(_wd=work_dir, _ch=effective_channel, _jid=job_id):
+                try:
+                    shutil.rmtree(_wd, ignore_errors=True)
+                    _job_log(_ch, _jid, "Temporary files cleaned (background)")
+                except Exception as _ce:
+                    _job_log(_ch, _jid, f"Temp cleanup warning: {_ce}")
+            threading.Thread(target=_bg_cleanup, daemon=True,
+                             name=f"cleanup_{job_id[:8]}").start()
         # Cleanup preview session only on success — failed/cancelled renders should
         # keep the session alive so the user can retry without re-preparing the source.
         _session_render_succeeded = _final_status in ("completed", "completed_with_errors")

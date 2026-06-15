@@ -258,8 +258,10 @@ def test_orchestrator_passes_clip_lock_and_clip_exclude_to_dispatcher():
     source = src.read_text(encoding="utf-8-sig")
 
     # The _llm_select_render_plan call must include both kwargs.
+    # OPT-02 pre-extracts the values into local variables before the call,
+    # so we check (a) kwarg is in the call and (b) payload.clip_lock is read.
     assert re.search(
-        r"_llm_select_render_plan\([\s\S]*?clip_lock\s*=\s*getattr\(",
+        r"_llm_select_render_plan\([\s\S]*?clip_lock\s*=",
         source,
     ), (
         "Strategic-1 regression — render_pipeline.py no longer passes "
@@ -267,11 +269,25 @@ def test_orchestrator_passes_clip_lock_and_clip_exclude_to_dispatcher():
         "broken; the prompt section never renders."
     )
     assert re.search(
-        r"_llm_select_render_plan\([\s\S]*?clip_exclude\s*=\s*getattr\(",
+        r"getattr\(payload,\s*['\"]clip_lock['\"]",
+        source,
+    ), (
+        "Strategic-1 regression — render_pipeline.py no longer reads "
+        "payload.clip_lock before passing to _llm_select_render_plan."
+    )
+    assert re.search(
+        r"_llm_select_render_plan\([\s\S]*?clip_exclude\s*=",
         source,
     ), (
         "Strategic-1 regression — render_pipeline.py no longer passes "
         "clip_exclude= into _llm_select_render_plan."
+    )
+    assert re.search(
+        r"getattr\(payload,\s*['\"]clip_exclude['\"]",
+        source,
+    ), (
+        "Strategic-1 regression — render_pipeline.py no longer reads "
+        "payload.clip_exclude before passing to _llm_select_render_plan."
     )
 
 

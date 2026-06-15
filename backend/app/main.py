@@ -1,5 +1,6 @@
 
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
@@ -135,6 +136,7 @@ if not _fontconfig_conf.exists():
 os.environ.setdefault("FONTCONFIG_FILE", str(_fontconfig_conf))
 
 app = FastAPI(title="YT TikTok Desktop Local Platform")
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(render_router)
 app.include_router(jobs_router)
 # Security: POST /api/dev/command executes arbitrary shell commands with no auth.

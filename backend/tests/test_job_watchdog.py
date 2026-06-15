@@ -71,8 +71,11 @@ def test_watchdog_exceeds_max_job_age_cancels(monkeypatch):
 
 def test_watchdog_survives_cancel_failure(monkeypatch):
     """If request_cancel() raises, _check_and_cancel_stale_jobs must not propagate the error."""
+    import uuid
     import app.jobs.manager as mgr
-    job_id = "watchdog-test-cancel-fail"
+    # Unique per-run ID prevents the hardcoded string from accumulating in
+    # _active_job_ids across repeated pytest runs against a live backend process.
+    job_id = f"watchdog-test-cancel-fail-{uuid.uuid4().hex[:8]}"
     _register_job(job_id, start_offset=mgr._MAX_JOB_AGE + 10)
 
     def _raise(jid: str) -> None:

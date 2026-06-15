@@ -219,7 +219,7 @@ def run_llm_pre_render(
             def _hb_fn(_stop=_hb_stop, _m=_model, _eta=_eta_sec):
                 _pct = 16
                 _tick = 0
-                while not _stop.wait(5):  # heartbeat every 5s (was 12s)
+                while not _stop.wait(10):  # heartbeat every 10s — halves DB writes during Whisper
                     _tick += 1
                     _el = round(time.perf_counter() - _t0)
                     _pct_est = min(99, int(100 * _el / max(1, _eta)))

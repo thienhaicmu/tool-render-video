@@ -536,7 +536,7 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
             "selected_format": fmt_id,
         }
 
-    def _try_download_with_timeout(opts: dict) -> dict:
+    def _try_download_with_timeout(opts: dict, _pool: concurrent.futures.ThreadPoolExecutor) -> dict:
         """Run _try_download with a wall-clock timeout (_DOWNLOAD_WALLCLOCK_TIMEOUT seconds).
 
         Raises RuntimeError("Download timed out") when the timeout expires so the
@@ -544,17 +544,16 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
         This is distinct from socket_timeout (which covers individual socket ops) —
         _DOWNLOAD_WALLCLOCK_TIMEOUT is a total session ceiling.
         """
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
-            fut = _pool.submit(_try_download, opts)
-            try:
-                return fut.result(timeout=_DOWNLOAD_WALLCLOCK_TIMEOUT)
-            except concurrent.futures.TimeoutError:
-                # Signal cancellation via progress hook on next iteration
-                if cancel_event:
-                    cancel_event.set()
-                raise RuntimeError(
-                    f"Download timed out after {_DOWNLOAD_WALLCLOCK_TIMEOUT}s wall-clock"
-                )
+        fut = _pool.submit(_try_download, opts)
+        try:
+            return fut.result(timeout=_DOWNLOAD_WALLCLOCK_TIMEOUT)
+        except concurrent.futures.TimeoutError:
+            # Signal cancellation via progress hook on next iteration
+            if cancel_event:
+                cancel_event.set()
+            raise RuntimeError(
+                f"Download timed out after {_DOWNLOAD_WALLCLOCK_TIMEOUT}s wall-clock"
+            )
 
     def _probe_info(client_kwargs: dict) -> dict:
         probe_opts = {
@@ -628,6 +627,12 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
             except Exception:
                 pass
 
+    # Single pool reused across all attempts (primary + dynamic fallback) to avoid
+    # creating a new ThreadPoolExecutor on every retry — pool creation costs ~5-20ms
+    # on Windows and creates unnecessary thread churn for 10+ attempt waterfalls.
+    _timeout_pool = concurrent.futures.ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix="dl-timeout"
+    )
     last_err: Exception | None = None
 
     unavailable_requested = False
@@ -648,7 +653,7 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
                 "download.ytdlp.attempt context=%s attempt=%d/%d client=%s format=%s proxy_used=%s",
                 context, idx, len(attempts), client_name, fmt[:60], bool(proxy_val),
             )
-            result = _try_download_with_timeout(opts)
+            result = _try_download_with_timeout(opts, _timeout_pool)
             h = result.get("selected_height", 0)
             fps_val = result.get("selected_fps", 0)
             logger.info(
@@ -713,7 +718,7 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
             )
             attempted_formats.append(fmt)
             try:
-                result = _try_download_with_timeout(opts)
+                result = _try_download_with_timeout(opts, _timeout_pool)
                 h = result.get("selected_height", 0)
                 fps_val = result.get("selected_fps", 0)
                 logger.info(
@@ -742,6 +747,7 @@ def download_youtube(url: str, temp_dir: Path, context: str = "render", progress
                 last_err = exc
                 _cleanup_partial()
 
+    _timeout_pool.shutdown(wait=False)
     last_err_text = str(last_err or "")
     extract_fail = "Failed to extract any player response" in last_err_text
     proxy_note = "Proxy was disabled for this download." if not proxy_val else f"Proxy used: {proxy_val}."

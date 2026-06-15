@@ -212,7 +212,7 @@ def test_enrich_asset_exception_sets_failed_status():
 # ── download router enriching status ─────────────────────────────────────────
 
 def test_run_download_sets_enriching_before_submit():
-    """update_asset_status('enriching') is called before _EXECUTOR.submit."""
+    """update_asset_status('enriching') is called before _ENRICH_EXECUTOR.submit."""
     from app.features.download import router as dl_router
 
     call_order = []
@@ -236,7 +236,7 @@ def test_run_download_sets_enriching_before_submit():
     }
 
     with (
-        patch.object(dl_router, "_EXECUTOR", fake_executor),
+        patch.object(dl_router, "_ENRICH_EXECUTOR", fake_executor),
         patch("app.db.assets_repo.upsert_asset", side_effect=fake_upsert),
         patch("app.db.assets_repo.update_asset_status", side_effect=fake_update_status),
         patch.object(dl_router, "download_video", return_value=fake_result),

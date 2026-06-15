@@ -3,11 +3,11 @@
 Tests for _resolve_pacing_speed_delta() in part_render_plan_resolvers.py
 and its downstream effect on PartExecutionPlan.playback_speed.
 
-Behavior table:
+Behavior table (AI pacing is ADDITIVE on top of platform delta — not soft-capped):
   pacing=""     + TikTok speed_delta=+0.08 → (0.0, +0.08) → 1.08x (unchanged pre-U1)
-  pacing="slow" + TikTok speed_delta=+0.08 → (-0.06, +0.02) → 0.96x (AI wins, soft nudge)
-  pacing="fast" + TikTok speed_delta=+0.08 → (+0.08, +0.02) → 1.10x (AI + nudge)
-  pacing="medium" → (+0.00, soft) → speed unchanged
+  pacing="slow" + TikTok speed_delta=+0.08 → (-0.06, +0.08) → 1.02x (AI slows from platform baseline)
+  pacing="fast" + TikTok speed_delta=+0.08 → (+0.08, +0.08) → 1.16x (AI speeds above platform baseline)
+  pacing="medium" + TikTok → (+0.00, +0.08) → 1.08x (platform speed maintained)
   No render_plan on ctx → (0.0, full_platform_delta) — pre-U1 passthrough
   idx out of clips range → (0.0, full_platform_delta) — graceful fallback
   Unknown pacing value → (0.0, full_platform_delta) — unknown = inherit
@@ -57,29 +57,29 @@ def test_no_pacing_returns_full_platform_delta():
     assert abs(platform_delta - 0.08) < 1e-9
 
 
-def test_slow_pacing_demotes_platform():
-    """pacing="slow" → AI wins → platform clamped to ±0.02."""
+def test_slow_pacing_additive_on_platform():
+    """pacing="slow" → AI delta additive on full platform delta (not soft-capped)."""
     ctx = _make_ctx(pacing="slow")
     pacing_delta, platform_delta = _call(ctx, idx=1)
     assert abs(pacing_delta - (-0.06)) < 1e-9
-    # TikTok +0.08 clamped to +0.02 soft cap
-    assert abs(platform_delta - 0.02) < 1e-9
+    # Full TikTok +0.08 preserved — pacing is additive, not replacing
+    assert abs(platform_delta - 0.08) < 1e-9
 
 
 def test_fast_pacing_adds_ai_delta():
-    """pacing="fast" → +0.08 AI delta, platform soft-capped."""
+    """pacing="fast" → +0.08 AI delta additive on full platform delta."""
     ctx = _make_ctx(pacing="fast")
     pacing_delta, platform_delta = _call(ctx, idx=1)
     assert abs(pacing_delta - 0.08) < 1e-9
-    assert abs(platform_delta - 0.02) < 1e-9
+    assert abs(platform_delta - 0.08) < 1e-9
 
 
 def test_medium_pacing_zero_ai_delta():
-    """pacing="medium" → 0.0 AI delta."""
+    """pacing="medium" → 0.0 AI delta, full platform delta preserved → platform speed maintained."""
     ctx = _make_ctx(pacing="medium")
     pacing_delta, platform_delta = _call(ctx, idx=1)
     assert abs(pacing_delta - 0.00) < 1e-9
-    assert abs(platform_delta - 0.02) < 1e-9
+    assert abs(platform_delta - 0.08) < 1e-9
 
 
 def test_no_render_plan_returns_full_platform():
@@ -106,29 +106,29 @@ def test_unknown_pacing_value_is_ignored():
     assert abs(platform_delta - 0.08) < 1e-9
 
 
-def test_negative_platform_delta_clamped_correctly():
-    """Negative platform_delta (youtube=-0.05) is soft-capped to -0.02."""
+def test_negative_platform_delta_preserved():
+    """Negative platform_delta (youtube=-0.05) is preserved in full — pacing additive."""
     ctx = _make_ctx(pacing="fast")
     pacing_delta, platform_delta = _call(ctx, idx=1, platform="youtube")
-    # youtube speed_delta=-0.05 clamped to -0.02
+    # youtube speed_delta=-0.05 fully preserved → 1.0 + 0.08 + (-0.05) = 1.03x
     assert abs(pacing_delta - 0.08) < 1e-9
-    assert abs(platform_delta - (-0.02)) < 1e-9
+    assert abs(platform_delta - (-0.05)) < 1e-9
 
 
 def test_combined_speed_tiktok_slow():
-    """Full integration: base=1.0 + slow AI (-0.06) + tiktok soft (+0.02) = 0.96x."""
+    """Full integration: base=1.0 + slow AI (-0.06) + tiktok full (+0.08) = 1.02x."""
     ctx = _make_ctx(pacing="slow")
     pd, plat = _call(ctx, idx=1)
     result = max(0.5, min(1.5, 1.0 + pd + plat))
-    assert abs(result - 0.96) < 1e-9
+    assert abs(result - 1.02) < 1e-9
 
 
 def test_combined_speed_tiktok_fast():
-    """Full integration: base=1.0 + fast AI (+0.08) + tiktok soft (+0.02) = 1.10x."""
+    """Full integration: base=1.0 + fast AI (+0.08) + tiktok full (+0.08) = 1.16x."""
     ctx = _make_ctx(pacing="fast")
     pd, plat = _call(ctx, idx=1)
     result = max(0.5, min(1.5, 1.0 + pd + plat))
-    assert abs(result - 1.10) < 1e-9
+    assert abs(result - 1.16) < 1e-9
 
 
 def test_pacing_to_speed_delta_dict_has_required_keys():
