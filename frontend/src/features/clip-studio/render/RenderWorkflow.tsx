@@ -343,7 +343,13 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
           return (
             <div key={i} style={{ display: 'contents' }}>
               {i > 0 && <div className="rw-step-sep" />}
-              <div className={`rw-step ${cls}`} onClick={() => n < step && setStep(n)}>
+              <div className={`rw-step ${cls}`} onClick={() => {
+                if (n === step) return
+                if (n < step) { setStep(n); return }
+                // forward navigation: allow returning to step already reached
+                if (n === 3 && jobId) setStep(3)
+                else if (n === 4 && jobId && isTerminal) setStep(4)
+              }}>
                 <span className="rw-step-num">{n < step ? '✓' : n}</span>
                 <div className="rw-step-info">
                   <div className="rw-step-label">{label}</div>
