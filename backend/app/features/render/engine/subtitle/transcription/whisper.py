@@ -90,17 +90,30 @@ def _get_transcribe_lock(model_name: str):
 
 
 def _transcribe_with_retry(model, audio_path: str, retries: int = 2, wait_sec: float = 0.8, transcribe_lock=None, **kwargs):
+    # N3 fix (audit 2026-06-15): poll the thread-local cancel event around
+    # every retry boundary so a Cancel click reaches the openai-whisper
+    # default adapter path (which is what runs when faster-whisper / CUDA
+    # is unavailable). The faster-whisper adapter already checks cancel
+    # segment-by-segment inside _write_fw_srt — this closes the same gap
+    # for the fallback path. We can't interrupt model.transcribe() itself
+    # (a blocking C call into the decoder), but we CAN: 1) skip starting
+    # transcribe if the job was cancelled before this call, 2) abort
+    # immediately between retries instead of waiting wait_sec*N seconds.
+    from app.features.render.engine.encoder.ffmpeg_helpers import check_thread_cancel
     attempt = 0
     while True:
         attempt += 1
+        check_thread_cancel()
         try:
             if transcribe_lock is None:
                 return model.transcribe(audio_path, fp16=False, **kwargs)
             with transcribe_lock:
+                check_thread_cancel()
                 return model.transcribe(audio_path, fp16=False, **kwargs)
         except Exception:
             if attempt > retries:
                 raise
+            check_thread_cancel()
             time.sleep(wait_sec * attempt)
 
 
