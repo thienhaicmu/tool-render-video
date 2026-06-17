@@ -32,7 +32,7 @@ tool-render-video/
 │   ├── app/
 │   │   ├── core/                   Config (config.py), stage enums (stage.py)
 │   │   ├── db/                     SQLite connection, repos, migrations
-│   │   │   └── migration_steps/    0001…0006 additive-only migrations
+│   │   │   └── migration_steps/    0001…0011 additive-only migrations
 │   │   ├── domain/                 Pure dataclasses (RenderPlan, CreatorContext, Timeline)
 │   │   ├── features/
 │   │   │   ├── render/
@@ -123,8 +123,58 @@ Open `http://127.0.0.1:8000` (React v2 UI, requires `STATIC_UI_VERSION=v2` in .e
 cd desktop-shell
 npm install
 npm start                  # development
-npm run dist:win           # NSIS + portable installer
+npm run dist:win           # NSIS + portable installer (see Packaging below)
 ```
+
+---
+
+## Packaging for Windows distribution
+
+Production build wraps PyInstaller-bundled backend + Electron + bundled
+FFmpeg into a single Windows installer.
+
+### One-time setup
+
+```powershell
+# Copy FFmpeg binaries into desktop-shell/ffmpeg-bin/ (empty by default)
+$FF = "C:\Path\To\ffmpeg\bin"
+Copy-Item "$FF\ffmpeg.exe"  desktop-shell\ffmpeg-bin\
+Copy-Item "$FF\ffprobe.exe" desktop-shell\ffmpeg-bin\
+
+# Bump version in desktop-shell\package.json when ready to ship
+```
+
+### Build
+
+```powershell
+.\build-desktop.ps1
+```
+
+What it does:
+
+1. `build-backend.bat clean` → PyInstaller bundles `backend/` via
+   `backend/render-backend.spec` (onedir mode) →
+   `desktop-shell/backend-bin/render-backend.exe` (~280 MB)
+2. `cd desktop-shell && npm run dist:win` → electron-builder packs
+   the Electron shell + `backend-bin/` + `ffmpeg-bin/` →
+   `desktop-shell/dist/Render Studio Desktop Setup X.Y.Z.exe`
+   (NSIS installer) + `Render Studio Desktop X.Y.Z.exe` (portable).
+
+**Total build time:** ~15–25 min.
+**Installer size:** ~1 GB (dominated by Whisper models + Python deps).
+
+### Notes
+
+- `backend/render-backend.spec` uses an absolute `pathex` of
+  `D:\tool-render-video\backend` — the spec is therefore
+  machine-specific. Adjust before building on a different developer
+  workstation.
+- The build is not code-signed (`forceCodeSigning: false` in
+  `desktop-shell/package.json`). Windows SmartScreen will warn
+  "Unknown publisher" on first launch until a code-signing certificate
+  is configured.
+- `desktop-shell/ffmpeg-bin/` is gitignored — bundle FFmpeg manually
+  each build environment.
 
 ---
 
@@ -178,7 +228,10 @@ See `.env.example` for the full list with comments. Most important:
 | `CLAUDE_API_KEY` | — | Anthropic API key |
 | `SUBTITLE_PER_PART_MODEL` | `small` | Whisper model size (tiny/small/medium/large-v3) |
 | `BGM_DUCKING_ENABLED` | `1` | Duck BGM under voice with sidechain compressor |
-| `LLM_EMIT_RENDER_PLAN` | `0` | Enable RenderPlan emission from LLM (Sprint 1–3) |
+| `LLM_EMIT_RENDER_PLAN` | `1` | LLM RenderPlan emission (default since Sprint 7.6a) |
+| `RENDER_FUSE_CUT` | `0` | Phase 7 source-seek fuse — `1` skips raw_part.mp4 intermediate when safe; cuts ~10–35 s on multi-part renders |
+| `DOWNLOAD_MAX_WORKERS` | `3` | Concurrent download executor pool size, clamped to [1, 16] |
+| `DOWNLOAD_ENRICH_WORKERS` | `2` | Concurrent enrichment executor pool size, clamped to [1, 16] |
 
 ---
 
@@ -190,8 +243,8 @@ python -m pytest                          # full suite (~8 min)
 python -m pytest tests/test_foo.py -v     # focused
 ```
 
-**Baseline:** 1087 passed, 1 pre-existing flaky fail
-(`test_render_pipeline_integration` — passes in isolation, fails only in full-suite ordering).
+**Baseline:** 1396 passed (verified across the 2026-06-17 12-phase
+perf optimisation programme — see [docs/perf-optimization-plan-2026-06-16.md](docs/perf-optimization-plan-2026-06-16.md)).
 
 ---
 
@@ -207,13 +260,54 @@ python -m pytest tests/test_foo.py -v     # focused
 | POST | `/api/jobs/{id}/parts/{no}/rerender` | Re-render a part |
 | POST | `/api/jobs/{id}/parts/{no}/export` | Export a part |
 | GET | `/api/settings/data-retention` | Retention config |
-| GET | `/metrics` | Prometheus metrics |
+| GET | `/api/downloader/info?url=…` | Probe yt-dlp metadata (5-min LRU cached) |
+| POST | `/api/downloader/start` | Start download job |
+| GET | `/api/downloader/jobs/{id}/ws` | Download progress WebSocket |
+| GET | `/metrics` | Prometheus metrics (see Performance section) |
 
 Full contract: [docs/FRONTEND_CONTRACT.md](docs/FRONTEND_CONTRACT.md)
 
 ---
 
+## Performance
+
+The render + download pipelines went through a 12-phase optimisation
+programme on 2026-06-17. 7 phases shipped; per-phase results and the
+canonical plan live under `docs/perf-*.md`.
+
+### Observability (`/metrics`)
+
+Phase 0 added 4 metric families on top of the pre-existing
+`render_jobs_total` / `nvenc_acquire_wait_seconds` / `db_conn_acquire_seconds`:
+
+| Metric | Labels | Meaning |
+|---|---|---|
+| `render_stage_seconds` | `stage` | Histogram per pipeline stage (job-level + `per_part_*`) |
+| `render_cache_lookups_total` | `cache`, `outcome` | Hit/miss counter for 5 caches (`whisper_srt`, `llm_plan`, `ass`, `scores`, `motion_path`) |
+| `whisper_transcribe_seconds` | `model`, `engine` | Wallclock per Whisper call |
+| `render_db_writes_total` | `surface` | DB write count by writer (`update_job_progress`, `upsert_job_part`, …) |
+
+### Highlights shipped
+
+| Phase | What | Realised gain |
+|---|---|---|
+| 3 | `/api/downloader/info` LRU 5-min TTL | **14× speed-up** on repeat preview clicks (3.8 s → 0.27 s) |
+| 3 | Whisper-tiny singleton in enrichment | 5–15 s per asset enrichment |
+| 7 | Source-seek fuse (Sprint 7.4/7.8 wired) | Opt-in via `RENDER_FUSE_CUT=1`; eliminates raw_part.mp4 intermediate |
+| 8 | Audio `-c:a copy` fast path | Bit-perfect AAC pass-through (also improves output quality) |
+| 9 | LLM cache key = full-SRT SHA-256 | Eliminates 8 KB prefix aliasing on long videos |
+| 10 | Parallel enrichment (lang ∥ thumb) | 5–10 s per asset |
+
+Discipline: 1396/1396 pytest preserved across every merged phase;
+zero `output_rank_score` drift across 5 smoke renders; every Sacred
+Contract and Frozen API surface untouched. Full per-phase rationale +
+operator runbook in [docs/perf-phase-12-result-2026-06-17.md](docs/perf-phase-12-result-2026-06-17.md).
+
+---
+
 ## Documentation index
+
+### Architecture + contracts
 
 | File | Contents |
 |---|---|
@@ -224,6 +318,15 @@ Full contract: [docs/FRONTEND_CONTRACT.md](docs/FRONTEND_CONTRACT.md)
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | All environment variables with descriptions |
 | [docs/DATABASE.md](docs/DATABASE.md) | Schema, migrations, WAL mode, connection model |
 | [CLAUDE.md](CLAUDE.md) | Sacred Contracts, blast radius tiers, agent protocol |
+
+### Performance programme (2026-06-17)
+
+| File | Contents |
+|---|---|
+| [docs/perf-optimization-plan-2026-06-16.md](docs/perf-optimization-plan-2026-06-16.md) | Canonical 12-phase plan + append-only STATUS log |
+| [docs/perf-baseline-2026-06-16.md](docs/perf-baseline-2026-06-16.md) | Frozen baseline (1396 tests, median historical render 885 s, fresh control 55 s rank 85.6) |
+| [docs/perf-phase-12-result-2026-06-17.md](docs/perf-phase-12-result-2026-06-17.md) | **Programme summary + operator runbook** |
+| `docs/perf-phase-{1,2,3,7,8,9,10}-result-*.md` | Per-merged-phase result docs |
 
 ---
 
