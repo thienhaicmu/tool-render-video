@@ -1,3 +1,4 @@
+from functools import lru_cache
 from urllib.parse import urlparse
 
 _DOMAIN_MAP: dict[str, str] = {
@@ -28,7 +29,13 @@ _DOMAIN_MAP: dict[str, str] = {
 ALLOWED_DOMAINS = frozenset(_DOMAIN_MAP.keys())
 
 
+@lru_cache(maxsize=1024)
 def detect_platform(url: str) -> str:
+    # Perf-opt Phase 3 (D9): up to 7 sites call detect_platform per
+    # download flow (router validate + dedup + start, engine.get_video_info
+    # + download_video, batch route, _run_download). The result depends
+    # only on the URL host, so memoising on the full URL string is safe
+    # and skips the urlparse + map lookup on every subsequent hit.
     try:
         host = (urlparse(url).hostname or "").lower()
         host = host.removeprefix("www.").removeprefix("m.")

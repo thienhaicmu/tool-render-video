@@ -112,12 +112,17 @@ def probe_video_metadata(path: str, timeout: int = 15) -> dict:
         "has_video": False,
         "width": 0,
         "height": 0,
+        # Perf-opt Phase 8 (R27) — audio_codec lets callers like
+        # render_part decide whether ``-c:a copy`` is safe (no audio
+        # filter + source already AAC = bit-identical pass-through).
+        # Empty string when no audio stream or probe failed.
+        "audio_codec": "",
     }
     try:
         cmd = [
             get_ffprobe_bin(), "-v", "error",
             "-show_entries",
-            "format=duration:stream=codec_type,avg_frame_rate,r_frame_rate,width,height",
+            "format=duration:stream=codec_type,codec_name,avg_frame_rate,r_frame_rate,width,height",
             "-of", "json", str(path),
         ]
         t0 = time.monotonic()
@@ -148,6 +153,11 @@ def probe_video_metadata(path: str, timeout: int = 15) -> dict:
                             break
                 elif ct == "audio":
                     result["has_audio"] = True
+                    # Phase 8 (R27) — first audio stream wins (mirrors
+                    # the first-video-stream pattern above). Lower-cased
+                    # so callers can compare against a literal "aac".
+                    if not result["audio_codec"]:
+                        result["audio_codec"] = str(stream.get("codec_name") or "").lower()
             logger.debug(
                 "ffprobe_metadata_ms=%d path=%s has_video=%s has_audio=%s fps=%.1f dur=%s",
                 _ms, Path(path).name, result["has_video"], result["has_audio"],

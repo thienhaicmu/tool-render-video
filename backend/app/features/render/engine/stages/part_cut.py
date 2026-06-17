@@ -81,7 +81,14 @@ logger = logging.getLogger("app.render")
 class CutStageResult:
     """Bundle of values produced by run_cut_stage — caller aliases each
     field back to its original local-variable name so the rest of
-    process_one_part is byte-for-byte unchanged."""
+    process_one_part is byte-for-byte unchanged.
+
+    Perf-opt Phase 7 (R8): ``fuse_active`` carries the decision to skip
+    the raw_part.mp4 intermediate so the downstream encode call site
+    (``run_render_encode``) can route to ``render_part_from_source``
+    instead of ``render_part_smart``. Defaults to False so the legacy
+    path is untouched.
+    """
     trim_offset: float
     effective_start: float
     effective_end: float
@@ -91,6 +98,39 @@ class CutStageResult:
     part_manifest: BaseClipManifest
     cut_ms: int
     first_frame_scan_ms: int
+    fuse_active: bool = False
+
+
+def _fuse_safe_active(ctx: PartRenderContext, force_accurate_cut: bool) -> bool:
+    """Perf-opt Phase 7 (R8) — gate the cut-fuse code path.
+
+    Returns True when it is safe to skip the cut_video step and let
+    ``render_part_from_source`` perform cut + encode in one FFmpeg call.
+
+    Default OFF: requires opt-in via ``RENDER_FUSE_CUT=1`` env var.
+
+    Conservative gates the helper applies:
+      - ``force_accurate_cut`` → False. The accurate cut path needs the
+        raw_part re-encode semantics that ``cut_video`` provides; the
+        input-side seek in render_part_from_source would land on the
+        wrong keyframe.
+      - ``resume_from_last`` → False. Resume looks at raw_part on disk
+        to decide whether to re-cut; bypassing that check would silently
+        change resume semantics.
+      - ``full_srt_available`` → False. When the per-part subtitle
+        slice cannot pull from full_srt the planner falls back to a
+        per-part Whisper read of raw_part audio. With raw_part absent
+        the Whisper fallback would fail.
+    """
+    if os.getenv("RENDER_FUSE_CUT", "0") != "1":
+        return False
+    if force_accurate_cut:
+        return False
+    if getattr(ctx.payload, "resume_from_last", False):
+        return False
+    if not getattr(ctx, "full_srt_available", False):
+        return False
+    return True
 
 
 def run_cut_stage(
@@ -231,7 +271,19 @@ def run_cut_stage(
     )
     upsert_job_part(ctx.job_id, idx, part_name, JobPartStage.CUTTING, 10, seg["start"], seg["end"], seg["duration"], seg.get("viral_score", 0), seg.get("motion_score", 0), seg.get("hook_score", 0), str(final_part), "Cutting raw part")
 
-    if not (ctx.payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
+    # Perf-opt Phase 7 (R8) — fuse mode: skip cut_video entirely. The
+    # downstream encode call (``run_render_encode``) consults
+    # ``CutStageResult.fuse_active`` and routes to
+    # ``render_part_from_source`` which performs source-window cut +
+    # final encode in a single FFmpeg invocation.
+    _fuse_active = _fuse_safe_active(ctx, _force_accurate_cut)
+    if _fuse_active:
+        _job_log(
+            ctx.effective_channel, ctx.job_id,
+            f"Part {idx} cut SKIPPED (fuse active — cut will be performed inside render_part_from_source)",
+            kind="debug",
+        )
+    elif not (ctx.payload.resume_from_last and raw_part.exists() and raw_part.stat().st_size > 0):
         _t_cut = time.perf_counter()
         cut_video(str(ctx.source_path), str(raw_part), _effective_start, _effective_end,
                   retry_count=ctx.retry_count, force_accurate_cut=_force_accurate_cut)
@@ -263,5 +315,6 @@ def run_cut_stage(
         part_manifest=_part_manifest,
         cut_ms=_cut_ms,
         first_frame_scan_ms=_first_frame_scan_ms,
+        fuse_active=_fuse_active,
     )
 

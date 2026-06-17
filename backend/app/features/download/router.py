@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import os
 import threading
 import time
 import uuid
@@ -32,8 +33,26 @@ logger = logging.getLogger("app.downloader")
 
 router = APIRouter(prefix="/api/downloader", tags=["downloader"])
 
-_DOWNLOAD_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="dl-main")
-_ENRICH_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dl-enrich")
+# Perf-opt Phase 10 (D6) — expose executor sizing via env vars so users
+# on bigger machines can raise the ceiling without a code edit.
+# Defaults match the historical hardcoded values (3 + 2).
+def _exec_size(env_name: str, default: int, min_: int = 1, max_: int = 16) -> int:
+    try:
+        raw = (os.getenv(env_name) or "").strip()
+        if not raw:
+            return default
+        return max(min_, min(max_, int(raw)))
+    except Exception:
+        return default
+
+_DOWNLOAD_EXECUTOR = ThreadPoolExecutor(
+    max_workers=_exec_size("DOWNLOAD_MAX_WORKERS", 3),
+    thread_name_prefix="dl-main",
+)
+_ENRICH_EXECUTOR = ThreadPoolExecutor(
+    max_workers=_exec_size("DOWNLOAD_ENRICH_WORKERS", 2),
+    thread_name_prefix="dl-enrich",
+)
 
 # In-flight dedup: prevents duplicate downloads when the same URL is submitted
 # twice before the first job finishes. url → job_id, cleared in _run_download finally.
@@ -282,7 +301,11 @@ async def job_progress_ws(websocket: WebSocket, job_id: str):
             await websocket.send_json(job)
             if job.get("status") in ("done", "failed"):
                 break
-            await asyncio.sleep(1.0)
+            # Perf-opt Phase 10 (D7) — 2 s poll interval (was 1 s). Halves
+            # DB queries against `download_jobs` without a perceptible
+            # progress-bar lag (download progress is dominated by network
+            # latency, not the poll cadence).
+            await asyncio.sleep(2.0)
     except WebSocketDisconnect:
         pass
     except Exception as exc:

@@ -23,6 +23,7 @@ from app.features.render.engine.pipeline.qa_pipeline import (
     _validate_render_output,
 )
 from app.features.render.engine.pipeline.render_events import _job_log
+from app.services.metrics import RENDER_STAGE_DURATION
 # Batch 10Q: ``upsert_job_part`` is no longer imported here — the 3 stage
 # transitions this file owned (resume-skip DONE, WAITING, RENDERING)
 # moved to part_db.py. Other stage helpers (part_done, part_asset_planner,
@@ -46,10 +47,17 @@ def _stage_begin(job_id: str, idx: int, name: str) -> float:
 
 def _stage_end(job_id: str, idx: int, name: str, t0: float) -> None:
     """Emit STAGE_END INFO log with elapsed seconds. Pair with _stage_begin."""
+    elapsed = time.perf_counter() - t0
     logger.info(
         "[%s][part=%d] STAGE_END   %-9s elapsed=%.1fs",
-        job_id[:8], idx, name, time.perf_counter() - t0,
+        job_id[:8], idx, name, elapsed,
     )
+    # Perf-opt Phase 1 — per-part stage histogram. Pure observation;
+    # never raises, never alters state-machine behaviour.
+    try:
+        RENDER_STAGE_DURATION.labels(stage=f"per_part_{name}").observe(elapsed)
+    except Exception:
+        pass
 
 
 
@@ -309,6 +317,14 @@ def process_one_part(ctx: PartRenderContext, idx: int, seg: dict):
         _part_manifest, _part_timeline,
         _part_text_layers, _part_text_layers_overlay,
         _effective_subtitle_style, _preflight,
+        # Perf-opt Phase 7 (R8): forward the fuse decision (resolved in
+        # run_cut_stage) so the encode call site picks
+        # render_part_from_source vs render_part_smart consistently. The
+        # source-window args (effective_start, effective_end) come from
+        # the same CutStageResult that computed fuse_active.
+        fuse_active=_cut.fuse_active,
+        source_start=_effective_start,
+        source_duration=max(0.0, _effective_end - _effective_start),
     )
     _stage_end(ctx.job_id, idx, "encode", _t_stage)
     _render_ms = _encode.render_ms

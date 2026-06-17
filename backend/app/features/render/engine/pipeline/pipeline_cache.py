@@ -20,9 +20,32 @@ import json
 import os
 import shutil
 import time
+from functools import wraps
 from pathlib import Path
 
 from app.core.config import APP_DATA_DIR
+from app.services.metrics import CACHE_LOOKUPS_TOTAL
+
+
+def _instrument_cache(cache_label: str):
+    """Decorator: emit render_cache_lookups_total{cache, outcome} on every call.
+
+    Perf-opt Phase 0 (2026-06-16) — pure observation, never alters return
+    value or raises. The inner counter inc is wrapped in its own try/except
+    so a misbehaving metric backend never breaks the cache path.
+    """
+    def decorator(fn):
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            result = fn(*args, **kwargs)
+            try:
+                outcome = "hit" if result is not None else "miss"
+                CACHE_LOOKUPS_TOTAL.labels(cache=cache_label, outcome=outcome).inc()
+            except Exception:
+                pass
+            return result
+        return wrapped
+    return decorator
 
 _RENDER_CACHE_TTL_SEC = 72 * 3600  # 72 h
 
@@ -73,6 +96,7 @@ def _atomic_copy2(src: Path, dst: Path) -> None:
     os.replace(tmp, dst)
 
 
+@_instrument_cache("scene")
 def _scene_cache_get(source_path: str) -> list | None:
     try:
         sp = Path(source_path)
@@ -103,6 +127,7 @@ def _scene_cache_put(source_path: str, scenes: list) -> None:
         pass
 
 
+@_instrument_cache("whisper_srt")
 def _transcription_cache_get(source_path: str, model_name: str, cache_suffix: str) -> Path | None:
     try:
         # Content-hash lookup (opt-in via WHISPER_CONTENT_HASH_CACHE=1). Checked
@@ -228,6 +253,7 @@ def _ass_cache_key(
         return None
 
 
+@_instrument_cache("ass")
 def _ass_cache_get(key: str) -> Path | None:
     """Return cached .ass path if exists + within TTL; lazy-unlink on stale."""
     try:
@@ -259,6 +285,7 @@ def _ass_cache_put(key: str, src_path: Path) -> None:
         pass
 
 
+@_instrument_cache("scores")
 def _score_cache_get(key: str) -> list | None:
     try:
         cache_file = APP_DATA_DIR / "cache" / "segment_scores" / f"{key}.json"
@@ -305,10 +332,20 @@ def _llm_plan_cache_key(
     clip_exclude_repr: str,
     language: str = "auto",
 ) -> str:
-    """MD5 of the LLM inputs that fully determine the RenderPlan output."""
-    srt_head = srt_content[:8192]  # first 8KB captures structure without full content
+    """MD5 of the LLM inputs that fully determine the RenderPlan output.
+
+    Perf-opt Phase 9 (R17) — previously the key used ``srt_content[:8192]``
+    so two transcripts sharing the same first 8 KB would alias to one
+    cache entry and the second render would see the first's plan. For
+    long videos (60+ min) where SRT > 8 KB this was a real correctness
+    bug. Now hashes the FULL SRT (SHA-256, sub-millisecond on 60 KB)
+    so the key reflects all of the content the LLM saw. Existing cache
+    entries keyed on the old prefix become orphans and age out via the
+    72 h TTL; no migration needed.
+    """
+    srt_full_hash = hashlib.sha256(srt_content.encode("utf-8")).hexdigest()
     return _render_cache_key(
-        srt_head, output_count, round(min_sec, 1), round(max_sec, 1),
+        srt_full_hash, output_count, round(min_sec, 1), round(max_sec, 1),
         target_platform, provider, model or "",
         editorial_hint or "", target_duration,
         clip_lock_repr, clip_exclude_repr,
@@ -316,6 +353,7 @@ def _llm_plan_cache_key(
     )
 
 
+@_instrument_cache("llm_plan")
 def _llm_plan_cache_get(key: str) -> str | None:
     """Return cached RenderPlan JSON string, or None on miss / stale / error."""
     try:

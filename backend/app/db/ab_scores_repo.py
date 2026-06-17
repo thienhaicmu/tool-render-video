@@ -51,6 +51,13 @@ def upsert_ab_score(
                     output_rank_score, output_rank, int(is_best_output),
                 ),
             )
+        # Perf-opt Phase 0 baseline observability. Local import keeps the
+        # module's no-prometheus-client fallback path intact.
+        try:
+            from app.services.metrics import DB_WRITES_TOTAL
+            DB_WRITES_TOTAL.labels(surface="upsert_ab_score").inc()
+        except Exception:
+            pass
     except Exception as exc:
         logger.warning("upsert_ab_score(%s, %d) failed: %s", job_id, part_no, exc)
 

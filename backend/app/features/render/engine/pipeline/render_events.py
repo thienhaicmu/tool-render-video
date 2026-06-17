@@ -283,7 +283,17 @@ def _emit_render_event(
         pass
 
 
-_PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes to update progress
+_PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes (stall guard cadence)
+
+# Perf-opt Phase 2 (R1) — coalesce DB writes inside _render_progress_timer.
+# Tick rate stays 3 s so stall guards react quickly, but the DB write only
+# fires when the progress moved by ≥ _DB_WRITE_MIN_DELTA_PCT OR
+# ≥ _DB_WRITE_MIN_INTERVAL_SEC has elapsed since the last write. Stall-guard
+# writes (failure path) are NOT subject to this throttle — they always
+# bypass it. The orchestrator emits the authoritative 100 % via the
+# caller's path, not through this timer.
+_DB_WRITE_MIN_INTERVAL_SEC = 10.0
+_DB_WRITE_MIN_DELTA_PCT = 10
 
 
 def _event_from_stage(stage: str) -> str:
@@ -320,6 +330,11 @@ def _render_progress_timer(
     from app.features.render.engine.pipeline.qa_pipeline import _stall_deadline
     stall_deadline = _stall_deadline(encode_start, expected_duration)
     _stall_suspected_emitted = False
+    # Perf-opt Phase 2 (R1) — track last-write state so the DB upsert
+    # only fires when the progress meaningfully changed or the stale-write
+    # interval elapsed. Stall-guard writes always bypass this throttle.
+    _last_db_write_t = 0.0
+    _last_db_write_pct = -1
     while not stop_event.wait(timeout=_PROGRESS_TICK_SEC):
         elapsed = time.monotonic() - encode_start
         if expected_duration > 0:
@@ -369,6 +384,19 @@ def _render_progress_timer(
             stop_event.set()
             break
 
+        # Perf-opt Phase 2 (R1) — coalesce: skip DB write unless the
+        # progress moved by ≥ _DB_WRITE_MIN_DELTA_PCT OR the staleness
+        # interval has elapsed. The first iteration (_last_db_write_pct < 0)
+        # always writes so the polling endpoint sees an initial value
+        # without waiting for the threshold.
+        _now = time.monotonic()
+        _should_write = (
+            _last_db_write_pct < 0
+            or abs(progress - _last_db_write_pct) >= _DB_WRITE_MIN_DELTA_PCT
+            or (_now - _last_db_write_t) >= _DB_WRITE_MIN_INTERVAL_SEC
+        )
+        if not _should_write:
+            continue
         try:
             upsert_job_part(
                 job_id,
@@ -385,5 +413,7 @@ def _render_progress_timer(
                 output_file,
                 "Rendering final video",
             )
+            _last_db_write_t = _now
+            _last_db_write_pct = progress
         except Exception:
             pass  # never let a DB error kill the timer thread

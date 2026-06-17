@@ -14,18 +14,41 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from functools import wraps
 from pathlib import Path
 
 from app.core.config import APP_DATA_DIR
+from app.services.metrics import CACHE_LOOKUPS_TOTAL
 
 # UP28.1 — Motion path cache
 _MOTION_CACHE_TTL_SEC = 72 * 3600
+
+
+def _instrument_cache(cache_label: str):
+    """Perf-opt Phase 3 — emit render_cache_lookups_total{cache, outcome}.
+
+    Pure observation; never alters return value or raises. Mirrors the
+    decorator already shipped in `pipeline/pipeline_cache.py`.
+    """
+    def decorator(fn):
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            result = fn(*args, **kwargs)
+            try:
+                outcome = "hit" if result is not None else "miss"
+                CACHE_LOOKUPS_TOTAL.labels(cache=cache_label, outcome=outcome).inc()
+            except Exception:
+                pass
+            return result
+        return wrapped
+    return decorator
 
 
 def _motion_cache_key(*parts) -> str:
     return hashlib.md5("|".join(str(p) for p in parts).encode()).hexdigest()
 
 
+@_instrument_cache("motion_path")
 def _motion_path_cache_get(key: str):
     try:
         cache_file = APP_DATA_DIR / "cache" / "motion_path" / f"{key}.json"

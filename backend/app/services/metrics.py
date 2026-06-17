@@ -176,6 +176,51 @@ if _AVAILABLE:
         registry=REGISTRY,
     )
 
+    # Perf-opt Phase 0 (2026-06-16) — baseline observability before any
+    # render-pipeline optimisation work. Pure-additive; no behaviour change.
+
+    # Per-stage timing. Lets the audit trace which stage dominates a job and
+    # measure the delta after each phase of optimisation work.
+    # Stage labels (canonical set):
+    #   source_prep | whisper_full | llm_call | segment_seed | per_part_cut |
+    #   per_part_assets | per_part_encode | per_part_audio | qa | ranking | finalize
+    RENDER_STAGE_DURATION = Histogram(
+        "render_stage_seconds",
+        "Wallclock time per render pipeline stage",
+        ["stage"],
+        buckets=(0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600),
+        registry=REGISTRY,
+    )
+
+    # Cache hit/miss counters. The six cache types audited in the
+    # 2026-06-16 perf report. outcome ∈ {hit, miss}.
+    CACHE_LOOKUPS_TOTAL = Counter(
+        "render_cache_lookups_total",
+        "Cache lookups by cache type and outcome",
+        ["cache", "outcome"],
+        registry=REGISTRY,
+    )
+
+    # Whisper transcription timing (separate from FFMPEG_DURATION).
+    # model ∈ {tiny, base, small, medium, large-v3, ...},
+    # engine ∈ {openai, faster}.
+    WHISPER_TRANSCRIBE_DURATION = Histogram(
+        "whisper_transcribe_seconds",
+        "Whisper transcription wallclock per call",
+        ["model", "engine"],
+        buckets=(1, 5, 10, 30, 60, 120, 300, 600),
+        registry=REGISTRY,
+    )
+
+    # DB write counter by writer surface — used to verify Phase 2
+    # progress-write coalescing.
+    DB_WRITES_TOTAL = Counter(
+        "render_db_writes_total",
+        "DB write operations during a render",
+        ["surface"],
+        registry=REGISTRY,
+    )
+
 else:
     REGISTRY = None  # type: ignore[assignment]
 
@@ -193,3 +238,7 @@ else:
     LLM_RENDER_PLAN_LATENCY = _NoOpMetric()   # type: ignore[assignment]
     LLM_SEGMENTS_SELECTED = _NoOpMetric()     # type: ignore[assignment]
     RENDER_ENGINE_EDITORIAL_OVERRIDES = _NoOpMetric()  # type: ignore[assignment]
+    RENDER_STAGE_DURATION = _NoOpMetric()      # type: ignore[assignment]
+    CACHE_LOOKUPS_TOTAL = _NoOpMetric()        # type: ignore[assignment]
+    WHISPER_TRANSCRIBE_DURATION = _NoOpMetric()  # type: ignore[assignment]
+    DB_WRITES_TOTAL = _NoOpMetric()            # type: ignore[assignment]

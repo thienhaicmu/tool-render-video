@@ -51,21 +51,16 @@ def _get_tv2_model():
 
 
 def _get_video_fps(video_path: str) -> float:
-    """Read FPS via ffprobe; fall back to 30.0 on any error."""
+    """Read FPS via the shared LRU-cached probe; fall back to 30.0 on any error.
+
+    Perf-opt Phase 3 (R11): formerly called ffprobe via subprocess on every
+    invocation. Now routes through ``probe_video_metadata`` which caches
+    on (abspath, mtime, size) and amortises the cost across the entire job.
+    """
     try:
-        from app.services.bin_paths import get_ffprobe_bin
-        cmd = [
-            get_ffprobe_bin(), "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=r_frame_rate",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            video_path,
-        ]
-        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True, encoding="utf-8").strip()
-        if "/" in out:
-            a, b = out.split("/")
-            return float(a) / float(b) if float(b) else 30.0
-        return float(out) if out else 30.0
+        from app.features.render.engine.encoder.ffmpeg_helpers import probe_video_metadata
+        fps = float(probe_video_metadata(video_path).get("fps") or 0.0)
+        return fps if 1.0 <= fps <= 240.0 else 30.0
     except Exception:
         return 30.0
 

@@ -34,7 +34,14 @@ def _probe_video_codec(video_path: Path) -> str:
 
 
 def _probe_preview_profile(video_path: Path) -> dict:
-    """Return container/video/audio details used to decide browser preview compatibility."""
+    """Return container/video/audio details used to decide browser preview compatibility.
+
+    Note (Phase 3 R11): kept as a dedicated ffprobe call because
+    ``probe_video_metadata`` does not surface ``format_name`` or per-stream
+    ``codec_name`` — adding them would widen that helper's contract for one
+    caller. Preview probing is infrequent (one-off per asset), so the
+    de-duplication win is small.
+    """
     cmd = [
         get_ffprobe_bin(),
         "-v", "error",

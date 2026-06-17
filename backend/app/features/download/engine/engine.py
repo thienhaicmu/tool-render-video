@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Callable
@@ -12,6 +13,16 @@ from app.features.download.engine.file_naming import build_output_filename, reso
 from app.features.download.engine.tiktok_handler import get_tiktok_opts
 
 logger = logging.getLogger("app.downloader")
+
+
+# Perf-opt Phase 3 (D3) — cache /api/downloader/info responses for 5 min.
+# Same URL pasted twice (preview → submit, or two preview clicks) returns
+# instantly instead of re-running yt-dlp metadata extraction (1–2 s).
+# Cache is in-memory + thread-safe; evicted by TTL on every read.
+_INFO_CACHE: dict[str, tuple[float, dict]] = {}
+_INFO_TTL_SEC: float = 300.0
+_INFO_LOCK = threading.Lock()
+_INFO_MAX_ENTRIES: int = 100
 
 # iOS client kwargs — bypasses YouTube bot/login checks on most videos
 _IOS = {"extractor_args": {"youtube": {"player_client": ["ios"]}}}
@@ -79,7 +90,23 @@ def _base_opts(output_dir: Path, job_id: str, ffmpeg_bin: str) -> dict:
 
 
 def get_video_info(url: str) -> dict:
-    """Extract metadata without downloading. Returns title, duration, formats."""
+    """Extract metadata without downloading. Returns title, duration, formats.
+
+    Perf-opt Phase 3 (D3): in-memory cache keyed on the URL with 5 min TTL.
+    Repeated preview clicks against the same URL return without spawning a
+    yt-dlp probe. Cache entries are pruned on read when they expire and the
+    map is bounded by oldest-eviction at 100 entries.
+    """
+    _now = time.monotonic()
+    with _INFO_LOCK:
+        _cached = _INFO_CACHE.get(url)
+        if _cached is not None:
+            _ts, _payload = _cached
+            if (_now - _ts) < _INFO_TTL_SEC:
+                return _payload
+            # Stale — drop it now so the cache map stays tight
+            _INFO_CACHE.pop(url, None)
+
     try:
         import yt_dlp
         ffmpeg_bin = _ensure_ffmpeg_on_path()
@@ -118,13 +145,24 @@ def get_video_info(url: str) -> dict:
                 seen.add(f["height"])
                 unique_formats.append(f)
 
-        return {
+        _result = {
             "title": info.get("title") or "",
             "platform": platform,
             "duration": info.get("duration") or 0,
             "thumbnail": info.get("thumbnail") or "",
             "formats": unique_formats[:6],
         }
+        # Phase 3 D3 — write back to cache on the success path only.
+        # Failure path returns a thin error payload that is NOT cached so
+        # the next call retries the probe.
+        with _INFO_LOCK:
+            _INFO_CACHE[url] = (_now, _result)
+            if len(_INFO_CACHE) > _INFO_MAX_ENTRIES:
+                # Evict the oldest entry by timestamp; bounded O(N) is fine
+                # at N≤100 — calls are user-triggered, not high-frequency.
+                _oldest_url = min(_INFO_CACHE, key=lambda k: _INFO_CACHE[k][0])
+                _INFO_CACHE.pop(_oldest_url, None)
+        return _result
     except Exception as exc:
         logger.warning("get_video_info failed: %s", exc)
         return {"title": "", "platform": detect_platform(url), "duration": 0, "formats": []}

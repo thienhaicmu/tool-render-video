@@ -28,7 +28,10 @@ from app.features.render.engine.pipeline.render_events import _emit_render_event
 from app.features.render.engine.stages.part_render_context import PartRenderContext
 from app.features.render.engine.stages.part_render_setup import RenderPreflightResult
 from app.features.render.engine.stages.manifest_writer import write_manifest
-from app.features.render.engine.encoder.clip_renderer import render_part_smart
+from app.features.render.engine.encoder.clip_renderer import (
+    render_part_from_source,
+    render_part_smart,
+)
 from app.features.render.engine.motion import MotionCropConfig
 
 # Preserve original logger name (same pattern as 6.D-2.1 / 2.2 / 2.3 / 2.4).
@@ -63,6 +66,15 @@ def run_render_encode(
     part_text_layers_overlay: list,
     effective_subtitle_style: str,
     preflight: RenderPreflightResult,
+    *,
+    # Perf-opt Phase 7 (R8) — when ``fuse_active=True`` the encode call
+    # routes through ``render_part_from_source`` (Sprint 7.4/7.8 fused
+    # cut+render) using ``ctx.source_path`` with the seek window in
+    # ``source_start`` / ``source_duration`` instead of reading the
+    # raw_part intermediate. Defaults preserve the pre-Phase-7 path.
+    fuse_active: bool = False,
+    source_start: float = 0.0,
+    source_duration: float = 0.0,
 ) -> RenderEncodeResult:
     """Execute the FFmpeg encode block. See module docstring for the
     7-step responsibility breakdown.
@@ -109,39 +121,86 @@ def run_render_encode(
         part_subtitle_enabled,
     )
     try:
-        render_part_smart(
-            str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if ctx.payload.add_title_overlay else "",
-            ctx.payload.aspect_ratio, ctx.payload.frame_scale_x, ctx.payload.frame_scale_y,
-            _effective_motion_crop,
-            reframe_mode=_effective_reframe,
-            add_subtitle=part_subtitle_enabled,
-            add_title_overlay=ctx.payload.add_title_overlay,
-            effect_preset=ctx.payload.effect_preset,
-            transition_sec=ctx.tuned["transition_sec"],
-            video_codec=ctx.payload.video_codec,
-            video_crf=_part_video_crf,
-            video_preset=ctx.tuned["video_preset"],
-            audio_bitrate=ctx.payload.audio_bitrate,
-            retry_count=ctx.retry_count,
-            encoder_mode=ctx.payload.encoder_mode,
-            output_fps=ctx.payload.output_fps,
-            reup_mode=ctx.payload.reup_mode,
-            reup_overlay_enable=ctx.payload.reup_overlay_enable,
-            reup_overlay_opacity=ctx.payload.reup_overlay_opacity,
-            reup_bgm_enable=ctx.payload.reup_bgm_enable,
-            reup_bgm_path=ctx.payload.reup_bgm_path,
-            reup_bgm_gain=ctx.payload.reup_bgm_gain,
-            playback_speed=_resolved_playback_speed,
-            text_layers=part_text_layers,
-            loudnorm_enabled=getattr(ctx.payload, "loudnorm_enabled", False),
-            ffmpeg_threads=ctx.ffmpeg_threads,
-            content_type=seg.get("content_type_hint", "vlog"),
-            crop_cfg_override=_crop_cfg_override,
-            _motion_cache_key=_motion_ck,
-            _fallback_flag=_motion_crop_fallback,
-            visual_intensity_hint="high" if preflight.camera_strategy.zoom_burst else None,
-            zoom_burst=preflight.camera_strategy.zoom_burst,
-        )
+        if fuse_active:
+            # Perf-opt Phase 7 (R8) — fused cut+encode path. Reads
+            # directly from ctx.source_path with input-side seek
+            # (source_start, source_duration) instead of consuming the
+            # raw_part.mp4 intermediate. Eliminates 1 disk write + 1
+            # read + 1 ffmpeg subprocess compared to the legacy chain.
+            render_part_from_source(
+                str(ctx.source_path),
+                str(final_part),
+                float(source_start),
+                float(source_duration),
+                str(ass_part) if part_subtitle_enabled else None,
+                overlay_title if ctx.payload.add_title_overlay else "",
+                aspect_ratio=ctx.payload.aspect_ratio,
+                scale_x=ctx.payload.frame_scale_x,
+                scale_y=ctx.payload.frame_scale_y,
+                add_subtitle=part_subtitle_enabled,
+                add_title_overlay=ctx.payload.add_title_overlay,
+                effect_preset=ctx.payload.effect_preset,
+                transition_sec=ctx.tuned["transition_sec"],
+                video_codec=ctx.payload.video_codec,
+                video_crf=_part_video_crf,
+                video_preset=ctx.tuned["video_preset"],
+                audio_bitrate=ctx.payload.audio_bitrate,
+                retry_count=ctx.retry_count,
+                encoder_mode=ctx.payload.encoder_mode,
+                output_fps=ctx.payload.output_fps,
+                reup_mode=ctx.payload.reup_mode,
+                reup_overlay_enable=ctx.payload.reup_overlay_enable,
+                reup_overlay_opacity=ctx.payload.reup_overlay_opacity,
+                reup_bgm_enable=ctx.payload.reup_bgm_enable,
+                reup_bgm_path=ctx.payload.reup_bgm_path,
+                reup_bgm_gain=ctx.payload.reup_bgm_gain,
+                playback_speed=_resolved_playback_speed,
+                text_layers=part_text_layers,
+                loudnorm_enabled=getattr(ctx.payload, "loudnorm_enabled", False),
+                ffmpeg_threads=ctx.ffmpeg_threads,
+                content_type=seg.get("content_type_hint", "vlog"),
+                visual_intensity_hint="high" if preflight.camera_strategy.zoom_burst else None,
+                zoom_burst=preflight.camera_strategy.zoom_burst,
+                force_accurate_cut=False,  # legacy path takes accurate-cut work
+                motion_aware_crop=_effective_motion_crop,
+                reframe_mode=_effective_reframe,
+                _motion_cache_key=_motion_ck,
+                _fallback_flag=_motion_crop_fallback,
+            )
+        else:
+            render_part_smart(
+                str(raw_part), str(final_part), str(ass_part) if part_subtitle_enabled else None, overlay_title if ctx.payload.add_title_overlay else "",
+                ctx.payload.aspect_ratio, ctx.payload.frame_scale_x, ctx.payload.frame_scale_y,
+                _effective_motion_crop,
+                reframe_mode=_effective_reframe,
+                add_subtitle=part_subtitle_enabled,
+                add_title_overlay=ctx.payload.add_title_overlay,
+                effect_preset=ctx.payload.effect_preset,
+                transition_sec=ctx.tuned["transition_sec"],
+                video_codec=ctx.payload.video_codec,
+                video_crf=_part_video_crf,
+                video_preset=ctx.tuned["video_preset"],
+                audio_bitrate=ctx.payload.audio_bitrate,
+                retry_count=ctx.retry_count,
+                encoder_mode=ctx.payload.encoder_mode,
+                output_fps=ctx.payload.output_fps,
+                reup_mode=ctx.payload.reup_mode,
+                reup_overlay_enable=ctx.payload.reup_overlay_enable,
+                reup_overlay_opacity=ctx.payload.reup_overlay_opacity,
+                reup_bgm_enable=ctx.payload.reup_bgm_enable,
+                reup_bgm_path=ctx.payload.reup_bgm_path,
+                reup_bgm_gain=ctx.payload.reup_bgm_gain,
+                playback_speed=_resolved_playback_speed,
+                text_layers=part_text_layers,
+                loudnorm_enabled=getattr(ctx.payload, "loudnorm_enabled", False),
+                ffmpeg_threads=ctx.ffmpeg_threads,
+                content_type=seg.get("content_type_hint", "vlog"),
+                crop_cfg_override=_crop_cfg_override,
+                _motion_cache_key=_motion_ck,
+                _fallback_flag=_motion_crop_fallback,
+                visual_intensity_hint="high" if preflight.camera_strategy.zoom_burst else None,
+                zoom_burst=preflight.camera_strategy.zoom_burst,
+            )
     finally:
         preflight.encode_stop.set()
         preflight.encode_timer.join(timeout=5.0)

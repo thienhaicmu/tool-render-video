@@ -6,8 +6,17 @@ from app.db.connection import (
     _thread_conn,
     db_conn,
 )
+from app.services.metrics import DB_WRITES_TOTAL
 
 logger = logging.getLogger("app.db")
+
+
+def _count_write(surface: str) -> None:
+    """Perf-opt Phase 0 — emit render_db_writes_total{surface}. Never raises."""
+    try:
+        DB_WRITES_TOTAL.labels(surface=surface).inc()
+    except Exception:
+        pass
 
 
 # Audit FINDING-BR05 / C06 closure (Batch 3, 2026-06-06).
@@ -108,6 +117,7 @@ def upsert_job(job_id: str, kind: str, channel_code: str, status: str,
             (job_id, kind, channel_code, status, stage, progress_percent, message, _json_dumps(payload), _json_dumps(result), priority)
         )
         conn.commit()
+    _count_write("upsert_job")
 
 
 def update_job_progress(job_id: str, stage: str, progress_percent: int, message: str = '', status: str | None = None):
@@ -129,6 +139,7 @@ def update_job_progress(job_id: str, stage: str, progress_percent: int, message:
             (stage, progress_percent, message, job_id),
         )
     conn.commit()
+    _count_write("update_job_progress")
 
 
 def save_error_kind(job_id: str, kind: str) -> None:
@@ -156,6 +167,7 @@ def update_render_plan(job_id: str, plan_json: str | None) -> None:
                 (plan_json, job_id),
             )
             conn.commit()
+        _count_write("update_render_plan")
     except Exception as exc:
         logger.warning("update_render_plan failed for job_id=%s: %s", job_id, exc)
 
@@ -220,6 +232,73 @@ def upsert_job_part(job_id: str, part_no: int, part_name: str, status: str,
         (job_id, part_no, part_name, status, progress_percent, start_sec, end_sec, duration, viral_score, motion_score, hook_score, output_file, message)
     )
     conn.commit()
+    _count_write("upsert_job_part")
+
+
+def batch_upsert_job_parts_queued(rows: list[dict]) -> int:
+    """Perf-opt Phase 8 (R13) — seed N parts in a single transaction.
+
+    Replaces the loop of N ``upsert_job_part(JobPartStage.QUEUED, …)`` calls
+    used at job startup. Same ON CONFLICT semantics as the per-row helper,
+    so callers can safely retry an already-seeded job (idempotent). All
+    inserts share one ``_thread_conn`` commit, cutting the WAL fsync cost
+    from N down to 1.
+
+    Each row dict must carry:
+      job_id, part_no, part_name, start_sec, end_sec, duration,
+      viral_score, motion_score, hook_score
+    Optional keys default to the same values as ``upsert_job_part``.
+
+    Returns the row count. Validation is WARN-level (matches
+    ``upsert_job_part``) so a stray status string never aborts seeding.
+    """
+    if not rows:
+        return 0
+    status = _normalize_enum_value(JobPartStage.QUEUED, allow_empty=True)
+    _warn_unknown_value("part_status", status, _VALID_JOB_PART_STAGES)
+    conn = _thread_conn()
+    cur = conn.cursor()
+    sql = """
+        INSERT INTO job_parts (
+            job_id, part_no, part_name, status, progress_percent,
+            start_sec, end_sec, duration,
+            viral_score, motion_score, hook_score,
+            output_file, message, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(job_id, part_no) DO UPDATE SET
+            part_name=excluded.part_name,
+            status=excluded.status,
+            progress_percent=excluded.progress_percent,
+            start_sec=excluded.start_sec,
+            end_sec=excluded.end_sec,
+            duration=excluded.duration,
+            viral_score=excluded.viral_score,
+            motion_score=excluded.motion_score,
+            hook_score=excluded.hook_score,
+            output_file=excluded.output_file,
+            message=excluded.message,
+            updated_at=CURRENT_TIMESTAMP
+    """
+    payload = [
+        (
+            r["job_id"], int(r["part_no"]), r["part_name"], status, 0,
+            float(r.get("start_sec", 0.0)), float(r.get("end_sec", 0.0)),
+            float(r.get("duration", 0.0)),
+            float(r.get("viral_score", 0)),
+            float(r.get("motion_score", 0)),
+            float(r.get("hook_score", 0)),
+            str(r.get("output_file", "")),
+            str(r.get("message", "")),
+        )
+        for r in rows
+    ]
+    cur.executemany(sql, payload)
+    conn.commit()
+    # Emit one counter increment per row so existing dashboards keep
+    # comparing apples to apples vs the per-row path.
+    for _ in payload:
+        _count_write("upsert_job_part")
+    return len(payload)
 
 
 def update_job_asset_id(job_id: str, asset_id: str) -> None:

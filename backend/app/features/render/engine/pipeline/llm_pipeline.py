@@ -32,6 +32,7 @@ from app.features.render.engine.pipeline.render_events import _emit_render_event
 from app.db.jobs_repo import update_job_progress
 from app.features.render.engine.subtitle.transcription.whisper import has_audio_stream
 from app.features.render.engine.subtitle.transcription.adapters import transcribe_with_adapter
+from app.services.metrics import WHISPER_TRANSCRIBE_DURATION
 
 logger = logging.getLogger("app.render.llm_pipeline")
 
@@ -290,6 +291,16 @@ def run_llm_pre_render(
             finally:
                 _hb_stop.set()
                 _hb.join(timeout=2)
+                # Perf-opt Phase 0 baseline observability — observe on both
+                # success and failure paths so the histogram captures real
+                # cost. Wrapped in try/except so any metric error stays out
+                # of the orchestration path.
+                try:
+                    WHISPER_TRANSCRIBE_DURATION.labels(
+                        model=_model, engine=str(_engine)
+                    ).observe(time.perf_counter() - _t0)
+                except Exception:
+                    pass
 
     # ── 4. Verify SRT not empty ──────────────────────────────────────────
     if not (full_srt.exists() and full_srt.stat().st_size > 0):

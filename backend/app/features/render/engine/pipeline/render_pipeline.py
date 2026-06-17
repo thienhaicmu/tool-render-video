@@ -26,7 +26,13 @@ from fastapi import HTTPException
 
 from app.models.schemas import RenderRequest
 from app.db.connection import close_thread_conn
-from app.db.jobs_repo import list_job_parts, update_job_progress, upsert_job, upsert_job_part
+from app.db.jobs_repo import (
+    batch_upsert_job_parts_queued,
+    list_job_parts,
+    update_job_progress,
+    upsert_job,
+    upsert_job_part,
+)
 from app.features.render.engine.subtitle.transcription.whisper import has_audio_stream
 from app.features.render.engine.encoder.ffmpeg_helpers import nvenc_available
 from app.jobs import cancel as cancel_registry
@@ -35,6 +41,7 @@ from app.features.render.engine.pipeline.report_service import append_rows
 from app.core.config import TEMP_DIR
 from app.core.stage import JobStage, JobPartStage
 from app.features.render.ai.visibility.ai_visibility_summary import attach_ai_visibility_summaries
+from app.services.metrics import RENDER_STAGE_DURATION
 from app.features.render.engine.pipeline.remotion_adapter import (  # noqa: F401 (re-exported for mock.patch in tests/test_remotion_adapter.py)
     generate_hook_intro,
     prepend_intro_clip,
@@ -473,9 +480,22 @@ def run_render_pipeline(
     retry_count = max(0, min(5, int(payload.retry_count)))
     current_stage = JobStage.STARTING
     current_progress = 1
+    # Perf-opt Phase 1 — job-level stage timing. Observed only on stage
+    # transition so stage names get one observation per visit (a stage
+    # is re-entered ≤ once in practice). Wrapped in try/except so a
+    # metric backend issue never affects the orchestrator.
+    _stage_t0 = time.perf_counter()
 
     def _set_stage(stage: str, progress: int, message: str):
-        nonlocal current_stage, current_progress
+        nonlocal current_stage, current_progress, _stage_t0
+        if stage != current_stage:
+            try:
+                RENDER_STAGE_DURATION.labels(stage=str(current_stage)).observe(
+                    time.perf_counter() - _stage_t0
+                )
+            except Exception:
+                pass
+            _stage_t0 = time.perf_counter()
         current_stage = stage
         current_progress = max(0, min(99, int(progress)))
         update_job_progress(job_id, stage, progress, message)
@@ -1177,24 +1197,30 @@ def run_render_pipeline(
                             _hb.join(timeout=2)
 
 
-        for idx, seg in enumerate(scored, start=1):
-            existing = existing_parts.get(idx, {})
-            existing_status = (existing.get("status") or "").lower()
-            if existing_status == "done" and payload.resume_from_last:
-                continue
-            upsert_job_part(
-                job_id=job_id,
-                part_no=idx,
-                part_name=f"part_{idx:03d}",
-                status=JobPartStage.QUEUED,
-                progress_percent=0,
-                start_sec=seg["start"],
-                end_sec=seg["end"],
-                duration=seg["duration"],
-                viral_score=seg.get("viral_score", 0),
-                motion_score=seg.get("motion_score", 0),
-                hook_score=seg.get("hook_score", 0),
+        # Perf-opt Phase 8 (R13) — batch the QUEUED-state seeding for all
+        # parts into a single transaction. Same ON CONFLICT semantics as
+        # the per-row helper so a resume keeps the DONE rows intact (the
+        # comprehension filters them out). Drops N commits to 1 → ~50 ms
+        # off the cold-start path on a 10-part job.
+        _seed_rows = [
+            {
+                "job_id": job_id,
+                "part_no": idx,
+                "part_name": f"part_{idx:03d}",
+                "start_sec": seg["start"],
+                "end_sec": seg["end"],
+                "duration": seg["duration"],
+                "viral_score": seg.get("viral_score", 0),
+                "motion_score": seg.get("motion_score", 0),
+                "hook_score": seg.get("hook_score", 0),
+            }
+            for idx, seg in enumerate(scored, start=1)
+            if not (
+                (existing_parts.get(idx, {}).get("status") or "").lower() == "done"
+                and payload.resume_from_last
             )
+        ]
+        batch_upsert_job_parts_queued(_seed_rows)
 
         # UP28.1: source stat for motion path cache key — computed once, shared across all parts
         try:
