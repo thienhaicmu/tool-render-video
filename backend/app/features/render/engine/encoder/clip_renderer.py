@@ -288,6 +288,20 @@ def render_base_clip(
     }
 
 
+def _audio_copy_safe(input_path: str, bgm_ok: bool, input_has_audio: bool, af: str) -> bool:
+    """Perf-opt Phase 8 (R27) — single source of truth for the ``-c:a copy``
+    fast-path decision, shared by the NVENC and CPU-recovery encode paths so
+    the two never diverge.
+
+    Source audio can pass through bit-identically only when: no BGM mix is in
+    play, the source actually has audio, no audio filter is applied (``af``
+    empty), and the source codec is already AAC (MP4-muxer compatible).
+    """
+    if bgm_ok or not input_has_audio or af:
+        return False
+    return (probe_video_metadata(input_path).get("audio_codec") or "").lower() == "aac"
+
+
 def render_part(
     input_path: str,
     output_path: str,
@@ -523,36 +537,28 @@ def render_part(
             cmd += ["-filter_complex", fc,
                     "-map", "[vout]", "-map", "1:a:0",
                     "-filter:a", af, "-shortest"]
-    # Perf-opt Phase 8 (R27) — track whether the source audio can pass
-    # through with ``-c:a copy``. Reset to True only when no BGM mixing
-    # is in play, no audio filter is applied, and the source codec is
-    # already AAC (MP4-muxer compatible). Saves 50–150 ms per part
-    # without altering audio quality (bit-identical pass-through).
+    # Perf-opt Phase 8 (R27) — pass the source audio through with ``-c:a copy``
+    # when it's bit-identical-safe (see _audio_copy_safe). Saves 50–150 ms per
+    # part. ``-shortest`` is added on the copy branch so a copied audio track
+    # that runs slightly longer than the (re-encoded) video cannot extend the
+    # output past the video and desync.
     _use_audio_copy = False
-    else_branch_no_af = False
     if not bgm_ok:
         cmd += ["-vf", vf_chain]
-        if input_has_audio:
-            af = _build_audio_filter(loudnorm_enabled, reup_mode, speed)
-            if af:
-                logger.debug(
-                    "render_part audio_filter=%s speed=%.4f part=%s",
-                    af, speed, Path(output_path).name,
-                )
-                cmd += ["-af", af]
-            else:
-                else_branch_no_af = True
-        else_branch_no_af = else_branch_no_af or not input_has_audio
-    if else_branch_no_af and input_has_audio:
-        _src_audio_codec = (probe_video_metadata(input_path).get("audio_codec") or "").lower()
-        if _src_audio_codec == "aac":
-            _use_audio_copy = True
+        af = _build_audio_filter(loudnorm_enabled, reup_mode, speed) if input_has_audio else ""
+        if af:
             logger.debug(
-                "render_part audio_fast_path: -c:a copy (src=aac, no filter) part=%s",
-                Path(output_path).name,
+                "render_part audio_filter=%s speed=%.4f part=%s",
+                af, speed, Path(output_path).name,
             )
+            cmd += ["-af", af]
+        _use_audio_copy = _audio_copy_safe(input_path, bgm_ok, input_has_audio, af)
     if _use_audio_copy:
-        cmd += [*codec_flags, "-c:a", "copy", output_path]
+        logger.debug(
+            "render_part audio_fast_path: -c:a copy (src=aac, no filter) part=%s",
+            Path(output_path).name,
+        )
+        cmd += [*codec_flags, "-c:a", "copy", "-shortest", output_path]
     else:
         cmd += [*codec_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
     logger.debug("render_part ffmpeg_cmd=%s", " ".join(str(a) for a in cmd))
@@ -591,6 +597,7 @@ def render_part(
                      "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
                      "-movflags", "+faststart"]
         cpu_cmd = [get_ffmpeg_bin(), "-y", *_input_args]
+        _cpu_use_audio_copy = False
         if bgm_ok:
             cpu_cmd += ["-stream_loop", "-1", "-i", bgm_path]
             if input_has_audio:
@@ -613,21 +620,14 @@ def render_part(
                             "-filter:a", af, "-shortest"]
         else:
             cpu_cmd += ["-vf", vf_chain]
-            if input_has_audio:
-                af = _build_audio_filter(loudnorm_enabled, reup_mode, speed)
-                if af:
-                    cpu_cmd += ["-af", af]
-        # Perf-opt Phase 8 (R27) — same audio-copy gate as the NVENC
-        # path: only the no-BGM + no-filter + AAC-source case is safe.
-        _cpu_use_audio_copy = False
-        if not bgm_ok and input_has_audio:
-            _cpu_af_check = _build_audio_filter(loudnorm_enabled, reup_mode, speed)
-            if not _cpu_af_check:
-                _cpu_src_codec = (probe_video_metadata(input_path).get("audio_codec") or "").lower()
-                if _cpu_src_codec == "aac":
-                    _cpu_use_audio_copy = True
+            af = _build_audio_filter(loudnorm_enabled, reup_mode, speed) if input_has_audio else ""
+            if af:
+                cpu_cmd += ["-af", af]
+            # Perf-opt Phase 8 (R27) — same audio-copy gate as the NVENC
+            # path (shared _audio_copy_safe helper so they never diverge).
+            _cpu_use_audio_copy = _audio_copy_safe(input_path, bgm_ok, input_has_audio, af)
         if _cpu_use_audio_copy:
-            cpu_cmd += [*cpu_flags, "-c:a", "copy", output_path]
+            cpu_cmd += [*cpu_flags, "-c:a", "copy", "-shortest", output_path]
         else:
             cpu_cmd += [*cpu_flags, "-c:a", "aac", "-b:a", audio_bitrate, output_path]
         _run_ffmpeg_with_retry(cpu_cmd, retry_count=retry_count)

@@ -121,6 +121,11 @@ def _fuse_safe_active(ctx: PartRenderContext, force_accurate_cut: bool) -> bool:
         slice cannot pull from full_srt the planner falls back to a
         per-part Whisper read of raw_part audio. With raw_part absent
         the Whisper fallback would fail.
+      - explicit ``camera_strategy.tracker`` → False. The fused
+        ``render_part_from_source`` path cannot carry a
+        ``crop_cfg_override`` (tracker_hint), so an AI-selected subject
+        tracker would silently degrade to the default tracker. Keep the
+        legacy cut+render path whenever the plan names a tracker.
     """
     if os.getenv("RENDER_FUSE_CUT", "0") != "1":
         return False
@@ -130,6 +135,11 @@ def _fuse_safe_active(ctx: PartRenderContext, force_accurate_cut: bool) -> bool:
         return False
     if not getattr(ctx, "full_srt_available", False):
         return False
+    _plan = getattr(ctx, "render_plan", None)
+    if _plan is not None:
+        _tracker = (getattr(_plan.camera_strategy, "tracker", "") or "").strip().lower()
+        if _tracker:
+            return False
     return True
 
 

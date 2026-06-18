@@ -279,16 +279,22 @@ def batch_upsert_job_parts_queued(rows: list[dict]) -> int:
             message=excluded.message,
             updated_at=CURRENT_TIMESTAMP
     """
+    # The ``or 0`` guards mirror the defensive coercion used everywhere these
+    # scores are read (e.g. pipeline_segment_selection.py) — an explicit None
+    # score value must coerce to 0.0, not raise. The pre-R13 per-row
+    # upsert_job_part bound the raw value (None -> SQL NULL), so this keeps
+    # the batch path equally tolerant and stops one bad row aborting the whole
+    # seeding transaction.
     payload = [
         (
             r["job_id"], int(r["part_no"]), r["part_name"], status, 0,
-            float(r.get("start_sec", 0.0)), float(r.get("end_sec", 0.0)),
-            float(r.get("duration", 0.0)),
-            float(r.get("viral_score", 0)),
-            float(r.get("motion_score", 0)),
-            float(r.get("hook_score", 0)),
-            str(r.get("output_file", "")),
-            str(r.get("message", "")),
+            float(r.get("start_sec", 0.0) or 0.0), float(r.get("end_sec", 0.0) or 0.0),
+            float(r.get("duration", 0.0) or 0.0),
+            float(r.get("viral_score", 0) or 0),
+            float(r.get("motion_score", 0) or 0),
+            float(r.get("hook_score", 0) or 0),
+            str(r.get("output_file", "") or ""),
+            str(r.get("message", "") or ""),
         )
         for r in rows
     ]

@@ -242,3 +242,32 @@ else:
     CACHE_LOOKUPS_TOTAL = _NoOpMetric()        # type: ignore[assignment]
     WHISPER_TRANSCRIBE_DURATION = _NoOpMetric()  # type: ignore[assignment]
     DB_WRITES_TOTAL = _NoOpMetric()            # type: ignore[assignment]
+
+
+# ── Shared cache-instrumentation decorator ───────────────────────────────────
+
+from functools import wraps as _wraps
+
+
+def instrument_cache(cache_label: str):
+    """Decorator: emit render_cache_lookups_total{cache, outcome} on every call.
+
+    Pure observation — never alters the wrapped function's return value or
+    raises. ``outcome`` is ``hit`` when the result is not None, else ``miss``.
+    The counter inc is wrapped in its own try/except so a misbehaving metric
+    backend never breaks the cache path. Single definition shared by every
+    cache module (motion/cache.py, pipeline/pipeline_cache.py) so the metric
+    contract can't drift between copies.
+    """
+    def decorator(fn):
+        @_wraps(fn)
+        def wrapped(*args, **kwargs):
+            result = fn(*args, **kwargs)
+            try:
+                outcome = "hit" if result is not None else "miss"
+                CACHE_LOOKUPS_TOTAL.labels(cache=cache_label, outcome=outcome).inc()
+            except Exception:
+                pass
+            return result
+        return wrapped
+    return decorator

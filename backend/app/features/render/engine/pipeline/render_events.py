@@ -292,8 +292,11 @@ _PROGRESS_TICK_SEC = 3.0   # how often the timer thread wakes (stall guard caden
 # writes (failure path) are NOT subject to this throttle — they always
 # bypass it. The orchestrator emits the authoritative 100 % via the
 # caller's path, not through this timer.
-_DB_WRITE_MIN_INTERVAL_SEC = 10.0
-_DB_WRITE_MIN_DELTA_PCT = 10
+# Phase 4 polish (2026-06-18) — tightened from 10 s / 10 % to 5 s / 5 % so the
+# HTTP polling fallback (GET /api/jobs/{id}) refreshes a slowly-advancing part
+# with better fidelity, while still coalescing the bulk of the per-tick writes.
+_DB_WRITE_MIN_INTERVAL_SEC = 5.0
+_DB_WRITE_MIN_DELTA_PCT = 5
 
 
 def _event_from_stage(stage: str) -> str:

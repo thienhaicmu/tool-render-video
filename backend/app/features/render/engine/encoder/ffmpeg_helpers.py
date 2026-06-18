@@ -148,7 +148,12 @@ def probe_video_metadata(path: str, timeout: int = 15) -> dict:
                         pass
                     for fps_field in ("avg_frame_rate", "r_frame_rate"):
                         fps_val = _parse_fps_ratio(stream.get(fps_field) or "")
-                        if 1.0 <= fps_val <= 120.0:
+                        # Upper bound 240.0 (was 120.0) so high-frame-rate
+                        # sources (120/144/240fps) report their true fps.
+                        # The old 120 cap silently zeroed HFR fps, which made
+                        # scene_detector._get_video_fps fall back to 30.0 and
+                        # mis-scale TransNetV2 scene-cut timestamps.
+                        if 1.0 <= fps_val <= 240.0:
                             result["fps"] = fps_val
                             break
                 elif ct == "audio":

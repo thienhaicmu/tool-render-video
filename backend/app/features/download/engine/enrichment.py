@@ -36,6 +36,18 @@ logger = logging.getLogger("app.download.enrichment")
 # pulls Whisper into memory if no enrichment ever runs.
 _TINY_MODEL = None
 _TINY_MODEL_LOCK = threading.Lock()
+# Serialise the shared model's forward pass. The singleton is reused across
+# concurrent enrichment workers (_ENRICH_EXECUTOR, max_workers>=2), but a
+# single torch nn.Module is not safe for concurrent transcribe() calls —
+# shared parameter/scratch buffers can corrupt output or crash the CUDA
+# context. This lock keeps the load-time savings while making inference
+# one-at-a-time across assets.
+_TINY_INFER_LOCK = threading.Lock()
+
+# Reused pool for the per-asset language||thumbnail fan-out. A module-level
+# pool (threads spawned lazily on first submit) avoids creating and tearing
+# down a fresh 2-thread pool for every asset enrichment.
+_ENRICH_PAR_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="enrich-par")
 
 
 def _get_tiny_model():
@@ -99,11 +111,10 @@ def _do_enrich(asset_id: str, file_path: str) -> None:
     # and run on the calling thread.
     probe = _ffprobe_metadata(file_path)
     duration_sec = float(probe.get("duration") or 0.0)
-    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="enrich-par") as _ex:
-        _f_lang = _ex.submit(_detect_language, file_path, duration_sec)
-        _f_thumb = _ex.submit(_extract_thumbnail, file_path, duration_sec)
-        language = _f_lang.result()
-        thumbnail_path = _f_thumb.result()
+    _f_lang = _ENRICH_PAR_POOL.submit(_detect_language, file_path, duration_sec)
+    _f_thumb = _ENRICH_PAR_POOL.submit(_extract_thumbnail, file_path, duration_sec)
+    language = _f_lang.result()
+    thumbnail_path = _f_thumb.result()
     content_type = _heuristic_content_type(duration_sec)
     file_size_bytes = _file_size(path)
 
@@ -192,7 +203,10 @@ def _detect_language(file_path: str, duration_sec: float) -> str:
     if model is None:
         return ""
     try:
-        result = model.transcribe(file_path, language=None, task="detect", duration=30.0)
+        # Serialise inference on the shared singleton — concurrent
+        # transcribe() calls on one torch model are not thread-safe.
+        with _TINY_INFER_LOCK:
+            result = model.transcribe(file_path, language=None, task="detect", duration=30.0)
         lang = (result.get("language") or "").strip().lower()
         logger.info("enrichment: language=%r for %s", lang, file_path)
         return lang

@@ -24,6 +24,26 @@ _INFO_TTL_SEC: float = 300.0
 _INFO_LOCK = threading.Lock()
 _INFO_MAX_ENTRIES: int = 100
 
+# Single-flight: a per-URL lock so a burst of concurrent FIRST-time requests
+# for the same URL runs yt-dlp once and the rest read the freshly cached
+# result, instead of each spawning its own probe. Different URLs use different
+# locks and still run in parallel. The lock map is bounded — clearing it only
+# loses dedup briefly, never correctness (the cache re-check is authoritative).
+_INFO_URL_LOCKS: dict[str, threading.Lock] = {}
+_INFO_LOCKS_GUARD = threading.Lock()
+_INFO_LOCKS_MAX: int = 256
+
+
+def _info_url_lock(url: str) -> threading.Lock:
+    with _INFO_LOCKS_GUARD:
+        lk = _INFO_URL_LOCKS.get(url)
+        if lk is None:
+            if len(_INFO_URL_LOCKS) >= _INFO_LOCKS_MAX:
+                _INFO_URL_LOCKS.clear()
+            lk = threading.Lock()
+            _INFO_URL_LOCKS[url] = lk
+        return lk
+
 # iOS client kwargs — bypasses YouTube bot/login checks on most videos
 _IOS = {"extractor_args": {"youtube": {"player_client": ["ios"]}}}
 
@@ -97,16 +117,29 @@ def get_video_info(url: str) -> dict:
     yt-dlp probe. Cache entries are pruned on read when they expire and the
     map is bounded by oldest-eviction at 100 entries.
     """
-    _now = time.monotonic()
+    # Fast path: a fresh cache hit returns without taking the per-URL lock.
     with _INFO_LOCK:
         _cached = _INFO_CACHE.get(url)
-        if _cached is not None:
-            _ts, _payload = _cached
-            if (_now - _ts) < _INFO_TTL_SEC:
-                return _payload
+        if _cached is not None and (time.monotonic() - _cached[0]) < _INFO_TTL_SEC:
+            return _cached[1]
+
+    # Single-flight per URL: concurrent first-time probes of the same URL
+    # serialise here so only one runs yt-dlp; the others fall through to the
+    # re-check below and read the freshly cached result.
+    with _info_url_lock(url):
+        with _INFO_LOCK:
+            _cached = _INFO_CACHE.get(url)
+            if _cached is not None and (time.monotonic() - _cached[0]) < _INFO_TTL_SEC:
+                return _cached[1]
             # Stale — drop it now so the cache map stays tight
             _INFO_CACHE.pop(url, None)
+        return _probe_video_info(url)
 
+
+def _probe_video_info(url: str) -> dict:
+    """Run the yt-dlp metadata probe and write the result to the cache on
+    success. Separated from get_video_info so the single-flight wrapper owns
+    the cache-check / locking and this owns the actual extraction."""
     try:
         import yt_dlp
         ffmpeg_bin = _ensure_ffmpeg_on_path()
@@ -154,9 +187,11 @@ def get_video_info(url: str) -> dict:
         }
         # Phase 3 D3 — write back to cache on the success path only.
         # Failure path returns a thin error payload that is NOT cached so
-        # the next call retries the probe.
+        # the next call retries the probe. Timestamp is captured AFTER the
+        # probe so the TTL clock starts when the data is actually fresh, not
+        # before the 1–2 s extraction.
         with _INFO_LOCK:
-            _INFO_CACHE[url] = (_now, _result)
+            _INFO_CACHE[url] = (time.monotonic(), _result)
             if len(_INFO_CACHE) > _INFO_MAX_ENTRIES:
                 # Evict the oldest entry by timestamp; bounded O(N) is fine
                 # at N≤100 — calls are user-triggered, not high-frequency.

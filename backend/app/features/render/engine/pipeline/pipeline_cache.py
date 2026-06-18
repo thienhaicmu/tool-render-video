@@ -20,32 +20,12 @@ import json
 import os
 import shutil
 import time
-from functools import wraps
 from pathlib import Path
 
 from app.core.config import APP_DATA_DIR
-from app.services.metrics import CACHE_LOOKUPS_TOTAL
-
-
-def _instrument_cache(cache_label: str):
-    """Decorator: emit render_cache_lookups_total{cache, outcome} on every call.
-
-    Perf-opt Phase 0 (2026-06-16) — pure observation, never alters return
-    value or raises. The inner counter inc is wrapped in its own try/except
-    so a misbehaving metric backend never breaks the cache path.
-    """
-    def decorator(fn):
-        @wraps(fn)
-        def wrapped(*args, **kwargs):
-            result = fn(*args, **kwargs)
-            try:
-                outcome = "hit" if result is not None else "miss"
-                CACHE_LOOKUPS_TOTAL.labels(cache=cache_label, outcome=outcome).inc()
-            except Exception:
-                pass
-            return result
-        return wrapped
-    return decorator
+# Perf-opt Phase 0 (2026-06-16) — shared cache-instrumentation decorator
+# (single definition lives in app.services.metrics to avoid drift).
+from app.services.metrics import instrument_cache as _instrument_cache
 
 _RENDER_CACHE_TTL_SEC = 72 * 3600  # 72 h
 
