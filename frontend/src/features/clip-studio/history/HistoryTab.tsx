@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import type { Lang } from '../ClipStudio'
 import { cancelRender, resumeRender } from '@/api/render'
+import { clearHistory } from '@/api/maintenance'
 import { useActiveJobs, useJobsStore } from '@/stores/jobsStore'
 import type { HistoryItem } from '@/types/api'
 
@@ -439,6 +440,7 @@ export function HistoryTab({ lang: _lang, onSwitchToRender }: HistoryTabProps) {
   const [filter, setFilter]     = useState<Filter>('All')
   const [search, setSearch]     = useState('')
   const [selected, setSelected] = useState<HistoryItem | null>(null)
+  const [clearing, setClearing] = useState(false)
 
   // Subscribe to the shared jobs store. The store owns the 4 s poll —
   // ActiveJobBadge + RenderWorkflow auto-reattach share the same fetch,
@@ -481,6 +483,26 @@ export function HistoryTab({ lang: _lang, onSwitchToRender }: HistoryTabProps) {
   const handleMonitor = useCallback((_j: HistoryItem) => {
     onSwitchToRender?.()
   }, [onSwitchToRender])
+
+  // Clear all history. Active (running/queued) jobs are preserved server-side
+  // (preserve_active default) so an in-flight render is never orphaned.
+  const handleClearHistory = useCallback(async () => {
+    if (clearing) return
+    const running = jobs.filter((j) => j.status === 'running' || j.status === 'queued').length
+    const msg = running > 0
+      ? `Clear render history? ${running} active job(s) will be kept. This cannot be undone.`
+      : 'Clear all render history? This cannot be undone.'
+    if (!window.confirm(msg)) return
+    setClearing(true)
+    try {
+      await clearHistory({ clearCache: false, preserveActive: true })
+      await refresh()
+    } catch {
+      // leave history as-is; next poll reflects reality
+    } finally {
+      setClearing(false)
+    }
+  }, [clearing, jobs, refresh])
 
   const filtered = jobs.filter((j) => {
     if (filter === 'Done'    && !j.status.startsWith('completed')) return false
@@ -549,13 +571,37 @@ export function HistoryTab({ lang: _lang, onSwitchToRender }: HistoryTabProps) {
             )}
           </div>
 
-          <button
-            onClick={() => { refresh() }}
-            title="Refresh"
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 14, cursor: 'pointer', padding: 4, lineHeight: 1 }}
-          >
-            ↻
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              onClick={() => { refresh() }}
+              title="Refresh"
+              style={{ background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 14, cursor: 'pointer', padding: 4, lineHeight: 1 }}
+            >
+              ↻
+            </button>
+            <button
+              onClick={handleClearHistory}
+              disabled={clearing || jobs.length === 0}
+              title="Clear history (keeps active jobs)"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                height: 28, padding: '0 11px', borderRadius: 'var(--radius-full)',
+                border: '1px solid var(--border-default)',
+                background: 'transparent',
+                color: jobs.length === 0 ? 'var(--text-disabled)' : 'var(--text-2)',
+                fontSize: 11, fontWeight: 600, lineHeight: 1,
+                cursor: clearing || jobs.length === 0 ? 'not-allowed' : 'pointer',
+                transition: 'all .12s',
+              }}
+              onMouseEnter={(e) => { if (!clearing && jobs.length > 0) { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--status-error) 35%, transparent)'; e.currentTarget.style.color = 'var(--status-error)' } }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = jobs.length === 0 ? 'var(--text-disabled)' : 'var(--text-2)' }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              </svg>
+              {clearing ? 'Clearing…' : 'Clear'}
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
