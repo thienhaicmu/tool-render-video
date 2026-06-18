@@ -45,9 +45,6 @@ def _info_url_lock(url: str) -> threading.Lock:
             _INFO_URL_LOCKS[url] = lk
         return lk
 
-# iOS client kwargs — bypasses YouTube bot/login checks on most videos
-_IOS = {"extractor_args": {"youtube": {"player_client": ["ios"]}}}
-
 # Hard wall-clock ceiling for a single download-tab download. socket_timeout=60
 # (in _base_opts) covers individual socket stalls; this is the total-session
 # backstop so a slow-but-progressing or postprocessor-stuck download cannot run
@@ -181,8 +178,11 @@ def _probe_video_info(url: str) -> dict:
         if platform == "tiktok":
             opts.update(get_tiktok_opts())
             opts["skip_download"] = True
-        elif platform == "youtube":
-            opts.update(_IOS)
+        # YouTube: use yt-dlp's default client set (it already multi-tries
+        # web/tv/android/etc.). The old forced "ios" client now fails with
+        # "Requested format is not available" on current YouTube, while the
+        # default client returns the full format ladder. See
+        # docs/audit-2026-06-06/DOWNLOAD_REVIEW_FIXES_2026-06-18.md (F11).
 
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -265,8 +265,8 @@ def download_video(
         opts["extractor_args"] = tiktok_opts["extractor_args"]
     else:
         opts["format"] = _quality_to_format(quality)
-        if platform == "youtube":
-            opts.update(_IOS)
+        # YouTube uses yt-dlp's default client set — the previously forced
+        # "ios" client now fails on current YouTube (see F11 in the audit).
 
     def _hook(data: dict):
         # Cooperative cancellation: raising inside the hook makes yt-dlp abort.
