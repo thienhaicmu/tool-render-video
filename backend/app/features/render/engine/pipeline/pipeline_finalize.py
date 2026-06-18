@@ -23,6 +23,7 @@ Sacred Contracts honored (CLAUDE.md):
 from __future__ import annotations
 
 import shutil
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -321,7 +322,18 @@ def run_render_finalize(ctx: FinalizeContext) -> str:
     # app.services.db_backup). Sacred Contract 7 follow-up.
     try:
         from app.features.render.engine.pipeline.db_backup import maybe_snapshot_after_job
-        maybe_snapshot_after_job()
+        # Run OFF the render worker thread. snapshot_db() uses
+        # sqlite3.Connection.backup(), whose CPython loop retries SQLITE_BUSY /
+        # SQLITE_LOCKED forever (no max attempts) — under DB contention (other
+        # concurrent renders writing via _thread_conn) it can hang. Calling it
+        # synchronously here would block the worker AFTER it wrote
+        # status=completed, holding its job slot and blocking new renders.
+        # Fire-and-forget: a slow/hung snapshot only abandons a daemon thread,
+        # never the render. The try/except below only guards thread spawn —
+        # it can't catch a hang, which is exactly why this must be async.
+        threading.Thread(
+            target=maybe_snapshot_after_job, daemon=True, name="db-snapshot",
+        ).start()
     except Exception:
         pass
 

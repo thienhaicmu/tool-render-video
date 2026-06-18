@@ -60,6 +60,11 @@ BACKUP_MIN_INTERVAL_SEC: int = max(0, int(os.getenv("DB_BACKUP_MIN_INTERVAL_SEC"
 _job_counter_lock = threading.Lock()
 _job_counter: int = 0
 _last_backup_at: float = 0.0  # monotonic seconds; 0 means "never"
+# Guards against piling up snapshot threads: the finalize call site fires this
+# in a daemon thread, and a hung/slow backup leaves _last_backup_at stale, so
+# the time-trigger would otherwise re-fire on every later render. Only one
+# snapshot runs at a time.
+_snapshot_in_progress: bool = False
 
 
 # ── Snapshot ─────────────────────────────────────────────────────────────────
@@ -161,11 +166,18 @@ def maybe_snapshot_after_job() -> Path | None:
     call site is wrapped in `try/except: pass` so any failure here cannot
     propagate. Returns the snapshot path (if taken) or None.
     """
-    global _job_counter, _last_backup_at
+    global _job_counter, _last_backup_at, _snapshot_in_progress
     with _job_counter_lock:
         _job_counter += 1
         n = _job_counter
         last = _last_backup_at
+        in_progress = _snapshot_in_progress
+
+    # A previous snapshot is still running (slow/hung backup) — don't stack
+    # another one. Returning here keeps the daemon-thread call site from
+    # spawning a new sqlite connection pair on every subsequent render.
+    if in_progress:
+        return None
 
     elapsed = float("inf") if last <= 0 else (time.monotonic() - last)
     n_trigger = (n % BACKUP_EVERY_N_JOBS) == 0
@@ -174,7 +186,13 @@ def maybe_snapshot_after_job() -> Path | None:
     if not (n_trigger or time_trigger):
         return None
 
-    snap = snapshot_db()
+    with _job_counter_lock:
+        _snapshot_in_progress = True
+    try:
+        snap = snapshot_db()
+    finally:
+        with _job_counter_lock:
+            _snapshot_in_progress = False
     if snap is not None:
         with _job_counter_lock:
             _last_backup_at = time.monotonic()
@@ -208,10 +226,11 @@ def list_snapshots(target_dir: Path | None = None) -> list[tuple[Path, int, date
 
 def _reset_state_for_tests() -> None:
     """Test helper — reset module-level trigger state. Not part of the public API."""
-    global _job_counter, _last_backup_at
+    global _job_counter, _last_backup_at, _snapshot_in_progress
     with _job_counter_lock:
         _job_counter = 0
         _last_backup_at = 0.0
+        _snapshot_in_progress = False
 
 
 def main() -> int:
