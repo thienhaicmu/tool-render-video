@@ -56,6 +56,33 @@ _DL_WALLCLOCK_TIMEOUT: int = max(60, int(os.getenv("DOWNLOAD_WALLCLOCK_TIMEOUT",
 _QUALITY_RE = re.compile(r"^(\d{3,4})p$")
 
 
+def _is_format_error(e: Exception) -> bool:
+    """True when a yt-dlp error means the requested format/quality isn't
+    available for this source (vs a network/auth/other failure)."""
+    m = str(e or "").lower()
+    return (
+        "requested format is not available" in m
+        or "requested format" in m
+        or "no video formats" in m
+    )
+
+
+def _should_quality_fallback(platform: str, quality: str, exc: Exception, cancelled: bool) -> bool:
+    """Decide whether to retry a failed download with ``best``.
+
+    A capped quality the source can't satisfy (UI offered 1080p but the video
+    tops out lower, or the download client exposes fewer formats) should
+    downgrade to ``best`` instead of failing. TikTok keeps its own format (no
+    cap applied) so it's excluded, and a user cancel is never retried.
+    """
+    return (
+        platform != "tiktok"
+        and (quality or "").strip().lower() != "best"
+        and not cancelled
+        and _is_format_error(exc)
+    )
+
+
 def _quality_to_format(quality: str) -> str:
     """Map the UI quality selector to a yt-dlp format string.
 
@@ -302,26 +329,45 @@ def download_video(
         job_id, platform, quality, cookie_src, url,
     )
 
-    def _extract() -> dict:
+    def _extract(fmt: str) -> dict:
+        opts["format"] = fmt
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=True)
 
-    _t_dl = time.monotonic()
-    # Run the blocking yt-dlp call under a wall-clock ceiling. On timeout we set
-    # cancel_event so the (still-running) worker's next progress hook aborts it;
-    # socket_timeout=60 bounds the no-progress-at-all case.
-    _pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="dl-wallclock")
-    try:
-        _fut = _pool.submit(_extract)
+    def _run_with_wallclock(fmt: str) -> dict:
+        # Run the blocking yt-dlp call under a wall-clock ceiling. On timeout we
+        # set cancel_event so the (still-running) worker's next progress hook
+        # aborts it; socket_timeout=60 bounds the no-progress-at-all case.
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="dl-wallclock")
         try:
-            info = _fut.result(timeout=_DL_WALLCLOCK_TIMEOUT)
-        except concurrent.futures.TimeoutError:
-            if cancel_event is not None:
-                cancel_event.set()
-            raise RuntimeError(
-                f"Download timed out after {_DL_WALLCLOCK_TIMEOUT}s. Increase "
-                "DOWNLOAD_WALLCLOCK_TIMEOUT to allow more time."
-            )
+            fut = pool.submit(_extract, fmt)
+            try:
+                return fut.result(timeout=_DL_WALLCLOCK_TIMEOUT)
+            except concurrent.futures.TimeoutError:
+                if cancel_event is not None:
+                    cancel_event.set()
+                raise RuntimeError(
+                    f"Download timed out after {_DL_WALLCLOCK_TIMEOUT}s. Increase "
+                    "DOWNLOAD_WALLCLOCK_TIMEOUT to allow more time."
+                )
+        finally:
+            pool.shutdown(wait=False)
+
+    _t_dl = time.monotonic()
+    _primary_fmt = opts.get("format") or _quality_to_format("best")
+    try:
+        try:
+            info = _run_with_wallclock(_primary_fmt)
+        except Exception as exc:
+            _cancelled = cancel_event is not None and cancel_event.is_set()
+            if _should_quality_fallback(platform, quality, exc, _cancelled):
+                logger.warning(
+                    "download.quality_fallback  job=%s  quality=%s unavailable → retrying best  (%s)",
+                    job_id, quality, str(exc)[:120],
+                )
+                info = _run_with_wallclock(_quality_to_format("best"))
+            else:
+                raise
     except Exception as exc:
         _elapsed_ms = int((time.monotonic() - _t_dl) * 1000)
         logger.error(
@@ -330,8 +376,6 @@ def download_video(
             exc_info=True,
         )
         raise
-    finally:
-        _pool.shutdown(wait=False)
 
     # Find the temp file (_dl_{job_id}.mp4)
     temp_candidates = sorted(

@@ -28,6 +28,29 @@ def test_quality_to_format_accepts_arbitrary_heights():
     assert "height<=360" in _quality_to_format("360p")
 
 
+# ── quality fallback to best (download won't error on unavailable quality) ────
+
+def test_quality_fallback_triggers_on_format_error():
+    from app.features.download.engine.engine import _should_quality_fallback
+    err = Exception("ERROR: Requested format is not available")
+    assert _should_quality_fallback("youtube", "1080p", err, cancelled=False) is True
+
+
+def test_quality_fallback_skips_when_best_already():
+    from app.features.download.engine.engine import _should_quality_fallback
+    err = Exception("Requested format is not available")
+    assert _should_quality_fallback("youtube", "best", err, cancelled=False) is False
+
+
+def test_quality_fallback_skips_tiktok_and_cancel_and_other_errors():
+    from app.features.download.engine.engine import _should_quality_fallback
+    fmt_err = Exception("Requested format is not available")
+    net_err = Exception("Connection timed out")
+    assert _should_quality_fallback("tiktok", "720p", fmt_err, cancelled=False) is False
+    assert _should_quality_fallback("youtube", "720p", fmt_err, cancelled=True) is False
+    assert _should_quality_fallback("youtube", "720p", net_err, cancelled=False) is False
+
+
 def test_quality_to_format_best_is_uncapped():
     from app.features.download.engine.engine import _quality_to_format
     fmt = _quality_to_format("best")
