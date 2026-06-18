@@ -7,7 +7,7 @@
 
 /* ── Top bar (title + paste) ─────────────────────────────────────────────── */
 .dlt-top { flex-shrink: 0; border-bottom: 1px solid var(--border-subtle); background: var(--surface-panel); }
-.dlt-top-inner { max-width: 900px; margin: 0 auto; padding: 18px 24px 20px; }
+.dlt-top-inner { padding: 18px 24px 20px; }
 .dlt-head-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .dlt-logo {
   display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
@@ -73,7 +73,7 @@
 
 /* ── Main (centered, soft ambiance) ─────────────────────────────────────── */
 .dlt-main { flex: 1; overflow: auto; background: radial-gradient(ellipse 80% 50% at 50% -5%, color-mix(in srgb, var(--accent-primary) 6%, transparent) 0%, transparent 60%); }
-.dlt-main-inner { max-width: 900px; margin: 0 auto; padding: 22px 24px 28px; }
+.dlt-main-inner { padding: 22px 24px 28px; }
 
 .dlt-section-head { display: flex; align-items: center; gap: 8px; margin: 0 2px 10px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-tertiary); }
 .dlt-list + .dlt-section-head, .dlt-section-head.second { margin-top: 24px; }
@@ -125,7 +125,7 @@
 
 /* ── Action bar ─────────────────────────────────────────────────────────── */
 .dlt-actionbar { flex-shrink: 0; border-top: 1px solid var(--border-subtle); background: var(--surface-panel); }
-.dlt-actionbar-inner { max-width: 900px; margin: 0 auto; padding: 13px 24px; display: flex; align-items: center; gap: 14px; }
+.dlt-actionbar-inner { padding: 13px 24px; display: flex; align-items: center; gap: 14px; }
 .dlt-opt-label { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-tertiary); flex-shrink: 0; }
 .dlt-folder { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--surface-card); cursor: pointer; transition: border-color .12s; }
 .dlt-folder:hover { border-color: var(--border-strong); }
