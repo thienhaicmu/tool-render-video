@@ -1321,3 +1321,12 @@
 .cs-root .rnd-screen { background: transparent !important; }
 .cs-root .cfg-left,
 .cs-root .cfg-right { background: color-mix(in srgb, var(--surface-panel) 90%, transparent) !important; }
+/* Configure's centre column (canvas around the preview) was the most opaque
+   layer — make it + the canvas transparent so the backdrop shows around the
+   video preview, like Rendering / Results. */
+.cs-root .cfg-center,
+.cs-root .cfg-canvas { background: transparent !important; }
+
+/* Hide the raw API field-name hints (min_part_sec, output_count, …) — they
+   look like leftover debug labels in the Configure panels. */
+.cs-root .cfg-sec-api { display: none !important; }
