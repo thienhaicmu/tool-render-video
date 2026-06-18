@@ -35,9 +35,6 @@ const PLATFORM_FULL: Record<string, string> = {
   reddit: 'Reddit', vimeo: 'Vimeo', dailymotion: 'Dailymotion', twitch: 'Twitch',
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  queued: 'Queued', downloading: 'Downloading', done: 'Done', failed: 'Failed',
-}
 const STATUS_CLASS: Record<string, string> = {
   queued: 'is-queued', downloading: 'is-active', done: 'is-done', failed: 'is-failed',
 }
@@ -83,8 +80,8 @@ interface StagedItem {
 let _keySeq = 0
 const nextKey = () => `s${Date.now()}_${_keySeq++}`
 
-/* ── Active download card (in-progress / done / failed) ───────────────────── */
-function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: string) => void }) {
+/* ── Active download row (in-progress / done / failed) ────────────────────── */
+function DownloadRow({ job, onCancel }: { job: DownloadJob; onCancel: (id: string) => void }) {
   const pColor = platformColor(job.platform)
   const pLabel = platformLabel(job.platform)
   const pFull = PLATFORM_FULL[job.platform] || job.platform
@@ -94,52 +91,49 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
   const isQueued = job.status === 'queued'
 
   return (
-    <div className={`dlt-card${isActive ? ' is-active' : ''}`}>
+    <div className={`dlt-row${isActive ? ' is-active' : ''}`}>
       {(isActive || isDone) && (
-        <div className={`dlt-card-bar${isDone ? ' is-done' : ''}`}>
+        <div className={`dlt-row-bar${isDone ? ' is-done' : ''}`}>
           <i style={{ width: `${Math.max(2, isDone ? 100 : job.progress)}%`, background: isDone ? undefined : `linear-gradient(90deg,${pColor}cc,var(--accent))` }} />
         </div>
       )}
-      {isFailed && <div className="dlt-card-bar is-failed" />}
-      <div className="dlt-card-body">
-        <div className="dlt-card-top">
-          <div className="dlt-badge" style={{ background: `${pColor}18`, border: `1px solid ${pColor}33`, color: pColor }} title={pFull}>{pLabel}</div>
-          <div className="dlt-card-info">
-            <div className="dlt-card-title">{job.title || job.url}</div>
-            <div className="dlt-card-url">{job.url}</div>
-          </div>
-          <span className={`dlt-status-badge ${STATUS_CLASS[job.status] ?? ''}`} style={statusBadgeStyle(job.status)}>
-            {(STATUS_LABEL[job.status] ?? job.status).toUpperCase()}
-          </span>
-        </div>
+      <div className="dlt-thumb" title={pFull}>
+        <div className="dlt-badge" style={{ background: `${pColor}22`, color: pColor }}>{pLabel}</div>
+      </div>
+      <div className="dlt-main-col">
+        <div className="dlt-row-title">{job.title || job.filename || job.url}</div>
+        <div className="dlt-row-sub"><span className="pf">{pFull}</span><span>{isDone && job.filename ? job.filename : job.url}</span></div>
+      </div>
+      <div className="dlt-end">
         {isActive && (
-          <div className="dlt-progress">
-            <span className="dlt-pct">{job.progress}%</span>
-            <div className="dlt-progress-meta">
+          <>
+            <span className="dlt-prog-num">{job.progress}%</span>
+            <div className="dlt-prog-meta">
               {job.speed_str && <div>↑ {job.speed_str}</div>}
-              {job.eta_str && <div className="eta">ETA {job.eta_str}</div>}
+              {job.eta_str && <div>ETA {job.eta_str}</div>}
             </div>
             <button className="dlt-row-btn is-danger" onClick={() => onCancel(job.id)}>Cancel</button>
-          </div>
+          </>
         )}
         {isQueued && (
-          <div className="dlt-card-foot">
-            <span style={{ flex: 1, fontSize: 10, color: 'var(--text-3)' }}>Waiting in queue…</span>
+          <>
+            <span className="dlt-status-badge is-queued" style={statusBadgeStyle('queued')}>QUEUED</span>
             <button className="dlt-row-btn" onClick={() => onCancel(job.id)}>Cancel</button>
-          </div>
+          </>
         )}
         {isDone && (
-          <div className="dlt-card-foot">
-            <span style={{ fontSize: 18, color: 'var(--ok)' }}>✓</span>
-            <div className="dlt-foot-file">
-              {job.filename && <div className="name">{job.filename}</div>}
-              {job.filesize > 0 && <div className="size">{formatFilesize(job.filesize)}</div>}
-            </div>
-            {job.output_dir && <button className="dlt-row-btn" title="Open folder" onClick={() => window.electronAPI?.openPath?.(job.output_dir)}>Open folder</button>}
-            {job.output_path && <button className="dlt-row-btn" title="Copy path" onClick={() => { navigator.clipboard.writeText(job.output_path).catch(() => {}) }}>Copy path</button>}
-          </div>
+          <>
+            {job.filesize > 0 && <span className="dlt-size">{formatFilesize(job.filesize)}</span>}
+            {job.output_dir && <button className="dlt-row-btn" title="Open folder" onClick={() => window.electronAPI?.openPath?.(job.output_dir)}>Open</button>}
+            {job.output_path && <button className="dlt-row-btn" title="Copy path" onClick={() => { navigator.clipboard.writeText(job.output_path).catch(() => {}) }}>Copy</button>}
+          </>
         )}
-        {isFailed && <div className="dlt-fail-msg">⚠ {job.error_msg || 'Download failed'}</div>}
+        {isFailed && (
+          <>
+            <span className="dlt-fail-inline" title={job.error_msg || 'Download failed'}>⚠ {job.error_msg || 'Failed'}</span>
+            <span className={`dlt-status-badge ${STATUS_CLASS.failed}`} style={statusBadgeStyle('failed')}>FAILED</span>
+          </>
+        )}
       </div>
     </div>
   )
@@ -332,147 +326,164 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
 
   return (
     <div className="dlt">
-      <div className="dlt-header">
-        <div className="dlt-head-row">
-          <span className="dlt-logo">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13" /><path d="M7 11l5 5 5-5" /><path d="M5 21h14" /></svg>
-          </span>
-          <div className="dlt-titles">
-            <span className="dlt-title">Downloader</span>
-            <span className="dlt-subtitle">Add links to the list, pick quality, then download</span>
+      {/* Top bar: title + cookie + prominent paste */}
+      <div className="dlt-top">
+        <div className="dlt-top-inner">
+          <div className="dlt-head-row">
+            <span className="dlt-logo">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13" /><path d="M7 11l5 5 5-5" /><path d="M5 21h14" /></svg>
+            </span>
+            <div className="dlt-titles">
+              <span className="dlt-title">Downloader</span>
+              <span className="dlt-subtitle">Add links, pick a quality per video, then download</span>
+            </div>
+            <button className={`dlt-cookie-chip ${cookieChipClass}`} onClick={() => setShowCookiePanel(p => !p)} title="YouTube cookie settings">
+              <span>{cookieStatus?.present ? (cookieStatus.has_v20_warning ? '⚠' : '✓') : '✗'}</span>
+              <span>{cookieStatus === null ? 'Cookies…' : cookieStatus.present ? `${cookieStatus.cookie_count ?? '?'} cookies${cookieStatus.has_v20_warning ? ' (v20!)' : ''}` : 'No cookies'}</span>
+              <span style={{ opacity: 0.5, fontSize: 9 }}>{showCookiePanel ? '▲' : '▼'}</span>
+            </button>
+            <div className="dlt-pills">
+              {activeCount > 0 && <span className="dlt-pill is-active">{activeCount} downloading</span>}
+              {queuedCount > 0 && <span className="dlt-pill is-queued">{queuedCount} queued</span>}
+              {doneCount > 0 && <span className="dlt-pill is-done">{doneCount} done</span>}
+              {failedCount > 0 && <span className="dlt-pill is-failed">{failedCount} failed</span>}
+            </div>
           </div>
-          <button className={`dlt-cookie-chip ${cookieChipClass}`} onClick={() => setShowCookiePanel(p => !p)} title="YouTube cookie settings">
-            <span>{cookieStatus?.present ? (cookieStatus.has_v20_warning ? '⚠' : '✓') : '✗'}</span>
-            <span>{cookieStatus === null ? 'Cookies…' : cookieStatus.present ? `${cookieStatus.cookie_count ?? '?'} cookies${cookieStatus.has_v20_warning ? ' (v20!)' : ''}` : 'No cookies'}</span>
-            <span style={{ opacity: 0.5, fontSize: 9 }}>{showCookiePanel ? '▲' : '▼'}</span>
-          </button>
-          <div className="dlt-pills">
-            {activeCount > 0 && <span className="dlt-pill is-active">{activeCount} downloading</span>}
-            {queuedCount > 0 && <span className="dlt-pill is-queued">{queuedCount} queued</span>}
-            {doneCount > 0 && <span className="dlt-pill is-done">{doneCount} done</span>}
-            {failedCount > 0 && <span className="dlt-pill is-failed">{failedCount} failed</span>}
-          </div>
-        </div>
 
-        {showCookiePanel && (
-          <div className="dlt-cookie-panel">
-            <div className="dlt-cookie-row">
-              <span className="dlt-cookie-status" style={{ color: cookieStatus?.present ? (cookieStatus.has_v20_warning ? 'var(--status-warning)' : 'var(--ok)') : 'var(--fail)' }}>
-                {cookieStatus?.present ? `✓ ${cookieStatus.cookie_count} cookies${cookieStatus.age_seconds != null ? ` · ${Math.round(cookieStatus.age_seconds / 60)}m ago` : ''}` : '✗ No cookies · YouTube auth will fail'}
-              </span>
-              <button className={`dlt-mini-btn${cookieAction === 'ok' ? ' is-ok' : cookieAction === 'fail' ? ' is-fail' : ''}`} onClick={handleAutoExtract} disabled={cookieAction === 'loading'} title="Auto-extract from Chrome DB (Chrome ≤126)">
-                {cookieAction === 'loading' ? '⟳ …' : cookieAction === 'ok' ? '✓ Done' : '⟳ Auto-extract'}
-              </button>
-              <button className="dlt-mini-btn" onClick={() => setShowCookieHelp(h => !h)} title="How to export from Chrome 127+" style={{ width: 26, padding: 0 }}>?</button>
-            </div>
-            <div className="dlt-cookie-row" style={{ paddingTop: 0 }}>
-              <input className={`dlt-cookie-input${cookieError ? ' is-invalid' : ''}`} value={cookiePath} onChange={e => { setCookiePath(e.target.value); setCookieError(null) }} placeholder="Paste path to cookies.txt, or click Browse" />
-              <button className="dlt-mini-btn" onClick={handleBrowseCookies} title="Browse for cookies.txt">📂 Browse</button>
-              <button className="dlt-mini-btn" onClick={handleImportFile} disabled={!cookiePath.trim() || cookieAction === 'loading'} style={{ color: cookiePath.trim() ? 'var(--accent)' : undefined, borderColor: cookiePath.trim() ? 'rgba(var(--accent-rgb),.4)' : undefined }}>
-                {cookieAction === 'loading' ? '⟳ Importing…' : 'Import'}
-              </button>
-            </div>
-            {cookieError && <div className="dlt-cookie-row" style={{ paddingTop: 0 }}><div className="dlt-fail-msg" style={{ margin: 0, flex: 1 }}>⚠ {cookieError}</div></div>}
-            {showCookieHelp && (
-              <div className="dlt-cookie-help">
-                <ol>
-                  <li>Install <strong>"Get cookies.txt LOCALLY"</strong> from the Chrome Web Store</li>
-                  <li>Open <strong>youtube.com</strong> — sign in first</li>
-                  <li>Click the extension → <strong>Export cookies for this tab</strong></li>
-                  <li>Save the file → paste its path above → click <strong>Import</strong></li>
-                </ol>
+          {showCookiePanel && (
+            <div className="dlt-cookie-panel" style={{ marginBottom: 12 }}>
+              <div className="dlt-cookie-row">
+                <span className="dlt-cookie-status" style={{ color: cookieStatus?.present ? (cookieStatus.has_v20_warning ? 'var(--status-warning)' : 'var(--ok)') : 'var(--fail)' }}>
+                  {cookieStatus?.present ? `✓ ${cookieStatus.cookie_count} cookies${cookieStatus.age_seconds != null ? ` · ${Math.round(cookieStatus.age_seconds / 60)}m ago` : ''}` : '✗ No cookies · YouTube auth will fail'}
+                </span>
+                <button className={`dlt-mini-btn${cookieAction === 'ok' ? ' is-ok' : cookieAction === 'fail' ? ' is-fail' : ''}`} onClick={handleAutoExtract} disabled={cookieAction === 'loading'} title="Auto-extract from Chrome DB (Chrome ≤126)">
+                  {cookieAction === 'loading' ? '⟳ …' : cookieAction === 'ok' ? '✓ Done' : '⟳ Auto-extract'}
+                </button>
+                <button className="dlt-mini-btn" onClick={() => setShowCookieHelp(h => !h)} title="How to export from Chrome 127+" style={{ width: 26, padding: 0 }}>?</button>
               </div>
-            )}
-          </div>
-        )}
+              <div className="dlt-cookie-row" style={{ paddingTop: 0 }}>
+                <input className={`dlt-cookie-input${cookieError ? ' is-invalid' : ''}`} value={cookiePath} onChange={e => { setCookiePath(e.target.value); setCookieError(null) }} placeholder="Paste path to cookies.txt, or click Browse" />
+                <button className="dlt-mini-btn" onClick={handleBrowseCookies} title="Browse for cookies.txt">📂 Browse</button>
+                <button className="dlt-mini-btn" onClick={handleImportFile} disabled={!cookiePath.trim() || cookieAction === 'loading'} style={{ color: cookiePath.trim() ? 'var(--accent)' : undefined, borderColor: cookiePath.trim() ? 'rgba(var(--accent-rgb),.4)' : undefined }}>
+                  {cookieAction === 'loading' ? '⟳ Importing…' : 'Import'}
+                </button>
+              </div>
+              {cookieError && <div className="dlt-cookie-row" style={{ paddingTop: 0 }}><div className="dlt-error" style={{ margin: 0, flex: 1 }}>⚠ {cookieError}</div></div>}
+              {showCookieHelp && (
+                <div className="dlt-cookie-help">
+                  <ol>
+                    <li>Install <strong>"Get cookies.txt LOCALLY"</strong> from the Chrome Web Store</li>
+                    <li>Open <strong>youtube.com</strong> — sign in first</li>
+                    <li>Click the extension → <strong>Export cookies for this tab</strong></li>
+                    <li>Save the file → paste its path above → click <strong>Import</strong></li>
+                  </ol>
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* Add bar */}
-        <div className="dlt-composer" style={{ marginTop: 12 }}>
-          <div className="dlt-url-row">
+          <div className="dlt-paste">
             <input
-              className="dlt-url-input"
+              className="dlt-paste-input"
               value={url}
               onChange={(e) => { setUrl(e.target.value); setError(null) }}
               onFocus={handleFocus}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder="Paste one or more links (YouTube, TikTok, Instagram, Facebook…)"
+              placeholder="Paste one or more video links here…"
             />
             {!url && <button className="dlt-icon-btn" onClick={handlePaste} title="Paste from clipboard">📋</button>}
             {url && <button className="dlt-icon-btn" onClick={() => { setUrl(''); setError(null) }} title="Clear">×</button>}
-            <button className="dlt-add-btn" onClick={handleAdd} disabled={!inputValid}>+ Add to list</button>
+            <button className="dlt-add-btn" onClick={handleAdd} disabled={!inputValid}>+ Add</button>
           </div>
+          {error
+            ? <div className="dlt-error">⚠ {error}</div>
+            : <div className="dlt-hint">Paste several links at once · clicking the box auto-pastes from your clipboard.</div>}
         </div>
-
-        {error && <div className="dlt-error">⚠ {error}</div>}
       </div>
 
-      {/* Body: staging list + active downloads */}
-      <div className="dlt-queue">
-        {staged.length === 0 && jobs.length === 0 && <EmptyStage />}
+      {/* Main: staging table + downloads table */}
+      <div className="dlt-main">
+        <div className="dlt-main-inner">
+          {staged.length === 0 && jobs.length === 0 && <EmptyStage />}
 
-        {staged.length > 0 && (
-          <>
-            <div className="dlt-section-label">
-              To download <span className="count">{staged.length}</span>
-              <span className="spacer" />
-              <button className="dlt-link-clear" onClick={clearStaged}>Clear list</button>
-            </div>
-            {staged.map(it => {
-              const pColor = platformColor(it.platform)
-              const pLabel = platformLabel(it.platform)
-              const opts = qualityOpts(it.heights)
-              const durTag = fmtDuration(it.durationSec)
-              return (
-                <div key={it.key} className={`dlt-stage-item${it.state === 'error' ? ' is-error' : ''}`}>
-                  <div className="dlt-thumb" title={PLATFORM_FULL[it.platform] || it.platform}>
-                    <div className="dlt-badge" style={{ background: `${pColor}22`, color: pColor }}>{pLabel}</div>
-                    {it.thumbnail && <img src={it.thumbnail} alt="" loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />}
-                    {durTag && <span className="dur-tag">{durTag}</span>}
-                  </div>
-                  <div className="dlt-stage-info">
-                    <div className="dlt-stage-title">
-                      {it.state === 'loading' && !it.title ? <span className="skel" /> : (it.title || it.url)}
-                    </div>
-                    <div className="dlt-stage-sub">
-                      {it.state === 'error' && <span style={{ color: 'var(--fail)' }}>⚠ couldn't read info — will still try</span>}
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.url}</span>
-                    </div>
-                  </div>
-                  <select className="dlt-qsel" value={it.quality} onChange={e => setQuality(it.key, e.target.value)} title="Quality for this video">
-                    {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                  <button className="dlt-stage-remove" onClick={() => removeItem(it.key)} title="Remove">×</button>
+          {staged.length > 0 && (
+            <>
+              <div className="dlt-section-head">
+                <span className="label">To download</span>
+                <span className="count">{staged.length}</span>
+                <span className="spacer" />
+                <button className="dlt-link-btn" onClick={clearStaged}>Clear list</button>
+              </div>
+              <div className="dlt-list">
+                <div className="dlt-list-head">
+                  <div className="col-thumb" />
+                  <div className="col-main">Video</div>
+                  <div className="col-q">Quality</div>
+                  <div className="col-x" />
                 </div>
-              )
-            })}
-          </>
-        )}
+                {staged.map(it => {
+                  const pColor = platformColor(it.platform)
+                  const pLabel = platformLabel(it.platform)
+                  const pFull = PLATFORM_FULL[it.platform] || it.platform
+                  const opts = qualityOpts(it.heights)
+                  const durTag = fmtDuration(it.durationSec)
+                  return (
+                    <div key={it.key} className={`dlt-row${it.state === 'error' ? ' is-error' : ''}`}>
+                      <div className="dlt-thumb" title={pFull}>
+                        <div className="dlt-badge" style={{ background: `${pColor}22`, color: pColor }}>{pLabel}</div>
+                        {it.thumbnail && <img src={it.thumbnail} alt="" loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />}
+                        {durTag && <span className="dur-tag">{durTag}</span>}
+                      </div>
+                      <div className="dlt-main-col">
+                        <div className="dlt-row-title">
+                          {it.state === 'loading' && !it.title ? <span className="skel" /> : (it.title || it.url)}
+                        </div>
+                        <div className="dlt-row-sub">
+                          <span className="pf">{pFull}</span>
+                          {it.state === 'error' && <span style={{ color: 'var(--fail)' }}>⚠ info unavailable</span>}
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.url}</span>
+                        </div>
+                      </div>
+                      <select className="dlt-qsel" value={it.quality} onChange={e => setQuality(it.key, e.target.value)} title="Quality for this video">
+                        {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      <button className="dlt-x" onClick={() => removeItem(it.key)} title="Remove">×</button>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
 
-        {jobs.length > 0 && (
-          <>
-            <div className="dlt-section-label" style={{ marginTop: staged.length > 0 ? 10 : 0 }}>
-              Downloads <span className="count">{jobs.length}</span>
-            </div>
-            {jobs.map(job => <DownloadCard key={job.id} job={job} onCancel={cancelJob} />)}
-          </>
-        )}
+          {jobs.length > 0 && (
+            <>
+              <div className="dlt-section-head" style={{ marginTop: staged.length > 0 ? 22 : 0 }}>
+                <span className="label">Downloads</span>
+                <span className="count">{jobs.length}</span>
+              </div>
+              <div className="dlt-list">
+                {jobs.map(job => <DownloadRow key={job.id} job={job} onCancel={cancelJob} />)}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Action bar — folder picker (validated) + Download */}
       {staged.length > 0 && (
         <div className="dlt-actionbar">
-          <div className="dlt-folder-opt">
+          <div className="dlt-actionbar-inner">
             <span className="dlt-opt-label">Save to</span>
             <div className={`dlt-folder${folderInvalid ? ' is-invalid' : ''}`} onClick={pickDir} title={outputDir || 'Choose a folder'}>
               <span style={{ flexShrink: 0 }}>📁</span>
               <span className={`dlt-folder-path${outputDir ? '' : ' is-empty'}`}>{outputDir ? '‪' + outputDir + '‬' : 'Click to choose a folder…'}</span>
               <span className="dlt-folder-change">{outputDir ? 'Change' : 'Choose'}</span>
             </div>
+            <button className="dlt-dl-btn" onClick={handleDownloadAll} disabled={downloading}>
+              {downloading ? <span className="dlt-spin">⟳</span> : '↓'}
+              {downloading ? 'Starting…' : `Download ${staged.length} video${staged.length !== 1 ? 's' : ''}`}
+            </button>
           </div>
-          <button className="dlt-dl-btn" onClick={handleDownloadAll} disabled={downloading}>
-            {downloading ? <span className="dlt-spin">⟳</span> : '↓'}
-            {downloading ? 'Starting…' : `Download ${staged.length} video${staged.length !== 1 ? 's' : ''}`}
-          </button>
         </div>
       )}
     </div>

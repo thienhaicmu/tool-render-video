@@ -4,6 +4,7 @@ import { cancelRender, resumeRender } from '@/api/render'
 import { clearHistory } from '@/api/maintenance'
 import { useActiveJobs, useJobsStore } from '@/stores/jobsStore'
 import type { HistoryItem } from '@/types/api'
+import './HistoryTab.css'
 
 const FILTERS = ['All', 'Done', 'Failed', 'Running'] as const
 type Filter = typeof FILTERS[number]
@@ -64,7 +65,6 @@ function JobRow({
   const st = sm(job.status)
   const isRunning = job.status === 'running'
   const isQueued = job.status === 'queued'
-  const [hov, setHov] = useState(false)
   // Bug #10 fix: use the job-level progress_percent (added 2026-06-15 to
   // /api/jobs/history). Falls back to parts-based ratio for older API
   // responses that pre-dated the field. Job-level progress works for
@@ -107,167 +107,42 @@ function JobRow({
   }
 
   return (
-    <div
-      onClick={handleRowClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '11px 14px',
-        minHeight: 58,
-        margin: '0 16px 8px',
-        borderRadius: 12,
-        background: hov ? 'var(--surface-card-hover)' : isRunning ? 'rgba(var(--accent-rgb),.05)' : 'var(--surface-card)',
-        border: `1px solid ${isRunning ? 'rgba(var(--accent-rgb),.28)' : 'var(--border-default)'}`,
-        cursor: 'pointer',
-        transition: 'background .12s, border-color .12s',
-        position: 'relative' as const,
-      }}
-    >
-      {/* Left accent */}
-      <div style={{
-        width: 3, height: 36, borderRadius: 2, flexShrink: 0,
-        background: st.color,
-        opacity: isRunning ? 1 : 0.7,
-      }} />
-
-      {/* Status icon */}
-      <div style={{
-        width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: st.bg, border: `1px solid ${st.border}`,
-        fontSize: 12, color: st.color, fontWeight: 700,
-        animation: isRunning ? 'hist-spin 1.6s linear infinite' : 'none',
-      }}>
+    <div className={`hist-row${isRunning ? ' is-running' : ''}`} onClick={handleRowClick}>
+      <div className={`hist-ico${isRunning ? ' spin' : ''}`} style={{ background: st.bg, borderColor: st.border, color: st.color }}>
         {st.icon}
       </div>
-
-      {/* Title + meta */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: 12, fontWeight: 600, color: 'var(--text-1)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
-          marginBottom: 4,
-        }}>
-          {job.title || job.source_hint || `Render Job #${job.job_id.slice(0, 8)}`}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
-          <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'monospace' }}>
-            {job.job_id.slice(0, 8)}
-          </span>
-          {job.completed_count > 0 && (
-            <span style={{
-              fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10,
-              background: 'rgba(var(--ok-rgb),.1)', color: 'var(--ok)',
-              border: '1px solid rgba(var(--ok-rgb),.2)',
-            }}>
-              ✓ {job.completed_count} clip{job.completed_count !== 1 ? 's' : ''}
-            </span>
-          )}
-          {job.failed_count > 0 && (
-            <span style={{
-              fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10,
-              background: 'rgba(var(--fail-rgb),.1)', color: 'var(--fail)',
-              border: '1px solid rgba(var(--fail-rgb),.2)',
-            }}>
-              ✕ {job.failed_count} failed
-            </span>
-          )}
-          {isRunning && job.total_count > 0 && (
-            <ProgressRing done={job.completed_count} total={job.total_count} color="var(--accent)" />
-          )}
+      <div className="hist-row-main">
+        <div className="hist-row-title">{job.title || job.source_hint || `Render Job #${job.job_id.slice(0, 8)}`}</div>
+        <div className="hist-row-sub">
+          <span className="mono">{job.job_id.slice(0, 8)}</span>
+          {job.completed_count > 0 && <span className="hist-tag ok">✓ {job.completed_count} clip{job.completed_count !== 1 ? 's' : ''}</span>}
+          {job.failed_count > 0 && <span className="hist-tag fail">✕ {job.failed_count} failed</span>}
+          {isRunning && job.total_count > 0 && <ProgressRing done={job.completed_count} total={job.total_count} color="var(--accent)" />}
         </div>
       </div>
-
-      {/* Progress bar (running) — Bug #10/#11 fix: always show when running
-          (uses job.progress_percent so it works for every stage) + ETA
-          label derived from elapsed × (100-pct)/pct. */}
       {isRunning && (
-        <div style={{ width: 96, flexShrink: 0 }}>
-          <div style={{ height: 5, borderRadius: 999, background: 'var(--surface-card-hover)', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%', borderRadius: 999,
-              width: `${pct}%`,
-              background: 'var(--brand-gradient)',
-              boxShadow: '0 0 8px rgba(139,92,246,.45)',
-              transition: 'width .4s ease',
-            }} />
-          </div>
-          <div style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-            marginTop: 3, gap: 4,
-          }}>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-family-mono)', fontWeight: 600, color: 'var(--accent-primary)' }}>
-              {pct}%
-            </span>
-            {etaLabel && (
-              <span style={{ fontSize: 9, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' as const, fontFamily: 'var(--font-family-mono)' }}>
-                {etaLabel}
-              </span>
-            )}
+        <div className="hist-prog">
+          <div className="hist-prog-track"><i style={{ width: `${pct}%` }} /></div>
+          <div className="hist-prog-meta">
+            <span className="pct">{pct}%</span>
+            {etaLabel && <span className="eta">{etaLabel}</span>}
           </div>
         </div>
       )}
-
-      {/* Date */}
-      <span style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0, whiteSpace: 'nowrap' as const, minWidth: 70, textAlign: 'right' as const }}>
-        {fmtDate(job.created_at)}
-      </span>
-
-      {/* Status badge */}
-      <span style={{
-        fontSize: 9, fontWeight: 800, padding: '3px 9px', borderRadius: 20, flexShrink: 0,
-        background: st.bg, color: st.color, border: `1px solid ${st.border}`,
-        letterSpacing: '.04em',
-      }}>
-        {st.label.toUpperCase()}
-      </span>
-
-      {/* Row actions — Bug #3 fix: cancel button surfaces directly on running
-          rows so the user can stop a runaway job from History without first
-          having to navigate into the Rendering screen. */}
-      {(isRunning || isQueued) && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onCancel(job) }}
-          title="Cancel render"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            height: 26, padding: '0 10px', borderRadius: 999,
-            background: 'var(--status-error-bg)',
-            color: 'var(--status-error)',
-            border: '1px solid color-mix(in srgb, var(--status-error) 30%, transparent)',
-            fontSize: 11, fontWeight: 600, cursor: 'pointer',
-            flexShrink: 0, transition: 'all .12s',
-            letterSpacing: '-.005em',
-          }}
-        >
-          ✕ Cancel
-        </button>
-      )}
-
-      {/* Arrow — chevron hint on hover only for non-active rows */}
-      {!(isRunning || isQueued) && (
-        <span style={{ fontSize: 10, color: 'var(--text-3)', opacity: hov ? 1 : 0, transition: 'opacity .1s', flexShrink: 0 }}>›</span>
-      )}
+      <span className="hist-date">{fmtDate(job.created_at)}</span>
+      <span className="hist-badge" style={{ background: st.bg, color: st.color, borderColor: st.border }}>{st.label.toUpperCase()}</span>
+      {(isRunning || isQueued)
+        ? <button className="hist-cancel" title="Cancel render" onClick={(e) => { e.stopPropagation(); onCancel(job) }}>✕ Cancel</button>
+        : <span className="hist-chev">›</span>}
     </div>
   )
 }
 
 function SectionHeader({ label, count }: { label: string; count: number }) {
   return (
-    <div style={{
-      padding: '10px 18px 8px',
-      fontSize: 10, fontWeight: 700, color: 'var(--text-3)',
-      letterSpacing: '.08em', textTransform: 'uppercase' as const,
-      display: 'flex', alignItems: 'center', gap: 8,
-      background: 'transparent',
-    }}>
-      {label}
-      <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 8, background: 'var(--border-subtle)', color: 'var(--text-2)' }}>
-        {count}
-      </span>
+    <div className="hist-sec">
+      <span className="label">{label}</span>
+      <span className="count">{count}</span>
     </div>
   )
 }
@@ -522,196 +397,89 @@ export function HistoryTab({ lang: _lang, onSwitchToRender }: HistoryTabProps) {
 
   const { today, yesterday, older } = groupByDate(filtered)
 
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden', background: 'var(--surface-base)' }}>
-      <style>{`
-        @keyframes hist-spin { to { transform: rotate(360deg) } }
-        @keyframes hist-pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-      `}</style>
-
-      {/* Header */}
-      <div style={{
-        padding: '18px 24px 14px',
-        borderBottom: '1px solid var(--border-subtle)',
-        flexShrink: 0,
-        background: 'var(--surface-panel)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 28, height: 28, borderRadius: 8,
-            background: 'var(--brand-gradient)',
-            color: '#fff', flexShrink: 0,
-            boxShadow: '0 1px 0 rgba(255,255,255,.3) inset, 0 2px 8px rgba(139,92,246,.35)',
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="9"/>
-              <path d="M12 7v5l3 2"/>
-            </svg>
-          </span>
-          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 1 }}>
-            <span style={{ fontFamily: 'var(--font-family-display)', fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-.02em', lineHeight: 1.2 }}>History</span>
-            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>All your render jobs in one place</span>
-          </div>
-
-          <div style={{ display: 'flex', gap: 6, marginLeft: 4 }}>
-            {runningCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(var(--accent-rgb),.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),.3)' }}>
-                {runningCount} running
-              </span>
-            )}
-            {doneCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(var(--ok-rgb),.1)', color: 'var(--ok)' }}>
-                {doneCount} done
-              </span>
-            )}
-            {failedCount > 0 && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(var(--fail-rgb),.1)', color: 'var(--fail)' }}>
-                {failedCount} failed
-              </span>
-            )}
-          </div>
-
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button
-              onClick={() => { refresh() }}
-              title="Refresh"
-              style={{ background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 14, cursor: 'pointer', padding: 4, lineHeight: 1 }}
-            >
-              ↻
-            </button>
-            <button
-              onClick={handleClearHistory}
-              disabled={clearing || jobs.length === 0}
-              title="Clear history (keeps active jobs)"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                height: 28, padding: '0 11px', borderRadius: 'var(--radius-full)',
-                border: '1px solid var(--border-default)',
-                background: 'transparent',
-                color: jobs.length === 0 ? 'var(--text-disabled)' : 'var(--text-2)',
-                fontSize: 11, fontWeight: 600, lineHeight: 1,
-                cursor: clearing || jobs.length === 0 ? 'not-allowed' : 'pointer',
-                transition: 'all .12s',
-              }}
-              onMouseEnter={(e) => { if (!clearing && jobs.length > 0) { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--status-error) 35%, transparent)'; e.currentTarget.style.color = 'var(--status-error)' } }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = jobs.length === 0 ? 'var(--text-disabled)' : 'var(--text-2)' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-              </svg>
-              {clearing ? 'Clearing…' : 'Clear'}
-            </button>
-          </div>
+  const _renderGroup = (label: string, items: HistoryItem[]) =>
+    items.length > 0 && (
+      <>
+        <SectionHeader label={label} count={items.length} />
+        <div className="hist-list">
+          {items.map((j) => <JobRow key={j.job_id} job={j} onOpen={setSelected} onCancel={handleCancel} onMonitor={handleMonitor} />)}
         </div>
+      </>
+    )
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Filter tabs */}
-          <div style={{ display: 'flex', background: 'var(--surface-card)', borderRadius: 10, border: '1px solid var(--border-subtle)', padding: 3, gap: 2 }}>
-            {FILTERS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                style={{
-                  padding: '5px 14px', borderRadius: 7, cursor: 'pointer', border: 'none',
-                  background: filter === f
-                    ? 'linear-gradient(135deg, rgba(139,92,246,.14), rgba(236,72,153,.12))'
-                    : 'transparent',
-                  color: filter === f ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                  boxShadow: filter === f ? '0 0 0 1px color-mix(in srgb, var(--accent-primary) 25%, transparent) inset' : 'none',
-                  fontSize: 12, fontWeight: 600,
-                  transition: 'all .12s',
-                  letterSpacing: '-.005em',
-                }}
-              >
-                {f}
+  return (
+    <div className="hist">
+      {/* Toolbar */}
+      <div className="hist-top">
+        <div className="hist-top-inner">
+          <div className="hist-head-row">
+            <span className="hist-logo">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+              </svg>
+            </span>
+            <div className="hist-titles">
+              <span className="hist-title">History</span>
+              <span className="hist-subtitle">All your render jobs in one place</span>
+            </div>
+            <div className="hist-pills">
+              {runningCount > 0 && <span className="hist-pill is-run">{runningCount} running</span>}
+              {doneCount > 0 && <span className="hist-pill is-done">{doneCount} done</span>}
+              {failedCount > 0 && <span className="hist-pill is-fail">{failedCount} failed</span>}
+            </div>
+            <div className="hist-actions">
+              <button className="hist-icon-btn" onClick={() => { refresh() }} title="Refresh">↻</button>
+              <button className="hist-clear" onClick={handleClearHistory} disabled={clearing || jobs.length === 0} title="Clear history (keeps active jobs)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                </svg>
+                {clearing ? 'Clearing…' : 'Clear'}
               </button>
-            ))}
+            </div>
           </div>
 
-          <div style={{
-            marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
-            background: 'var(--surface-panel)', border: '1px solid var(--border-default)', borderRadius: 8, padding: '0 10px',
-            height: 32,
-          }}>
-            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>🔍</span>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              style={{
-                background: 'none', border: 'none', outline: 'none',
-                fontSize: 11, color: 'var(--text-1)', width: 160,
-              }}
-            />
+          <div className="hist-tools">
+            <div className="hist-filters">
+              {FILTERS.map((f) => (
+                <button key={f} className={`hist-filter${filter === f ? ' is-sel' : ''}`} onClick={() => setFilter(f)}>{f}</button>
+              ))}
+            </div>
+            <div className="hist-search">
+              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>🔍</span>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* List */}
-      <div style={{ flex: 1, overflow: 'auto', paddingTop: 6 }}>
-        {loading && (
-          <div style={{ padding: 40, textAlign: 'center' as const, color: 'var(--text-3)', fontSize: 12 }}>Loading…</div>
-        )}
-        {!loading && error && (
-          <div style={{ padding: 40, textAlign: 'center' as const, color: 'var(--fail)', fontSize: 12 }}>⚠ {error}</div>
-        )}
-        {!loading && !error && filtered.length === 0 && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', gap: 18, padding: 56, minHeight: 360 }}>
-            <div
-              aria-hidden="true"
-              style={{
-                width: 96, height: 96, borderRadius: 24,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'var(--brand-gradient-soft)',
-                border: '1px solid color-mix(in srgb, var(--accent-primary) 22%, transparent)',
-                color: 'var(--accent-primary)',
-                boxShadow: '0 1px 0 rgba(255,255,255,.4) inset, 0 10px 28px rgba(139,92,246,.16)',
-              }}
-            >
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="9"/>
-                <path d="M12 7v5l3 2"/>
-              </svg>
-            </div>
-            <div style={{ textAlign: 'center' as const, maxWidth: 340, display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
-              <div style={{
-                fontFamily: 'var(--font-family-display)', fontSize: 18, fontWeight: 600,
-                color: 'var(--text-primary)', letterSpacing: '-.02em', lineHeight: 1.25,
-              }}>
-                {search || filter !== 'All' ? 'No matches' : 'No render jobs yet'}
+      {/* Main */}
+      <div className="hist-main">
+        <div className="hist-main-inner">
+          {loading && <div className="hist-state">Loading…</div>}
+          {!loading && error && <div className="hist-state is-fail">⚠ {error}</div>}
+          {!loading && !error && filtered.length === 0 && (
+            <div className="hist-empty">
+              <div className="hist-empty-icon" aria-hidden="true">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                </svg>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-                {search || filter !== 'All'
-                  ? 'Try clearing the filter or search.'
-                  : 'Your finished and in-progress renders will appear here.'}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+                <div className="hist-empty-title">{search || filter !== 'All' ? 'No matches' : 'No render jobs yet'}</div>
+                <div className="hist-empty-sub">
+                  {search || filter !== 'All' ? 'Try clearing the filter or search.' : 'Your finished and in-progress renders will appear here.'}
+                </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {!loading && !error && filtered.length > 0 && (
-          <>
-            {today.length > 0 && (
-              <>
-                <SectionHeader label="Today" count={today.length} />
-                {today.map((j) => <JobRow key={j.job_id} job={j} onOpen={setSelected} onCancel={handleCancel} onMonitor={handleMonitor} />)}
-              </>
-            )}
-            {yesterday.length > 0 && (
-              <>
-                <SectionHeader label="Yesterday" count={yesterday.length} />
-                {yesterday.map((j) => <JobRow key={j.job_id} job={j} onOpen={setSelected} onCancel={handleCancel} onMonitor={handleMonitor} />)}
-              </>
-            )}
-            {older.length > 0 && (
-              <>
-                <SectionHeader label="Older" count={older.length} />
-                {older.map((j) => <JobRow key={j.job_id} job={j} onOpen={setSelected} onCancel={handleCancel} onMonitor={handleMonitor} />)}
-              </>
-            )}
-          </>
-        )}
+          )}
+          {!loading && !error && filtered.length > 0 && (
+            <>
+              {_renderGroup('Today', today)}
+              {_renderGroup('Yesterday', yesterday)}
+              {_renderGroup('Older', older)}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Detail drawer */}

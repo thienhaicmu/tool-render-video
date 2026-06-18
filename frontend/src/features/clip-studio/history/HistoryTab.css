@@ -1,0 +1,95 @@
+/* HistoryTab — table-style redesign 2026-06-18, matched to DownloadTab.
+   Centered container, prominent toolbar, a bordered list with hairline rows. */
+
+.hist { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--surface-base); }
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+.hist-top { flex-shrink: 0; border-bottom: 1px solid var(--border-subtle); background: var(--surface-panel); }
+.hist-top-inner { max-width: 1040px; margin: 0 auto; padding: 16px 24px 14px; }
+.hist-head-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.hist-logo {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  border-radius: 9px; background: var(--brand-gradient); color: #fff; flex-shrink: 0;
+  box-shadow: 0 1px 0 rgba(255,255,255,.3) inset, 0 2px 10px rgba(139,92,246,.35);
+}
+.hist-titles { display: flex; flex-direction: column; gap: 1px; }
+.hist-title { font-family: var(--font-family-display); font-size: 18px; font-weight: 600; color: var(--text-primary); letter-spacing: -.02em; line-height: 1.2; }
+.hist-subtitle { font-size: 11px; color: var(--text-tertiary); }
+.hist-pills { display: flex; gap: 6px; margin-left: 6px; flex-wrap: wrap; }
+.hist-pill { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: var(--radius-full); white-space: nowrap; }
+.hist-pill.is-run { background: rgba(var(--accent-rgb),.15); color: var(--accent); border: 1px solid rgba(var(--accent-rgb),.3); }
+.hist-pill.is-done { background: rgba(var(--ok-rgb),.1); color: var(--ok); }
+.hist-pill.is-fail { background: rgba(var(--fail-rgb),.1); color: var(--fail); }
+
+.hist-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.hist-icon-btn { background: none; border: none; color: var(--text-3); font-size: 15px; cursor: pointer; padding: 6px; line-height: 1; border-radius: var(--radius-md); transition: background .12s, color .12s; }
+.hist-icon-btn:hover { background: var(--surface-card-hover); color: var(--text-1); }
+.hist-clear {
+  display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 12px;
+  border-radius: var(--radius-full); border: 1px solid var(--border-default); background: transparent;
+  color: var(--text-2); font-size: 11px; font-weight: 600; cursor: pointer; transition: all .12s;
+}
+.hist-clear:hover:not(:disabled) { border-color: color-mix(in srgb, var(--status-error) 35%, transparent); color: var(--status-error); }
+.hist-clear:disabled { color: var(--text-disabled); cursor: not-allowed; }
+
+/* Filter + search */
+.hist-tools { display: flex; align-items: center; gap: 10px; }
+.hist-filters { display: flex; background: var(--surface-card); border-radius: 10px; border: 1px solid var(--border-subtle); padding: 3px; gap: 2px; }
+.hist-filter { padding: 5px 14px; border-radius: 7px; cursor: pointer; border: none; background: transparent; color: var(--text-tertiary); font-size: 12px; font-weight: 600; transition: all .12s; }
+.hist-filter:hover { color: var(--text-1); }
+.hist-filter.is-sel { background: var(--brand-gradient-soft); color: var(--text-primary); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 22%, transparent) inset; }
+.hist-search { margin-left: auto; display: flex; align-items: center; gap: 6px; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: 10px; padding: 0 12px; height: 34px; }
+.hist-search input { background: none; border: none; outline: none; font-size: 12px; color: var(--text-1); width: 180px; }
+
+/* ── List ────────────────────────────────────────────────────────────────── */
+.hist-main { flex: 1; overflow: auto; }
+.hist-main-inner { max-width: 1040px; margin: 0 auto; padding: 18px 24px 24px; }
+.hist-sec { display: flex; align-items: center; gap: 8px; margin: 22px 2px 8px; }
+.hist-sec:first-child { margin-top: 0; }
+.hist-sec .label { font-size: 11px; font-weight: 700; color: var(--text-2); letter-spacing: .06em; text-transform: uppercase; }
+.hist-sec .count { font-size: 10px; padding: 1px 7px; border-radius: var(--radius-full); background: var(--border-subtle); color: var(--text-2); font-weight: 700; }
+
+.hist-list { border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-card); overflow: hidden; }
+.hist-row {
+  display: flex; align-items: center; gap: 12px; padding: 11px 14px; min-height: 58px;
+  border-bottom: 1px solid var(--border-subtle); cursor: pointer; transition: background .1s; position: relative;
+}
+.hist-row:last-child { border-bottom: none; }
+.hist-row:hover { background: var(--surface-card-hover); }
+.hist-row.is-running { background: rgba(var(--accent-rgb),.05); }
+.hist-ico { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
+.hist-ico.spin { animation: hist-spin 1.6s linear infinite; }
+.hist-row-main { flex: 1; min-width: 0; }
+.hist-row-title { font-size: 12.5px; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 3px; }
+.hist-row-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 10px; color: var(--text-3); }
+.hist-row-sub .mono { font-family: var(--font-family-mono); }
+.hist-tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; border: 1px solid transparent; }
+.hist-tag.ok { background: rgba(var(--ok-rgb),.1); color: var(--ok); border-color: rgba(var(--ok-rgb),.2); }
+.hist-tag.fail { background: rgba(var(--fail-rgb),.1); color: var(--fail); border-color: rgba(var(--fail-rgb),.2); }
+
+.hist-prog { width: 100px; flex-shrink: 0; }
+.hist-prog-track { height: 5px; border-radius: 999px; background: var(--surface-card-hover); overflow: hidden; }
+.hist-prog-track > i { display: block; height: 100%; border-radius: 999px; background: var(--brand-gradient); box-shadow: 0 0 8px rgba(139,92,246,.45); transition: width .4s ease; }
+.hist-prog-meta { display: flex; justify-content: space-between; align-items: baseline; margin-top: 3px; gap: 4px; }
+.hist-prog-meta .pct { font-size: 10px; font-family: var(--font-family-mono); font-weight: 600; color: var(--accent-primary); }
+.hist-prog-meta .eta { font-size: 9px; color: var(--text-tertiary); white-space: nowrap; font-family: var(--font-family-mono); }
+
+.hist-date { font-size: 10px; color: var(--text-3); flex-shrink: 0; white-space: nowrap; min-width: 70px; text-align: right; }
+.hist-badge { font-size: 9px; font-weight: 800; padding: 3px 9px; border-radius: var(--radius-full); flex-shrink: 0; letter-spacing: .04em; border: 1px solid transparent; }
+.hist-cancel {
+  display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; border-radius: var(--radius-full);
+  background: var(--status-error-bg); color: var(--status-error); border: 1px solid color-mix(in srgb, var(--status-error) 30%, transparent);
+  font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0;
+}
+.hist-chev { font-size: 12px; color: var(--text-3); opacity: 0; transition: opacity .1s; flex-shrink: 0; }
+.hist-row:hover .hist-chev { opacity: 1; }
+
+/* ── States ─────────────────────────────────────────────────────────────── */
+.hist-state { padding: 48px 24px; text-align: center; color: var(--text-3); font-size: 13px; }
+.hist-state.is-fail { color: var(--fail); }
+.hist-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 56px 24px; min-height: 320px; }
+.hist-empty-icon { width: 92px; height: 92px; border-radius: 24px; display: flex; align-items: center; justify-content: center; background: var(--brand-gradient-soft); border: 1px solid color-mix(in srgb, var(--accent-primary) 22%, transparent); color: var(--accent-primary); box-shadow: 0 1px 0 rgba(255,255,255,.4) inset, 0 10px 28px rgba(139,92,246,.16); }
+.hist-empty-title { font-family: var(--font-family-display); font-size: 18px; font-weight: 600; color: var(--text-primary); letter-spacing: -.02em; text-align: center; }
+.hist-empty-sub { font-size: 13px; color: var(--text-tertiary); line-height: 1.5; text-align: center; max-width: 360px; }
+
+@keyframes hist-spin { to { transform: rotate(360deg); } }
