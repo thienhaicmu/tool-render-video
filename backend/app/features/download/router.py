@@ -59,6 +59,11 @@ _ENRICH_EXECUTOR = ThreadPoolExecutor(
 _INFLIGHT_URLS: dict[str, str] = {}
 _INFLIGHT_LOCK = threading.Lock()
 
+# Per-job cancellation: job_id → Event. Set by cancel_job so the worker's
+# yt-dlp progress hook aborts the in-flight download. Created in _run_download,
+# cleared in its finally. Guarded by _INFLIGHT_LOCK.
+_CANCEL_EVENTS: dict[str, threading.Event] = {}
+
 
 # ── Security helpers ──────────────────────────────────────────────────────────
 
@@ -133,11 +138,16 @@ class BatchDownloadStartRequest(BaseModel):
 
 # ── Background worker ─────────────────────────────────────────────────────────
 
-def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -> None:
+def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "", quality: str = "best") -> None:
     from app.core.tracing import dl_job_start, dl_job_done, dl_job_fail
 
     _t_start = time.monotonic()
     _platform = platform or "unknown"
+
+    # Register a cancel event so DELETE /jobs/{id} can abort this download.
+    _cancel = threading.Event()
+    with _INFLIGHT_LOCK:
+        _CANCEL_EVENTS[job_id] = _cancel
 
     # Detect cookie source for trace
     import os as _os
@@ -155,7 +165,7 @@ def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -
         if _cookie_src == "none" and (_os.getenv("YTDLP_COOKIES_FROM_BROWSER") or "").strip():
             _cookie_src = "browser"
 
-    dl_job_start(job_id, url=url, platform=_platform, quality="best", cookies=_cookie_src)
+    dl_job_start(job_id, url=url, platform=_platform, quality=quality, cookies=_cookie_src)
 
     try:
         update_download_job(job_id, status="downloading", progress=1)
@@ -163,7 +173,12 @@ def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -
         def _on_progress(pct: int, speed: str, eta: str):
             update_download_job(job_id, progress=pct, speed_str=speed, eta_str=eta)
 
-        result = download_video(job_id, url, output_dir, on_progress=_on_progress)
+        result = download_video(
+            job_id, url, output_dir,
+            on_progress=_on_progress,
+            quality=quality,
+            cancel_event=_cancel,
+        )
 
         _elapsed_ms = int((time.monotonic() - _t_start) * 1000)
         # Phase C — register file in asset library (never blocks, never raises).
@@ -216,7 +231,11 @@ def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "") -
         dl_job_fail(job_id, error=msg, platform=_platform)
     finally:
         with _INFLIGHT_LOCK:
-            _INFLIGHT_URLS.pop(url, None)
+            # Only clear the dedup marker if it still points at THIS job — a
+            # later job for the same URL may have reserved it.
+            if _INFLIGHT_URLS.get(url) == job_id:
+                _INFLIGHT_URLS.pop(url, None)
+            _CANCEL_EVENTS.pop(job_id, None)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -228,20 +247,46 @@ def get_info(url: str):
     return get_video_info(url)
 
 
+def _reserve_inflight(url: str) -> tuple[str, bool]:
+    """Atomically reserve the in-flight slot for ``url``.
+
+    Returns (job_id, is_new). When the URL is already in flight, returns the
+    existing job_id with is_new=False so the caller can dedup.
+    """
+    with _INFLIGHT_LOCK:
+        existing = _INFLIGHT_URLS.get(url)
+        if existing:
+            return existing, False
+        job_id = str(uuid.uuid4())
+        _INFLIGHT_URLS[url] = job_id
+        return job_id, True
+
+
+def _release_inflight(url: str, job_id: str) -> None:
+    with _INFLIGHT_LOCK:
+        if _INFLIGHT_URLS.get(url) == job_id:
+            _INFLIGHT_URLS.pop(url, None)
+
+
 @router.post("/start")
 def start_download(req: DownloadStartRequest):
     url = _validate_download_url(req.url)
-    with _INFLIGHT_LOCK:
-        if url in _INFLIGHT_URLS:
-            existing_id = _INFLIGHT_URLS[url]
-            logger.info("download: dedup hit url=%s existing_job=%s", url, existing_id)
-            return {"job_id": existing_id, "platform": detect_platform(url), "dedup": True}
-        output_dir = _validate_output_dir(req.output_dir)
-        job_id = str(uuid.uuid4())
-        platform = detect_platform(url)
-        _INFLIGHT_URLS[url] = job_id
+    # Filesystem + platform work is done OUTSIDE the dedup lock so concurrent
+    # /start calls don't serialise behind mkdir / DB I/O.
+    output_dir = _validate_output_dir(req.output_dir)
+    platform = detect_platform(url)
+
+    job_id, is_new = _reserve_inflight(url)
+    if not is_new:
+        logger.info("download: dedup hit url=%s existing_job=%s", url, job_id)
+        return {"job_id": job_id, "platform": platform, "dedup": True}
+
+    try:
         create_download_job(job_id, url, platform, str(output_dir))
-    _DOWNLOAD_EXECUTOR.submit(_run_download, job_id, url, output_dir, platform)
+        _DOWNLOAD_EXECUTOR.submit(_run_download, job_id, url, output_dir, platform, req.quality)
+    except Exception:
+        _release_inflight(url, job_id)
+        raise
     return {"job_id": job_id, "platform": platform}
 
 
@@ -257,10 +302,20 @@ def start_batch(req: BatchDownloadStartRequest):
             url = _validate_download_url(url)
         except HTTPException:
             continue
-        job_id = str(uuid.uuid4())
         platform = detect_platform(url)
-        create_download_job(job_id, url, platform, str(output_dir))
-        _DOWNLOAD_EXECUTOR.submit(_run_download, job_id, url, output_dir, platform)
+        # Same in-flight dedup as /start so the same URL across batch+single (or
+        # two batch calls) never spawns duplicate downloads.
+        job_id, is_new = _reserve_inflight(url)
+        if not is_new:
+            logger.info("download: batch dedup hit url=%s existing_job=%s", url, job_id)
+            job_ids.append({"job_id": job_id, "url": url, "platform": platform, "dedup": True})
+            continue
+        try:
+            create_download_job(job_id, url, platform, str(output_dir))
+            _DOWNLOAD_EXECUTOR.submit(_run_download, job_id, url, output_dir, platform, req.quality)
+        except Exception:
+            _release_inflight(url, job_id)
+            continue
         job_ids.append({"job_id": job_id, "url": url, "platform": platform})
     return {"jobs": job_ids}
 
@@ -284,6 +339,12 @@ def cancel_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Download job not found")
     if job.get("status") in ("queued", "downloading"):
+        # Signal the worker to abort the in-flight yt-dlp download (the progress
+        # hook raises on the next callback), then mark + remove the job.
+        with _INFLIGHT_LOCK:
+            _ev = _CANCEL_EVENTS.get(job_id)
+        if _ev is not None:
+            _ev.set()
         update_download_job(job_id, status="failed", error_msg="Cancelled by user")
     delete_download_job(job_id)
     return {"ok": True}

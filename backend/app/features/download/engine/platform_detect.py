@@ -29,25 +29,41 @@ _DOMAIN_MAP: dict[str, str] = {
 ALLOWED_DOMAINS = frozenset(_DOMAIN_MAP.keys())
 
 
+def _host_of(url: str) -> str:
+    try:
+        return (urlparse(url).hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def _platform_for_host(host: str) -> str:
+    """Map a hostname to a platform.
+
+    Matches exactly OR as a subdomain (``host`` ends with ``.<base>``) so
+    legit subdomains like ``music.youtube.com`` resolve correctly. The
+    leading-dot requirement keeps lookalike hosts (``youtube.com.evil.com``)
+    from matching, so this stays SSRF-allowlist-safe.
+    """
+    if not host:
+        return "other"
+    plat = _DOMAIN_MAP.get(host)
+    if plat:
+        return plat
+    for d, name in _DOMAIN_MAP.items():
+        if host.endswith("." + d):
+            return name
+    return "other"
+
+
 @lru_cache(maxsize=1024)
 def detect_platform(url: str) -> str:
-    # Perf-opt Phase 3 (D9): up to 7 sites call detect_platform per
-    # download flow (router validate + dedup + start, engine.get_video_info
-    # + download_video, batch route, _run_download). The result depends
-    # only on the URL host, so memoising on the full URL string is safe
-    # and skips the urlparse + map lookup on every subsequent hit.
-    try:
-        host = (urlparse(url).hostname or "").lower()
-        host = host.removeprefix("www.").removeprefix("m.")
-        return _DOMAIN_MAP.get(host, "other")
-    except Exception:
-        return "other"
+    # Perf-opt Phase 3 (D9): up to 7 sites call detect_platform per download
+    # flow. The result depends only on the URL host, so memoising on the full
+    # URL string is safe and skips the urlparse + lookup on every hit.
+    return _platform_for_host(_host_of(url))
 
 
 def is_allowed_url(url: str) -> bool:
-    try:
-        host = (urlparse(url).hostname or "").lower()
-        host = host.removeprefix("www.").removeprefix("m.")
-        return host in ALLOWED_DOMAINS
-    except Exception:
-        return False
+    # Consistent with detect_platform (same matching) — a URL is allowed iff it
+    # resolves to a known platform.
+    return _platform_for_host(_host_of(url)) != "other"

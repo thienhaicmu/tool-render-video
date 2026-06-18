@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import os
 import threading
 import time
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 from app.services.bin_paths import ensure_ffmpeg_available
 from app.features.download.engine.platform_detect import detect_platform
@@ -46,6 +47,32 @@ def _info_url_lock(url: str) -> threading.Lock:
 
 # iOS client kwargs — bypasses YouTube bot/login checks on most videos
 _IOS = {"extractor_args": {"youtube": {"player_client": ["ios"]}}}
+
+# Hard wall-clock ceiling for a single download-tab download. socket_timeout=60
+# (in _base_opts) covers individual socket stalls; this is the total-session
+# backstop so a slow-but-progressing or postprocessor-stuck download cannot run
+# unbounded. Override with DOWNLOAD_WALLCLOCK_TIMEOUT (seconds).
+_DL_WALLCLOCK_TIMEOUT: int = max(60, int(os.getenv("DOWNLOAD_WALLCLOCK_TIMEOUT", "1800")))
+
+
+def _quality_to_format(quality: str) -> str:
+    """Map the UI quality selector to a yt-dlp format string.
+
+    ``best`` → highest available (prefer mp4); ``1080p``/``720p``/``480p`` →
+    capped at that height. Unknown values fall back to ``best``.
+    """
+    q = (quality or "best").strip().lower()
+    cap = {"1080p": 1080, "720p": 720, "480p": 480}.get(q)
+    if cap:
+        return (
+            f"bestvideo[height<={cap}][ext=mp4]+bestaudio[ext=m4a]"
+            f"/bestvideo[height<={cap}]+bestaudio"
+            f"/best[height<={cap}]/best"
+        )
+    return (
+        "bestvideo[ext=mp4]+bestaudio[ext=m4a]"
+        "/bestvideo+bestaudio/best"
+    )
 
 
 def _apply_cookies(opts: dict) -> dict:
@@ -208,11 +235,19 @@ def download_video(
     url: str,
     output_dir: Path,
     on_progress: Callable[[int, str, str], None] | None = None,
+    *,
+    quality: str = "best",
+    cancel_event: Optional[threading.Event] = None,
 ) -> dict:
     """
     Download video to output_dir.
     Filename: {original_title}_{height}p{fps}fps.mp4
     Returns dict with title, platform, output_path, filename, height, fps, duration, filesize.
+
+    ``quality`` (best|1080p|720p|480p) selects the yt-dlp format ceiling.
+    ``cancel_event`` — when set, the progress hook raises so yt-dlp aborts the
+    in-flight download. A hard wall-clock ceiling (_DL_WALLCLOCK_TIMEOUT) also
+    bounds the total session.
     """
     import yt_dlp
 
@@ -224,13 +259,19 @@ def download_video(
     opts = _base_opts(output_dir, job_id, ffmpeg_bin)
     _apply_cookies(opts)
     if platform == "tiktok":
+        # TikTok needs its own format + extractor args; quality cap not applied.
         tiktok_opts = get_tiktok_opts()
         opts["format"] = tiktok_opts["format"]
         opts["extractor_args"] = tiktok_opts["extractor_args"]
-    elif platform == "youtube":
-        opts.update(_IOS)
+    else:
+        opts["format"] = _quality_to_format(quality)
+        if platform == "youtube":
+            opts.update(_IOS)
 
     def _hook(data: dict):
+        # Cooperative cancellation: raising inside the hook makes yt-dlp abort.
+        if cancel_event is not None and cancel_event.is_set():
+            raise RuntimeError("Download cancelled")
         if not on_progress:
             return
         status = str(data.get("status") or "")
@@ -247,12 +288,31 @@ def download_video(
     opts["progress_hooks"] = [_hook]
 
     cookie_src = "file" if "cookiefile" in opts else ("browser" if "cookiesfrombrowser" in opts else "none")
-    logger.info("download.start  job=%s  platform=%s  cookies=%s  url=%s", job_id, platform, cookie_src, url)
+    logger.info(
+        "download.start  job=%s  platform=%s  quality=%s  cookies=%s  url=%s",
+        job_id, platform, quality, cookie_src, url,
+    )
+
+    def _extract() -> dict:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=True)
 
     _t_dl = time.monotonic()
+    # Run the blocking yt-dlp call under a wall-clock ceiling. On timeout we set
+    # cancel_event so the (still-running) worker's next progress hook aborts it;
+    # socket_timeout=60 bounds the no-progress-at-all case.
+    _pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="dl-wallclock")
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+        _fut = _pool.submit(_extract)
+        try:
+            info = _fut.result(timeout=_DL_WALLCLOCK_TIMEOUT)
+        except concurrent.futures.TimeoutError:
+            if cancel_event is not None:
+                cancel_event.set()
+            raise RuntimeError(
+                f"Download timed out after {_DL_WALLCLOCK_TIMEOUT}s. Increase "
+                "DOWNLOAD_WALLCLOCK_TIMEOUT to allow more time."
+            )
     except Exception as exc:
         _elapsed_ms = int((time.monotonic() - _t_dl) * 1000)
         logger.error(
@@ -261,6 +321,8 @@ def download_video(
             exc_info=True,
         )
         raise
+    finally:
+        _pool.shutdown(wait=False)
 
     # Find the temp file (_dl_{job_id}.mp4)
     temp_candidates = sorted(

@@ -1,0 +1,110 @@
+"""Regression tests for the 2026-06-18 download-feature review fixes.
+
+Covers the unit-testable parts of the 10 findings:
+  #1  quality -> format mapping (engine._quality_to_format)
+  #3  router in-flight dedup helpers (single + batch share one reservation)
+  #9  cookie_extractor host filter keeps subdomains, rejects lookalikes
+  #10 platform_detect resolves subdomains, blocks allowlist-bypass hosts
+"""
+from __future__ import annotations
+
+import pytest
+
+
+# ── #1 quality -> format ──────────────────────────────────────────────────────
+
+def test_quality_to_format_caps_height():
+    from app.features.download.engine.engine import _quality_to_format
+    assert "height<=720" in _quality_to_format("720p")
+    assert "height<=480" in _quality_to_format("480p")
+    assert "height<=1080" in _quality_to_format("1080p")
+
+
+def test_quality_to_format_best_is_uncapped():
+    from app.features.download.engine.engine import _quality_to_format
+    fmt = _quality_to_format("best")
+    assert "height<=" not in fmt
+    # unknown/empty fall back to best (uncapped)
+    assert _quality_to_format("garbage") == fmt
+    assert _quality_to_format("") == fmt
+
+
+# ── #10 platform_detect ───────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("url,expected", [
+    ("https://music.youtube.com/watch?v=x", "youtube"),
+    ("https://www.youtube.com/watch?v=x", "youtube"),
+    ("https://m.youtube.com/watch?v=x", "youtube"),
+    ("https://vm.tiktok.com/abc/", "tiktok"),
+    ("https://sub.x.com/i/status/1", "twitter"),
+    ("https://evil.com/x", "other"),
+    # allowlist-bypass attempts must NOT resolve to a platform
+    ("https://youtube.com.evil.com/x", "other"),
+    ("https://notyoutube.com/x", "other"),
+])
+def test_detect_platform_subdomains_and_bypass(url, expected):
+    from app.features.download.engine.platform_detect import detect_platform
+    assert detect_platform(url) == expected
+
+
+@pytest.mark.parametrize("url,allowed", [
+    ("https://music.youtube.com/x", True),
+    ("https://youtube.com.evil.com/x", False),
+    ("https://evil.com/x", False),
+])
+def test_is_allowed_url_consistent_with_detect(url, allowed):
+    from app.features.download.engine.platform_detect import is_allowed_url
+    assert is_allowed_url(url) is allowed
+
+
+# ── #9 cookie host filter ─────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("host,keep", [
+    (".youtube.com", True),
+    ("www.youtube.com", True),
+    ("music.youtube.com", True),
+    ("accounts.google.com", True),
+    (".google.com", True),
+    ("evil.com", False),
+    ("notyoutube.com", False),
+    ("youtube.com.evil.com", False),
+])
+def test_is_youtube_auth_host(host, keep):
+    from app.features.download.engine.cookie_extractor import _is_youtube_auth_host
+    assert _is_youtube_auth_host(host) is keep
+
+
+# ── #3 router in-flight dedup ─────────────────────────────────────────────────
+
+def test_reserve_inflight_dedups_same_url():
+    from app.features.download import router
+
+    url = "https://www.youtube.com/watch?v=dedup-test"
+    router._release_inflight(url, router._INFLIGHT_URLS.get(url) or "")  # clean slate
+    try:
+        jid1, new1 = router._reserve_inflight(url)
+        jid2, new2 = router._reserve_inflight(url)
+        assert new1 is True and new2 is False
+        assert jid1 == jid2  # batch/single share the one reservation
+    finally:
+        router._release_inflight(url, jid1)
+    # After release a fresh reservation gets a new id
+    jid3, new3 = router._reserve_inflight(url)
+    try:
+        assert new3 is True and jid3 != jid1
+    finally:
+        router._release_inflight(url, jid3)
+
+
+def test_release_inflight_only_owner():
+    from app.features.download import router
+
+    url = "https://www.youtube.com/watch?v=owner-test"
+    jid, _ = router._reserve_inflight(url)
+    try:
+        # A non-owner release must not clear the reservation.
+        router._release_inflight(url, "some-other-job")
+        assert router._INFLIGHT_URLS.get(url) == jid
+    finally:
+        router._release_inflight(url, jid)
+    assert url not in router._INFLIGHT_URLS

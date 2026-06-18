@@ -34,8 +34,16 @@ from typing import Optional
 
 logger = logging.getLogger("app.downloader.cookies")
 
-# Domains we care about for YouTube auth
-_YOUTUBE_DOMAINS = {".youtube.com", ".google.com", "www.youtube.com"}
+# Registrable domains we keep cookies for (YouTube auth flows through both).
+# Matched by suffix so subdomains (accounts.google.com, music.youtube.com,
+# .youtube.com host_key form, etc.) are all retained — the previous exact-set
+# match dropped most relevant Google/YouTube cookies.
+_YOUTUBE_BASE_DOMAINS = ("youtube.com", "google.com")
+
+
+def _is_youtube_auth_host(host: str) -> bool:
+    h = (host or "").lstrip(".").lower()
+    return any(h == d or h.endswith("." + d) for d in _YOUTUBE_BASE_DOMAINS)
 
 # Chrome profile paths to try (default profile first)
 def _chrome_paths() -> list[tuple[Path, Path]]:
@@ -181,8 +189,11 @@ def _open_db_readonly(cookie_db: Path) -> Optional[sqlite3.Connection]:
         pass
 
     # Strategy 2 — copy to temp file (bypasses WAL lock)
+    conn = None
+    _fd, _tmp_name = tempfile.mkstemp(suffix=".db", prefix="chrome_cookies_")
+    os.close(_fd)
+    tmp = Path(_tmp_name)
     try:
-        tmp = Path(tempfile.mktemp(suffix=".db", prefix="chrome_cookies_"))
         shutil.copy2(str(cookie_db), str(tmp))
         conn = sqlite3.connect(str(tmp), check_same_thread=False)
         conn.text_factory = bytes
@@ -201,6 +212,17 @@ def _open_db_readonly(cookie_db: Path) -> Optional[sqlite3.Connection]:
         conn.close = _close_and_delete  # type: ignore[method-assign]
         return conn
     except Exception:
+        # Smoke-test / copy failed before close-wrapping — clean up so we don't
+        # leak the temp .db on every locked-and-unreadable profile.
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
         return None
 
 
@@ -257,7 +279,7 @@ def extract_youtube_cookies(output_path: Path) -> bool:
             name     = _to_str(name_raw)
             enc_val  = _to_bytes(enc_val_raw)
 
-            if host not in _YOUTUBE_DOMAINS:
+            if not _is_youtube_auth_host(host):
                 continue
 
             value = ""
