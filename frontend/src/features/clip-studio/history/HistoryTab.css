@@ -1,10 +1,10 @@
 /* HistoryTab — restyled 2026-06-18 (v5) to match the LIVE Render look from
    src/styles/polish.css: B5 tokens, rounded, soft shadows, brand gradient. */
 
-.hist { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--surface-base); }
+.hist { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: transparent; }
 
 /* ── Toolbar ─────────────────────────────────────────────────────────────── */
-.hist-top { flex-shrink: 0; border-bottom: 1px solid var(--border-subtle); background: var(--surface-panel); }
+.hist-top { flex-shrink: 0; background: transparent; }
 .hist-top-inner { padding: 18px 24px 16px; }
 .hist-head-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .hist-logo {
@@ -37,7 +37,7 @@
 .hist-search input { background: none; border: none; outline: none; font-size: 12px; color: var(--text-primary); width: 180px; }
 
 /* ── List ────────────────────────────────────────────────────────────────── */
-.hist-main { flex: 1; overflow: auto; background: radial-gradient(ellipse 80% 50% at 50% -5%, color-mix(in srgb, var(--accent-primary) 6%, transparent) 0%, transparent 60%); }
+.hist-main { flex: 1; overflow: auto; background: transparent; }
 .hist-main-inner { padding: 22px 24px 28px; }
 .hist-sec { display: flex; align-items: center; gap: 8px; margin: 24px 2px 10px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-tertiary); }
 .hist-sec:first-child { margin-top: 0; }
