@@ -137,6 +137,39 @@ def prune_render_cache(cache_dir: Path, max_age_hours: int = 72) -> dict:
     return {"removed": removed, "kept": kept, "freed_bytes": freed_bytes}
 
 
+def clear_all_cache(cache_dir: Path) -> dict:
+    """Remove ALL cache files (every subdir, any age) — the 'clear cache'
+    side of the reset/clear-history feature. Mirrors prune_render_cache's
+    defensive per-file/per-subdir try/except and skips ``.tmp`` sidecars so a
+    concurrent atomic cache write isn't corrupted. Returns
+    {removed, freed_bytes}. Never raises."""
+    if not cache_dir.exists():
+        return {"removed": 0, "freed_bytes": 0}
+    removed = 0
+    freed_bytes = 0
+    for subdir in cache_dir.iterdir():
+        if not subdir.is_dir():
+            continue
+        try:
+            for f in subdir.iterdir():
+                if not f.is_file() or f.suffix == ".tmp":
+                    continue
+                try:
+                    size = f.stat().st_size
+                    f.unlink(missing_ok=True)
+                    removed += 1
+                    freed_bytes += size
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    logger.info(
+        "maintenance: cleared %d cache files (freed=%.1f MB) from %s",
+        removed, freed_bytes / (1024 * 1024), cache_dir,
+    )
+    return {"removed": removed, "freed_bytes": freed_bytes}
+
+
 def prune_xtts_cache(temp_dir: Path, max_age_days: int = 30) -> dict:
     """Remove stale XTTS synthesis cache MP3 files older than max_age_days.
 

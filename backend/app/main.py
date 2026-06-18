@@ -355,6 +355,15 @@ def startup():
         except Exception as _ce:
             logging.getLogger("app.startup").debug("cookie_warmup: skipped — %s", _ce)
     threading.Thread(target=_cookie_warmup, daemon=True, name="cookie-warmup").start()
+    # Keep yt-dlp current (YouTube breaks older releases) — throttled,
+    # non-blocking, best-effort; disable with YTDLP_AUTO_UPDATE=0.
+    def _ytdlp_auto_update():
+        try:
+            from app.features.download.engine.auto_update import maybe_update_ytdlp
+            maybe_update_ytdlp()
+        except Exception as _ye:
+            logging.getLogger("app.startup").debug("ytdlp_auto_update: skipped — %s", _ye)
+    threading.Thread(target=_ytdlp_auto_update, daemon=True, name="ytdlp-update").start()
 
 
 @app.get("/api/warmup/status")

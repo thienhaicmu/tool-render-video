@@ -394,3 +394,41 @@ def patch_score_feedback_rating(
     if not updated:
         raise HTTPException(status_code=404, detail=f"Score row not found: {job_id}/{part_no}")
     return {"job_id": job_id, "part_no": part_no, "rating": payload.rating}
+
+
+# ── Clear history / reset ────────────────────────────────────────────────────
+
+class ClearHistoryPayload(BaseModel):
+    """Body for POST /api/settings/clear-history.
+
+    ``clear_cache`` also wipes the render cache (scene/whisper/llm/etc.).
+    ``preserve_active`` (default True) keeps in-flight render/download jobs so
+    a running job is never orphaned — Sacred Contract #7. Settings, presets,
+    and migration state are ALWAYS preserved.
+    """
+    model_config = ConfigDict(extra="ignore")
+
+    clear_cache: bool = False
+    preserve_active: bool = True
+
+
+@router.post("/clear-history")
+def clear_history_endpoint(payload: ClearHistoryPayload) -> dict:
+    """Delete job/download/asset history (and optionally the render cache).
+
+    Preserves creator settings, render presets, and schema/migration state.
+    Returns per-table delete counts and (if requested) cache stats.
+    """
+    from app.db.history_repo import clear_history
+    deleted = clear_history(preserve_active=payload.preserve_active)
+    out: dict = {
+        "ok": True,
+        "deleted": deleted,
+        "total_deleted": sum(deleted.values()),
+        "preserve_active": payload.preserve_active,
+    }
+    if payload.clear_cache:
+        from app.services.maintenance import clear_all_cache
+        from app.core.config import CACHE_DIR
+        out["cache"] = clear_all_cache(CACHE_DIR)
+    return out

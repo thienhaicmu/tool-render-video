@@ -1,9 +1,11 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 openpyxl==3.1.5
-# yt-dlp must be kept reasonably current — YouTube breaks older releases
-# (the 2025.3.31 pin failed extraction on current YouTube). Bump periodically.
-yt-dlp==2026.6.9
+# yt-dlp is intentionally UNPINNED — YouTube breaks older releases, so we
+# always want the newest. A startup background task (app.features.download.
+# engine.auto_update) also runs `pip install -U yt-dlp` (throttled; disable
+# with YTDLP_AUTO_UPDATE=0). Fresh installs get the latest available.
+yt-dlp
 openai-whisper==20231117
 scenedetect[opencv]==0.6.4
 playwright==1.51.0
