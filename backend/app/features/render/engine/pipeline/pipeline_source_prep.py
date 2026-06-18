@@ -33,6 +33,7 @@ Sacred Contracts honored:
 """
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -242,7 +243,17 @@ def prepare_render_source(
         cmd += ["-avoid_negative_ts", "make_zero", str(edited_path)]
         _job_log(effective_channel, job_id, f"Applying edits: trim_in={trim_in:.1f}s trim_out={trim_out:.1f}s volume={edit_volume:.2f}")
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, encoding="utf-8")
+            # Bounded so a stalled preprocess ffmpeg can't hang the render worker.
+            subprocess.run(
+                cmd, check=True, capture_output=True, text=True, encoding="utf-8",
+                timeout=max(60, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "3600"))),
+            )
+        except subprocess.TimeoutExpired as _preprocess_to:
+            _job_log(
+                effective_channel, job_id,
+                "FFmpeg preprocess timed out and was killed", kind="warning",
+            )
+            raise RuntimeError("FFmpeg preprocess timed out") from _preprocess_to
         except subprocess.CalledProcessError as _preprocess_exc:
             _pp_stderr = _preprocess_exc.stderr or ""
             _pp_diag = _summarize_ffmpeg_stderr(_pp_stderr)

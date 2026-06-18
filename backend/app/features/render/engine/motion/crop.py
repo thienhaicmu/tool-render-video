@@ -126,6 +126,14 @@ from app.features.render.engine.encoder.encoder_helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Wall-clock ceiling for the motion-crop ffmpeg subprocess. Mirrors
+# encoder/ffmpeg_helpers._FFMPEG_TIMEOUT_SEC (same env). Without it, the
+# post-stream proc.wait() below could block forever if ffmpeg stalls — and
+# because this path holds the NVENC semaphore, a hang would also pin a GPU
+# session and wedge the render worker. On expiry the catch-all except below
+# kills the process and retries/raises.
+_FFMPEG_TIMEOUT_SEC: int = max(60, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "3600")))
 # `_TRACKER_CAPABILITY_LOGGED` moved to motion_crop_tracker.py with
 # _create_tracker (Sprint 6.D-3.4) — it's the function's per-process guard.
 
@@ -789,7 +797,10 @@ def render_motion_aware_crop(
 
             if proc.stdin:
                 proc.stdin.close()
-            rc = proc.wait()
+            # Bounded wait: a stalled ffmpeg must not hang the worker (and pin
+            # the NVENC permit). TimeoutExpired is reaped by the catch-all
+            # except below, which kills proc and retries/raises.
+            rc = proc.wait(timeout=_FFMPEG_TIMEOUT_SEC)
             if rc != 0:
                 err_tail = ""
                 try:

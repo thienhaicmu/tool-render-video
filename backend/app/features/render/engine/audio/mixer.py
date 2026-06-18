@@ -1,7 +1,15 @@
+import os
 import subprocess
 from pathlib import Path
 
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
+
+# Wall-clock ceilings so a stalled ffprobe/ffmpeg can't hang the render worker
+# (these audio helpers run inside the per-part render path, bypassing the
+# bounded _run_ffmpeg_with_retry encoder wrapper). Audio-only work is fast, so
+# these are generous. Override via FFMPEG_TIMEOUT_SECONDS.
+_PROBE_TIMEOUT_SEC: int = 30
+_AUDIO_FFMPEG_TIMEOUT_SEC: int = max(60, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "3600")))
 
 
 def _has_audio_stream(input_path: str) -> bool:
@@ -14,7 +22,7 @@ def _has_audio_stream(input_path: str) -> bool:
             "-of", "csv=p=0",
             str(input_path),
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True, timeout=_PROBE_TIMEOUT_SEC)
         return bool((result.stdout or "").strip())
     except Exception:
         return False
@@ -146,7 +154,9 @@ def mix_narration_audio(
         raise RuntimeError("Unsupported narration audio mix mode")
 
     try:
-        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True)
+        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True, timeout=_AUDIO_FFMPEG_TIMEOUT_SEC)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"Narration audio mix timed out after {_AUDIO_FFMPEG_TIMEOUT_SEC}s") from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()
         raise RuntimeError(f"Narration audio mix failed: {detail or exc}") from exc
@@ -202,7 +212,9 @@ def mix_with_bgm(
         str(bgm_output),
     ]
     try:
-        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True)
+        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True, timeout=_AUDIO_FFMPEG_TIMEOUT_SEC)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"BGM mix timed out after {_AUDIO_FFMPEG_TIMEOUT_SEC}s") from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or "").strip()
         raise RuntimeError(f"BGM mix failed: {detail or exc}") from exc

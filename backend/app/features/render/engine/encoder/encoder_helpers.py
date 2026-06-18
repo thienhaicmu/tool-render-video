@@ -25,7 +25,7 @@ def ffmpeg_encoders_text() -> str:
     try:
         r = subprocess.run(
             [get_ffmpeg_bin(), "-hide_banner", "-encoders"],
-            capture_output=True, text=True, encoding="utf-8", check=True,
+            capture_output=True, text=True, encoding="utf-8", check=True, timeout=30,
         )
         return (r.stdout or "") + "\n" + (r.stderr or "")
     except Exception:
