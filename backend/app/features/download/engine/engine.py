@@ -67,6 +67,52 @@ def _is_format_error(e: Exception) -> bool:
     )
 
 
+def _coerce_int(v: object) -> int:
+    try:
+        return int(float(v))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+
+
+def _resolve_dimensions(info: dict, final_path: "Path | None" = None) -> tuple[int, float]:
+    """Best-effort (height, fps) for a finished download.
+
+    ``info['height']`` is 0 for some sources/formats (e.g. a merged or
+    lower-resolution Facebook format), which made the UI show "0p". Fall back
+    to the per-stream height/fps in ``requested_downloads`` / ``requested_formats``,
+    then to an ffprobe of the produced file. Never raises.
+    """
+    height = _coerce_int(info.get("height"))
+    fps = 0.0
+    try:
+        fps = float(info.get("fps") or 0)
+    except (TypeError, ValueError):
+        fps = 0.0
+
+    if height <= 0 or fps <= 0:
+        for key in ("requested_downloads", "requested_formats"):
+            for item in (info.get(key) or []):
+                if isinstance(item, dict):
+                    height = max(height, _coerce_int(item.get("height")))
+                    if fps <= 0:
+                        try:
+                            fps = float(item.get("fps") or 0)
+                        except (TypeError, ValueError):
+                            pass
+
+    if height <= 0 and final_path is not None:
+        try:
+            from app.features.render.engine.encoder.ffmpeg_helpers import probe_video_metadata
+            meta = probe_video_metadata(str(final_path))
+            height = _coerce_int(meta.get("height")) or height
+            if fps <= 0:
+                fps = float(meta.get("fps") or 0)
+        except Exception:
+            pass
+
+    return max(0, height), max(0.0, fps)
+
+
 def _should_quality_fallback(platform: str, quality: str, exc: Exception, cancelled: bool) -> bool:
     """Decide whether to retry a failed download with ``best``.
 
@@ -395,8 +441,7 @@ def download_video(
 
     _elapsed_ms = int((time.monotonic() - _t_dl) * 1000)
     _filesize   = final_path.stat().st_size
-    _height     = int(info.get("height") or 0)
-    _fps        = float(info.get("fps") or 0)
+    _height, _fps = _resolve_dimensions(info, final_path)
     logger.info(
         "download.done  job=%s  platform=%s  cookies=%s  elapsed_ms=%d  size_bytes=%d  res=%dp  fps=%g  file=%s",
         job_id, platform, cookie_src, _elapsed_ms, _filesize, _height, _fps, final_path.name,

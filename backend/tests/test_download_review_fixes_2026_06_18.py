@@ -51,6 +51,35 @@ def test_quality_fallback_skips_tiktok_and_cancel_and_other_errors():
     assert _should_quality_fallback("youtube", "720p", net_err, cancelled=False) is False
 
 
+# ── height/fps resolution (no more 0p in the UI) ──────────────────────────────
+
+def test_resolve_dimensions_prefers_top_level():
+    from app.features.download.engine.engine import _resolve_dimensions
+    h, f = _resolve_dimensions({"height": 1080, "fps": 30})
+    assert h == 1080 and f == 30.0
+
+
+def test_resolve_dimensions_falls_back_to_requested_streams():
+    from app.features.download.engine.engine import _resolve_dimensions
+    # top-level height missing (the Facebook 0p case) — derive from the
+    # actually-downloaded streams.
+    info = {
+        "height": 0,
+        "requested_downloads": [{"height": 360, "fps": 25}],
+        "requested_formats": [{"height": 360}, {"height": 0}],
+    }
+    h, f = _resolve_dimensions(info)
+    assert h == 360 and f == 25.0
+
+
+def test_resolve_dimensions_handles_strings_and_missing():
+    from app.features.download.engine.engine import _resolve_dimensions
+    h, f = _resolve_dimensions({"height": "720", "fps": "29.97"})
+    assert h == 720 and round(f, 2) == 29.97
+    # nothing usable + no file → (0, 0.0), never raises
+    assert _resolve_dimensions({}) == (0, 0.0)
+
+
 def test_quality_to_format_best_is_uncapped():
     from app.features.download.engine.engine import _quality_to_format
     fmt = _quality_to_format("best")
