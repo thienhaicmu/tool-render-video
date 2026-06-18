@@ -254,6 +254,23 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         final_status = "cancelled"
     except Exception:
         final_status = "failed"
+        # Belt-and-suspenders: run_render_pipeline runs setup (setup_render_pipeline,
+        # prepare_output_dir, …) BEFORE its own try/except, and JobCancelledError
+        # aside, any exception from that setup phase propagates here WITHOUT a
+        # terminal DB write. The job would then sit at status='running' forever —
+        # a phantom "active" job that makes the queue dedup + the UI's
+        # active-job reattach block every NEW render (the user has to manually
+        # kill it). Force the row terminal so a dead worker never blocks the queue.
+        try:
+            _cur = get_job(job_id)
+            if (_cur or {}).get("status") in (None, "running", "queued"):
+                update_job_progress(
+                    job_id, JobStage.FAILED, 0,
+                    "Render failed before completion",
+                    status="failed",
+                )
+        except Exception:
+            pass
         raise
     finally:
         # Audit FINDING-BR10 closure (Batch 10A ST-14): belt-and-suspenders

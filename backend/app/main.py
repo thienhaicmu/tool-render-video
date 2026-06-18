@@ -273,10 +273,18 @@ def _run_periodic_cleanup():
                 _cleanup_logger.warning("data_retention read failed: %s", _exc)
             _retention_days = _db_days if _db_days is not None else _JOB_RETENTION_DAYS
             result_jobs = prune_old_jobs(_retention_days)
+            # Reconcile phantom jobs (DB 'running'/'queued' but no live worker)
+            # so a dead render can't block new renders. See
+            # app.jobs.manager.reconcile_orphaned_render_jobs.
+            try:
+                from app.jobs.manager import reconcile_orphaned_render_jobs
+                _reconciled = reconcile_orphaned_render_jobs()
+            except Exception:
+                _reconciled = 0
             _cleanup_logger.info(
                 "periodic cleanup: sessions_evicted=%d preview_removed=%d render_removed=%d "
                 "xtts_removed=%d overlay_removed=%d cache_removed=%d cache_freed_mb=%.1f "
-                "jobs_pruned=%d parts_pruned=%d",
+                "jobs_pruned=%d parts_pruned=%d jobs_reconciled=%d",
                 evicted,
                 result_preview.get("removed", 0),
                 result_render.get("removed", 0),
@@ -286,6 +294,7 @@ def _run_periodic_cleanup():
                 result_cache.get("freed_bytes", 0) / (1024 * 1024),
                 result_jobs.get("removed_jobs", 0),
                 result_jobs.get("removed_parts", 0),
+                _reconciled,
             )
         except Exception as exc:
             _cleanup_logger.warning("periodic cleanup error: %s", exc)

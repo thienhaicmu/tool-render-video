@@ -381,6 +381,56 @@ def shutdown(wait: bool = True, timeout: float = 30.0) -> None:
 # Startup recovery
 # ---------------------------------------------------------------------------
 
+def reconcile_orphaned_render_jobs(stale_seconds: int = 120) -> int:
+    """Mark phantom render jobs as 'interrupted'.
+
+    A *phantom* is a job whose DB status is still 'running' or 'queued' but
+    which the scheduler is NOT tracking (not in _active_job_ids / _pending).
+    This happens when a worker dies without writing a terminal status — e.g.
+    an exception during the render pipeline's setup phase (before its own
+    try/except) that propagated past process_render. The phantom then shows
+    as a perpetually-active job, which makes the UI's active-job reattach and
+    the queue's source-dedup block every NEW render until the user manually
+    kills it.
+
+    Conservative gates to avoid racing a freshly-submitted job:
+      - only jobs untouched for ``stale_seconds`` (default 120 s), and
+      - only jobs the scheduler is not currently tracking.
+
+    Returns the number of jobs reconciled. Never raises.
+    """
+    try:
+        from app.db.connection import db_conn
+        from app.db.jobs_repo import update_job_progress
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT job_id, stage, progress_percent FROM jobs "
+                "WHERE kind = 'render' AND status IN ('running', 'queued') "
+                "AND updated_at < datetime('now', ?)",
+                (f"-{int(stale_seconds)} seconds",),
+            ).fetchall()
+        reconciled = 0
+        for r in rows:
+            jid = r[0] if isinstance(r, tuple) else r["job_id"]
+            stage = (r[1] if isinstance(r, tuple) else r["stage"]) or "unknown"
+            pct = int((r[2] if isinstance(r, tuple) else r["progress_percent"]) or 0)
+            with _lock:
+                tracked = jid in _active_job_ids or jid in _pending_job_ids
+            if tracked:
+                continue
+            update_job_progress(
+                jid, stage, pct,
+                "Worker ended without finishing — click Resume to continue",
+                status="interrupted",
+            )
+            reconciled += 1
+            logger.info("Reconciled orphaned render job %s (was stuck, untracked)", jid)
+        return reconciled
+    except Exception as exc:
+        logger.warning("reconcile_orphaned_render_jobs failed (non-fatal): %s", exc)
+        return 0
+
+
 def recover_pending_render_jobs():
     """
     Called once on server startup.
