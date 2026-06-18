@@ -20,6 +20,14 @@ def test_quality_to_format_caps_height():
     assert "height<=1080" in _quality_to_format("1080p")
 
 
+def test_quality_to_format_accepts_arbitrary_heights():
+    # Per-video quality picker can offer any resolution the source exposes.
+    from app.features.download.engine.engine import _quality_to_format
+    assert "height<=2160" in _quality_to_format("2160p")
+    assert "height<=1440" in _quality_to_format("1440p")
+    assert "height<=360" in _quality_to_format("360p")
+
+
 def test_quality_to_format_best_is_uncapped():
     from app.features.download.engine.engine import _quality_to_format
     fmt = _quality_to_format("best")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -52,14 +53,22 @@ def _info_url_lock(url: str) -> threading.Lock:
 _DL_WALLCLOCK_TIMEOUT: int = max(60, int(os.getenv("DOWNLOAD_WALLCLOCK_TIMEOUT", "1800")))
 
 
+_QUALITY_RE = re.compile(r"^(\d{3,4})p$")
+
+
 def _quality_to_format(quality: str) -> str:
     """Map the UI quality selector to a yt-dlp format string.
 
-    ``best`` → highest available (prefer mp4); ``1080p``/``720p``/``480p`` →
-    capped at that height. Unknown values fall back to ``best``.
+    ``best`` → highest available (prefer mp4); any ``<height>p`` value
+    (e.g. ``2160p``/``1440p``/``1080p``/``720p``/``480p``/``360p``) caps at
+    that height so the per-video quality picker can offer the real resolutions
+    a source exposes. Unknown values fall back to ``best``.
     """
     q = (quality or "best").strip().lower()
-    cap = {"1080p": 1080, "720p": 720, "480p": 480}.get(q)
+    cap: int | None = None
+    m = _QUALITY_RE.match(q)
+    if m:
+        cap = int(m.group(1))
     if cap:
         return (
             f"bestvideo[height<={cap}][ext=mp4]+bestaudio[ext=m4a]"

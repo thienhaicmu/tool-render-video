@@ -1,12 +1,30 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Lang } from '../ClipStudio'
 import {
-  listJobs, startDownload, cancelJob,
+  listJobs, startDownload, cancelJob, getVideoInfo,
   platformLabel, platformColor, formatFilesize,
 } from '@/api/platformDownloader'
 import type { DownloadJob } from '@/api/platformDownloader'
 import { getDefaultOutputDir, putDefaultOutputDir } from '@/api/outputDir'
 import './DownloadTab.css'
+
+// Instant client-side platform guess from the URL host (replaced by the real
+// platform from getVideoInfo once it resolves).
+function guessPlatform(u: string): string {
+  let h = ''
+  try { h = new URL(u).hostname.toLowerCase() } catch { return 'other' }
+  if (/youtube|youtu\.be/.test(h)) return 'youtube'
+  if (/tiktok/.test(h)) return 'tiktok'
+  if (/instagr/.test(h)) return 'instagram'
+  if (/facebook|fb\.watch/.test(h)) return 'facebook'
+  if (/twitter|x\.com|t\.co/.test(h)) return 'twitter'
+  if (/bilibili|b23/.test(h)) return 'bilibili'
+  if (/reddit|redd\.it/.test(h)) return 'reddit'
+  if (/vimeo/.test(h)) return 'vimeo'
+  if (/dailymotion/.test(h)) return 'dailymotion'
+  if (/twitch/.test(h)) return 'twitch'
+  return 'other'
+}
 
 const POLL_MS = 1500
 const LS_DIR_KEY = 'dl_output_dir'
@@ -16,14 +34,6 @@ const PLATFORM_FULL: Record<string, string> = {
   facebook: 'Facebook', twitter: 'X (Twitter)', bilibili: 'Bilibili',
   reddit: 'Reddit', vimeo: 'Vimeo', dailymotion: 'Dailymotion', twitch: 'Twitch',
 }
-
-// value MUST match the backend _quality_to_format keys (best | 1080p | 720p | 480p).
-const QUALITY_OPTS = [
-  { value: 'best', label: 'Best' },
-  { value: '1080p', label: '1080p' },
-  { value: '720p', label: '720p' },
-  { value: '480p', label: '480p' },
-]
 
 const STATUS_LABEL: Record<string, string> = {
   queued: 'Queued', downloading: 'Downloading', done: 'Done', failed: 'Failed',
@@ -42,6 +52,37 @@ const statusBadgeStyle = (s: string): React.CSSProperties => {
   return { background: bg, color, borderColor: border }
 }
 
+function fmtDuration(sec?: number): string {
+  if (!sec || sec <= 0) return ''
+  const s = Math.round(sec)
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  if (m >= 60) { const h = Math.floor(m / 60); return `${h}:${String(m % 60).padStart(2, '0')}:${String(r).padStart(2, '0')}` }
+  return `${m}:${String(r).padStart(2, '0')}`
+}
+
+function qualityOpts(heights: number[]): { value: string; label: string }[] {
+  const opts = [{ value: 'best', label: 'Best' }]
+  const hs = (heights.length ? [...new Set(heights)] : [1080, 720, 480]).filter(h => h > 0).sort((a, b) => b - a)
+  for (const h of hs) opts.push({ value: `${h}p`, label: `${h}p` })
+  return opts
+}
+
+interface StagedItem {
+  key: string
+  url: string
+  platform: string
+  title?: string
+  durationSec?: number
+  heights: number[]
+  quality: string
+  state: 'loading' | 'ok' | 'error'
+}
+
+let _keySeq = 0
+const nextKey = () => `s${Date.now()}_${_keySeq++}`
+
+/* ── Active download card (in-progress / done / failed) ───────────────────── */
 function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: string) => void }) {
   const pColor = platformColor(job.platform)
   const pLabel = platformLabel(job.platform)
@@ -59,12 +100,9 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
         </div>
       )}
       {isFailed && <div className="dlt-card-bar is-failed" />}
-
       <div className="dlt-card-body">
         <div className="dlt-card-top">
-          <div className="dlt-badge" style={{ background: `${pColor}18`, border: `1px solid ${pColor}33`, color: pColor }} title={pFull}>
-            {pLabel}
-          </div>
+          <div className="dlt-badge" style={{ background: `${pColor}18`, border: `1px solid ${pColor}33`, color: pColor }} title={pFull}>{pLabel}</div>
           <div className="dlt-card-info">
             <div className="dlt-card-title">{job.title || job.url}</div>
             <div className="dlt-card-url">{job.url}</div>
@@ -73,7 +111,6 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
             {(STATUS_LABEL[job.status] ?? job.status).toUpperCase()}
           </span>
         </div>
-
         {isActive && (
           <div className="dlt-progress">
             <span className="dlt-pct">{job.progress}%</span>
@@ -84,14 +121,12 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
             <button className="dlt-row-btn is-danger" onClick={() => onCancel(job.id)}>Cancel</button>
           </div>
         )}
-
         {isQueued && (
           <div className="dlt-card-foot">
             <span style={{ flex: 1, fontSize: 10, color: 'var(--text-3)' }}>Waiting in queue…</span>
             <button className="dlt-row-btn" onClick={() => onCancel(job.id)}>Cancel</button>
           </div>
         )}
-
         {isDone && (
           <div className="dlt-card-foot">
             <span style={{ fontSize: 18, color: 'var(--ok)' }}>✓</span>
@@ -99,26 +134,17 @@ function DownloadCard({ job, onCancel }: { job: DownloadJob; onCancel: (id: stri
               {job.filename && <div className="name">{job.filename}</div>}
               {job.filesize > 0 && <div className="size">{formatFilesize(job.filesize)}</div>}
             </div>
-            {job.output_dir && (
-              <button className="dlt-row-btn" title="Open folder" onClick={() => window.electronAPI?.openPath?.(job.output_dir)}>
-                Open folder
-              </button>
-            )}
-            {job.output_path && (
-              <button className="dlt-row-btn" title="Copy path" onClick={() => { navigator.clipboard.writeText(job.output_path).catch(() => {}) }}>
-                Copy path
-              </button>
-            )}
+            {job.output_dir && <button className="dlt-row-btn" title="Open folder" onClick={() => window.electronAPI?.openPath?.(job.output_dir)}>Open folder</button>}
+            {job.output_path && <button className="dlt-row-btn" title="Copy path" onClick={() => { navigator.clipboard.writeText(job.output_path).catch(() => {}) }}>Copy path</button>}
           </div>
         )}
-
         {isFailed && <div className="dlt-fail-msg">⚠ {job.error_msg || 'Download failed'}</div>}
       </div>
     </div>
   )
 }
 
-function EmptyQueue() {
+function EmptyStage() {
   const chips = [
     { n: 'YouTube', c: '#ff0000' }, { n: 'TikTok', c: '#000' },
     { n: 'Instagram', c: '#e1306c' }, { n: 'Facebook', c: '#1877f2' },
@@ -133,33 +159,25 @@ function EmptyQueue() {
         </svg>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-        <div className="dlt-empty-title">Paste a URL to start downloading</div>
-        <div className="dlt-empty-sub">Drop in a link from YouTube, TikTok, Instagram, Facebook and 10+ more platforms — choose a folder and we'll grab it.</div>
+        <div className="dlt-empty-title">Build your download list</div>
+        <div className="dlt-empty-sub">Paste one or more links (YouTube, TikTok, Instagram, Facebook…), pick a quality for each, choose a folder, then hit Download.</div>
       </div>
       <div className="dlt-chips">
-        {chips.map(p => (
-          <span key={p.n} className="dlt-chip"><span className="dot" style={{ background: p.c }} />{p.n}</span>
-        ))}
+        {chips.map(p => <span key={p.n} className="dlt-chip"><span className="dot" style={{ background: p.c }} />{p.n}</span>)}
       </div>
     </div>
   )
 }
 
-type CookieStatus = {
-  present: boolean
-  age_seconds?: number
-  cookie_count?: number
-  has_v20_warning?: boolean
-  detail?: string
-}
+type CookieStatus = { present: boolean; age_seconds?: number; cookie_count?: number; has_v20_warning?: boolean; detail?: string }
 
 export function DownloadTab({ lang: _lang }: { lang: Lang }) {
   const [url, setUrl] = useState('')
+  const [staged, setStaged] = useState<StagedItem[]>([])
   const [outputDir, setOutputDir] = useState('')
   const [folderInvalid, setFolderInvalid] = useState(false)
-  const [quality, setQuality] = useState('best')
   const [jobs, setJobs] = useState<DownloadJob[]>([])
-  const [adding, setAdding] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cookieStatus, setCookieStatus] = useState<CookieStatus | null>(null)
   const [cookieAction, setCookieAction] = useState<'idle' | 'loading' | 'ok' | 'fail'>('idle')
@@ -168,158 +186,151 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
   const [cookiePath, setCookiePath] = useState('')
   const [cookieError, setCookieError] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const autoPasted = useRef(false)
 
   const fetchCookieStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/downloader/cookie-status')
-      setCookieStatus(await res.json())
-    } catch { /* ignore */ }
+    try { setCookieStatus(await (await fetch('/api/downloader/cookie-status')).json()) } catch { /* ignore */ }
   }, [])
-
   const refresh = useCallback(async () => {
     try { setJobs(await listJobs(50)) } catch { /* ignore */ }
   }, [])
 
-  // Load the saved output folder: default-output-dir setting first, then the
-  // last folder used on this machine (localStorage).
   useEffect(() => {
     (async () => {
-      try {
-        const env = await getDefaultOutputDir()
-        if (env.is_configured && env.path) { setOutputDir(env.path); return }
-      } catch { /* ignore */ }
-      const ls = localStorage.getItem(LS_DIR_KEY)
-      if (ls) setOutputDir(ls)
+      try { const env = await getDefaultOutputDir(); if (env.is_configured && env.path) { setOutputDir(env.path); return } } catch { /* ignore */ }
+      const ls = localStorage.getItem(LS_DIR_KEY); if (ls) setOutputDir(ls)
     })()
   }, [])
 
   useEffect(() => {
-    refresh()
-    fetchCookieStatus()
+    refresh(); fetchCookieStatus()
     pollRef.current = setInterval(refresh, POLL_MS)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [refresh, fetchCookieStatus])
 
+  // Enrich a staged item with title/duration/available heights (best-effort).
+  const fetchInfo = useCallback(async (key: string, link: string) => {
+    try {
+      const info = await getVideoInfo(link)
+      const heights = (info.formats || []).map(f => f.height).filter(h => h > 0)
+      setStaged(prev => prev.map(it => it.key === key
+        ? { ...it, title: info.title || it.title, durationSec: info.duration, heights, platform: info.platform || it.platform, state: 'ok' }
+        : it))
+    } catch {
+      setStaged(prev => prev.map(it => it.key === key ? { ...it, state: 'error' } : it))
+    }
+  }, [])
+
+  // Add one or more URLs (whitespace/newline separated) to the staging list.
+  const addUrls = useCallback((raw: string) => {
+    const links = raw.split(/[\s\n]+/).map(s => s.trim()).filter(s => s.startsWith('http'))
+    if (links.length === 0) { setError('Enter a valid http(s) URL'); return }
+    setError(null)
+    setStaged(prev => {
+      const existing = new Set(prev.map(p => p.url))
+      const additions: StagedItem[] = []
+      for (const link of links) {
+        if (existing.has(link)) continue
+        existing.add(link)
+        const item: StagedItem = { key: nextKey(), url: link, platform: guessPlatform(link), quality: 'best', heights: [], state: 'loading' }
+        additions.push(item)
+        // Enrich title/duration/heights/platform asynchronously.
+        fetchInfo(item.key, link)
+      }
+      return [...prev, ...additions]
+    })
+    setUrl('')
+  }, [fetchInfo])
+
+  const handleAdd = () => { const v = url.trim(); if (v) addUrls(v) }
+
+  // Auto-paste on first focus of an empty input ("click → link tự vào thanh").
+  const handleFocus = async () => {
+    if (url || autoPasted.current) return
+    autoPasted.current = true
+    try { const t = await navigator.clipboard.readText(); if (t && t.trim().startsWith('http')) setUrl(t.trim()) } catch { /* ignore */ }
+  }
+  const handlePaste = async () => {
+    try { const t = await navigator.clipboard.readText(); if (t.trim().startsWith('http')) addUrls(t) } catch { /* ignore */ }
+  }
+
+  const setQuality = (key: string, q: string) => setStaged(prev => prev.map(it => it.key === key ? { ...it, quality: q } : it))
+  const removeItem = (key: string) => setStaged(prev => prev.filter(it => it.key !== key))
+  const clearStaged = () => { setStaged([]); setError(null) }
+
   const pickDir = async () => {
     const dir = await window.electronAPI?.pickDirectory?.()
     if (dir) {
-      setOutputDir(dir)
-      setFolderInvalid(false)
-      setError(null)
+      setOutputDir(dir); setFolderInvalid(false); setError(null)
       localStorage.setItem(LS_DIR_KEY, dir)
-      putDefaultOutputDir(dir).catch(() => {})  // best-effort: remember as default
+      putDefaultOutputDir(dir).catch(() => {})
     }
   }
 
-  const handleAdd = async () => {
-    const v = url.trim()
-    if (!v || adding) return
-    if (!v.startsWith('http')) { setError('Enter a valid http(s) URL'); return }
-    // Validate the save folder BEFORE submitting — no silent 'output' default.
-    if (!outputDir.trim()) {
-      setFolderInvalid(true)
-      setError('Choose a folder to save downloads to')
-      return
-    }
-    setAdding(true)
-    setError(null)
-    try {
-      await startDownload(v, outputDir.trim(), quality)
-      setUrl('')
-      await refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to start download')
-    } finally {
-      setAdding(false)
-    }
-  }
-
-  const handlePaste = async () => {
-    try {
-      const text = await navigator.clipboard.readText()
-      if (text.startsWith('http')) { setUrl(text); setError(null) }
-    } catch { /* ignore */ }
+  // Validate folder, then kick off one download per staged item with its own
+  // quality. Items move into the active downloads list (backend jobs).
+  const handleDownloadAll = async () => {
+    if (downloading || staged.length === 0) return
+    if (!outputDir.trim()) { setFolderInvalid(true); setError('Choose a folder to save downloads to'); return }
+    setDownloading(true); setError(null)
+    const items = [...staged]
+    const results = await Promise.allSettled(
+      items.map(it => startDownload(it.url, outputDir.trim(), it.quality)),
+    )
+    const failed = results.filter(r => r.status === 'rejected').length
+    // Drop the ones that started; keep any that failed to submit so the user
+    // can retry them.
+    const okUrls = new Set(items.filter((_, i) => results[i].status === 'fulfilled').map(it => it.url))
+    setStaged(prev => prev.filter(it => !okUrls.has(it.url)))
+    if (failed > 0) setError(`${failed} link(s) could not be started — check the URL or cookies.`)
+    setDownloading(false)
+    await refresh()
   }
 
   const handleAutoExtract = async () => {
     if (cookieAction === 'loading') return
     setCookieAction('loading')
     try {
-      const res = await fetch('/api/downloader/refresh-cookies', { method: 'POST' })
+      const data = await (await fetch('/api/downloader/refresh-cookies', { method: 'POST' })).json()
+      setCookieStatus(data); setCookieAction(data.ok ? 'ok' : 'fail')
+    } catch { setCookieAction('fail') } finally { setTimeout(() => setCookieAction('idle'), 3000) }
+  }
+  const handleBrowseCookies = async () => { const fp = await window.electronAPI?.pickCookiesFile?.(); if (fp) setCookiePath(fp) }
+  const handleImportFile = async () => {
+    const p = cookiePath.trim(); if (!p || cookieAction === 'loading') return
+    setCookieAction('loading'); setCookieError(null)
+    try {
+      const res = await fetch('/api/downloader/import-cookies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p }) })
       const data = await res.json()
-      setCookieStatus(data)
-      setCookieAction(data.ok ? 'ok' : 'fail')
-    } catch { setCookieAction('fail') }
+      if (!res.ok) throw new Error(data.detail || 'Import failed')
+      setCookieStatus(data); setCookieAction('ok'); setCookiePath('')
+    } catch (e) { setCookieError(e instanceof Error ? e.message : 'Import failed'); setCookieAction('fail') }
     finally { setTimeout(() => setCookieAction('idle'), 3000) }
   }
 
-  const handleBrowseCookies = async () => {
-    const filePath = await window.electronAPI?.pickCookiesFile?.()
-    if (filePath) setCookiePath(filePath)
-  }
-
-  const handleImportFile = async () => {
-    const pathToUse = cookiePath.trim()
-    if (!pathToUse || cookieAction === 'loading') return
-    setCookieAction('loading')
-    setCookieError(null)
-    try {
-      const res = await fetch('/api/downloader/import-cookies', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: pathToUse }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Import failed')
-      setCookieStatus(data)
-      setCookieAction('ok')
-      setCookiePath('')
-    } catch (e) {
-      setCookieError(e instanceof Error ? e.message : 'Import failed')
-      setCookieAction('fail')
-    } finally { setTimeout(() => setCookieAction('idle'), 3000) }
-  }
-
-  const activeCount = jobs.filter((j) => j.status === 'downloading').length
-  const doneCount = jobs.filter((j) => j.status === 'done').length
-  const failedCount = jobs.filter((j) => j.status === 'failed').length
-  const queuedCount = jobs.filter((j) => j.status === 'queued').length
+  const activeCount = jobs.filter(j => j.status === 'downloading').length
+  const doneCount = jobs.filter(j => j.status === 'done').length
+  const failedCount = jobs.filter(j => j.status === 'failed').length
+  const queuedCount = jobs.filter(j => j.status === 'queued').length
   const inputValid = url.trim().startsWith('http')
-
-  const cookieChipClass = cookieStatus === null ? ''
-    : !cookieStatus.present ? 'is-missing'
-      : cookieStatus.has_v20_warning ? 'is-warn' : 'is-ok'
+  const cookieChipClass = cookieStatus === null ? '' : !cookieStatus.present ? 'is-missing' : cookieStatus.has_v20_warning ? 'is-warn' : 'is-ok'
 
   return (
     <div className="dlt">
       <div className="dlt-header">
         <div className="dlt-head-row">
           <span className="dlt-logo">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3v13" /><path d="M7 11l5 5 5-5" /><path d="M5 21h14" />
-            </svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13" /><path d="M7 11l5 5 5-5" /><path d="M5 21h14" /></svg>
           </span>
           <div className="dlt-titles">
             <span className="dlt-title">Downloader</span>
-            <span className="dlt-subtitle">Paste a link to fetch video from any platform</span>
+            <span className="dlt-subtitle">Add links to the list, pick quality, then download</span>
           </div>
-
-          <button
-            className={`dlt-cookie-chip ${cookieChipClass}`}
-            onClick={() => setShowCookiePanel(p => !p)}
-            title="YouTube cookie settings"
-          >
+          <button className={`dlt-cookie-chip ${cookieChipClass}`} onClick={() => setShowCookiePanel(p => !p)} title="YouTube cookie settings">
             <span>{cookieStatus?.present ? (cookieStatus.has_v20_warning ? '⚠' : '✓') : '✗'}</span>
-            <span>
-              {cookieStatus === null ? 'Cookies…'
-                : cookieStatus.present
-                  ? `${cookieStatus.cookie_count ?? '?'} cookies${cookieStatus.has_v20_warning ? ' (v20!)' : ''}`
-                  : 'No cookies'}
-            </span>
+            <span>{cookieStatus === null ? 'Cookies…' : cookieStatus.present ? `${cookieStatus.cookie_count ?? '?'} cookies${cookieStatus.has_v20_warning ? ' (v20!)' : ''}` : 'No cookies'}</span>
             <span style={{ opacity: 0.5, fontSize: 9 }}>{showCookiePanel ? '▲' : '▼'}</span>
           </button>
-
           <div className="dlt-pills">
             {activeCount > 0 && <span className="dlt-pill is-active">{activeCount} downloading</span>}
             {queuedCount > 0 && <span className="dlt-pill is-queued">{queuedCount} queued</span>}
@@ -332,34 +343,17 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
           <div className="dlt-cookie-panel">
             <div className="dlt-cookie-row">
               <span className="dlt-cookie-status" style={{ color: cookieStatus?.present ? (cookieStatus.has_v20_warning ? 'var(--status-warning)' : 'var(--ok)') : 'var(--fail)' }}>
-                {cookieStatus?.present
-                  ? `✓ ${cookieStatus.cookie_count} cookies${cookieStatus.age_seconds != null ? ` · ${Math.round(cookieStatus.age_seconds / 60)}m ago` : ''}`
-                  : '✗ No cookies · YouTube auth will fail'}
+                {cookieStatus?.present ? `✓ ${cookieStatus.cookie_count} cookies${cookieStatus.age_seconds != null ? ` · ${Math.round(cookieStatus.age_seconds / 60)}m ago` : ''}` : '✗ No cookies · YouTube auth will fail'}
               </span>
-              <button
-                className={`dlt-mini-btn${cookieAction === 'ok' ? ' is-ok' : cookieAction === 'fail' ? ' is-fail' : ''}`}
-                onClick={handleAutoExtract}
-                disabled={cookieAction === 'loading'}
-                title="Auto-extract from Chrome DB (Chrome ≤126)"
-              >
+              <button className={`dlt-mini-btn${cookieAction === 'ok' ? ' is-ok' : cookieAction === 'fail' ? ' is-fail' : ''}`} onClick={handleAutoExtract} disabled={cookieAction === 'loading'} title="Auto-extract from Chrome DB (Chrome ≤126)">
                 {cookieAction === 'loading' ? '⟳ …' : cookieAction === 'ok' ? '✓ Done' : '⟳ Auto-extract'}
               </button>
               <button className="dlt-mini-btn" onClick={() => setShowCookieHelp(h => !h)} title="How to export from Chrome 127+" style={{ width: 26, padding: 0 }}>?</button>
             </div>
             <div className="dlt-cookie-row" style={{ paddingTop: 0 }}>
-              <input
-                className={`dlt-cookie-input${cookieError ? ' is-invalid' : ''}`}
-                value={cookiePath}
-                onChange={e => { setCookiePath(e.target.value); setCookieError(null) }}
-                placeholder="Paste path to cookies.txt, or click Browse"
-              />
+              <input className={`dlt-cookie-input${cookieError ? ' is-invalid' : ''}`} value={cookiePath} onChange={e => { setCookiePath(e.target.value); setCookieError(null) }} placeholder="Paste path to cookies.txt, or click Browse" />
               <button className="dlt-mini-btn" onClick={handleBrowseCookies} title="Browse for cookies.txt">📂 Browse</button>
-              <button
-                className="dlt-mini-btn"
-                onClick={handleImportFile}
-                disabled={!cookiePath.trim() || cookieAction === 'loading'}
-                style={{ color: cookiePath.trim() ? 'var(--accent)' : undefined, borderColor: cookiePath.trim() ? 'rgba(var(--accent-rgb),.4)' : undefined }}
-              >
+              <button className="dlt-mini-btn" onClick={handleImportFile} disabled={!cookiePath.trim() || cookieAction === 'loading'} style={{ color: cookiePath.trim() ? 'var(--accent)' : undefined, borderColor: cookiePath.trim() ? 'rgba(var(--accent-rgb),.4)' : undefined }}>
                 {cookieAction === 'loading' ? '⟳ Importing…' : 'Import'}
               </button>
             </div>
@@ -377,52 +371,91 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
           </div>
         )}
 
-        {/* Composer */}
+        {/* Add bar */}
         <div className="dlt-composer" style={{ marginTop: 12 }}>
           <div className="dlt-url-row">
             <input
-              ref={inputRef}
               className="dlt-url-input"
               value={url}
               onChange={(e) => { setUrl(e.target.value); setError(null) }}
+              onFocus={handleFocus}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder="Paste YouTube, TikTok, Instagram, Facebook URL…"
+              placeholder="Paste one or more links (YouTube, TikTok, Instagram, Facebook…)"
             />
             {!url && <button className="dlt-icon-btn" onClick={handlePaste} title="Paste from clipboard">📋</button>}
             {url && <button className="dlt-icon-btn" onClick={() => { setUrl(''); setError(null) }} title="Clear">×</button>}
-            <button className="dlt-add-btn" onClick={handleAdd} disabled={adding || !inputValid}>
-              {adding ? <span className="dlt-spin">⟳</span> : '↓'} {adding ? 'Adding…' : 'Add'}
-            </button>
-          </div>
-
-          <div className="dlt-options">
-            <div className="dlt-opt">
-              <span className="dlt-opt-label">Quality</span>
-              <div className="dlt-quality">
-                {QUALITY_OPTS.map(q => (
-                  <button key={q.value} className={quality === q.value ? 'is-sel' : ''} onClick={() => setQuality(q.value)}>{q.label}</button>
-                ))}
-              </div>
-            </div>
-            <div className="dlt-opt dlt-folder-opt">
-              <span className="dlt-opt-label">Save to</span>
-              <div className={`dlt-folder${folderInvalid ? ' is-invalid' : ''}`} onClick={pickDir} title={outputDir || 'Choose a folder'}>
-                <span style={{ flexShrink: 0 }}>📁</span>
-                <span className={`dlt-folder-path${outputDir ? '' : ' is-empty'}`}>
-                  {outputDir ? '‪' + outputDir + '‬' : 'Click to choose a folder…'}
-                </span>
-                <span className="dlt-folder-change">{outputDir ? 'Change' : 'Choose'}</span>
-              </div>
-            </div>
+            <button className="dlt-add-btn" onClick={handleAdd} disabled={!inputValid}>+ Add to list</button>
           </div>
         </div>
 
         {error && <div className="dlt-error">⚠ {error}</div>}
       </div>
 
+      {/* Body: staging list + active downloads */}
       <div className="dlt-queue">
-        {jobs.length === 0 ? <EmptyQueue /> : jobs.map((job) => <DownloadCard key={job.id} job={job} onCancel={cancelJob} />)}
+        {staged.length === 0 && jobs.length === 0 && <EmptyStage />}
+
+        {staged.length > 0 && (
+          <>
+            <div className="dlt-section-label">
+              To download <span className="count">{staged.length}</span>
+              <span className="spacer" />
+              <button className="dlt-link-clear" onClick={clearStaged}>Clear list</button>
+            </div>
+            {staged.map(it => {
+              const pColor = platformColor(it.platform)
+              const pLabel = platformLabel(it.platform)
+              const opts = qualityOpts(it.heights)
+              return (
+                <div key={it.key} className={`dlt-stage-item${it.state === 'error' ? ' is-error' : ''}`}>
+                  <div className="dlt-badge" style={{ width: 30, height: 30, fontSize: 10, background: `${pColor}18`, border: `1px solid ${pColor}33`, color: pColor }} title={PLATFORM_FULL[it.platform] || it.platform}>{pLabel}</div>
+                  <div className="dlt-stage-info">
+                    <div className="dlt-stage-title">
+                      {it.state === 'loading' && !it.title ? <span className="skel" /> : (it.title || it.url)}
+                    </div>
+                    <div className="dlt-stage-sub">
+                      {it.durationSec ? <span className="dur">{fmtDuration(it.durationSec)}</span> : null}
+                      {it.state === 'error' && <span style={{ color: 'var(--fail)' }}>⚠ couldn't read info — will still try</span>}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.url}</span>
+                    </div>
+                  </div>
+                  <select className="dlt-qsel" value={it.quality} onChange={e => setQuality(it.key, e.target.value)} title="Quality for this video">
+                    {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  <button className="dlt-stage-remove" onClick={() => removeItem(it.key)} title="Remove">×</button>
+                </div>
+              )
+            })}
+          </>
+        )}
+
+        {jobs.length > 0 && (
+          <>
+            <div className="dlt-section-label" style={{ marginTop: staged.length > 0 ? 10 : 0 }}>
+              Downloads <span className="count">{jobs.length}</span>
+            </div>
+            {jobs.map(job => <DownloadCard key={job.id} job={job} onCancel={cancelJob} />)}
+          </>
+        )}
       </div>
+
+      {/* Action bar — folder picker (validated) + Download */}
+      {staged.length > 0 && (
+        <div className="dlt-actionbar">
+          <div className="dlt-folder-opt">
+            <span className="dlt-opt-label">Save to</span>
+            <div className={`dlt-folder${folderInvalid ? ' is-invalid' : ''}`} onClick={pickDir} title={outputDir || 'Choose a folder'}>
+              <span style={{ flexShrink: 0 }}>📁</span>
+              <span className={`dlt-folder-path${outputDir ? '' : ' is-empty'}`}>{outputDir ? '‪' + outputDir + '‬' : 'Click to choose a folder…'}</span>
+              <span className="dlt-folder-change">{outputDir ? 'Change' : 'Choose'}</span>
+            </div>
+          </div>
+          <button className="dlt-dl-btn" onClick={handleDownloadAll} disabled={downloading}>
+            {downloading ? <span className="dlt-spin">⟳</span> : '↓'}
+            {downloading ? 'Starting…' : `Download ${staged.length} video${staged.length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

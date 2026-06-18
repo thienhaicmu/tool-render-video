@@ -406,6 +406,133 @@
 }
 .dlt-chip .dot { width: 6px; height: 6px; border-radius: 50%; }
 
+/* ── Staging list (queue before download) ───────────────────────────────── */
+.dlt-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dlt-section-label .count {
+  font-size: 9px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--border-subtle);
+  color: var(--text-2);
+}
+.dlt-section-label .spacer { flex: 1; }
+.dlt-link-clear {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+.dlt-link-clear:hover { color: var(--fail); }
+
+.dlt-stage-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+.dlt-stage-item.is-error { border-color: rgba(var(--fail-rgb), 0.3); }
+.dlt-stage-info { flex: 1; min-width: 0; }
+.dlt-stage-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.dlt-stage-title .skel {
+  display: inline-block;
+  width: 160px;
+  height: 11px;
+  border-radius: 4px;
+  background: var(--surface-card-hover);
+  animation: dlt-pulse 1.2s ease-in-out infinite;
+}
+.dlt-stage-sub { font-size: 10.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+.dlt-stage-sub .dur { color: var(--text-2); font-family: var(--font-family-mono); }
+.dlt-qsel {
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-panel);
+  color: var(--text-1);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+.dlt-qsel:hover { border-color: var(--border-strong); }
+.dlt-stage-remove {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.dlt-stage-remove:hover { border-color: rgba(var(--fail-rgb), 0.4); color: var(--fail); background: rgba(var(--fail-rgb), 0.06); }
+
+/* ── Action bar (folder + download) ─────────────────────────────────────── */
+.dlt-actionbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-panel);
+}
+.dlt-actionbar .dlt-folder-opt { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.dlt-dl-btn {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 22px;
+  border: none;
+  border-radius: 10px;
+  background: var(--brand-gradient-button);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 4px 16px rgba(139, 92, 246, 0.32);
+  transition: filter 0.15s, opacity 0.15s;
+}
+.dlt-dl-btn:hover:not(:disabled) { filter: brightness(1.08); }
+.dlt-dl-btn:disabled { background: var(--surface-card-hover); color: var(--text-disabled); cursor: not-allowed; box-shadow: none; }
+
 @keyframes dlt-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 @keyframes dlt-spin { to { transform: rotate(360deg); } }
 .dlt-spin { display: inline-block; animation: dlt-spin 0.8s linear infinite; }
