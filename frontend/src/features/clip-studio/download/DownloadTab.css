@@ -134,7 +134,7 @@
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset;
 }
 .dlt-add-btn:hover:not(:disabled) { filter: brightness(1.08); }
-.dlt-add-btn:disabled { background: var(--surface-card-hover); color: var(--text-disabled); cursor: not-allowed; box-shadow: none; }
+.dlt-add-btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 
 .dlt-options {
   display: flex;
@@ -390,6 +390,35 @@
 }
 .dlt-empty-title { font-family: var(--font-family-display); font-size: 20px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.025em; line-height: 1.2; text-align: center; }
 .dlt-empty-sub { font-size: 13px; color: var(--text-tertiary); line-height: 1.55; text-align: center; max-width: 360px; }
+/* 3-step "how it works" guide in the empty state */
+.dlt-steps { display: flex; align-items: stretch; gap: 10px; max-width: 560px; }
+.dlt-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 14px 16px;
+  border-radius: 12px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.dlt-step .num {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--brand-gradient-soft);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 28%, transparent);
+  color: var(--accent-primary);
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dlt-step .st-title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+.dlt-step .st-sub { font-size: 11px; color: var(--text-tertiary); line-height: 1.45; }
+
 .dlt-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 380px; }
 .dlt-chip {
   display: inline-flex;
@@ -441,14 +470,45 @@
 .dlt-stage-item {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--surface-card);
   border: 1px solid var(--border-default);
   flex-shrink: 0;
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
+.dlt-stage-item:hover { border-color: var(--border-strong); }
 .dlt-stage-item.is-error { border-color: rgba(var(--fail-rgb), 0.3); }
+
+/* Thumbnail (16:9) with a platform-badge fallback while loading. */
+.dlt-thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 72px;
+  height: 44px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-card-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dlt-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.dlt-thumb .dlt-badge { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; }
+.dlt-thumb .dur-tag {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.02em;
+}
 .dlt-stage-info { flex: 1; min-width: 0; }
 .dlt-stage-title {
   font-size: 12.5px;

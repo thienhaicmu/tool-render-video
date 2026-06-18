@@ -74,6 +74,7 @@ interface StagedItem {
   platform: string
   title?: string
   durationSec?: number
+  thumbnail?: string
   heights: number[]
   quality: string
   state: 'loading' | 'ok' | 'error'
@@ -151,6 +152,11 @@ function EmptyStage() {
     { n: 'Bilibili', c: '#00a1d6' }, { n: 'Vimeo', c: '#1ab7ea' },
     { n: 'Twitch', c: '#9146ff' }, { n: 'Reddit', c: '#ff4500' },
   ]
+  const steps = [
+    { t: 'Add links', s: 'Paste one or many URLs into the bar above and click Add.' },
+    { t: 'Pick quality', s: 'Choose a resolution per video — or leave it on Best.' },
+    { t: 'Download', s: 'Set a folder, then download the whole list at once.' },
+  ]
   return (
     <div className="dlt-empty">
       <div className="dlt-empty-icon" aria-hidden="true">
@@ -160,7 +166,16 @@ function EmptyStage() {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
         <div className="dlt-empty-title">Build your download list</div>
-        <div className="dlt-empty-sub">Paste one or more links (YouTube, TikTok, Instagram, Facebook…), pick a quality for each, choose a folder, then hit Download.</div>
+        <div className="dlt-empty-sub">Grab videos from YouTube, TikTok, Instagram, Facebook and 10+ more — one at a time or in bulk.</div>
+      </div>
+      <div className="dlt-steps">
+        {steps.map((s, i) => (
+          <div key={s.t} className="dlt-step">
+            <span className="num">{i + 1}</span>
+            <span className="st-title">{s.t}</span>
+            <span className="st-sub">{s.s}</span>
+          </div>
+        ))}
       </div>
       <div className="dlt-chips">
         {chips.map(p => <span key={p.n} className="dlt-chip"><span className="dot" style={{ background: p.c }} />{p.n}</span>)}
@@ -214,7 +229,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
       const info = await getVideoInfo(link)
       const heights = (info.formats || []).map(f => f.height).filter(h => h > 0)
       setStaged(prev => prev.map(it => it.key === key
-        ? { ...it, title: info.title || it.title, durationSec: info.duration, heights, platform: info.platform || it.platform, state: 'ok' }
+        ? { ...it, title: info.title || it.title, durationSec: info.duration, thumbnail: info.thumbnail || it.thumbnail, heights, platform: info.platform || it.platform, state: 'ok' }
         : it))
     } catch {
       setStaged(prev => prev.map(it => it.key === key ? { ...it, state: 'error' } : it))
@@ -406,15 +421,19 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
               const pColor = platformColor(it.platform)
               const pLabel = platformLabel(it.platform)
               const opts = qualityOpts(it.heights)
+              const durTag = fmtDuration(it.durationSec)
               return (
                 <div key={it.key} className={`dlt-stage-item${it.state === 'error' ? ' is-error' : ''}`}>
-                  <div className="dlt-badge" style={{ width: 30, height: 30, fontSize: 10, background: `${pColor}18`, border: `1px solid ${pColor}33`, color: pColor }} title={PLATFORM_FULL[it.platform] || it.platform}>{pLabel}</div>
+                  <div className="dlt-thumb" title={PLATFORM_FULL[it.platform] || it.platform}>
+                    <div className="dlt-badge" style={{ background: `${pColor}22`, color: pColor }}>{pLabel}</div>
+                    {it.thumbnail && <img src={it.thumbnail} alt="" loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />}
+                    {durTag && <span className="dur-tag">{durTag}</span>}
+                  </div>
                   <div className="dlt-stage-info">
                     <div className="dlt-stage-title">
                       {it.state === 'loading' && !it.title ? <span className="skel" /> : (it.title || it.url)}
                     </div>
                     <div className="dlt-stage-sub">
-                      {it.durationSec ? <span className="dur">{fmtDuration(it.durationSec)}</span> : null}
                       {it.state === 'error' && <span style={{ color: 'var(--fail)' }}>⚠ couldn't read info — will still try</span>}
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.url}</span>
                     </div>

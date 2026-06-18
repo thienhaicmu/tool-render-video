@@ -114,13 +114,15 @@ function JobRow({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        padding: '0 20px',
-        minHeight: 64,
-        background: hov ? 'var(--surface-card-hover)' : isRunning ? 'rgba(var(--accent-rgb),.04)' : 'transparent',
-        borderBottom: '1px solid var(--border-subtle)',
+        gap: 12,
+        padding: '11px 14px',
+        minHeight: 58,
+        margin: '0 16px 8px',
+        borderRadius: 12,
+        background: hov ? 'var(--surface-card-hover)' : isRunning ? 'rgba(var(--accent-rgb),.05)' : 'var(--surface-card)',
+        border: `1px solid ${isRunning ? 'rgba(var(--accent-rgb),.28)' : 'var(--border-default)'}`,
         cursor: 'pointer',
-        transition: 'background .12s',
+        transition: 'background .12s, border-color .12s',
         position: 'relative' as const,
       }}
     >
@@ -256,12 +258,11 @@ function JobRow({
 function SectionHeader({ label, count }: { label: string; count: number }) {
   return (
     <div style={{
-      padding: '8px 20px 6px',
+      padding: '10px 18px 8px',
       fontSize: 10, fontWeight: 700, color: 'var(--text-3)',
       letterSpacing: '.08em', textTransform: 'uppercase' as const,
-      borderBottom: '1px solid var(--border-subtle)',
       display: 'flex', alignItems: 'center', gap: 8,
-      background: 'var(--surface-base)',
+      background: 'transparent',
     }}>
       {label}
       <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 8, background: 'var(--border-subtle)', color: 'var(--text-2)' }}>
@@ -648,7 +649,7 @@ export function HistoryTab({ lang: _lang, onSwitchToRender }: HistoryTabProps) {
       </div>
 
       {/* List */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div style={{ flex: 1, overflow: 'auto', paddingTop: 6 }}>
         {loading && (
           <div style={{ padding: 40, textAlign: 'center' as const, color: 'var(--text-3)', fontSize: 12 }}>Loading…</div>
         )}
