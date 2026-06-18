@@ -96,7 +96,10 @@ function SubStyleCard({ id, label, selected, onSelect }: {
 
   useEffect(() => {
     let cancelled = false
-    const params = new URLSearchParams({ style: id, aspect_ratio: '9:16', font_size: '0', text: 'AI Clip' })
+    // 16:9 so the subtitle (rendered at the bottom of the frame) stays visible
+    // inside the landscape card. A 9:16 preview gets center-cropped by the
+    // card's object-fit:cover, hiding the text → blank-looking cards.
+    const params = new URLSearchParams({ style: id, aspect_ratio: '16:9', font_size: '0', text: 'AI Clip' })
     const url = `${BASE_URL}/api/render/subtitle-preview?${params}`
     const img = new Image()
     img.onload  = () => { if (!cancelled) setImgSrc(url) }

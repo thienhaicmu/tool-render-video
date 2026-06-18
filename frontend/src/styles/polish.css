@@ -1307,3 +1307,17 @@
 .cs-root .cs-sb-dot.ok {
   animation: none !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHARED TOOL BACKDROP → render steps (2026-06-18)
+   The shell (.cs-content) paints the violet/pink blobs + grid behind every
+   tab. The render tab's .rw-root and the rendering screen painted an opaque
+   --bg-base on top, hiding it. Drop those so the backdrop reaches Configure /
+   Rendering / Results too (Source keeps its own .src-bg). Configure's two
+   panels go slightly translucent so the backdrop tints through without
+   hurting form/preview contrast.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cs-root .rw-root,
+.cs-root .rnd-screen { background: transparent !important; }
+.cs-root .cfg-left,
+.cs-root .cfg-right { background: color-mix(in srgb, var(--surface-panel) 90%, transparent) !important; }
