@@ -1,6 +1,11 @@
 /**
  * ProgressPartItem — compact card for a single active render part.
+ *
+ * Memoized (F3): props are all primitives, so React.memo's shallow compare
+ * is exact. During an active render the parent list re-renders on every WS
+ * progress event; memoization limits re-render to the one part that changed.
  */
+import { memo } from 'react'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { getPartLabel, normalizeProgressPercent } from './progress.utils'
 
@@ -10,7 +15,7 @@ export interface ProgressPartItemProps {
   progress_percent: number
 }
 
-export function ProgressPartItem({ part_no, status, progress_percent }: ProgressPartItemProps) {
+export const ProgressPartItem = memo(function ProgressPartItem({ part_no, status, progress_percent }: ProgressPartItemProps) {
   const pct = normalizeProgressPercent(progress_percent)
   const isError = status === 'failed' || status === 'cancelled'
 
@@ -48,4 +53,4 @@ export function ProgressPartItem({ part_no, status, progress_percent }: Progress
       />
     </div>
   )
-}
+})

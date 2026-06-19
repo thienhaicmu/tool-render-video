@@ -25,6 +25,15 @@ export default defineConfig({
   build: {
     outDir: '../backend/static-v2',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Split the rarely-changing runtime into a long-cacheable vendor
+        // chunk so app-code updates don't re-download React (F1).
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'zustand'],
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',
