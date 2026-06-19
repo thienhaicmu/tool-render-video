@@ -22,22 +22,24 @@ import {
 // ── SUBTITLE_STYLES ───────────────────────────────────────────────────────────
 
 describe('SUBTITLE_STYLES', () => {
-  it('has exactly 10 canonical presets', () => {
-    expect(SUBTITLE_STYLES).toHaveLength(10)
+  it('has exactly 5 CapCut/Opus presets', () => {
+    expect(SUBTITLE_STYLES).toHaveLength(5)
   })
 
-  it('contains all 10 documented values from §6.3', () => {
+  it('contains the 5 CapCut presets (ass_capcut engine)', () => {
     const values = SUBTITLE_STYLES.map((s) => s.value)
-    expect(values).toContain('tiktok_bounce_v1')
-    expect(values).toContain('bold_cap')
-    expect(values).toContain('story_clean_01')
-    expect(values).toContain('viral_bold')
-    expect(values).toContain('clean_pro')
-    expect(values).toContain('boxed_caption')
-    expect(values).toContain('viral')
-    expect(values).toContain('clean')
-    expect(values).toContain('story')
-    expect(values).toContain('gaming')
+    expect(values).toContain('opus_pop')
+    expect(values).toContain('capcut_box')
+    expect(values).toContain('punch_green')
+    expect(values).toContain('karaoke_clean')
+    expect(values).toContain('smooth_premiere')
+  })
+
+  it('does NOT include retired legacy styles', () => {
+    const values = SUBTITLE_STYLES.map((s) => s.value)
+    expect(values).not.toContain('tiktok_bounce_v1')
+    expect(values).not.toContain('viral_bold')
+    expect(values).not.toContain('gaming')
   })
 
   it('does NOT include legacy alias pro_karaoke', () => {
