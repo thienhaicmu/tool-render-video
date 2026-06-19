@@ -679,6 +679,7 @@ def run_render_pipeline(
         # The Sprint 2.2 builder shim was removed in Sprint 4.H.
         # Outer try/except is the Sacred Contract #3 belt-and-braces.
         _render_plan = None
+        _ai_fallback_reasons: list[str] = []
         try:
             # Resume path: when retrying/resuming a job that already ran the LLM,
             # load the persisted RenderPlan from DB and skip the LLM call entirely.
@@ -841,6 +842,7 @@ def run_render_pipeline(
                         # to the legacy payload-derived logic. Event
                         # name kept for backward compat with operator
                         # tooling that grepped for it during 4.D-4.G.
+                        _ai_fallback_reasons.append(f"{_ai_provider}=returned_none")
                         _emit_render_event(
                             channel_code=effective_channel,
                             job_id=job_id,
@@ -853,6 +855,7 @@ def run_render_pipeline(
                 except Exception as _ai_exc:
                     logger.warning("render_plan AI emission failed (non-fatal): %s", _ai_exc)
                     _render_plan = None
+                    _ai_fallback_reasons.append(f"{_ai_provider}={type(_ai_exc).__name__}")
                     _emit_render_event(
                         channel_code=effective_channel,
                         job_id=job_id,
@@ -1350,9 +1353,15 @@ def run_render_pipeline(
             # total AI failure from the user. Raising here routes the
             # job through the outer except → status="failed", stage=
             # FAILED, FE shows failure state.
+            _reason_hint = (
+                ", ".join(_ai_fallback_reasons) if _ai_fallback_reasons
+                else "no_ai_response"
+            )
             raise RuntimeError(
                 f"ai_emission_empty: 0 outputs produced and 0 parts attempted "
-                f"(total_parts={total_parts}). The AI returned no usable clips."
+                f"(total_parts={total_parts}). AI provider chain: {_reason_hint}. "
+                f"Verify API keys in server .env (OpenAI sk-, Claude sk-ant-, "
+                f"Gemini AIza/AQ.) or test via Configure → AI panel → Test connection."
             )
         if failed_parts and not outputs:
             raise RuntimeError(f"All parts failed ({len(failed_parts)}/{total_parts})")
