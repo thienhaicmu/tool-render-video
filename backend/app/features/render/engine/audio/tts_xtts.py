@@ -43,6 +43,7 @@ _XTTS_LANGUAGE_MAP: dict[str, str] = {
     "en-US": "en",
     "en-GB": "en",
     "ja-JP": "ja",
+    "ko-KR": "ko",
 }
 
 # Voice personas: content_type × gender → XTTS v2 built-in speaker.

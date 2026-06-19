@@ -39,20 +39,15 @@ export const ASPECT_RATIOS = [
 
 export type AspectRatioValue = typeof ASPECT_RATIOS[number]['value']
 
-// ── Subtitle styles (§6.3) — 10 canonical presets ────────────────────────────
-// DO NOT include legacy aliases (pro_karaoke, viral_clean_montserrat, etc.)
+// ── Subtitle styles (§6.3) — 5 CapCut/Opus presets (ass_capcut engine) ───────
+// Legacy IDs are still accepted by the backend (aliased) but not offered here.
 
 export const SUBTITLE_STYLES = [
-  { value: 'tiktok_bounce_v1', label: 'TikTok Bounce',   description: 'Classic bounce, Bungee font, outline shadow' },
-  { value: 'bold_cap',         label: 'Bold Cap',         description: 'Bold, large Bungee, auto-scale' },
-  { value: 'story_clean_01',   label: 'Story Clean',      description: 'Montserrat, soft bounce, editorial' },
-  { value: 'viral_bold',       label: 'Viral Bold',       description: 'Bold Bungee, boosted size, karaoke highlight' },
-  { value: 'clean_pro',        label: 'Clean Pro',        description: 'Inter font, clean professional look' },
-  { value: 'boxed_caption',    label: 'Boxed Caption',    description: 'Opaque box behind text, no bounce' },
-  { value: 'viral',            label: 'Viral',            description: 'Anton font, 50px, thick outline, TikTok native' },
-  { value: 'clean',            label: 'Clean',            description: 'Inter, minimal outline, wide margins' },
-  { value: 'story',            label: 'Story',            description: 'Montserrat, cinematic, emotional content' },
-  { value: 'gaming',           label: 'Gaming',           description: 'Anton, box-backed, fast-motion readability' },
+  { value: 'opus_pop',        label: 'Pop',     description: 'Anton, active word yellow + scale-pop, keyword accent' },
+  { value: 'capcut_box',      label: 'Box',     description: 'One word at a time on a yellow box, black text' },
+  { value: 'punch_green',     label: 'Punch',   description: 'Anton, active word green + pop — high energy' },
+  { value: 'karaoke_clean',   label: 'Karaoke', description: 'Montserrat read-along, active bright, others dimmed' },
+  { value: 'smooth_premiere', label: 'Smooth',  description: 'Inter, words fade in word-by-word — cinematic' },
 ] as const
 
 export type SubtitleStyleValue = typeof SUBTITLE_STYLES[number]['value']

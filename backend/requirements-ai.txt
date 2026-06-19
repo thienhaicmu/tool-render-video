@@ -15,6 +15,11 @@ whisperx
 nvidia-cublas-cu12
 nvidia-cudnn-cu12
 nvidia-cuda-nvrtc-cu12
+# Piper — offline neural TTS (CPU, no network). Preferred narration engine
+# for offline-first use; Edge-TTS falls back to it when offline / 403.
+# Download a voice model after install, e.g.:
+#   python -m piper.download_voices vi_VN-vais1000-medium --data-dir backend/models/piper
+piper-tts
 # Cloud LLM providers for segment selection.
 # Each is optional; install the one matching your configured ai_provider.
 openai>=1.0.0              # ai_provider=openai

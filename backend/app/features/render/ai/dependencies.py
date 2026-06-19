@@ -43,6 +43,11 @@ def has_xtts() -> bool:
     return importlib.util.find_spec("TTS") is not None
 
 
+def has_piper() -> bool:
+    """Check if the Piper offline-TTS package is available."""
+    return importlib.util.find_spec("piper") is not None
+
+
 def motion_crop_quality() -> str:
     """Report the effective motion-crop quality tier.
 
@@ -76,6 +81,7 @@ def get_ai_dependency_status() -> dict:
         "whisperx": has_whisperx(),
         "deepfilternet": has_deepfilternet(),
         "xtts": has_xtts(),
+        "piper": has_piper(),
         # Audit FINDING-T01 closure — surfaces the silent-degrade signal.
         "motion_crop_quality": motion_crop_quality(),
     }

@@ -86,6 +86,12 @@ from app.features.render.engine.stages.part_render_context import PartRenderCont
 from app.db.jobs_repo import upsert_job_part
 from app.features.render.engine.stages.manifest_writer import write_manifest
 from app.features.render.engine.subtitle.generator.ass import srt_to_ass_bounce, srt_to_ass_karaoke
+from app.features.render.engine.subtitle.generator.ass_capcut import srt_to_ass_capcut, resolve_capcut_style
+
+# CapCut/Opus-grade word-by-word subtitles. Default ON; set SUBTITLE_CAPCUT=0
+# to revert to the legacy bounce/karaoke writers. Requires word-level SRT
+# (highlight_per_word=True) — otherwise the legacy path is kept.
+_SUBTITLE_CAPCUT: bool = os.getenv("SUBTITLE_CAPCUT", "1") == "1"
 from app.features.render.engine.subtitle.generator.srt import parse_srt_blocks, slice_srt_by_time, write_srt_blocks
 from app.features.render.engine.subtitle.processing.readability import (
     resegment_srt_for_readability,
@@ -800,6 +806,10 @@ def prepare_part_assets(
                 _ass_writer = "karaoke"
             elif _subtitle_mode == "sentence":
                 _ass_writer = "bounce"
+            # CapCut writer wins when enabled AND word-level SRT is available
+            # (its per-word highlight is meaningless on segment-level SRT).
+            if _SUBTITLE_CAPCUT and bool(getattr(ctx.payload, "highlight_per_word", False)):
+                _ass_writer = "capcut"
             _ass_cache_k = _ass_cache_key(
                 srt_path=_ass_srt_source,
                 writer=_ass_writer,
@@ -834,7 +844,17 @@ def prepare_part_assets(
                     )
 
             if not _ass_cache_hit:
-                if _effective_subtitle_style == "pro_karaoke":
+                if _ass_writer == "capcut":
+                    srt_to_ass_capcut(
+                        str(_ass_srt_source),
+                        str(ass_part),
+                        style=resolve_capcut_style(_effective_subtitle_style),
+                        play_res_x=1080,
+                        play_res_y=_play_res_y,
+                        margin_v=_margin_v,
+                        font_size=_effective_sub_font_size or 0,
+                    )
+                elif _effective_subtitle_style == "pro_karaoke":
                     from app.features.render.engine.subtitle.generator.ass import _hex_to_ass
                     srt_to_ass_karaoke(
                         str(_ass_srt_source), str(ass_part),

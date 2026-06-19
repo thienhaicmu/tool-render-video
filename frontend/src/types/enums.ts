@@ -15,32 +15,22 @@ export type AspectRatio = '9:16' | '3:4' | '1:1' | '16:9' | '4:3'
 
 export const ASPECT_RATIO_VALUES = ['9:16', '3:4', '1:1', '16:9', '4:3'] as const
 
-// ── Subtitle style (§6.3) — 10 canonical presets only ────────────────────────
-// DO NOT add legacy aliases: pro_karaoke, viral_clean_montserrat, etc.
+// ── Subtitle style (§6.3) — 5 CapCut/Opus presets (ass_capcut engine) ────────
+// Legacy IDs are still accepted by the backend (aliased) but not offered here.
 
 export type SubtitleStyle =
-  | 'tiktok_bounce_v1'
-  | 'bold_cap'
-  | 'story_clean_01'
-  | 'viral_bold'
-  | 'clean_pro'
-  | 'boxed_caption'
-  | 'viral'
-  | 'clean'
-  | 'story'
-  | 'gaming'
+  | 'opus_pop'
+  | 'capcut_box'
+  | 'punch_green'
+  | 'karaoke_clean'
+  | 'smooth_premiere'
 
 export const SUBTITLE_STYLE_VALUES = [
-  'tiktok_bounce_v1',
-  'bold_cap',
-  'story_clean_01',
-  'viral_bold',
-  'clean_pro',
-  'boxed_caption',
-  'viral',
-  'clean',
-  'story',
-  'gaming',
+  'opus_pop',
+  'capcut_box',
+  'punch_green',
+  'karaoke_clean',
+  'smooth_premiere',
 ] as const
 
 // ── Effect preset (§6.4) — 6 presets ─────────────────────────────────────────

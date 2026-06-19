@@ -5,8 +5,6 @@ import os
 import re
 from pathlib import Path
 
-import edge_tts
-
 logger = logging.getLogger(__name__)
 
 from app.core.config import TEMP_DIR
@@ -227,6 +225,17 @@ def generate_narration_mp3(
     if not clean_text:
         raise RuntimeError("Narration text is empty")
 
+    # Lazy import: edge-tts is an optional dependency. Importing it here
+    # (not at module top) keeps the render pipeline importable when the
+    # package is absent, and surfaces a clear error only on actual use.
+    try:
+        import edge_tts
+    except ImportError as _imp_exc:
+        raise RuntimeError(
+            "edge-tts is not installed; cannot synthesize narration "
+            "(pip install edge-tts, or switch tts_engine to an offline option)"
+        ) from _imp_exc
+
     _ct_profile = _CONTENT_TYPE_VOICE_PROFILES.get(content_type) or _CONTENT_TYPE_VOICE_PROFILES["vlog"]
     _humanized = ssml_humanize_for_edge(
         clean_text,
@@ -276,56 +285,114 @@ def generate_narration_audio(
     content_type: str = "vlog",
     tts_engine: str = "edge",
 ) -> str:
-    """Route narration synthesis to Edge-TTS (default) or XTTS v2 (premium).
+    """Route narration synthesis to the requested TTS engine.
 
-    tts_engine="edge" → generate_narration_mp3() — zero behavior change.
-    tts_engine="xtts" → XTTS v2 with automatic edge fallback on any failure.
+    Engines:
+      "edge" (default) — Edge-TTS (online). On failure (no network / 403)
+                         it falls back to an offline engine automatically:
+                         Piper (CPU — vi/en) first, then XTTS (GPU — adds
+                         ja/ko). Voice keeps working on offline/firewalled
+                         machines with no config change; zero behaviour
+                         change when Edge succeeds.
+      "piper"          — Piper offline neural TTS (CPU, no network).
+                         Falls back to Edge on any failure.
+      "xtts"           — Coqui XTTS v2 (GPU, multilingual incl. ja/ko).
+                         Falls back to Edge.
     """
-    if tts_engine != "xtts":
+    engine = (tts_engine or "edge").strip().lower()
+
+    def _edge() -> str:
         return generate_narration_mp3(
             text=text, language=language, gender=gender, rate=rate,
             job_id=job_id, voice_id=voice_id, output_path=output_path,
             content_type=content_type,
         )
 
-    # XTTS path: availability check before import
-    from app.features.render.ai.dependencies import has_xtts as _has_xtts
-    if not _has_xtts():
-        logger.warning("xtts_unavailable_fallback job_id=%s — TTS package absent, using edge", job_id)
-        return generate_narration_mp3(
-            text=text, language=language, gender=gender, rate=rate,
-            job_id=job_id, voice_id=voice_id, output_path=output_path,
-            content_type=content_type,
+    def _piper() -> str:
+        # Piper takes plain text — use the same humanizer as XTTS (no SSML,
+        # which Piper would read literally).
+        from app.features.render.engine.audio.tts_piper import synthesize_piper
+        _ct = _CONTENT_TYPE_VOICE_PROFILES.get(content_type) or _CONTENT_TYPE_VOICE_PROFILES["vlog"]
+        _h = humanize_narration_text(str(text or "").strip(), pause_style=_ct["pause_style"])
+        return synthesize_piper(
+            text=_h, language=language, gender=gender,
+            job_id=job_id, content_type=content_type, output_path=output_path,
         )
 
-    # Humanize text through the same pipeline as edge (rate is not applied in XTTS — natural prosody)
-    clean_text = str(text or "").strip()
-    if not clean_text:
-        raise RuntimeError("Narration text is empty")
-    _ct_profile = _CONTENT_TYPE_VOICE_PROFILES.get(content_type) or _CONTENT_TYPE_VOICE_PROFILES["vlog"]
-    _humanized = humanize_narration_text(clean_text, pause_style=_ct_profile["pause_style"])
-    logger.info(
-        "xtts_route job_id=%s content_type=%s pause_style=%s language=%s",
-        job_id, content_type, _ct_profile["pause_style"], language,
-    )
-
-    try:
+    def _xtts() -> str:
+        # XTTS v2 (GPU) — multilingual; the offline path for Japanese/Korean,
+        # which Piper's catalog has no voices for.
+        clean = str(text or "").strip()
+        if not clean:
+            raise RuntimeError("Narration text is empty")
         from app.features.render.engine.audio.tts_xtts import synthesize_xtts
+        _ct = _CONTENT_TYPE_VOICE_PROFILES.get(content_type) or _CONTENT_TYPE_VOICE_PROFILES["vlog"]
+        _h = humanize_narration_text(clean, pause_style=_ct["pause_style"])
+        logger.info(
+            "xtts_route job_id=%s content_type=%s pause_style=%s language=%s",
+            job_id, content_type, _ct["pause_style"], language,
+        )
         return synthesize_xtts(
-            text=_humanized,
-            language=language,
-            gender=gender,
-            job_id=job_id,
-            content_type=content_type,
-            output_path=output_path,
+            text=_h, language=language, gender=gender,
+            job_id=job_id, content_type=content_type, output_path=output_path,
         )
-    except Exception as xtts_exc:
-        logger.warning(
-            "xtts_synthesis_failed_fallback job_id=%s: %s — falling back to edge",
-            job_id, xtts_exc,
-        )
-        return generate_narration_mp3(
-            text=text, language=language, gender=gender, rate=rate,
-            job_id=job_id, voice_id=voice_id, output_path=output_path,
-            content_type=content_type,
-        )
+
+    # ── Piper requested ──────────────────────────────────────────────────
+    if engine == "piper":
+        from app.features.render.ai.dependencies import has_piper
+        if has_piper():
+            try:
+                return _piper()
+            except Exception as piper_exc:
+                logger.warning(
+                    "piper_synthesis_failed_fallback job_id=%s: %s — falling back to edge",
+                    job_id, piper_exc,
+                )
+        else:
+            logger.warning("piper_unavailable_fallback job_id=%s — package absent, using edge", job_id)
+        return _edge()
+
+    # ── XTTS requested ───────────────────────────────────────────────────
+    if engine == "xtts":
+        from app.features.render.ai.dependencies import has_xtts as _has_xtts
+        if not _has_xtts():
+            logger.warning("xtts_unavailable_fallback job_id=%s — TTS package absent, using edge", job_id)
+            return _edge()
+        try:
+            return _xtts()
+        except Exception as xtts_exc:
+            logger.warning(
+                "xtts_synthesis_failed_fallback job_id=%s: %s — falling back to edge",
+                job_id, xtts_exc,
+            )
+            return _edge()
+
+    # ── Default: Edge-TTS, with automatic offline fallback ───────────────
+    # Edge needs network. On failure, synthesize offline instead of losing
+    # narration: Piper (CPU — vi/en) first, then XTTS (GPU — adds ja/ko).
+    try:
+        return _edge()
+    except Exception as edge_exc:
+        from app.features.render.ai.dependencies import has_piper, has_xtts
+        # Tier 1 — Piper (CPU offline: Vietnamese, English).
+        try:
+            from app.features.render.engine.audio.tts_piper import piper_model_available
+            if has_piper() and piper_model_available(language, gender):
+                logger.warning(
+                    "edge_failed_piper_fallback job_id=%s: %s — using offline Piper",
+                    job_id, edge_exc,
+                )
+                return _piper()
+        except Exception as piper_exc:
+            logger.warning("piper_fallback_failed job_id=%s: %s", job_id, piper_exc)
+        # Tier 2 — XTTS (GPU offline: Japanese, Korean, and the rest).
+        try:
+            if has_xtts():
+                logger.warning(
+                    "edge_failed_xtts_fallback job_id=%s: %s — using offline XTTS",
+                    job_id, edge_exc,
+                )
+                return _xtts()
+        except Exception as xtts_exc:
+            logger.warning("xtts_fallback_failed job_id=%s: %s", job_id, xtts_exc)
+        raise

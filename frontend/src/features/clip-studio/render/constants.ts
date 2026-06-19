@@ -25,9 +25,11 @@ export const RATIO_INFO: Record<Ratio, { label: string; sub: string; api: string
 }
 
 export const SUB_STYLE_GROUPS = [
-  { label: 'Minimal', set: 'clean_pro',        ids: ['clean_pro', 'story_clean_01'] },
-  { label: 'Karaoke', set: 'tiktok_bounce_v1', ids: ['tiktok_bounce_v1', 'viral_bold'] },
-  { label: 'Emphasis', set: 'bold_cap',         ids: ['bold_cap', 'boxed_caption', 'gaming'] },
+  { label: 'Pop',     set: 'opus_pop',        ids: ['opus_pop'] },
+  { label: 'Box',     set: 'capcut_box',      ids: ['capcut_box'] },
+  { label: 'Punch',   set: 'punch_green',     ids: ['punch_green'] },
+  { label: 'Karaoke', set: 'karaoke_clean',   ids: ['karaoke_clean'] },
+  { label: 'Smooth',  set: 'smooth_premiere', ids: ['smooth_premiere'] },
 ]
 
 export const QUALITY_MAP = [

@@ -133,11 +133,11 @@ export interface RenderRequest {
   edit_volume?: number
   text_layers?: TextLayerConfig[]
   voice_enabled?: boolean
-  voice_language?: 'vi-VN' | 'ja-JP' | 'en-US' | 'en-GB'
+  voice_language?: 'vi-VN' | 'ja-JP' | 'ko-KR' | 'en-US' | 'en-GB'
   voice_gender?: 'female' | 'male'
   voice_source?: 'manual' | 'subtitle' | 'translated_subtitle'
   voice_text?: string | null
-  tts_engine?: 'edge' | 'xtts'
+  tts_engine?: 'edge' | 'piper' | 'xtts'
   voice_mix_mode?: 'replace_original' | 'keep_original_low'
   hook_apply_enabled?: boolean
   hook_overlay_enabled?: boolean

@@ -515,8 +515,8 @@ class RenderRequest(BaseModel):
             raise ValueError("voice_text is required when voice_enabled=true and voice_source=manual")
         if self.subtitle_target_language not in {"vi", "en", "ja"}:
             raise ValueError("subtitle_target_language must be one of vi, en, ja")
-        if self.voice_language not in {"vi-VN", "ja-JP", "en-US", "en-GB"}:
-            raise ValueError("voice_language must be one of vi-VN, ja-JP, en-US, en-GB")
+        if self.voice_language not in {"vi-VN", "ja-JP", "ko-KR", "en-US", "en-GB"}:
+            raise ValueError("voice_language must be one of vi-VN, ja-JP, ko-KR, en-US, en-GB")
         if self.voice_gender not in {"female", "male"}:
             raise ValueError("voice_gender must be 'female' or 'male'")
         if self.voice_mix_mode not in {"replace_original", "keep_original_low"}:

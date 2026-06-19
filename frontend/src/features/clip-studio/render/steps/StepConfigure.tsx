@@ -21,7 +21,7 @@ function SubtitleDemo({ style }: { style: string }) {
     textAlign: 'center', padding: '0 10px', pointerEvents: 'none', zIndex: 2,
   }
 
-  const textStyle = DEMO_VARIANTS[style] ?? DEMO_VARIANTS['pro_karaoke']
+  const textStyle = DEMO_VARIANTS[style] ?? DEMO_VARIANTS['opus_pop']
   const hlC = DEMO_HIGHLIGHT_COLORS[style] ?? 'var(--cyan)'
 
   return (
@@ -158,7 +158,7 @@ function TranscriptOverlay({ sessionId, subStyle, subEnabled }: { sessionId: str
   const words = text.trim().split(/\s+/)
   const hlIdx = Math.floor(words.length / 2)
 
-  const style = OVERLAY_VARIANTS[subStyle] ?? OVERLAY_VARIANTS['clean_pro']
+  const style = OVERLAY_VARIANTS[subStyle] ?? OVERLAY_VARIANTS['opus_pop']
   const hlC = OVERLAY_HIGHLIGHT_COLORS[subStyle] ?? 'var(--cyan)'
 
   const showSub = subEnabled
@@ -248,7 +248,7 @@ function StepConfigureBase({
   const ratioInfo    = RATIO_INFO[cfg.ratio]
   const previewVideoUrl = prepareResult ? getPreviewVideoUrl(prepareResult.session_id) : null
   const styleLabel   = STYLES.find(s => s.id === cfg.style)?.label ?? cfg.style
-  const activeSubGroup = SUB_STYLE_GROUPS.find(g => g.ids.includes(cfg.subStyle))?.set ?? 'clean_pro'
+  const activeSubGroup = SUB_STYLE_GROUPS.find(g => g.ids.includes(cfg.subStyle))?.set ?? 'opus_pop'
   const qualityLabel   = QUALITY_MAP.find(q => q.v === cfg.renderProfile)?.l ?? '1080p'
 
   void activeSubGroup
@@ -789,18 +789,11 @@ function StepConfigureBase({
               </div>
               <div className="sub-style-grid">
                 {([
-                  { id: 'tiktok_bounce_v1',  label: 'Bounce'  },
-                  { id: 'viral_bold',        label: 'Viral'   },
-                  { id: 'bold_cap',          label: 'Caps'    },
-                  { id: 'neon_glow',         label: 'Neon'    },
-                  { id: 'fire_bold',         label: 'Fire'    },
-                  { id: 'color_pop',         label: 'Pop'     },
-                  { id: 'slay_soft',         label: 'Slay'    },
-                  { id: 'bold_stroke',       label: 'Stroke'  },
-                  { id: 'dark_card',         label: 'Card'    },
-                  { id: 'clean_pro',         label: 'Clean'   },
-                  { id: 'story_clean_01',    label: 'Story'   },
-                  { id: 'gaming',            label: 'Gaming'  },
+                  { id: 'opus_pop',        label: 'Pop'     },
+                  { id: 'capcut_box',      label: 'Box'     },
+                  { id: 'punch_green',     label: 'Punch'   },
+                  { id: 'karaoke_clean',   label: 'Karaoke' },
+                  { id: 'smooth_premiere', label: 'Smooth'  },
                 ] as const).map(({ id, label }) => (
                   <SubStyleCard
                     key={id} id={id} label={label}
@@ -912,6 +905,7 @@ function StepConfigureBase({
                   { v: 'en-US' as const, l: '🇺🇸 EN'    },
                   { v: 'en-GB' as const, l: '🇬🇧 EN-GB' },
                   { v: 'ja-JP' as const, l: '🇯🇵 JA'    },
+                  { v: 'ko-KR' as const, l: '🇰🇷 KO'    },
                 ]).map(({ v, l }) => (
                   <div key={v} className={`seg-b${cfg.voiceLang === v ? ' on' : ''}`}
                     onClick={() => setCfgKey('voiceLang', v)}>{l}</div>

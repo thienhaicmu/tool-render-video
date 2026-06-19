@@ -370,10 +370,6 @@ _PREVIEW_ASPECT_RES: dict[str, tuple[int, int]] = {
     "16:9": (960, 540),
 }
 
-# Bundled fonts directory next to the backend package
-_PREVIEW_FONTS_DIR: Path = Path(__file__).resolve().parents[3] / "fonts"
-
-
 def render_subtitle_preview(
     subtitle_style: str = "tiktok_bounce_v1",
     font_name: str = "Bungee",
@@ -423,8 +419,17 @@ def render_subtitle_preview(
         )
 
         safe_ass = _safe_filter_path(str(ass_path.resolve()))
-        if _PREVIEW_FONTS_DIR.is_dir():
-            safe_fonts = _safe_filter_path(str(_PREVIEW_FONTS_DIR.resolve()))
+        # Resolve the bundled-fonts dir the SAME way the real render does
+        # (encoder_helpers), so the preview shows the identical font to the
+        # final output. Lazy import keeps this module free of an
+        # import-time dependency on the encoder package.
+        from app.features.render.engine.encoder.encoder_helpers import (
+            get_custom_fonts_dir as _get_custom_fonts_dir,
+            detect_windows_fonts_dir as _detect_windows_fonts_dir,
+        )
+        _fonts_dir = _get_custom_fonts_dir() or _detect_windows_fonts_dir()
+        if _fonts_dir and Path(_fonts_dir).is_dir():
+            safe_fonts = _safe_filter_path(str(Path(_fonts_dir).resolve()))
             vf = f"ass='{safe_ass}':fontsdir='{safe_fonts}'"
         else:
             vf = f"ass='{safe_ass}'"
