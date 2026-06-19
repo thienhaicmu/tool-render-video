@@ -31,7 +31,6 @@ from app.features.render.engine.preview.ffmpeg_probers import (
 from app.models.schemas import (
     QuickProcessRequest,
     RenderRequest,
-    RenderRequestStrict,
 )
 from app.models.render_public import RenderRequestPublic
 from app.services.bin_paths import get_ffmpeg_bin

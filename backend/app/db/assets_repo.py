@@ -13,7 +13,7 @@ or renders a file that was already enriched.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from app.db.connection import _utc_now_iso, db_conn
 from app.domain.asset import Asset

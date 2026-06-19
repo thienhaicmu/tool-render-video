@@ -1,8 +1,6 @@
 """
 routes/batch_render.py — Batch Render from Asset Library.
 
-Phase K — Batch Render.
-
 POST /api/render/batch
     Enqueue one render job per asset_id in the request body, optionally
     applying a shared preset. Each job is fully independent — failure
@@ -37,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.db.assets_repo import get_asset
 from app.db.presets_repo import get_preset
 from app.domain.render_preset import PRESET_ALLOWED_PARAMS
-from app.features.render.routers._common import _queue_render_job, _validate_output_dir
+from app.features.render.routers._common import _queue_render_job
 from app.models.schemas import RenderRequest
 
 logger = logging.getLogger("app.routes.batch_render")

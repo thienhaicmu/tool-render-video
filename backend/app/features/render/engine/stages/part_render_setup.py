@@ -54,7 +54,6 @@ Logger note (same pattern as 6.D-2.1 / 2.2 / 2.3):
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from dataclasses import dataclass
@@ -63,7 +62,6 @@ from typing import Optional
 from app.features.render.engine.pipeline.camera_strategy import CameraStrategy
 from app.features.render.engine.pipeline.part_plan import PartExecutionPlan
 from app.features.render.engine.pipeline.pipeline_cache import _render_cache_key
-from app.features.render.engine.pipeline.pipeline_segment_selection import _PLATFORM_PROFILES
 from app.features.render.engine.stages.part_render_plan_resolvers import _resolve_pacing_speed_delta
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _render_progress_timer
 from app.features.render.engine.stages.part_render_context import PartRenderContext

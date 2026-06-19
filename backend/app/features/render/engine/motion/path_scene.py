@@ -153,7 +153,6 @@ def build_subject_path_scene(
             Path(video_path).name, scene_index, content_type, detect_interval,
             "available" if tracker_available else "unavailable",
         )
-        required_lock_confirm = _required_lock_confirm_frames(cfg, tracker_available)
         untracked_hold_frames = _untracked_hold_frames(cfg, detect_interval)
         dead_zone_x = crop_w * cfg.dead_zone_ratio
         dead_zone_y = crop_h * cfg.dead_zone_ratio

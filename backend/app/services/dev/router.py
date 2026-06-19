@@ -16,7 +16,6 @@ import fnmatch
 import os
 import subprocess
 import time
-from pathlib import Path
 
 from app.core.config import LOGS_DIR
 

@@ -15,14 +15,12 @@ Returns:
 from __future__ import annotations
 
 import logging
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from app.domain.manifests import BaseClipManifest
 from app.domain.timeline import TimelineMap
-from app.features.render.engine.pipeline.pipeline_segment_selection import _PLATFORM_PROFILES
 from app.features.render.engine.stages.part_render_plan_resolvers import _resolve_pacing_speed_delta
 from app.features.render.engine.pipeline.render_events import _emit_render_event, _job_log
 from app.features.render.engine.stages.part_render_context import PartRenderContext

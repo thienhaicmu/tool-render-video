@@ -1,8 +1,6 @@
 """
 routes/job_clone.py — Job Clone / Re-render API.
 
-Phase M — Job Clone / Re-render.
-
 POST /api/jobs/{job_id}/clone
     Deserialize the stored payload_json of an existing job, merge optional
     override fields, enqueue a new independent render job with a fresh job_id.
@@ -38,7 +36,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.jobs_repo import get_job
-from app.features.render.routers._common import _queue_render_job, _validate_output_dir
+from app.features.render.routers._common import _queue_render_job
 from app.models.schemas import RenderRequest
 
 logger = logging.getLogger("app.routes.job_clone")

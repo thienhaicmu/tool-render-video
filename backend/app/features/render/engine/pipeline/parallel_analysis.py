@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import shutil
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, Future, as_completed
 from dataclasses import dataclass, field

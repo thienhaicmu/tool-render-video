@@ -42,13 +42,13 @@ else:
 TEMP_DIR    = Path(os.getenv("TEMP_DIR",    str(APP_DATA_DIR / "temp")))
 LOGS_DIR    = APP_DATA_DIR / "logs"
 COOKIES_DIR = APP_DATA_DIR / "cookies"
-# Sprint 5.2: single source of truth for the render cache root used by
-# pipeline_cache.py + motion_crop.py + the maintenance prune helper.
+# Nguồn chân lý duy nhất cho thư mục gốc cache render — dùng bởi
+# pipeline_cache.py, motion/crop.py và helper prune trong maintenance.
 CACHE_DIR   = APP_DATA_DIR / "cache"
 REQUEST_LOG = LOGS_DIR / "request.log"   # Type 1: request/validation errors
-# Sprint 2.3 — BGM library root. User places audio files under
-# {BGM_DIR}/{mood}/*.mp3 (or .wav/.m4a/.ogg/.flac). No files shipped
-# in repo; the dir is created on startup for user convenience.
+# Thư mục gốc thư viện BGM. Người dùng đặt file nhạc tại
+# {BGM_DIR}/{mood}/*.mp3 (hoặc .wav/.m4a/.ogg/.flac). Repo không kèm
+# file nào; thư mục được tạo lúc khởi động cho tiện.
 BGM_DIR     = APP_DATA_DIR / "bgm"
 
 for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, COOKIES_DIR, CACHE_DIR, BGM_DIR, DATABASE_PATH.parent]:

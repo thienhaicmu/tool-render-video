@@ -48,7 +48,6 @@ from app.jobs.manager import recover_pending_render_jobs, shutdown as shutdown_j
 from app.services.warmup import start_warmup, get_status as warmup_status
 from app.core.ui_gate import resolve_static_directory
 from fastapi import Request
-from fastapi.responses import Response
 
 
 class _SuppressNoisyAccessFilter(logging.Filter):

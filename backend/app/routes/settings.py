@@ -1,16 +1,15 @@
 """
 routes/settings.py — User-facing settings endpoints.
 
-Sprint 3-FE: ships GET/PUT /api/settings/creator-context so the
-frontend Settings screen can read and persist the CreatorContext
-(Sprint 3 backend already wired the read path into the LLM stage's
-editorial hint).
+Ships GET/PUT /api/settings/creator-context so the frontend Settings
+screen can read and persist the CreatorContext (the read path is wired
+into the LLM stage's editorial hint).
 
 Design notes:
 - The route is intentionally separated from /api/channels because
   channels are per-channel-folder configuration; CreatorContext is the
-  app-wide creator persona (singleton creator_prefs row). Sprint 3.6+
-  may extend this with multi-creator routing.
+  app-wide creator persona (singleton creator_prefs row). This may later
+  be extended with multi-creator routing.
 - Request body uses a Pydantic model so FastAPI emits clean OpenAPI
   docs and rejects garbage payloads with 422. The Pydantic model
   mirrors the CreatorContext dataclass field-for-field; defaults
@@ -48,8 +47,7 @@ class CreatorContextPayload(BaseModel):
     Mirrors `app.domain.creator_context.CreatorContext` 1:1. Defaults
     exactly match so a PUT with `{}` clears every field. extra="ignore"
     protects against unknown payload keys from older / newer clients —
-    same backward-compat pattern Sprint 1.2 introduced on
-    PrepareSourceRequest.
+    the same backward-compat pattern used on PrepareSourceRequest.
     """
     model_config = ConfigDict(extra="ignore")
 

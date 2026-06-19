@@ -1,8 +1,6 @@
 """
 routes/analytics.py — Analytics Dashboard REST endpoints.
 
-Phase G — Analytics Dashboard API.
-
 GET /api/analytics/overview
     Snapshot: job counts, feedback totals, avg scores, editorial overrides.
 
@@ -21,7 +19,6 @@ Blast radius: LOW — new file, no existing routes modified.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Query
 

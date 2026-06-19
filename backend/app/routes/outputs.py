@@ -1,8 +1,6 @@
 """
 routes/outputs.py — Multi-Output Compare & Export endpoints.
 
-Phase F — Multi-Output Compare & Export.
-
 GET  /api/jobs/{job_id}/outputs
      Ranked list of all rendered clips for a job, merging job_parts
      (output_file, scores, timing) with render_ab_scores (rank, is_best_output).

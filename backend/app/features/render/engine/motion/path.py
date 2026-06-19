@@ -198,7 +198,6 @@ def build_subject_path(
         Path(video_path).name, content_type, detect_interval,
         "available" if tracker_available else "unavailable",
     )
-    required_lock_confirm = _required_lock_confirm_frames(cfg, tracker_available)
     pending_subject: Optional[Tuple[int, int, int, int]] = None
     pending_count = 0
     trackerless_confidence = 0.0

@@ -1,6 +1,6 @@
 """GET /metrics — Prometheus exposition endpoint.
 
-Sprint 6.C. Returns the Prometheus text format (version 0.0.4). Unauthenticated
+Returns the Prometheus text format (version 0.0.4). Unauthenticated
 by design — the metrics surface contains aggregate counts (renders/hr, NVENC
 queue depth, FFmpeg durations), no per-user or per-job data.
 

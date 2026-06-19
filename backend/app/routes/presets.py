@@ -1,8 +1,6 @@
 """
 routes/presets.py — Render Preset REST endpoints.
 
-Phase E — Smart Render Presets.
-
 GET    /api/presets                        list (filter: platform, channel_code)
 GET    /api/presets/{preset_id}            get one
 POST   /api/presets                        create custom preset
@@ -14,7 +12,7 @@ Blast radius: LOW — new file, no existing routes modified.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field

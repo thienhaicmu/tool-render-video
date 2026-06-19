@@ -1,8 +1,6 @@
 """
 routes/job_report.py — Job Export Report endpoint.
 
-Phase S — Job Export Report.
-
 GET /api/jobs/{job_id}/report?format=json   (default)
 GET /api/jobs/{job_id}/report?format=csv
 
@@ -25,10 +23,9 @@ import io
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from app.db.ab_scores_repo import list_ab_scores_for_job
 from app.db.jobs_repo import get_job, list_job_parts

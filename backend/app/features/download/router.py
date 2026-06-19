@@ -151,7 +151,6 @@ def _run_download(job_id: str, url: str, output_dir: Path, platform: str = "", q
 
     # Detect cookie source for trace
     import os as _os
-    from pathlib import Path as _Path
     _cookie_src = "none"
     if (_os.getenv("YTDLP_COOKIEFILE") or "").strip():
         _cookie_src = "file"

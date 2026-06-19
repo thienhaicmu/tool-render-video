@@ -1,5 +1,5 @@
 """
-routes/feedback.py — Clip feedback API (Phase 6) + Platform Metrics ingestion (Phase V1).
+routes/feedback.py — Clip feedback API + Platform Metrics ingestion.
 
 POST /api/feedback/jobs/{job_id}/parts/{part_no}  — submit or update a rating
 GET  /api/feedback/jobs/{job_id}/parts/{part_no}  — get rating for one part
@@ -27,7 +27,6 @@ from app.db.feedback_repo import (
 )
 from app.db.platform_metrics_repo import (
     get_channel_platform_summary,
-    list_platform_metrics,
     upsert_platform_metric,
 )
 
@@ -174,7 +173,7 @@ async def channel_feedback_summary(channel_code: str, goal: str = ""):
     )
 
 
-# ── Platform Metrics (Phase V1) ───────────────────────────────────────────────
+# ── Platform Metrics ──────────────────────────────────────────────────────────
 
 @router.post("/platform-metrics", status_code=201)
 async def ingest_platform_metrics(body: PlatformMetricsBatchRequest):

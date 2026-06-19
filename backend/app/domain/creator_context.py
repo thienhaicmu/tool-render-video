@@ -1,12 +1,11 @@
 """
 creator_context.py — CreatorContext dataclass.
 
-Sprint 3 deliverable. Captures the channel/persona signals the AI
-Director needs to bias clip selection per creator. Sprint 2 wired
-RenderPlan + builder shim; this sprint adds the *input* the AI should
-consider before emitting a plan.
+Captures the channel/persona signals the AI Director needs to bias
+clip selection per creator — the *input* the AI considers before
+emitting a plan.
 
-Vision (post-Sprint-3):
+Vision:
     Local Video File
        → Transcript
        → **CreatorContextBuilder** ← reads this dataclass via creator_repo
@@ -16,8 +15,7 @@ Vision (post-Sprint-3):
 
 Sacred Contract guards baked in:
 - Every field has a safe default. A blank CreatorContext is the
-  "no preferences set" state — identical to pre-Sprint-3 behaviour
-  (no editorial hint).
+  "no preferences set" state — no editorial hint.
 - to_json / from_json are deterministic + defensive (unknown keys
   dropped, never raise). Same pattern as RenderPlan.
 - to_prompt_hint() renders a plain string passed as the
@@ -25,10 +23,9 @@ Sacred Contract guards baked in:
   template variables, no risk of the {end}/{start} class of bug.
 
 The dataclass is the *contract* — populated by user settings (singleton
-creator_prefs row in DB for now; Sprint 3-FE will expose UI). Multi-
-creator (per channel_code) is a future extension; today it lives as a
-nested JSON blob inside the existing creator_prefs.prefs_json column,
-so no schema migration is required in Sprint 3.
+creator_prefs row in DB). Multi-creator (per channel_code) is a future
+extension; today it lives as a nested JSON blob inside the existing
+creator_prefs.prefs_json column, so no schema migration is required.
 """
 from __future__ import annotations
 
@@ -114,8 +111,7 @@ class CreatorContext:
 
         A default-constructed instance reports True. Used by callers to
         decide whether to feed the AI an editorial hint at all — when
-        empty, the hint is omitted entirely, preserving identical
-        pre-Sprint-3 behaviour."""
+        empty, the hint is omitted entirely."""
         return not any(
             [
                 self.creator_id.strip(),

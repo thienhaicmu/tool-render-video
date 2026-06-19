@@ -12,8 +12,7 @@ Both are imported directly by render_pipeline.py.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("app.render.llm_stage")
 logger.info("llm_stage: module loaded (build=2026-06-04.gemini-default)")
@@ -116,7 +115,6 @@ def _resolve_api_key(payload: Any, provider: str) -> tuple[str, str]:
       2. Generic payload field (payload.ai_cloud_api_key) — UI sends the active provider's key here
       3. Server env var (GEMINI_API_KEY / GROQ_API_KEY / etc.)
     """
-    from app.core import config as _cfg
     _per_provider_attr = {
         "gemini": "gemini_api_key",
         "openai": "openai_api_key",

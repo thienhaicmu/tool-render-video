@@ -31,7 +31,6 @@ from app.db.jobs_repo import (
     list_job_parts,
     update_job_progress,
     upsert_job,
-    upsert_job_part,
 )
 from app.features.render.engine.subtitle.transcription.whisper import has_audio_stream
 from app.features.render.engine.encoder.ffmpeg_helpers import nvenc_available
@@ -39,7 +38,7 @@ from app.jobs import cancel as cancel_registry
 from app.jobs.manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.features.render.engine.pipeline.report_service import append_rows
 from app.core.config import TEMP_DIR
-from app.core.stage import JobStage, JobPartStage
+from app.core.stage import JobStage
 from app.features.render.ai.visibility.ai_visibility_summary import attach_ai_visibility_summaries
 from app.services.metrics import RENDER_STAGE_DURATION
 from app.features.render.engine.pipeline.remotion_adapter import (  # noqa: F401 (re-exported for mock.patch in tests/test_remotion_adapter.py)
@@ -617,7 +616,6 @@ def run_render_pipeline(
         source                  = _source_prep.source
         source_path             = _source_prep.source_path
         edit_session_id         = _source_prep.edit_session_id
-        detected_source_mode    = _source_prep.detected_source_mode
         _output_stem            = _source_prep.output_stem
 
         voice_audio_path = None

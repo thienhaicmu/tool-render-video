@@ -24,7 +24,8 @@ DEFAULT_PROVIDER = "gemini"
 
 # When LLM_FALLBACK_ENABLED=1, a None result from the primary provider
 # triggers sequential fallback through the remaining SUPPORTED_PROVIDERS.
-# Default OFF — preserves existing behavior for all current deployments.
+# Default ON — set LLM_FALLBACK_ENABLED=0 to opt out (primary-only, no
+# cross-provider fallback; lower cost/latency on a failing render).
 _LLM_FALLBACK_ENABLED: bool = os.getenv("LLM_FALLBACK_ENABLED", "1") == "1"
 
 
@@ -79,7 +80,7 @@ def select_render_plan(
 
     When ``LLM_FALLBACK_ENABLED=1`` and the primary provider returns None,
     the remaining SUPPORTED_PROVIDERS are tried in order until one succeeds.
-    Default is OFF — fallback behavior must be explicitly opted in.
+    Default is ON — set ``LLM_FALLBACK_ENABLED=0`` to opt out.
 
     Returns None on any failure. Sacred Contract #3 — provider modules
     catch all exceptions and surface None at the wire.

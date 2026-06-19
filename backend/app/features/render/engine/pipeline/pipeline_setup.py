@@ -25,8 +25,6 @@ from pathlib import Path
 from typing import Any
 
 from app.models.schemas import RenderRequest
-from app.services.channel_service import ensure_channel
-from app.features.render.engine.pipeline.pipeline_config import _resolve_output_dir
 from app.features.render.engine.pipeline.render_events import _emit_render_event
 
 

@@ -1,29 +1,25 @@
 """
 routes/assets.py — Asset Library REST endpoints.
 
-Phase C — Asset Library. CRUD surface for registered source video
+Asset Library. CRUD surface for registered source video
 assets. Assets are created automatically when a download completes;
 they can also be queried by the frontend to build a library UI.
 
-Phase Q — Asset Search & Filter. GET /api/assets now accepts optional
+Asset Search & Filter. GET /api/assets now accepts optional
 query params: content_type, language, min_duration, max_duration, q.
 
 Blast radius: LOW — new file, no existing routes modified.
 """
 from __future__ import annotations
 
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.db.assets_repo import (
     delete_asset,
     get_asset,
-    get_asset_by_path,
     list_assets,
-    upsert_asset,
 )
-from app.domain.asset import Asset
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
 

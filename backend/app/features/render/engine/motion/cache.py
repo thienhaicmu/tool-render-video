@@ -14,7 +14,6 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from pathlib import Path
 
 from app.core.config import APP_DATA_DIR
 # Perf-opt Phase 3 — shared cache-instrumentation decorator (single

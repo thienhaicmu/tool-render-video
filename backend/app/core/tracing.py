@@ -33,7 +33,6 @@ All exceptions are swallowed — trace must NEVER break a render or download.
 from __future__ import annotations
 
 import logging
-import os
 import time
 from datetime import datetime
 from pathlib import Path

@@ -125,10 +125,6 @@ from app.features.render.engine.pipeline.asset_pipeline import (
 )
 from app.features.render.engine.pipeline.pipeline_config import extract_text_from_srt
 from app.features.render.engine.pipeline.pipeline_ranking import resolve_combined_score_weights
-from app.features.render.engine.pipeline.pipeline_segment_selection import (
-    _PLATFORM_PROFILES,
-    _get_effective_playback_speed,
-)
 from app.features.render.engine.stages.part_render_plan_resolvers import _resolve_pacing_speed_delta
 from app.features.render.engine.pipeline.qa_pipeline import (
     _assess_output_quality,

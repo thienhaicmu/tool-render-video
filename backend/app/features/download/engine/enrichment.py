@@ -18,7 +18,6 @@ are still persisted.
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 import threading
 import uuid

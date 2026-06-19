@@ -1,8 +1,6 @@
 """
 routes/snapshot.py — Job Snapshot Endpoint.
 
-Phase P — Job Snapshot.
-
 GET /api/jobs/{job_id}/snapshot
     Return a single JSON blob with the shape of a WebSocket progress event:
         { "job": {...}, "parts": [...], "summary": {...} }

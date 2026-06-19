@@ -1,8 +1,6 @@
 """
 routes/thumbnails.py — Output clip thumbnail endpoint.
 
-Phase J — Output Thumbnail API.
-
 GET /api/jobs/{job_id}/outputs/{part_no}/thumbnail?width=320
     Extract a JPEG frame at 10 % of the clip's duration from the
     rendered output file and return it as image/jpeg.

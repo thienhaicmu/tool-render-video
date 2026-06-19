@@ -1,8 +1,6 @@
 """
 routes/storage.py — Disk Usage & Cleanup endpoints.
 
-Phase L — Disk Usage & Cleanup API.
-
 GET  /api/storage/summary
      Aggregate disk usage across all jobs — total bytes, file count,
      and a per-status breakdown. Uses list_job_parts_bulk() to avoid
@@ -27,7 +25,6 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -227,7 +224,7 @@ def cleanup_storage(body: CleanupRequest) -> dict:
     }
 
 
-# ── Phase T — Output File Archive ─────────────────────────────────────────────
+# ── Output File Archive ───────────────────────────────────────────────────────
 
 class ArchiveRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")

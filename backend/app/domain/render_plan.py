@@ -4,7 +4,7 @@ render_plan.py — Unified RenderPlan dataclass + sub-dataclasses.
 Pure domain object: no FFmpeg logic, no file I/O, no subprocess calls,
 no LLM SDK imports. JSON (de)serialisation is the only stdlib touch.
 
-Vision (Sprint 2 — RenderPlan skeleton):
+Vision (RenderPlan skeleton):
     Local Video File
        → Transcript
        → Creator Context Builder
@@ -14,7 +14,7 @@ Vision (Sprint 2 — RenderPlan skeleton):
 
 The AI provider (Gemini/OpenAI/Claude) emits RenderPlan directly via
 `ai/llm/providers/<name>.select_render_plan`. The builder shim path
-was retired in Sprint 4.H.
+has been retired.
 
 Sacred Contract guards baked into the schema:
 - Every field has a safe default. Loading a legacy payload that omits
@@ -27,7 +27,7 @@ Sacred Contract guards baked into the schema:
   so the persisted blob is stable across rebuilds.
 
 Schema is versioned via `RenderPlan.schema_version`. Bump on breaking
-shape change and adapt `from_json` accordingly. Sprint 2 ships v1.
+shape change and adapt `from_json` accordingly. The current schema is v1.
 """
 from __future__ import annotations
 
@@ -43,9 +43,8 @@ SCHEMA_VERSION = 1
 class ClipPlan:
     """One clip selected for rendering.
 
-    Mirrors the LLM segment-selection output plus a stable rank. Sprint 2
-    builder fills rank from the post-LLM ranking pass; Sprint 4 the AI
-    will provide rank directly.
+    Mirrors the LLM segment-selection output plus a stable rank, filled
+    from the post-LLM ranking pass.
     """
     start: float = 0.0
     end: float = 0.0
@@ -57,14 +56,14 @@ class ClipPlan:
     # Extended segment metadata emitted by the AI provider per clip.
     hook_type: str = ""           # question|reveal|contrast|humor|emotion|statement
     content_type: str = ""        # interview|vlog|tutorial|commentary|montage|gaming
-    subtitle_style: str = ""      # viral|clean|story|gaming|"" = inherit (Sprint 7.6 FULL)
+    subtitle_style: str = ""      # viral|clean|story|gaming|"" = inherit
     viral_score: float = 0.0
     hook_score: float = 0.0
     retention_score: float = 0.0
     speech_density: float = 0.0
     duration_fit: float = 0.0
     cover_offset_ratio: float = 0.0
-    # Sprint 2 — new AI-directed fields
+    # Các field do AI điều hướng
     pacing: str = ""              # fast|medium|slow|"" = inherit (subtitle timing, edit rhythm)
     hook_intensity: float = 0.0   # 0.0–1.0; >= 0.75 triggers zoom_burst visual effect
 
@@ -73,14 +72,13 @@ class ClipPlan:
 class SubtitlePolicy:
     """Subtitle styling decision.
 
-    Empty string on any field means 'inherit' — Sprint 2 keeps the existing
-    backend resolver (part_asset_planner.py) as the authority; Sprint 4
-    will move that decision up into the AI layer.
+    Empty string on any field means 'inherit' — the backend resolver
+    (part_asset_planner.py) is the authority.
     """
     style: str = ""               # viral|clean|story|gaming|"" = inherit
     market: str = ""              # us|eu|jp|vn|global|"" = inherit
     emphasis_pass: Optional[bool] = None
-    # Sprint 2 — AI-directed subtitle timing mode
+    # Chế độ canh thời gian phụ đề do AI điều hướng
     subtitle_mode: str = ""       # word_by_word|sentence|phrase|"" = inherit
 
 
@@ -99,7 +97,7 @@ class AudioPlan:
     voice_provider: str = ""      # "" = inherit (xtts default)
     bgm_enabled: Optional[bool] = None
     cta_audio: str = ""           # path or "" = none
-    # Sprint 2 — AI-directed BGM selection
+    # Chọn BGM do AI điều hướng
     bgm_mood: str = ""            # energetic|calm|emotional|hype|"" = no BGM preference
     bgm_volume: float = 0.0       # 0.0 = inherit platform default; >0 = dB gain relative to vocal
 

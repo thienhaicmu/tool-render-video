@@ -1,8 +1,6 @@
 """
 routes/channels_context.py — Per-channel CreatorContext REST endpoints.
 
-Phase I — Per-Channel Creator Context API.
-
 GET  /api/channels/{channel_code}/context
      Return the CreatorContext for the given channel (falls back to the
      global singleton when no per-channel row exists). Never 404 —

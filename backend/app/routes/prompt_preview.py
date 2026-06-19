@@ -1,8 +1,6 @@
 """
 routes/prompt_preview.py — LLM Prompt Preview endpoint.
 
-Phase R — LLM Prompt Preview.
-
 POST /api/render/preview-prompt
     Build and return the LLM system + user prompts that WOULD be sent
     for a given render configuration — without launching a render job.
@@ -34,7 +32,6 @@ no LLM call (prompt is built but not sent). Safe to call from the UI at any time
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field

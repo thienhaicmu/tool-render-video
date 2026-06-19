@@ -16,7 +16,6 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
