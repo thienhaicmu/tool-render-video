@@ -101,9 +101,13 @@ def test_voice_enabled_plan_true_overrides_false_fallback():
     assert _resolve_voice_enabled_from_plan(ctx, False) is True
 
 
-def test_voice_enabled_plan_false_overrides_true_fallback():
+def test_voice_enabled_user_true_wins_over_plan_false():
+    # Precedence reversal: user's explicit voice_enabled=True is sacred and
+    # must NOT be overridden by the LLM's default audio_plan.voice_enabled=false.
+    # The prompt biases the AI toward False ("extremely rare for short-form
+    # viral clips"), which silently dropped users' opted-in TTS pre-fix.
     ctx = _ctx_with_plan('{"audio_plan": {"voice_enabled": false}}')
-    assert _resolve_voice_enabled_from_plan(ctx, True) is False
+    assert _resolve_voice_enabled_from_plan(ctx, True) is True
 
 
 def test_voice_enabled_plan_true_and_true_fallback():

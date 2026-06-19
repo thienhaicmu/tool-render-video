@@ -130,9 +130,15 @@ def _resolve_voice_provider_from_plan(ctx: PartRenderContext, fallback: str) -> 
 def _resolve_voice_enabled_from_plan(ctx: PartRenderContext, fallback: bool) -> bool:
     """Return the effective voice_enabled flag for this part.
 
-    Returns render_plan.audio_plan.voice_enabled when explicitly set
-    (not None), otherwise the caller's payload-derived fallback.
+    User's explicit opt-in (payload.voice_enabled=True) is sacred: the LLM
+    prompt defaults audio_plan.voice_enabled=false (it judges narration as
+    "extremely rare" for short-form viral clips), so if the AI plan were
+    allowed to override an opted-in user, the user's chosen TTS would be
+    silently dropped. Precedence: user-True wins; otherwise the plan's
+    explicit value (when set) wins; else fall back to user's choice.
     """
+    if fallback is True:
+        return True
     rp = getattr(ctx, "render_plan", None)
     if rp is None:
         return fallback
@@ -143,7 +149,12 @@ def _resolve_voice_enabled_from_plan(ctx: PartRenderContext, fallback: bool) -> 
 
 
 def _resolve_bgm_enabled_from_plan(ctx: PartRenderContext, fallback: bool) -> bool:
-    """Return the effective bgm_enabled flag for this part."""
+    """Return the effective bgm_enabled flag for this part.
+
+    Same precedence rule as voice: user explicit True wins over AI's default.
+    """
+    if fallback is True:
+        return True
     rp = getattr(ctx, "render_plan", None)
     if rp is None:
         return fallback
