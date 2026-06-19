@@ -87,7 +87,7 @@ function HybridAnalysisBadge({
 // Sprint 5.7: wrapped in React.memo at export below. See StepConfigure for rationale.
 function StepResultsBase({
   jobId, parts, partScores, partRanks, qualityReports, qualityLoadFailed,
-  loading, t, aspectRatio, jobStatus, onRetry, isRetrying,
+  loading, t, aspectRatio, jobStatus, jobMessage, onRetry, isRetrying,
   aiAnalysisMode, aiCloudProvider, goal,
 }: {
   jobId: string | null
@@ -100,6 +100,7 @@ function StepResultsBase({
   t: Strings
   aspectRatio: string
   jobStatus: string
+  jobMessage: string
   onRetry: () => void
   isRetrying: boolean
   aiAnalysisMode?: string
@@ -225,51 +226,77 @@ function StepResultsBase({
       {/* ── LEFT ── */}
       <div className="res-left">
 
-        {/* Hero banner */}
-        <div className="res-hero">
-          <div className="res-hero-bg" />
-          <div className="res-hero-content">
-            <div className="res-hero-left">
-              <div className="res-complete-row">
-                <div className="res-complete-icon">✓</div>
-                <div>
-                  <div className="res-kicker">Render Complete</div>
-                  <div className="res-hero-title">
-                    {doneParts.length} clip{doneParts.length !== 1 ? 's' : ''} ready to publish
+        {/* Hero banner — failed-state vs success-state */}
+        {jobStatus === 'failed' ? (
+          <div className="res-hero res-hero-failed">
+            <div className="res-hero-bg" />
+            <div className="res-hero-content">
+              <div className="res-hero-left">
+                <div className="res-complete-row">
+                  <div className="res-complete-icon res-failed-icon">✕</div>
+                  <div>
+                    <div className="res-kicker res-kicker-failed">Render Failed</div>
+                    <div className="res-hero-title">
+                      {jobMessage.includes('ai_emission_empty')
+                        ? 'AI providers unavailable — check API keys in Configure → AI panel → Test connection'
+                        : (jobMessage || 'No clips produced')}
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="res-vtags">
-                {bestScore >= 75 && <span className="res-vtag vtag-green">🔥 High engagement</span>}
-                {doneParts.some(p => p.hook_score > 65) && <span className="res-vtag vtag-purple">⚡ Hook detected</span>}
-                <HybridAnalysisBadge
-                  hybrid={aiSummary?.hybrid_analysis}
-                  fallbackMode={aiAnalysisMode}
-                  fallbackProvider={aiCloudProvider}
-                />
+              <div className="res-hero-right">
+                <button className="res-export-btn" onClick={onRetry} disabled={isRetrying}>
+                  {isRetrying ? '…' : t.btnRetry}
+                </button>
               </div>
-            </div>
-            <div className="res-hero-right">
-              <div className="res-kpi-row">
-                <div className="res-kpi green">
-                  <strong>{bestScore > 0 ? Math.round(bestScore) : '—'}</strong>
-                  <span>Top Score</span>
-                </div>
-                <div className="res-kpi blue">
-                  <strong>{doneParts.length}</strong>
-                  <span>Clips</span>
-                </div>
-                <div className="res-kpi">
-                  <strong>{totalDurFmt}</strong>
-                  <span>Total</span>
-                </div>
-              </div>
-              {outputDir && (
-                <button className="res-export-btn" onClick={openOutputFolder}>Open Folder</button>
-              )}
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="res-hero">
+            <div className="res-hero-bg" />
+            <div className="res-hero-content">
+              <div className="res-hero-left">
+                <div className="res-complete-row">
+                  <div className="res-complete-icon">✓</div>
+                  <div>
+                    <div className="res-kicker">Render Complete</div>
+                    <div className="res-hero-title">
+                      {doneParts.length} clip{doneParts.length !== 1 ? 's' : ''} ready to publish
+                    </div>
+                  </div>
+                </div>
+                <div className="res-vtags">
+                  {bestScore >= 75 && <span className="res-vtag vtag-green">🔥 High engagement</span>}
+                  {doneParts.some(p => p.hook_score > 65) && <span className="res-vtag vtag-purple">⚡ Hook detected</span>}
+                  <HybridAnalysisBadge
+                    hybrid={aiSummary?.hybrid_analysis}
+                    fallbackMode={aiAnalysisMode}
+                    fallbackProvider={aiCloudProvider}
+                  />
+                </div>
+              </div>
+              <div className="res-hero-right">
+                <div className="res-kpi-row">
+                  <div className="res-kpi green">
+                    <strong>{bestScore > 0 ? Math.round(bestScore) : '—'}</strong>
+                    <span>Top Score</span>
+                  </div>
+                  <div className="res-kpi blue">
+                    <strong>{doneParts.length}</strong>
+                    <span>Clips</span>
+                  </div>
+                  <div className="res-kpi">
+                    <strong>{totalDurFmt}</strong>
+                    <span>Total</span>
+                  </div>
+                </div>
+                {outputDir && (
+                  <button className="res-export-btn" onClick={openOutputFolder}>Open Folder</button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Partial failure warning */}
         {jobStatus === 'completed_with_errors' && failedParts.length > 0 && (

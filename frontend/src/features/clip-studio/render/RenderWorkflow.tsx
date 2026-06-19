@@ -912,6 +912,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 loading={partsLoading} t={t}
                 aspectRatio={RATIO_INFO[cfg.ratio].api}
                 jobStatus={jobStatus ?? ''}
+                jobMessage={jobMessage ?? ''}
                 onRetry={handleRetryRender} isRetrying={isRetrying}
                 aiAnalysisMode={cfg.aiAnalysisMode}
                 aiCloudProvider={cfg.aiCloudProvider}

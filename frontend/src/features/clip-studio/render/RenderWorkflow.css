@@ -1083,6 +1083,24 @@
   cursor: pointer; transition: opacity .15s;
 }
 .res-export-btn:hover { opacity: .8; }
+.res-export-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Failed-state hero — bug fix: previously success banner showed even for
+   failed jobs, hiding the real error from the user. */
+.res-hero-failed .res-hero-bg {
+  background: linear-gradient(135deg, #1a060e 0%, #120508 50%, #0e0608 100%);
+}
+.res-failed-icon {
+  background: rgba(232,64,122,.15) !important;
+  border-color: rgba(232,64,122,.5) !important;
+  color: var(--fail) !important;
+}
+.res-kicker-failed { color: var(--fail) !important; }
+.res-hero-failed .res-export-btn {
+  background: rgba(232,64,122,.1);
+  border-color: rgba(232,64,122,.4);
+  color: var(--fail);
+}
 
 /* Sort / count bar */
 .res-bar {
