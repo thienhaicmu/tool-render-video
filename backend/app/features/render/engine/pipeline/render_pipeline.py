@@ -1353,15 +1353,37 @@ def run_render_pipeline(
             # total AI failure from the user. Raising here routes the
             # job through the outer except → status="failed", stage=
             # FAILED, FE shows failure state.
-            _reason_hint = (
-                ", ".join(_ai_fallback_reasons) if _ai_fallback_reasons
-                else "no_ai_response"
+            # Phân biệt 3 nguyên nhân 0-output để remedy không dẫn sai
+            # (review 2026-06-20). _ai_fallback_reasons chỉ được điền khi
+            # AI emission thất bại/raise — các nguyên nhân khác (parser lọc
+            # hết clip dù AI đã phản hồi, plan cache/resume rỗng, hay
+            # flag-OFF legacy selection) để list rỗng, nên chỉ trường hợp
+            # AI-emission-fail mới gợi ý kiểm tra API key.
+            _remedy_keys = (
+                " Verify API keys in server .env (OpenAI sk-, Claude sk-ant-, "
+                "Gemini AIza/AQ.) or test via Configure → AI panel → Test connection."
             )
+            if _ai_fallback_reasons:
+                _reason_hint = ", ".join(_ai_fallback_reasons)
+                _remedy = _remedy_keys
+            elif not _FEATURE_LLM_EMIT_RENDER_PLAN:
+                _reason_hint = (
+                    "ai_emission_disabled (LLM_EMIT_RENDER_PLAN=0); "
+                    "legacy segment selection produced no clips"
+                )
+                _remedy = ""
+            elif _render_plan is not None:
+                _reason_hint = (
+                    "ai_responded_but_all_clips_filtered "
+                    "(check segment duration / score thresholds)"
+                )
+                _remedy = ""
+            else:
+                _reason_hint = "no_ai_response"
+                _remedy = _remedy_keys
             raise RuntimeError(
                 f"ai_emission_empty: 0 outputs produced and 0 parts attempted "
-                f"(total_parts={total_parts}). AI provider chain: {_reason_hint}. "
-                f"Verify API keys in server .env (OpenAI sk-, Claude sk-ant-, "
-                f"Gemini AIza/AQ.) or test via Configure → AI panel → Test connection."
+                f"(total_parts={total_parts}). AI provider chain: {_reason_hint}.{_remedy}"
             )
         if failed_parts and not outputs:
             raise RuntimeError(f"All parts failed ({len(failed_parts)}/{total_parts})")
