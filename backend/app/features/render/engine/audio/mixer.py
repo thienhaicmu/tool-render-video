@@ -107,10 +107,18 @@ def mix_narration_audio(
             ]
     elif str(mix_mode or "").strip() == "keep_original_low":
         if _has_audio_stream(str(source_video)):
+            # Dynamic ducking (2026-06-20): the original audio stays at full
+            # volume and is ducked ONLY while the narration is actually
+            # speaking, then recovers when it falls silent — instead of the
+            # previous static volume=0.25 that lowered the original across the
+            # whole clip. The narration stream is asplit into a playback copy
+            # ([narr]) and a key ([key]) that drives sidechaincompress on the
+            # original; the ducked original is then amixed with the narration.
+            _DUCK = "sidechaincompress=threshold=0.03:ratio=12:attack=20:release=400"
             if apply_atempo:
                 cmd += [
                     "-filter_complex",
-                    f"[0:a]volume=0.25[a0];[1:a]atempo={speed:.4f},apad,volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    f"[1:a]atempo={speed:.4f},apad,volume=1.0,asplit=2[narr][key];[0:a][key]{_DUCK}[duck];[duck][narr]amix=inputs=2:duration=first:dropout_transition=2[aout]",
                     "-map", "0:v:0",
                     "-map", "[aout]",
                     "-c:v", "copy",
@@ -121,7 +129,7 @@ def mix_narration_audio(
             else:
                 cmd += [
                     "-filter_complex",
-                    "[0:a]volume=0.25[a0];[1:a]apad,volume=1.0[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    f"[1:a]apad,volume=1.0,asplit=2[narr][key];[0:a][key]{_DUCK}[duck];[duck][narr]amix=inputs=2:duration=first:dropout_transition=2[aout]",
                     "-map", "0:v:0",
                     "-map", "[aout]",
                     "-c:v", "copy",
