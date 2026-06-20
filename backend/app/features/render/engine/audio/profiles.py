@@ -23,6 +23,12 @@ VOICE_PROFILES = {
         "female_voice": "en-GB-SoniaNeural",
         "male_voice": "en-GB-RyanNeural",
     },
+    "ko-KR": {
+        "language": "ko-KR",
+        "label": "Korean",
+        "female_voice": "ko-KR-SunHiNeural",
+        "male_voice": "ko-KR-InJoonNeural",
+    },
 }
 
 VOICE_LIST = {
@@ -45,6 +51,10 @@ VOICE_LIST = {
         {"id": "en-GB-LibbyNeural",  "label": "Libby",  "gender": "female", "recommended_use": "casual, warm"},
         {"id": "en-GB-RyanNeural",   "label": "Ryan",   "gender": "male",   "recommended_use": "documentary, narration"},
         {"id": "en-GB-OliverNeural", "label": "Oliver", "gender": "male",   "recommended_use": "formal, professional"},
+    ],
+    "ko-KR": [
+        {"id": "ko-KR-SunHiNeural",  "label": "SunHi",  "gender": "female", "recommended_use": "warm, conversational"},
+        {"id": "ko-KR-InJoonNeural", "label": "InJoon", "gender": "male",   "recommended_use": "professional"},
     ],
 }
 
