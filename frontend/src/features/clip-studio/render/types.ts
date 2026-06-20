@@ -48,11 +48,8 @@ export interface ConfigState {
   targetDuration:  number
   outputCount:     number
   videoType:       'auto' | 'viral' | 'storytelling' | 'educational' | 'emotional' | 'high_retention'
-  energyStyle:     'auto' | 'fast' | 'balanced' | 'slow'
   hookStrength:    'aggressive' | 'balanced' | 'soft'
   focusMode:       'auto' | 'face' | 'object' | 'center'
-  outputLanguage:  string
-  narrationStyle:  'auto' | 'energetic' | 'calm' | 'emotional'
   subDensity:      'auto' | 'low' | 'medium' | 'high'
   subLanguage:     string
   aiAnalysisMode:    'local' | 'cloud' | 'hybrid'

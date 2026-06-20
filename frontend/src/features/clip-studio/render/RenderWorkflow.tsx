@@ -53,8 +53,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     outputDir: '',
     renderProfile: 'balanced',
     targetDuration: 90, outputCount: 1, videoType: 'auto',
-    energyStyle: 'auto', hookStrength: 'balanced', focusMode: 'auto',
-    outputLanguage: 'auto', narrationStyle: 'auto',
+    hookStrength: 'balanced', focusMode: 'auto',
     subDensity: 'auto', subLanguage: 'auto',
     aiAnalysisMode: 'hybrid',
     aiCloudProvider:  (localStorage.getItem('rw_ai_cloud_provider') as 'gemini' | 'openai' | 'claude') ?? 'gemini',
@@ -371,10 +370,9 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       // T1.4 — Audit 2026-06-08 closure: removed `energy_style`,
       // `output_language`, `narration_style` (v2 vision dead — never
       // consumed by the render engine) and `asset_music_profile`
-      // (UP27 — never wired). UI form state for these still exists
-      // (cfg.energyStyle / cfg.outputLanguage / cfg.narrationStyle /
-      // cfg.assetMusicProfile); cleanup of those form widgets is a
-      // follow-up task.
+      // (UP27 — never wired). The dead form widgets + ConfigState for
+      // energy_style / output_language / narration_style were removed
+      // 2026-06-20 (#3 cleanup); cfg.assetMusicProfile state remains.
       asset_logo_path:     cfg.assetLogoPath ?? undefined,
       asset_intro_path:    cfg.assetIntroPath ?? undefined,
       asset_outro_path:    cfg.assetOutroPath ?? undefined,

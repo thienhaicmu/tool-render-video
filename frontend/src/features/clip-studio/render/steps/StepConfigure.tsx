@@ -566,26 +566,6 @@ function StepConfigureBase({
             {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>ENERGY</span>
-                <span className="cfg-sec-api">energy_style</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: 'auto'     as ConfigState['energyStyle'], l: 'Auto'     },
-                  { v: 'fast'     as ConfigState['energyStyle'], l: 'Fast'     },
-                  { v: 'balanced' as ConfigState['energyStyle'], l: 'Balanced' },
-                  { v: 'slow'     as ConfigState['energyStyle'], l: 'Slow'     },
-                ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.energyStyle === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('energyStyle', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-            )}
-
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
                 <span>HOOK</span>
                 <span className="cfg-sec-api">hook_strength</span>
               </div>
@@ -651,27 +631,6 @@ function StepConfigureBase({
             )}
 
 
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>OUTPUT LANGUAGE</span>
-                <span className="cfg-sec-api">output_language</span>
-              </div>
-              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
-                {([
-                  { v: 'auto', l: 'Keep original' },
-                  { v: 'vi',   l: '🇻🇳 VI'        },
-                  { v: 'en',   l: '🇺🇸 EN'        },
-                  { v: 'ja',   l: '🇯🇵 JA'        },
-                  { v: 'ko',   l: '🇰🇷 KO'        },
-                ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.outputLanguage === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('outputLanguage', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-            )}
-
             {/* LLM segment selection — Phase I */}
             <div className="cfg-section">
               <div className="cfg-sec-hd">
@@ -736,7 +695,7 @@ function StepConfigureBase({
                     type="text"
                     value={cfg.llmModel}
                     onChange={(e) => setCfgKey('llmModel', e.target.value)}
-                    placeholder={cfg.aiProvider === 'openai' ? 'gpt-4o (optional)' : cfg.aiProvider === 'claude' ? 'claude-sonnet-4-6 (optional)' : 'gemini-2.0-flash (optional)'}
+                    placeholder={cfg.aiProvider === 'openai' ? 'gpt-4o (optional)' : cfg.aiProvider === 'claude' ? 'claude-sonnet-4-6 (optional)' : 'gemini-2.5-flash (optional)'}
                     style={{
                       width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 11,
                       border: '1px solid var(--border-default)', backgroundColor: 'var(--surface-input)',
@@ -924,27 +883,6 @@ function StepConfigureBase({
               </div>
             </div>
 
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>STYLE</span>
-                <span className="cfg-sec-api">narration_style</span>
-              </div>
-              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
-                {([
-                  { v: 'auto'      as ConfigState['narrationStyle'], l: 'Auto'      },
-                  { v: 'energetic' as ConfigState['narrationStyle'], l: 'Energetic' },
-                  { v: 'calm'      as ConfigState['narrationStyle'], l: 'Calm'      },
-                  { v: 'emotional' as ConfigState['narrationStyle'], l: 'Emotional' },
-                ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.narrationStyle === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('narrationStyle', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-            )}
-
-            {adv && (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>SOURCE</span>
@@ -976,7 +914,6 @@ function StepConfigureBase({
                 </div>
               )}
             </div>
-            )}
 
           </div>
 
