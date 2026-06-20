@@ -10,7 +10,7 @@ const MODE_COLORS: Record<string, string> = {
 }
 
 const PROVIDER_MODEL_HINT: Record<string, string> = {
-  gemini: 'gemini-2.0-flash',
+  gemini: 'gemini-2.5-flash',
   openai: 'gpt-4o',
   claude: 'claude-sonnet-4-6',
 }

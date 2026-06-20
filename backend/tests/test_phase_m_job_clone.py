@@ -60,7 +60,7 @@ _VALID_PAYLOAD = {
     "channel_code": "k1",
     "output_count": 3,
     "whisper_model": "small",
-    "llm_model": "gemini-2.0-flash",
+    "llm_model": "gemini-2.5-flash",
     "ai_provider": "gemini",
 }
 

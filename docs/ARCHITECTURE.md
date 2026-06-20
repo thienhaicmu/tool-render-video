@@ -175,7 +175,7 @@ Three interchangeable providers — same interface, same Sacred Contract #3 (nev
 
 | Provider | Default Model | Max SRT | Env Key |
 |----------|--------------|---------|---------|
-| Gemini | gemini-2.0-flash | 60,000 chars | `GEMINI_API_KEY` |
+| Gemini | gemini-2.5-flash | 60,000 chars | `GEMINI_API_KEY` |
 | OpenAI | gpt-4o-mini | 30,000 chars | `OPENAI_API_KEY` |
 | Claude | claude-3-5-sonnet-20241022 | 50,000 chars | `CLAUDE_API_KEY` |
 

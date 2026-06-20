@@ -203,7 +203,7 @@ Configure via `.env` — all three are optional (install the matching client fro
 
 | Provider | Env var | Default model |
 |---|---|---|
-| Gemini | `GEMINI_API_KEY` | gemini-2.0-flash-exp |
+| Gemini | `GEMINI_API_KEY` | gemini-2.5-flash-exp |
 | OpenAI | `OPENAI_API_KEY` | gpt-4o-mini |
 | Claude | `CLAUDE_API_KEY` | claude-3-5-haiku |
 

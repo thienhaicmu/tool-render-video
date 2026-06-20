@@ -177,7 +177,7 @@ def test_cloud_ai(body: dict):
             )
         elif provider == "gemini":
             from google import genai as _genai
-            resolved_model = model or "gemini-2.0-flash"
+            resolved_model = model or "gemini-2.5-flash"
             client = _genai.Client(api_key=api_key)
             _gem_resp = client.models.generate_content(
                 model=resolved_model,

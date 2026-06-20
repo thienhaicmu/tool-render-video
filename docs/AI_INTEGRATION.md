@@ -39,7 +39,7 @@ backend/app/ai/llm/__init__.py   Compat shim — re-exports from features/render
 
 | Parameter | Value |
 |-----------|-------|
-| Default model | `gemini-2.0-flash` |
+| Default model | `gemini-2.5-flash` |
 | Model override | `AI_CLOUD_MODEL` env var |
 | Max SRT chars | 60,000 (`GEMINI_MAX_SRT_CHARS`) |
 | Request timeout | 120s (`GEMINI_REQUEST_TIMEOUT`) |
