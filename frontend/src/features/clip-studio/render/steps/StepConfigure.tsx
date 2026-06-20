@@ -852,6 +852,26 @@ function StepConfigureBase({
 
             <div className="cfg-section">
               <div className="cfg-sec-hd">
+                <span>AUDIO MIX</span>
+                <span className="cfg-sec-api">voice_mix_mode</span>
+              </div>
+              <div className="seg" style={{ flexDirection: 'column', gap: '3px' }}>
+                {([
+                  { v: 'replace_original'  as const, l: 'Replace original',       d: 'Original audio removed — narration only' },
+                  { v: 'keep_original_low' as const, l: 'Keep original (lowered)', d: 'Original kept, ducked while narration speaks' },
+                ]).map(({ v, l, d }) => (
+                  <div key={v} className={`seg-b${cfg.voiceMixMode === v ? ' on' : ''}`}
+                    style={{ textAlign: 'left', padding: '7px 10px' }}
+                    onClick={() => setCfgKey('voiceMixMode', v)}>
+                    <div>{l}</div>
+                    <div style={{ fontSize: '9px', color: cfg.voiceMixMode === v ? 'rgba(255,255,255,.6)' : 'var(--text-3)', marginTop: '1px', fontFamily: 'var(--fb)', fontWeight: 400 }}>{d}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
                 <span>SOURCE</span>
                 <span className="cfg-sec-api">voice_source</span>
               </div>
