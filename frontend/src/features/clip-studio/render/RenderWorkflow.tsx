@@ -37,16 +37,15 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
 
   const [cfgTab, setCfgTab] = useState<CfgTab>('ai')
   const [cfg, setCfg] = useState<ConfigState>(() => ({
-    preset: 'viral', ratio: 'r916', minSec: 30, maxSec: 60, clipCount: 5,
+    ratio: 'r916', minSec: 30, maxSec: 60,
     style: 'slay_soft_01', platform: 'tiktok', aiMarket: 'us',
-    aiEnabled: true, multiVariant: false, ctaEnabled: false, ctaType: 'auto',
+    multiVariant: false, ctaEnabled: false, ctaType: 'auto',
     hookApplyEnabled: false, hookOverlayEnabled: false, structureBias: null,
     clipLock: [], clipExclude: [],
-    motionCrop: false,
     subEnabled: true, subStyle: 'opus_pop',
     subHighlight: true, subFontSize: 0, subTranslate: false, subTranslateLang: 'en',
-    subEmphasis: null, partOrder: 'viral',
-    assetLogoPath: null, assetIntroPath: null, assetOutroPath: null, assetMusicProfile: null,
+    subEmphasis: null,
+    assetLogoPath: null, assetIntroPath: null, assetOutroPath: null,
     whisperModel: 'auto',
     narrEnabled: false, voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
     voiceSource: 'translated_subtitle', voiceText: '', voiceMixMode: 'replace_original',
@@ -54,12 +53,6 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     renderProfile: 'balanced',
     targetDuration: 90, outputCount: 1, videoType: 'auto',
     hookStrength: 'balanced', focusMode: 'auto',
-    subDensity: 'auto', subLanguage: 'auto',
-    aiAnalysisMode: 'hybrid',
-    aiCloudProvider:  (localStorage.getItem('rw_ai_cloud_provider') as 'gemini' | 'openai' | 'claude') ?? 'gemini',
-    aiCloudApiKey:    localStorage.getItem('rw_ai_cloud_api_key') ?? '',
-    aiCloudModel:     '',
-    aiContentDriven:  false,
     llmEnabled:   true,
     aiProvider:   (localStorage.getItem('rw_ai_provider') as 'gemini' | 'openai' | 'claude') ?? 'gemini',
     llmModel:     '',
@@ -232,15 +225,13 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   }
 
   function setCfgKey<K extends keyof ConfigState>(k: K, v: ConfigState[K]) {
-    if (k === 'aiCloudApiKey')   localStorage.setItem('rw_ai_cloud_api_key', v as string)
-    if (k === 'aiCloudProvider') localStorage.setItem('rw_ai_cloud_provider', v as string)
     if (k === 'aiProvider')      localStorage.setItem('rw_ai_provider', v as string)
     setCfg((p) => ({ ...p, [k]: v }))
   }
   function applyPreset(id: string) {
     const p = PRESETS.find((x) => x.id === id)
     if (!p) return
-    setCfg((prev) => ({ ...prev, preset: id, platform: p.platform, ratio: 'r916' }))
+    setCfg((prev) => ({ ...prev, platform: p.platform, ratio: 'r916' }))
   }
   async function pickOutputDir() {
     const dir = await window.electronAPI?.pickDirectory?.()
@@ -364,7 +355,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       // consumed by the render engine) and `asset_music_profile`
       // (UP27 — never wired). The dead form widgets + ConfigState for
       // energy_style / output_language / narration_style were removed
-      // 2026-06-20 (#3 cleanup); cfg.assetMusicProfile state remains.
+      // 2026-06-20 (#3 + A/B/C cleanup), along with assetMusicProfile and
+      // the legacy aiCloud* cluster (badge rewired to the real llm* config).
       asset_logo_path:     cfg.assetLogoPath ?? undefined,
       asset_intro_path:    cfg.assetIntroPath ?? undefined,
       asset_outro_path:    cfg.assetOutroPath ?? undefined,
@@ -826,8 +818,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 wsPolling={wsPolling}
                 t={t}
                 aspectRatio={RATIO_INFO[cfg.ratio].api}
-                aiAnalysisMode={cfg.aiAnalysisMode}
-                aiCloudProvider={cfg.aiCloudProvider}
+                aiAnalysisMode={cfg.llmEnabled ? 'cloud' : 'local'}
+                aiCloudProvider={cfg.aiProvider}
               />
             </ErrorBoundary>
             <div className="screen-footer">
@@ -915,8 +907,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 jobStatus={jobStatus ?? ''}
                 jobMessage={jobMessage ?? ''}
                 onRetry={handleRetryRender} isRetrying={isRetrying}
-                aiAnalysisMode={cfg.aiAnalysisMode}
-                aiCloudProvider={cfg.aiCloudProvider}
+                aiAnalysisMode={cfg.llmEnabled ? 'cloud' : 'local'}
+                aiCloudProvider={cfg.aiProvider}
                 goal={cfg.videoType}
               />
             </ErrorBoundary>

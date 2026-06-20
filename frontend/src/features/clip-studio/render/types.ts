@@ -5,15 +5,12 @@ export type CfgTab = 'ai' | 'sub' | 'narr' | 'output'
 export interface Source { value: string }
 
 export interface ConfigState {
-  preset:        string
   ratio:         Ratio
   minSec:        number
   maxSec:        number
-  clipCount:     number
   style:         string
   platform:      'tiktok' | 'youtube_shorts' | 'instagram_reels'
   aiMarket:      string
-  aiEnabled:          boolean
   multiVariant:       boolean
   ctaEnabled:         boolean
   ctaType:            'auto' | 'comment' | 'part_2' | 'follow'
@@ -22,7 +19,6 @@ export interface ConfigState {
   structureBias:      'hook' | 'balanced' | 'story' | null
   clipLock:           Array<{ start_sec: number; end_sec: number }>
   clipExclude:        Array<{ start_sec: number; end_sec: number }>
-  motionCrop:         boolean
   subEnabled:       boolean
   subStyle:         string
   subHighlight:     boolean
@@ -33,9 +29,7 @@ export interface ConfigState {
   assetLogoPath:     string | null
   assetIntroPath:    string | null
   assetOutroPath:    string | null
-  assetMusicProfile: 'clean' | 'energetic' | 'soft' | null
   whisperModel:      string
-  partOrder:       'viral' | 'sequential'
   narrEnabled:   boolean
   voiceLang:     string
   voiceGender:   'female' | 'male'
@@ -50,13 +44,6 @@ export interface ConfigState {
   videoType:       'auto' | 'viral' | 'storytelling' | 'educational' | 'emotional' | 'high_retention'
   hookStrength:    'aggressive' | 'balanced' | 'soft'
   focusMode:       'auto' | 'face' | 'object' | 'center'
-  subDensity:      'auto' | 'low' | 'medium' | 'high'
-  subLanguage:     string
-  aiAnalysisMode:    'local' | 'cloud' | 'hybrid'
-  aiCloudProvider:   'gemini' | 'openai' | 'claude'
-  aiCloudApiKey:     string
-  aiCloudModel:      string
-  aiContentDriven:   boolean
   // LLM segment selection — multi-provider
   llmEnabled:          boolean
   aiProvider:          'gemini' | 'openai' | 'claude'

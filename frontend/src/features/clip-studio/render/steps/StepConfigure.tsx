@@ -229,7 +229,7 @@ function StepConfigureBase({
       const res = await testCloudAi(
         cfg.aiProvider as 'gemini' | 'openai' | 'claude',
         '',  // server reads key from .env
-        cfg.aiCloudModel || undefined,
+        cfg.llmModel || undefined,
       )
       if (res.ok) {
         setTestStatus('ok')
@@ -779,39 +779,6 @@ function StepConfigureBase({
                 <span style={{ fontFamily: 'var(--fh)', fontSize: '13px', fontWeight: 700, minWidth: '40px', textAlign: 'right', color: 'var(--accent)' }}>
                   {cfg.subFontSize === 0 ? 'Auto' : cfg.subFontSize}
                 </span>
-              </div>
-            </div>
-            )}
-
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>LANGUAGE</span>
-              </div>
-              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
-                {(['auto', 'vi', 'en', 'ja', 'ko'] as string[]).map(v => (
-                  <div key={v} className={`seg-b${cfg.subLanguage === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('subLanguage', v)}>{v === 'auto' ? 'Auto' : v.toUpperCase()}</div>
-                ))}
-              </div>
-            </div>
-            )}
-
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>AMOUNT</span>
-                <span className="cfg-sec-api">subtitle_density</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: 'low'    as ConfigState['subDensity'], l: 'Low'    },
-                  { v: 'medium' as ConfigState['subDensity'], l: 'Medium' },
-                  { v: 'high'   as ConfigState['subDensity'], l: 'High'   },
-                ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.subDensity === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('subDensity', v)}>{l}</div>
-                ))}
               </div>
             </div>
             )}
