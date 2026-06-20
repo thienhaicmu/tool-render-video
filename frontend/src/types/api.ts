@@ -567,11 +567,3 @@ export interface CreatorContextEnvelope {
   creator_context: CreatorContextPayload
 }
 
-// ── Queue status ──────────────────────────────────────────────────────────────
-
-export interface QueueStatus {
-  max_concurrent: number
-  active: number
-  pending: number
-  available_slots: number
-}

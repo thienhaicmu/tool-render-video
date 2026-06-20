@@ -8,7 +8,6 @@ import type {
   JobsHistoryResponse,
   QualityReport,
   QualitySummary,
-  QueueStatus,
   PartRankResult,
 } from '../types/api'
 
@@ -33,14 +32,6 @@ export async function getJobHistory(
     offset: String(Math.max(0, offset)),
   })
   return apiFetch<JobsHistoryResponse>(`/api/jobs/history?${params}`)
-}
-
-/**
- * Get queue depth.
- * GET /api/jobs/queue/status
- */
-export async function getQueueStatus(): Promise<QueueStatus> {
-  return apiFetch<QueueStatus>('/api/jobs/queue/status')
 }
 
 /**
