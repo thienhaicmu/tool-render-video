@@ -101,7 +101,7 @@ export interface RenderRequest {
   highlight_per_word?: boolean
   sub_font_size?: number
   subtitle_translate_enabled?: boolean
-  subtitle_target_language?: 'vi' | 'en' | 'ja'
+  subtitle_target_language?: 'vi' | 'en' | 'ja' | 'ko'
 
   // Frame / crop
   aspect_ratio?: string

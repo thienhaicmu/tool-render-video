@@ -49,7 +49,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     assetLogoPath: null, assetIntroPath: null, assetOutroPath: null, assetMusicProfile: null,
     whisperModel: 'auto',
     narrEnabled: false, voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
-    voiceSource: 'subtitle', voiceText: '', voiceMixMode: 'replace_original',
+    voiceSource: 'translated_subtitle', voiceText: '', voiceMixMode: 'replace_original',
     outputDir: '',
     renderProfile: 'balanced',
     targetDuration: 90, outputCount: 1, videoType: 'auto',
@@ -289,6 +289,17 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     }
     setIsSubmitting(true)
     setSubmitError(null)
+    // Phase 1 (2026-06-20): when narration reads the "translated subtitle",
+    // force subtitle translation on and align its target to the chosen voice
+    // language so the narration is actually spoken in that language (and the
+    // on-screen subtitle follows). Removes the misconfig where a foreign
+    // voice read the original-language transcript. langBase maps the BCP-47
+    // voice tag to the subtitle target the BE accepts (vi/en/ja/ko).
+    const langBase = (vl: string): 'vi' | 'en' | 'ja' | 'ko' =>
+      vl.startsWith('ja') ? 'ja' : vl.startsWith('ko') ? 'ko' : vl.startsWith('vi') ? 'vi' : 'en'
+    const _narrTranslated = cfg.narrEnabled && cfg.voiceSource === 'translated_subtitle'
+    const _subTranslateOn = cfg.subTranslate || _narrTranslated
+    const _subTargetLang  = _narrTranslated ? langBase(cfg.voiceLang) : cfg.subTranslateLang
     const payload: RenderRequest = {
       source_mode:       'local',
       source_video_path: src.value,
@@ -304,8 +315,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       subtitle_style:              cfg.subStyle,
       highlight_per_word:          cfg.subHighlight,
       sub_font_size:               cfg.subFontSize,
-      subtitle_translate_enabled:  cfg.subTranslate || undefined,
-      subtitle_target_language:    cfg.subTranslate ? cfg.subTranslateLang : undefined,
+      subtitle_translate_enabled:  _subTranslateOn || undefined,
+      subtitle_target_language:    _subTranslateOn ? _subTargetLang : undefined,
       // T1.4 follow-up — Audit 2026-06-08: removed `part_order:
       // cfg.partOrder`. The BE validator at models/render.py:451-463
       // coerces the value to "viral" then no engine consumer reads it
