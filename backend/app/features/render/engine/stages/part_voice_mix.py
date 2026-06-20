@@ -318,23 +318,39 @@ def run_part_voice_mix(
         and getattr(ctx.payload, "voice_source", "manual") == "translated_subtitle"
         and ctx.voice_audio_path is None
     ):
-        _tgt_lang_voice = getattr(ctx.payload, "subtitle_target_language", "en")
-        if not ctx.payload.voice_language.lower().startswith(_tgt_lang_voice.lower()):
-            _job_log(ctx.effective_channel, ctx.job_id, f"VOICE_LANGUAGE_TARGET_MISMATCH: voice_language={ctx.payload.voice_language} target={_tgt_lang_voice}", kind="warning")
-        _voice_srt = translated_srt_part if translated_srt_part.exists() and translated_srt_part.stat().st_size > 0 else None
-        if _voice_srt is None:
-            _job_log(ctx.effective_channel, ctx.job_id, f"VOICE_TRANSLATED_SUBTITLE_MISSING: part {idx} translated SRT not found; falling back to original", kind="warning")
-            _voice_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
-        _voice_srt_inmem_text: str | None = None
-        if _voice_srt is None and ctx.full_srt_available:
-            try:
-                _voice_srt_inmem_text = slice_srt_to_text(str(ctx.full_srt), seg["start"], seg["end"])
-                _voice_srt = ctx.full_srt
-                _job_log(ctx.effective_channel, ctx.job_id, f"voice.translated_srt_in_memory part_no={idx} (no temp file written)", kind="debug")
-            except Exception:
-                _voice_srt = None
+        # P2 (2026-06-20): narration language is the VOICE language, decoupled
+        # from the burned subtitle. Reuse the subtitle's translation only when
+        # it is already in the voice's language; otherwise translate the
+        # original part text to the voice language independently — so e.g. an
+        # English on-screen subtitle can pair with a Japanese narration.
+        _voice_target = (ctx.payload.voice_language.split("-")[0] or "en").lower()
+        _sub_target = (getattr(ctx.payload, "subtitle_target_language", "") or "en").lower()
+        _tgt_lang_voice = _voice_target  # event/context label (now the voice language)
+        _part_narration_text = ""
+        if _sub_target == _voice_target and translated_srt_part.exists() and translated_srt_part.stat().st_size > 0:
+            # Subtitle was already translated to the voice language — reuse it.
+            _part_narration_text = extract_text_from_srt(str(translated_srt_part))
+        else:
+            # Take the original-language part text and translate it to the
+            # voice language ourselves (independent of the burned subtitle).
+            if srt_part.exists() and srt_part.stat().st_size > 0:
+                _orig_text = extract_text_from_srt(str(srt_part))
+            elif ctx.full_srt_available:
+                try:
+                    _orig_text = slice_srt_to_text(str(ctx.full_srt), seg["start"], seg["end"])
+                except Exception:
+                    _orig_text = ""
+            else:
+                _orig_text = ""
+            if _orig_text.strip():
+                try:
+                    from app.features.render.engine.subtitle.translation_service import translate_text
+                    _part_narration_text = translate_text(_orig_text, target_language=_voice_target)
+                except Exception as _self_tr_exc:
+                    _job_log(ctx.effective_channel, ctx.job_id, f"voice.self_translate_failed part_no={idx} target={_voice_target}: {_self_tr_exc} — speaking original text", kind="warning")
+                    _part_narration_text = _orig_text
+        _voice_srt = bool((_part_narration_text or "").strip())
         if _voice_srt:
-            _part_narration_text = _voice_srt_inmem_text if _voice_srt_inmem_text is not None else extract_text_from_srt(str(_voice_srt))
             if _part_narration_text.strip():
                 ctx.voice_part_tts_attempts.append(idx)
                 _part_mp3 = str(TEMP_DIR / ctx.job_id / "voice" / f"part_{idx:03d}.mp3")
