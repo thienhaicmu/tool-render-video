@@ -11,7 +11,7 @@ import { getJob } from '@/api/jobs'
 import type { PrepareSourceResponse } from '@/api/render'
 import { getJobParts, getJobQualitySummary, getJobRanking } from '@/api/jobs'
 import type { RenderRequest, JobPart, QualityReport, PartRankResult } from '@/types/api'
-import { useT, ERROR_KIND_KEY, ERROR_FIX_STEPS } from './i18n'
+import { useT, ERROR_KIND_KEY, ERROR_FIX_STEPS, inferErrorKind } from './i18n'
 import type { Step, CfgTab, ConfigState, Source } from './types'
 import { PRESETS, RATIO_INFO } from './constants'
 import { StepConfigure } from './steps/StepConfigure'
@@ -1092,14 +1092,26 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 }
               </div>
               {isTerminal ? (
+                (() => {
+                  // S5-hotfix — refine the displayed error using both
+                  // the backend kind and the raw message, so cancelled
+                  // jobs don't read as "Failed — retry" and so AI key
+                  // failures get actionable hints.
+                  const displayKind = inferErrorKind(jobStatus ?? '', jobMessage ?? '', errorKind)
+                  const isCancelled = displayKind === 'CANCELLED' || jobStatus === 'cancelled'
+                  return (
                 <>
-                  {(jobStatus === 'failed') && errorKind && (
+                  {(jobStatus === 'failed' || jobStatus === 'cancelled') && displayKind && (
                     <div style={{ marginBottom: 8 }}>
-                      <div style={{ fontSize: 11, color: 'var(--error, #e74c3c)', fontWeight: 700, marginBottom: 6 }}>
-                        {t[ERROR_KIND_KEY[errorKind]] as string}
+                      <div style={{
+                        fontSize: 11,
+                        color: isCancelled ? 'var(--text-2)' : 'var(--error, #e74c3c)',
+                        fontWeight: 700, marginBottom: 6,
+                      }}>
+                        {t[ERROR_KIND_KEY[displayKind]] as string}
                       </div>
                       <ul style={{ margin: '0 0 6px 14px', padding: 0, fontSize: 10, color: 'var(--text-2)', lineHeight: 1.6 }}>
-                        {ERROR_FIX_STEPS[errorKind].map((step, i) => (
+                        {ERROR_FIX_STEPS[displayKind].map((step, i) => (
                           <li key={i}>{step}</li>
                         ))}
                       </ul>
@@ -1125,7 +1137,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    {(jobStatus === 'failed') && (
+                    {(jobStatus === 'failed' || jobStatus === 'cancelled') && (
                       <button className="btn-back" onClick={handleRetryRender} disabled={isRetrying}>
                         {isRetrying ? '…' : t.btnRetry}
                       </button>
@@ -1138,6 +1150,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                     <button className="btn-next" onClick={() => setStep(4)}>{t.btnViewResults}</button>
                   </div>
                 </>
+                  )
+                })()
               ) : (
                 <button
                   className="btn-cancel"

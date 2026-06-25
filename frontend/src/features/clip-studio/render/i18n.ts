@@ -101,6 +101,7 @@ const T = {
     errKindQa: 'Output validation failed — video may be corrupt or empty',
     errKindVoice: 'Voiceover failed — TTS engine error',
     errKindCancelled: 'Render was cancelled',
+    errKindAiKey: 'AI provider returned no clips — likely a missing or invalid API key',
     errKindRender: 'Render failed — check logs for details',
   },
   VI: {
@@ -197,6 +198,7 @@ const T = {
     errKindQa: 'Kiểm tra output thất bại — video bị hỏng hoặc trống',
     errKindVoice: 'Thuyết minh thất bại — lỗi TTS engine',
     errKindCancelled: 'Render đã bị hủy',
+    errKindAiKey: 'AI không trả về clip nào — có thể thiếu hoặc sai API key',
     errKindRender: 'Render thất bại — xem nhật ký để biết chi tiết',
   },
 } as const
@@ -204,9 +206,16 @@ const T = {
 export type Strings = { [K in keyof typeof T['EN']]: typeof T['EN'][K] extends string ? string : typeof T['EN'][K] }
 export function useT(lang: Lang): Strings { return T[lang] as Strings }
 
-export const ERROR_KIND_KEY: Record<JobErrorKind, keyof Pick<Strings,
+// "AI_KEY_MISSING" is a synthetic kind inferred client-side from the
+// pipeline's "ai_emission_empty" / "returned_none" / "API key" phrases.
+// Treated as a string literal here so the existing JobErrorKind type
+// (declared in types/api.ts) doesn't need to change in lockstep with
+// the backend — the FE handles the inference + hint surface itself.
+export type FrontendErrorKind = JobErrorKind | 'AI_KEY_MISSING'
+
+export const ERROR_KIND_KEY: Record<FrontendErrorKind, keyof Pick<Strings,
   'errKindDownload' | 'errKindWhisper' | 'errKindSource' | 'errKindFfmpeg' |
-  'errKindQa' | 'errKindVoice' | 'errKindCancelled' | 'errKindRender'
+  'errKindQa' | 'errKindVoice' | 'errKindCancelled' | 'errKindAiKey' | 'errKindRender'
 >> = {
   DOWNLOAD_FAILED: 'errKindDownload',
   WHISPER_FAILED:  'errKindWhisper',
@@ -215,16 +224,65 @@ export const ERROR_KIND_KEY: Record<JobErrorKind, keyof Pick<Strings,
   QA_FAILED:       'errKindQa',
   VOICE_FAILED:    'errKindVoice',
   CANCELLED:       'errKindCancelled',
+  AI_KEY_MISSING:  'errKindAiKey',
   RENDER_FAILED:   'errKindRender',
 }
 
-export const ERROR_FIX_STEPS: Record<JobErrorKind, string[]> = {
+export const ERROR_FIX_STEPS: Record<FrontendErrorKind, string[]> = {
   DOWNLOAD_FAILED:  ['Check the YouTube URL is valid and not private/region-locked', 'Verify disk space on the output drive', 'Try switching to local file mode if download keeps failing'],
   WHISPER_FAILED:   ['Switch to a smaller Whisper model (e.g. "small" instead of "medium")', 'Check available RAM — Whisper needs ~4 GB for large models', 'Disable transcription and use manual subtitles'],
   SOURCE_NOT_FOUND: ['Verify the source file still exists at the original path', 'Re-add the source in Step 1 and render again'],
   FFMPEG_FAILED:    ['Check the render log in the Output folder for the full FFmpeg error', 'Try switching render quality to "Fast" and retry', 'Ensure the output folder has write permissions'],
   QA_FAILED:        ['The exported video was empty or corrupt — check disk space', 'Retry the render — this can occur if the machine was low on memory', 'Check FFmpeg log in the output folder for codec errors'],
   VOICE_FAILED:     ['Disable voiceover and re-render subtitles only', 'Check that the TTS engine is installed and not rate-limited', 'Switch voice source to "subtitle" instead of "manual"'],
-  CANCELLED:        ['Render was cancelled — click Retry to restart from scratch'],
+  CANCELLED:        ['You cancelled this render — click Retry to restart from scratch', 'Or click Configure to tweak settings before rendering again'],
+  AI_KEY_MISSING:   ['Open backend/.env and set GEMINI_API_KEY=AIza… (or OPENAI_API_KEY / ANTHROPIC_API_KEY)', 'Use Configure → AI panel → Test connection to verify the key works before rendering', 'Switch to a different AI provider in Step 2 if your current one is rate-limited or down'],
   RENDER_FAILED:    ['Open the output folder and check render.log for the root cause', 'Retry once — transient errors (memory spike, process collision) often resolve', 'Reduce concurrent jobs in Settings if rendering multiple videos'],
+}
+
+/**
+ * S5-hotfix — infer a more specific error kind from the raw exception
+ * message when the backend's classification is too coarse. Currently
+ * catches two cases the backend lumps under "failed":
+ *   1. JobCancelledError — surfaces as message ending with ":" + empty
+ *      exception body. We treat as CANCELLED.
+ *   2. ai_emission_empty / returned_none / "API keys in server .env" —
+ *      we treat as AI_KEY_MISSING so the user gets actionable hints
+ *      instead of the generic "retry / reduce concurrency" wall.
+ *
+ * Backend fix (render_pipeline.py outer except handler) is CRITICAL-tier
+ * and tracked as follow-up. Until then this client-side inference is
+ * the safe path that doesn't risk regressions on the render path.
+ */
+export function inferErrorKind(
+  jobStatus: string,
+  jobMessage: string,
+  backendKind: JobErrorKind | null,
+): FrontendErrorKind | null {
+  const msg = (jobMessage || '').toLowerCase()
+
+  // Cancellation pattern: pipeline emits "Failed at step '...': " with
+  // empty exception body when JobCancelledError propagates through the
+  // outer except. Match on the empty-suffix to be conservative; a real
+  // failure always has at least an exception class name after the
+  // colon.
+  if (jobStatus === 'failed' && /failed at step '.+':\s*$/i.test(jobMessage || '')) {
+    return 'CANCELLED'
+  }
+
+  if (backendKind === 'CANCELLED' || jobStatus === 'cancelled') {
+    return 'CANCELLED'
+  }
+
+  // AI key / provider exhaustion pattern.
+  if (
+    msg.includes('ai_emission_empty') ||
+    msg.includes('returned_none') ||
+    msg.includes('verify api keys') ||
+    msg.includes('api provider chain')
+  ) {
+    return 'AI_KEY_MISSING'
+  }
+
+  return backendKind
 }
