@@ -17,6 +17,21 @@ interface ElectronAPI {
   /** Check whether a path exists on disk. Returns null on IPC failure
    *  (caller should treat that as "unknown — skip the check"). */
   pathExists?: (path: string) => Promise<boolean | null>
+  /** Show an OS-level notification (Win11 Action Center / macOS Notification
+   *  Center). Returns ok=false if the platform doesn't support notifications
+   *  or IPC failed. The web build is a no-op (method is undefined). */
+  notify?: (opts: {
+    title: string
+    body?: string
+    jobId?: string
+    kind?: 'render' | 'download'
+  }) => Promise<{ ok: boolean; error?: string }>
+  /** Subscribe to "user clicked an OS notification" events. Returns an
+   *  unsubscribe function. Useful for navigating to the relevant screen
+   *  (e.g. Results for the jobId carried in the original notify() call). */
+  onNotificationClicked?: (
+    handler: (payload: { jobId: string | null; kind: string | null }) => void,
+  ) => () => void
 }
 
 declare global {

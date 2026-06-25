@@ -401,7 +401,20 @@ function StepRenderingBase({
         </div>
       )}
 
-      {!isTerminal && (wsReconnecting || wsError || wsPolling) && (
+      {!isTerminal && jobStatus === 'cancelling' && (
+        <div style={{
+          padding: '8px 16px',
+          background: 'rgba(234,179,8,.10)',
+          borderBottom: '1px solid rgba(234,179,8,.2)',
+          fontSize: '11px',
+          color: 'var(--warn)',
+          flexShrink: 0,
+        }}>
+          {`◐ ${t.rndCancelling}`}
+        </div>
+      )}
+
+      {!isTerminal && jobStatus !== 'cancelling' && (wsReconnecting || wsError || wsPolling) && (
         <div style={{
           padding: '8px 16px',
           background: wsPolling
@@ -416,7 +429,8 @@ function StepRenderingBase({
             ? `↻ ${t.rndWsReconnecting}`
             : wsPolling
               // N5 (2026-06-15): WS exhausted reconnect → 5 s HTTP polling.
-              ? '⟳ Live updates unavailable — polling every 5s (progress will be slower)'
+              // Copy reassures the user that the render itself is unaffected.
+              ? `● ${t.rndWsPolling}`
               : `⚠ ${t.rndWsError}`}
         </div>
       )}

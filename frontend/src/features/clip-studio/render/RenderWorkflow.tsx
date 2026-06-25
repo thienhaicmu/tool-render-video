@@ -889,8 +889,12 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                   </div>
                 </>
               ) : (
-                <button className="btn-cancel" onClick={handleCancelRender} disabled={isCancelling}>
-                  {isCancelling ? t.btnCancelling : t.btnCancelRender}
+                <button
+                  className="btn-cancel"
+                  onClick={handleCancelRender}
+                  disabled={isCancelling || jobStatus === 'cancelling'}
+                >
+                  {(isCancelling || jobStatus === 'cancelling') ? t.btnCancelling : t.btnCancelRender}
                 </button>
               )}
             </div>

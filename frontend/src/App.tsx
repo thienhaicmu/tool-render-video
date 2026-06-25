@@ -8,10 +8,12 @@
  */
 import React, { Suspense, lazy } from 'react'
 import { AppShell } from './layouts/AppShell'
+import { ActiveJobsDock } from './layouts/ActiveJobsDock'
 import { useUIStore } from './stores/uiStore'
 import type { ActivePanel } from './stores/uiStore'
 import { Notifications } from './components/ui/Notifications'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
+import { useJobCompletionNotifier } from './hooks/useJobCompletionNotifier'
 
 // Code-split each top-level screen into its own chunk (F1). The initial
 // bundle no longer carries every screen's code; a screen's chunk is fetched
@@ -68,6 +70,9 @@ export function App() {
   const activePanel = useUIStore((s) => s.activePanel)
   const ActiveScreen = PANEL_MAP[activePanel]
 
+  // Watch jobsStore for terminal transitions and fire OS notifications.
+  useJobCompletionNotifier()
+
   // Prefetch all screen chunks once the browser is idle so the first open of
   // any panel is instant. Best-effort: requestIdleCallback when available,
   // else a short timeout. Failures are ignored (the lazy() import retries).
@@ -96,6 +101,7 @@ export function App() {
           <Suspense fallback={<ScreenFallback />}>
             <ActiveScreen />
           </Suspense>
+          <ActiveJobsDock />
           <Notifications />
         </div>
       </ErrorBoundary>

@@ -4,6 +4,7 @@
 import React from 'react'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
+import { ActiveJobsDock } from './ActiveJobsDock'
 import { Notifications } from '../components/ui/Notifications'
 
 interface AppShellProps {
@@ -26,6 +27,7 @@ export function AppShell({ children }: AppShellProps) {
           {children}
         </main>
       </div>
+      <ActiveJobsDock />
       <Notifications />
     </div>
   )

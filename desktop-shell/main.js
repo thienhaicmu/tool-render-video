@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, Notification } = require('electron');
 const { spawn } = require('child_process');
 const http = require('http');
 const path = require('path');
@@ -564,6 +564,35 @@ ipcMain.handle('shell:openPath', async (_event, targetPath) => {
   const p = String(targetPath || '').trim();
   if (!p) return 'Missing path';
   return shell.openPath(p);
+});
+
+// ---------------------------------------------------------------------------
+// notify:show — OS-level notification when a long render job finishes.
+// Click brings the window forward and emits 'notify-clicked' to the renderer
+// so the FE can navigate to the relevant screen (e.g. Results for jobId).
+// ---------------------------------------------------------------------------
+ipcMain.handle('notify:show', (_event, opts) => {
+  try {
+    if (!Notification.isSupported()) return { ok: false, error: 'unsupported' };
+    const title = String((opts && opts.title) || 'Job done');
+    const body = String((opts && opts.body) || '');
+    const jobId = opts && opts.jobId ? String(opts.jobId) : null;
+    const kind = opts && opts.kind ? String(opts.kind) : null;
+    const n = new Notification({ title, body, silent: false });
+    n.on('click', () => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+        try { win.webContents.send('notify-clicked', { jobId, kind }); } catch (_) {}
+      }
+    });
+    n.show();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err && err.message ? err.message : String(err) };
+  }
 });
 
 // ---------------------------------------------------------------------------

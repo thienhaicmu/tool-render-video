@@ -1,0 +1,1 @@
+import{a as t}from"./index-CJnWGS5C.js";async function r(){return t("/api/settings/output-dir")}async function a(u){return t("/api/settings/output-dir",{method:"PUT",body:JSON.stringify({path:u})})}export{r as g,a as p};

@@ -85,5 +85,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onBootVersion: (cb) => {
     ipcRenderer.on('boot-version', (_event, ver) => cb(ver));
   },
+  notify: async (opts) => {
+    try {
+      return await ipcRenderer.invoke('notify:show', opts || {});
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e || 'IPC error') };
+    }
+  },
+  onNotificationClicked: (handler) => {
+    try {
+      const listener = (_event, data) => handler(data);
+      ipcRenderer.on('notify-clicked', listener);
+      return () => ipcRenderer.removeListener('notify-clicked', listener);
+    } catch (_) {
+      return () => {};
+    }
+  },
 });
 
