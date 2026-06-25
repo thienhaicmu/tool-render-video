@@ -722,6 +722,35 @@ def api_cleanup_logs(keep_last: int = 30, older_than_days: int = 10):
     return prune_job_logs(CHANNELS_DIR, keep_last=keep_last, older_than_days=older_than_days)
 
 
+# S4.4 — Watchdog extend: grant a running job extra age before the
+# 2 h MAX_JOB_AGE_SECONDS watchdog cancels it. Surfaces a clean 404
+# when the job isn't active so the FE can decide whether to retry
+# (job just finished) or surface the error (already cancelled).
+@router.post("/{job_id}/extend")
+def api_extend_job_age(job_id: str, extra_seconds: int = 3600) -> dict:
+    """Postpone the watchdog auto-cancel deadline for an active job.
+
+    ``extra_seconds`` defaults to 3600 (1 h) — matches the FE advisory
+    dialog copy. Negative values clamp to 0. The override is in-memory
+    and is cleared when the job terminates, so retrying after a
+    completed render returns a 404.
+
+    Returns ``{job_id, granted_seconds, cumulative_override}`` on success.
+    """
+    from app.jobs.manager import extend_job_age, get_job_age_override
+    extra = max(0, int(extra_seconds))
+    if not extend_job_age(job_id, extra):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} is not currently running (cannot extend).",
+        )
+    return {
+        "job_id": job_id,
+        "granted_seconds": extra,
+        "cumulative_override": get_job_age_override(job_id),
+    }
+
+
 @router.delete("/{job_id}/parts/{part_no}/output")
 def delete_part_output_endpoint(job_id: str, part_no: int):
     """Delete the output file of a single rendered part and clear its DB path.

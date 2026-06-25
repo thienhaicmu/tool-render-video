@@ -218,7 +218,14 @@ def run_llm_pre_render(
             )
 
             def _hb_fn(_stop=_hb_stop, _m=_model, _eta=_eta_sec):
-                _pct = 16
+                # S4.6 — feed the eta-based estimate directly into the
+                # DB progress field instead of the slow 16-22% drip the
+                # previous implementation used. The estimate isn't
+                # segment-accurate (faster-whisper doesn't expose per-
+                # segment progress without a wrapped iterator) but
+                # bouncing 16 -> 22% over a multi-minute Whisper run made
+                # the analyze bar look frozen. eta-based is closer to
+                # actual ground truth and unambiguously moves.
                 _tick = 0
                 while not _stop.wait(10):  # heartbeat every 10s — halves DB writes during Whisper
                     _tick += 1
@@ -230,12 +237,14 @@ def run_llm_pre_render(
                         f"llm_pipeline.transcription.alive elapsed={_el}s "
                         f"est_progress={_pct_est}% model={_m} eta={_eta:.0f}s",
                     )
-                    # DB progress: only bump stage % gradually (UI cap).
+                    # DB progress: surface the eta-based estimate so the
+                    # FE analyze phase actually moves over the Whisper
+                    # duration. Stage stays TRANSCRIBING_FULL — Sacred
+                    # Contract #4 untouched.
                     update_job_progress(
-                        job_id, JobStage.TRANSCRIBING_FULL, _pct,
-                        f"Whisper transcribing… {_el}s elapsed (~{_pct_est}% of eta)",
+                        job_id, JobStage.TRANSCRIBING_FULL, _pct_est,
+                        f"Whisper transcribing ~{_pct_est}% ({_el}s / est {int(_eta)}s, {_m})",
                     )
-                    _pct = _pct + 1 if _pct < 22 else 22
 
             _hb = threading.Thread(
                 target=_hb_fn, daemon=True,

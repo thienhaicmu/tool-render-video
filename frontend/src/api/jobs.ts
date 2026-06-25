@@ -20,6 +20,22 @@ export async function getJob(jobId: string): Promise<JobStatus> {
 }
 
 /**
+ * S4.4 — postpone the watchdog auto-cancel deadline for an active job.
+ * POST /api/jobs/{jobId}/extend?extra_seconds={N}. 404 when the job is
+ * no longer running (just finished / cancelled). Returns the new
+ * cumulative override (seconds).
+ */
+export async function extendJob(
+  jobId: string,
+  extraSeconds: number = 3600,
+): Promise<{ job_id: string; granted_seconds: number; cumulative_override: number }> {
+  return apiFetch(
+    `/api/jobs/${encodeURIComponent(jobId)}/extend?extra_seconds=${encodeURIComponent(extraSeconds)}`,
+    { method: 'POST' },
+  )
+}
+
+/**
  * Paginated job history. ALWAYS use this instead of listJobs() for history UI.
  * GET /api/jobs/history?limit=20&offset=0
  */

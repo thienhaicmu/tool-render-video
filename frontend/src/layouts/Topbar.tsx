@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from 'react'
 import { apiFetch } from '../api/client'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
+import { NotificationCenter } from '../components/NotificationCenter'
 import { useUIStore } from '../stores/uiStore'
 
 interface WarmupStatus {
@@ -70,6 +71,7 @@ export function Topbar() {
       </div>
 
       <div style={styles.right}>
+        <NotificationCenter />
         <ThemeToggle />
 
         {warmupStatus && (

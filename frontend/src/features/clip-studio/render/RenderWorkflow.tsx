@@ -136,7 +136,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     stage, jobStatus, progress, jobMessage, isTerminal,
     isReconnecting: wsReconnecting,
     isPolling:      wsPolling,
-    liveParts, error: wsError, errorKind,
+    liveParts, liveEvents, error: wsError, errorKind,
   } = useRenderSocket(jobId)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -1062,6 +1062,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 jobMessage={jobMessage ?? ''}
                 isTerminal={isTerminal}
                 liveParts={liveParts}
+                liveEvents={liveEvents}
                 wsError={wsError}
                 wsReconnecting={wsReconnecting}
                 wsPolling={wsPolling}

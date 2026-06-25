@@ -5,6 +5,8 @@ import { DownloadTab } from './download/DownloadTab'
 import { ThemeToggle } from '../../components/ui/ThemeToggle'
 import { ActiveJobBadge } from './ActiveJobBadge'
 import { useUIStore } from '../../stores/uiStore'
+import { useSystemResources } from '../../hooks/useSystemResources'
+import { NotificationCenter } from '../../components/NotificationCenter'
 
 // S2.6 — collapsed the in-Studio History tab; the sidebar Library is now
 // the single canonical jobs/history surface. HistoryTab.tsx remains in
@@ -19,6 +21,32 @@ const SettingsIcon = () => (
   </svg>
 )
 
+// S4.2 — map a 0–100 percentage to a status-bar dot tone. Threshold
+// matches what the design tokens already imply: under 80 % is healthy
+// (green), 80–95 % is warning (yellow), above 95 % is critical (red).
+// null collapses to 'off' so the dot grays out instead of disappearing.
+function loadTone(pct: number | null): 'ok' | 'warn' | 'fail' | 'off' {
+  if (pct === null) return 'off'
+  if (pct >= 95) return 'fail'
+  if (pct >= 80) return 'warn'
+  return 'ok'
+}
+
+function ResourceDot({
+  label, pct, suffix,
+}: {
+  label: string; pct: number | null; suffix?: string
+}) {
+  const tone = loadTone(pct)
+  const text = pct === null ? label : `${label} ${Math.round(pct)}%${suffix ?? ''}`
+  return (
+    <span className="cs-sb" title={pct === null ? `${label}: unavailable` : text}>
+      <span className={`cs-sb-dot ${tone}`} />
+      {text}
+    </span>
+  )
+}
+
 export function ClipStudio() {
   const [activeTab, setActiveTab] = useState<Tab>('render')
   const [lang, setLang] = useState<Lang>('EN')
@@ -26,6 +54,7 @@ export function ClipStudio() {
   // with no onClick. Wire it to switch the global active panel to
   // 'settings' so AppShell takes over and renders SettingsScreen.
   const setActivePanel = useUIStore((s) => s.setActivePanel)
+  const { snapshot: sysSnap } = useSystemResources()
 
   return (
     <div className="cs-root">
@@ -53,6 +82,7 @@ export function ClipStudio() {
 
         <div className="cs-topbar-right">
           <ActiveJobBadge onClick={() => setActiveTab('render')} />
+          <NotificationCenter />
           <ThemeToggle size="sm" />
           <div className="cs-lang-sw">
             <button className={`cs-lang-btn${lang === 'EN' ? ' active' : ''}`} onClick={() => setLang('EN')}>EN</button>
@@ -83,7 +113,12 @@ export function ClipStudio() {
         <span className="cs-sb"><span className="cs-sb-dot ok" />API</span>
         <span className="cs-sb"><span className="cs-sb-dot ok" />FFmpeg</span>
         <span className="cs-sb"><span className="cs-sb-dot ok" />Whisper</span>
-        <span className="cs-sb"><span className="cs-sb-dot off" />GPU</span>
+        <ResourceDot label="CPU" pct={sysSnap?.cpu_percent ?? null} />
+        <ResourceDot
+          label={sysSnap?.gpu_name ? 'GPU' : 'GPU'}
+          pct={sysSnap?.gpu_percent ?? null}
+        />
+        <ResourceDot label="RAM" pct={sysSnap?.ram_percent ?? null} />
         <span className="cs-sb-endpoint">http://127.0.0.1:8000</span>
       </footer>
     </div>

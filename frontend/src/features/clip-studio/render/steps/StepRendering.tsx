@@ -1,8 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import type { JobPart, WsProgressSummary } from '@/types/api'
 import type { ClipSlot } from '../types'
 import type { Strings } from '../i18n'
+import type { WsLogEvent } from '@/websocket/events'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
+import { extendJob } from '@/api/jobs'
 
 function buildClipSlots(liveParts: JobPart[], progress: WsProgressSummary | null): ClipSlot[] {
   if (liveParts.length > 0) {
@@ -66,6 +68,33 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
   const isActive = state === 'active'
   const activity = ACTIVITY_LABELS[slot.status.toLowerCase()] ?? ''
   const activeStepIdx = STEP_NODES.findIndex((n) => n.key === slot.status.toLowerCase())
+
+  // S4.1 — per-clip ETA. Track when the clip first transitioned into an
+  // active state so the heuristic uses *this clip's* elapsed time
+  // rather than the whole job's elapsed time. Reset whenever the clip
+  // goes back to waiting or reaches a terminal state.
+  const clipStartRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (isActive) {
+      if (clipStartRef.current === null) clipStartRef.current = Date.now()
+    } else {
+      clipStartRef.current = null
+    }
+  }, [isActive])
+  const clipEtaSec = (() => {
+    if (!isActive || clipStartRef.current === null) return null
+    if (pct <= 5 || pct >= 100) return null
+    const clipElapsed = Math.max(0, (Date.now() - clipStartRef.current) / 1000)
+    if (clipElapsed < 3) return null
+    const remaining = Math.round(clipElapsed * (100 - pct) / pct)
+    if (remaining < 1 || remaining > 60 * 60) return null
+    return remaining
+  })()
+  const clipEtaLabel = clipEtaSec !== null
+    ? clipEtaSec < 60
+      ? `${clipEtaSec}s`
+      : `${Math.floor(clipEtaSec / 60)}:${String(clipEtaSec % 60).padStart(2, '0')}`
+    : null
 
   const thumbUrl = jobId ? getPartThumbnailUrl(jobId, slot.part_no) : null
 
@@ -194,6 +223,14 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
           <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'monospace', flexShrink: 0, color: accentColor }}>
             {isDone ? '100%' : isFail ? 'ERR' : isWait ? '—' : `${pct}%`}
           </span>
+          {clipEtaLabel && (
+            <span style={{
+              fontSize: 9, fontWeight: 600, fontFamily: 'monospace', flexShrink: 0,
+              color: 'var(--text-3)', opacity: 0.7,
+            }} title="Estimated time remaining for this clip">
+              ~{clipEtaLabel}
+            </span>
+          )}
         </div>
 
         {isActive && (
@@ -254,12 +291,15 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
 
 // Sprint 5.7: wrapped in React.memo at export below. See StepConfigure for rationale.
 function StepRenderingBase({
-  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, wsError, wsReconnecting, wsPolling, t, aspectRatio,
+  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, liveEvents, wsError, wsReconnecting, wsPolling, t, aspectRatio,
   aiAnalysisMode, aiCloudProvider,
 }: {
   jobId: string | null; stage: string; jobStatus: string
   progress: WsProgressSummary | null; jobMessage: string
   isTerminal: boolean; liveParts: JobPart[]
+  /** S4.5 — bridged event stream from backend `_emit_render_event`.
+   *  Optional so older mount sites without the wiring still compile. */
+  liveEvents?: WsLogEvent[]
   wsError: string | null
   wsReconnecting?: boolean
   // N5 (2026-06-15): true while the WebSocket has exhausted its reconnect
@@ -274,6 +314,17 @@ function StepRenderingBase({
   const doneCount   = progress?.completed_parts ?? 0
   const totalCount  = progress?.total_parts ?? liveParts.length
   const failedCount = progress?.failed_parts ?? 0
+  // S4.3 — backend already computes stuck_parts (>120 s no DB update)
+  // in WsProgressSummary; FE was dropping the signal on the floor.
+  // Surface it as a banner so a user staring at a frozen progress bar
+  // can tell "is this normal slow or actually stuck?" without leaving
+  // the screen. Polling-fallback derives an empty list (no per-tick
+  // timestamp tracking), which is fine — banner just doesn't appear.
+  const stuckParts = progress?.stuck_parts ?? []
+  const longestStuckSec = stuckParts.reduce(
+    (max, p) => Math.max(max, p.stuck_seconds || 0),
+    0,
+  )
 
   const startRef = useRef<number>(Date.now())
   const [elapsed, setElapsed] = useState(0)
@@ -288,6 +339,22 @@ function StepRenderingBase({
   const etaSec = pct > 2 && !isTerminal ? Math.round(elapsed * (100 - pct) / pct) : null
   const etaMm  = etaSec !== null ? Math.floor(etaSec / 60).toString().padStart(2, '0') : null
   const etaSs  = etaSec !== null ? (etaSec % 60).toString().padStart(2, '0') : null
+  // S4.1 — before the heuristic stabilises (< 2% progress), show an
+  // explicit "estimating…" hint instead of leaving the slot blank. The
+  // user expects an ETA from second 1 of a 30-minute render; an empty
+  // gap reads as "broken", not "still warming up".
+  const etaShowEstimating = !isTerminal && jobId !== null && etaSec === null && elapsed > 3
+
+  // S4.4 — watchdog advisory. The backend auto-cancels at 2 h
+  // (MAX_JOB_AGE_SECONDS). We warn the user at 90 min so they can
+  // grant an extension via POST /api/jobs/{id}/extend. ackedExtendRef
+  // remembers whether the user already extended this elapsed window so
+  // we don't re-trigger the dialog every render.
+  const WATCHDOG_WARN_SEC = 90 * 60  // 90 min
+  const showWatchdogAdvisory =
+    !isTerminal && jobId !== null && elapsed >= WATCHDOG_WARN_SEC
+  const [watchdogDismissed, setWatchdogDismissed] = useState(false)
+  const [watchdogExtending, setWatchdogExtending] = useState(false)
 
   const phases = [
     { key: 'download',   label: t.rndPhaseDownload },
@@ -332,9 +399,13 @@ function StepRenderingBase({
           {!isTerminal && jobId && (
             <span className="rd-elapsed">
               {mm}:{ss}
-              {etaMm !== null && (
+              {etaMm !== null ? (
                 <span style={{ opacity: 0.5, marginLeft: 6, fontWeight: 400 }}>ETA {etaMm}:{etaSs}</span>
-              )}
+              ) : etaShowEstimating ? (
+                <span style={{ opacity: 0.45, marginLeft: 6, fontWeight: 400, fontStyle: 'italic' }}>
+                  ETA đang ước tính…
+                </span>
+              ) : null}
             </span>
           )}
         </div>
@@ -401,6 +472,93 @@ function StepRenderingBase({
         </div>
       )}
 
+      {showWatchdogAdvisory && !watchdogDismissed && jobStatus !== 'cancelling' && (
+        <div style={{
+          padding: '10px 16px',
+          background: 'rgba(234,179,8,.16)',
+          borderBottom: '1px solid rgba(234,179,8,.3)',
+          fontSize: 11,
+          color: 'var(--warn)',
+          flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 14 }}>⏰</span>
+          <span style={{ fontWeight: 600 }}>
+            Render đã chạy {Math.floor(elapsed / 60)} phút
+          </span>
+          <span style={{ opacity: 0.8 }}>
+            — sắp đạt giới hạn watchdog 2h. Cấp thêm 1h?
+          </span>
+          <span style={{ flex: 1 }} />
+          <button
+            disabled={watchdogExtending}
+            onClick={async () => {
+              if (!jobId) return
+              setWatchdogExtending(true)
+              try {
+                await extendJob(jobId, 3600)
+                setWatchdogDismissed(true)
+              } catch {
+                // 404 = job no longer active (just finished/cancelled)
+                // — dismiss banner silently in that case.
+                setWatchdogDismissed(true)
+              } finally {
+                setWatchdogExtending(false)
+              }
+            }}
+            style={{
+              padding: '4px 12px', borderRadius: 6,
+              fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
+              border: '1px solid var(--warn)',
+              background: 'var(--warn)',
+              color: '#000',
+              cursor: watchdogExtending ? 'not-allowed' : 'pointer',
+              opacity: watchdogExtending ? 0.5 : 1,
+            }}
+          >
+            {watchdogExtending ? 'Đang xin…' : '+1h'}
+          </button>
+          <button
+            onClick={() => setWatchdogDismissed(true)}
+            style={{
+              padding: '4px 10px', borderRadius: 6,
+              fontSize: 10, fontWeight: 600,
+              border: '1px solid var(--border)', background: 'transparent',
+              color: 'var(--text-2)', cursor: 'pointer',
+            }}
+          >
+            Để render bị hủy
+          </button>
+        </div>
+      )}
+
+      {!isTerminal && stuckParts.length > 0 && jobStatus !== 'cancelling' && (
+        <div style={{
+          padding: '8px 16px',
+          background: 'rgba(234,179,8,.12)',
+          borderBottom: '1px solid rgba(234,179,8,.25)',
+          fontSize: 11,
+          color: 'var(--warn)',
+          flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        }}>
+          <span>⚠</span>
+          <span style={{ fontWeight: 600 }}>
+            {stuckParts.length === 1
+              ? `Clip #${stuckParts[0].part_no} có vẻ bị chậm bất thường`
+              : `${stuckParts.length} clip có vẻ bị chậm bất thường`
+            }
+          </span>
+          <span style={{ opacity: 0.7 }}>
+            (không cập nhật trong {Math.round(longestStuckSec)}s)
+          </span>
+          <span style={{ flex: 1 }} />
+          <span style={{ opacity: 0.6, fontSize: 10 }}>
+            Render vẫn đang chạy — chờ thêm 1-2 phút trước khi cancel
+          </span>
+        </div>
+      )}
+
       {!isTerminal && jobStatus === 'cancelling' && (
         <div style={{
           padding: '8px 16px',
@@ -458,6 +616,9 @@ function StepRenderingBase({
         </div>
       )}
 
+      {/* S4.5 — event log tail panel */}
+      <EventLogPanel events={liveEvents || []} />
+
       <div className="rd-abp-toolbar">
         <div className="rd-abp-job">
           <div className="rd-abp-title">{jobId ? jobId.slice(-12) : '—'}</div>
@@ -480,3 +641,141 @@ function StepRenderingBase({
 }
 
 export const StepRendering = React.memo(StepRenderingBase)
+
+// ── S4.5 — Event log tail panel ────────────────────────────────────────
+//
+// Collapsible drawer above the bottom toolbar that surfaces the
+// structured event stream backend already emits via _emit_render_event.
+// Power-user surface — copy-to-clipboard per event + filter by level
+// (warn/error) so a stuck render is debuggable without leaving the UI.
+
+const EVENT_LEVEL_COLORS: Record<string, string> = {
+  ERROR:    'var(--fail, #f87171)',
+  CRITICAL: 'var(--fail, #f87171)',
+  FATAL:    'var(--fail, #f87171)',
+  WARN:     'var(--warn, #eab308)',
+  WARNING:  'var(--warn, #eab308)',
+  INFO:     'var(--text-2)',
+  DEBUG:    'var(--text-3)',
+}
+
+function EventLogPanel({ events }: { events: WsLogEvent[] }) {
+  const [open, setOpen] = useState(false)
+  const [filterErrors, setFilterErrors] = useState(false)
+
+  const visible = useMemo(() => {
+    const list = filterErrors
+      ? events.filter((e) => {
+        const l = (e.level || '').toUpperCase()
+        return l === 'ERROR' || l === 'CRITICAL' || l === 'FATAL' || l === 'WARN' || l === 'WARNING'
+      })
+      : events
+    // Newest at bottom for a tail-like feel; events stream in newest-first
+    // from the hook so reverse here.
+    return [...list].reverse()
+  }, [events, filterErrors])
+
+  function copyEvent(ev: WsLogEvent) {
+    const payload = JSON.stringify(ev, null, 2)
+    try {
+      navigator.clipboard?.writeText(payload)
+    } catch {
+      // ignore — clipboard API can be unavailable in some Electron contexts
+    }
+  }
+
+  if (events.length === 0) return null
+
+  return (
+    <div style={{
+      borderTop: '1px solid var(--border)',
+      background: 'var(--bg-panel)',
+      flexShrink: 0,
+    }}>
+      <button
+        onClick={() => setOpen((p) => !p)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 14px', background: 'transparent',
+          border: 'none', borderBottom: open ? '1px solid var(--border)' : 'none',
+          color: 'var(--text-2)', fontSize: 10, fontWeight: 700,
+          fontFamily: 'var(--fh)', letterSpacing: '.06em', textTransform: 'uppercase',
+          cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <span style={{ width: 12, display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
+        Event Log
+        <span style={{ opacity: 0.5, fontWeight: 500, letterSpacing: 0, textTransform: 'none' }}>
+          ({events.length} event{events.length !== 1 ? 's' : ''})
+        </span>
+        <span style={{ flex: 1 }} />
+        {open && (
+          <span
+            onClick={(e) => { e.stopPropagation(); setFilterErrors((p) => !p) }}
+            style={{
+              padding: '2px 8px', borderRadius: 4,
+              border: '1px solid var(--border)',
+              background: filterErrors ? 'rgba(234,179,8,.18)' : 'transparent',
+              color: filterErrors ? 'var(--warn)' : 'var(--text-3)',
+              fontSize: 9, fontWeight: 700, letterSpacing: '.04em',
+            }}
+          >
+            {filterErrors ? 'ONLY WARN/ERROR' : 'ALL LEVELS'}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div style={{
+          maxHeight: 240, overflowY: 'auto',
+          fontFamily: 'monospace', fontSize: 10, lineHeight: 1.5,
+          padding: '6px 14px',
+        }}>
+          {visible.length === 0 ? (
+            <div style={{ color: 'var(--text-3)', padding: '8px 0', textAlign: 'center' }}>
+              Không có event nào khớp filter
+            </div>
+          ) : (
+            visible.map((ev, i) => {
+              const lvl = (ev.level || 'INFO').toUpperCase()
+              const color = EVENT_LEVEL_COLORS[lvl] || 'var(--text-2)'
+              const t = (ev.timestamp || '').slice(11, 19)
+              return (
+                <div
+                  key={`${ev.timestamp}-${ev.event}-${i}`}
+                  onClick={() => copyEvent(ev)}
+                  title="Click để copy event JSON"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '60px 60px 1fr',
+                    gap: 8, padding: '3px 4px', borderRadius: 4,
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.04)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <span style={{ color: 'var(--text-3)' }}>{t}</span>
+                  <span style={{ color, fontWeight: 700 }}>{lvl}</span>
+                  <span style={{ color: 'var(--text-1)' }}>
+                    <span style={{ color: 'var(--text-3)' }}>{ev.event}</span>
+                    {ev.message && (
+                      <>
+                        <span style={{ opacity: 0.5 }}> · </span>
+                        {ev.message}
+                      </>
+                    )}
+                    {ev.error_code && (
+                      <span style={{ marginLeft: 6, color: 'var(--fail)', opacity: 0.8 }}>
+                        [{ev.error_code}]
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

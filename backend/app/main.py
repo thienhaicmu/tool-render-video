@@ -41,6 +41,7 @@ from app.routes.batch_render import router as batch_render_router
 from app.routes.thumbnails import router as thumbnails_router
 from app.routes.storage import router as storage_router
 from app.routes.snapshot import router as snapshot_router
+from app.routes.system import router as system_router
 from app.routes.prompt_preview import router as prompt_preview_router
 from app.routes.job_report import router as job_report_router
 from app.routes.job_clone import router as job_clone_router
@@ -172,6 +173,7 @@ app.include_router(batch_render_router)    # Phase K: Batch Render from Asset Li
 app.include_router(thumbnails_router)      # Phase J: Output Thumbnail API
 app.include_router(storage_router)         # Phase L: Disk Usage & Cleanup
 app.include_router(snapshot_router)        # Phase P: Job Snapshot
+app.include_router(system_router)          # S4.2: CPU/GPU/disk resource snapshot
 app.include_router(prompt_preview_router)  # Phase R: LLM Prompt Preview
 app.include_router(job_report_router)      # Phase S: Job Export Report
 app.include_router(job_clone_router)       # Phase M: Job Clone / Re-render

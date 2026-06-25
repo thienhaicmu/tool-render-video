@@ -69,6 +69,13 @@ _stopping: bool = False
 
 # Watchdog state — tracks when each job was dispatched for age-limit enforcement.
 _job_start_times: dict[str, float] = {}
+# S4.4 — extra seconds the user has explicitly granted to specific jobs via
+# POST /api/jobs/{id}/extend. The watchdog adds this to MAX_JOB_AGE before
+# comparing, so a 4 K long-form render can survive past the 2 h default
+# without the user having to bump the env var globally. Cleared when the
+# job's start-time entry is removed (job finishes / cancelled). In-memory
+# only — restart resets to zero overrides, which is the safe default.
+_job_age_overrides: dict[str, int] = {}
 _job_times_lock = threading.Lock()
 _watchdog_thread: threading.Thread | None = None
 
@@ -83,6 +90,10 @@ def _check_and_cancel_stale_jobs() -> None:
     Called from the watchdog daemon thread every _WATCHDOG_INTERVAL seconds.
     Exposed at module level so unit tests can invoke it directly without
     sleeping.  _MAX_JOB_AGE == 0 disables the check entirely.
+
+    S4.4 — per-job override in ``_job_age_overrides`` is added to the
+    base limit before comparing, so a user-granted extension via
+    POST /api/jobs/{id}/extend pushes the deadline out.
     """
     if _MAX_JOB_AGE <= 0:
         return
@@ -92,16 +103,50 @@ def _check_and_cancel_stale_jobs() -> None:
     for job_id in active:
         with _job_times_lock:
             t0 = _job_start_times.get(job_id)
-        if t0 is not None and (now - t0) > _MAX_JOB_AGE:
+            override = _job_age_overrides.get(job_id, 0)
+        effective_limit = _MAX_JOB_AGE + override
+        if t0 is not None and (now - t0) > effective_limit:
             logger.warning(
-                "watchdog: job %s has run for %.0fs (limit %ds) — cancelling",
-                job_id, now - t0, _MAX_JOB_AGE,
+                "watchdog: job %s has run for %.0fs (limit %ds, override %ds) — cancelling",
+                job_id, now - t0, _MAX_JOB_AGE, override,
             )
             try:
                 from app.jobs.cancel import request_cancel
                 request_cancel(job_id)
             except Exception as exc:
                 logger.error("watchdog: request_cancel(%s) failed: %s", job_id, exc)
+
+
+# S4.4 — public surface for the /api/jobs/{id}/extend endpoint.
+
+def extend_job_age(job_id: str, extra_seconds: int = 3600) -> bool:
+    """Grant ``extra_seconds`` of additional run-time to an active job.
+
+    Multiple calls accumulate (caller can extend repeatedly). Negative
+    values clamp to 0 — extension can't shrink the limit. Returns True
+    when the job exists in the active set + has a start time recorded;
+    False otherwise (the caller surfaces a 404).
+
+    In-memory only — restart clears all overrides, returning to the base
+    MAX_JOB_AGE_SECONDS limit (the safe default).
+    """
+    extra = max(0, int(extra_seconds))
+    with _job_times_lock:
+        if job_id not in _job_start_times:
+            return False
+        _job_age_overrides[job_id] = _job_age_overrides.get(job_id, 0) + extra
+        logger.info(
+            "watchdog: extended job %s by %ds (cumulative override %ds)",
+            job_id, extra, _job_age_overrides[job_id],
+        )
+    return True
+
+
+def get_job_age_override(job_id: str) -> int:
+    """Read the cumulative override (seconds) for a job. 0 if untouched
+    or job not tracked. Exposed for tests + diagnostic endpoints."""
+    with _job_times_lock:
+        return int(_job_age_overrides.get(job_id, 0))
 
 
 def _watchdog_loop() -> None:
@@ -209,6 +254,9 @@ def _scheduler_loop() -> None:
             finally:
                 with _job_times_lock:
                     _job_start_times.pop(jid, None)
+                    # S4.4 — flush any extend-override too; the override
+                    # is meaningless once the job has terminated.
+                    _job_age_overrides.pop(jid, None)
                 with _cond:
                     _active_job_ids.discard(jid)
                     _cond.notify_all()  # a slot just opened — wake the scheduler

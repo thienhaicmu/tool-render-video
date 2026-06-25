@@ -27,10 +27,26 @@ export interface Notification {
   duration?: number
 }
 
+/** S4.7 — notification history entry. Same shape as `Notification`
+ *  plus a `created_at` timestamp + a `read` flag. Stored separately
+ *  from the live `notifications` array so dismissing a toast doesn't
+ *  evict its history record. */
+export interface NotificationHistoryEntry {
+  id: string
+  type: Notification['type']
+  title: string
+  message?: string
+  created_at: number
+  read: boolean
+}
+
 export interface UIStore {
   sidebarOpen: boolean
   activePanel: ActivePanel
   notifications: Notification[]
+  /** S4.7 — persistent history of past notifications (cap 50, newest
+   *  first). Backed by localStorage so survives a tab reload. */
+  notificationHistory: NotificationHistoryEntry[]
   lang: Lang
   /** S2.5 — jobId being duplicated, picked up by RenderWorkflow on
    *  mount to pre-fill cfg + source from the old job's payload_json.
@@ -53,14 +69,45 @@ export interface UIStore {
   setLang: (lang: Lang) => void
   setDuplicateSeedJobId: (jobId: string | null) => void
   requestNewRender: () => void
+  /** S4.7 — mark a single history entry as read. */
+  markNotificationRead: (id: string) => void
+  /** S4.7 — mark every history entry as read. */
+  markAllNotificationsRead: () => void
+  /** S4.7 — drop all history entries (history panel "Clear" button). */
+  clearNotificationHistory: () => void
 }
 
 let _notifCounter = 0
+
+// S4.7 — localStorage persistence for notification history.
+const NOTIF_HISTORY_KEY = 'ui:notif_history_v1'
+const NOTIF_HISTORY_CAP = 50
+
+function _loadHistory(): NotificationHistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(NOTIF_HISTORY_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.slice(0, NOTIF_HISTORY_CAP) as NotificationHistoryEntry[]
+  } catch {
+    return []
+  }
+}
+
+function _saveHistory(entries: NotificationHistoryEntry[]) {
+  try {
+    localStorage.setItem(NOTIF_HISTORY_KEY, JSON.stringify(entries.slice(0, NOTIF_HISTORY_CAP)))
+  } catch {
+    // localStorage quota or disabled — silently drop.
+  }
+}
 
 export const useUIStore = create<UIStore>((set) => ({
   sidebarOpen: true,
   activePanel: 'clip-studio',
   notifications: [],
+  notificationHistory: _loadHistory(),
   lang: 'en' as Lang,
   duplicateSeedJobId: null,
   newRenderRequest: 0,
@@ -79,12 +126,25 @@ export const useUIStore = create<UIStore>((set) => ({
 
   addNotification: (notification: Omit<Notification, 'id'>): string => {
     const id = `notif_${Date.now()}_${++_notifCounter}`
-    set((s) => ({
-      notifications: [
-        ...s.notifications,
-        { ...notification, id },
-      ],
-    }))
+    set((s) => {
+      const historyEntry: NotificationHistoryEntry = {
+        id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        created_at: Date.now(),
+        read: false,
+      }
+      const history = [historyEntry, ...s.notificationHistory].slice(0, NOTIF_HISTORY_CAP)
+      _saveHistory(history)
+      return {
+        notifications: [
+          ...s.notifications,
+          { ...notification, id },
+        ],
+        notificationHistory: history,
+      }
+    })
     return id
   },
 
@@ -103,4 +163,21 @@ export const useUIStore = create<UIStore>((set) => ({
   setDuplicateSeedJobId: (jobId: string | null) => set({ duplicateSeedJobId: jobId }),
 
   requestNewRender: () => set((s) => ({ newRenderRequest: s.newRenderRequest + 1 })),
+
+  markNotificationRead: (id: string) => set((s) => {
+    const next = s.notificationHistory.map((n) => (n.id === id ? { ...n, read: true } : n))
+    _saveHistory(next)
+    return { notificationHistory: next }
+  }),
+
+  markAllNotificationsRead: () => set((s) => {
+    const next = s.notificationHistory.map((n) => ({ ...n, read: true }))
+    _saveHistory(next)
+    return { notificationHistory: next }
+  }),
+
+  clearNotificationHistory: () => {
+    _saveHistory([])
+    set({ notificationHistory: [] })
+  },
 }))
