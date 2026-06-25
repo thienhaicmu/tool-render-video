@@ -1636,6 +1636,16 @@ def run_render_pipeline(
             # persisted shape.
             rank_source=_rank_source_tag,
         ))
+    except cancel_registry.JobCancelledError:
+        # Sacred Contract #4: a cancelled job MUST write status='cancelled'
+        # (not 'failed') so the FE + history can distinguish user-cancel
+        # from a real failure. The outer process_render handler
+        # (_common.py) catches this and writes JobStage.CANCELLED. Without
+        # this passthrough, the broad `except Exception` below swallows the
+        # JobCancelledError, writes status='failed', and returns — leaving
+        # the outer handler blind. Confirmed root cause of job 9289722b
+        # appearing as "Failed" in the UI despite being a cancel.
+        raise
     except Exception as e:
         fail_message = f"Failed at step '{current_stage}': {e}"
         tb = traceback.format_exc()
