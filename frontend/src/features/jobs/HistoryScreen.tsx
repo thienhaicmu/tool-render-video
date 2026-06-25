@@ -37,6 +37,14 @@ export function HistoryScreen() {
   // ── Action loading ────────────────────────────────────────────────────────
   const [actionLoading, setActionLoading] = useState<Set<string>>(new Set())
 
+  // ── S3.3 batch selection state ────────────────────────────────────────────
+  // Tracks the set of jobIds in multi-select mode. Empty Set = not in
+  // batch mode (no action bar). lastShiftAnchor remembers the row the
+  // user shift-selected from so subsequent shift-clicks select ranges.
+  const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set())
+  const [batchBusy, setBatchBusy] = useState(false)
+  const lastShiftAnchorRef = useRef<string | null>(null)
+
   const addNotification = useUIStore((s) => s.addNotification)
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const setDuplicateSeedJobId = useUIStore((s) => s.setDuplicateSeedJobId)
@@ -190,6 +198,94 @@ export function HistoryScreen() {
     setSelectedJobId((prev) => (prev === jobId ? null : jobId))
   }
 
+  // ── S3.3 batch selection helpers ───────────────────────────────────────
+  // toggleBatch(jobId, shift): no shift = toggle single. Shift = select
+  // range from last anchor through jobId. Operates over the filtered
+  // items list so the user's mental model matches what they see.
+  function toggleBatch(jobId: string, withShift: boolean) {
+    setBatchSelected((prev) => {
+      const next = new Set(prev)
+      if (withShift && lastShiftAnchorRef.current && lastShiftAnchorRef.current !== jobId) {
+        const ids = filteredItems.map((it) => it.job_id)
+        const a = ids.indexOf(lastShiftAnchorRef.current)
+        const b = ids.indexOf(jobId)
+        if (a >= 0 && b >= 0) {
+          const [lo, hi] = a < b ? [a, b] : [b, a]
+          for (let i = lo; i <= hi; i++) next.add(ids[i])
+        }
+      } else {
+        if (next.has(jobId)) next.delete(jobId)
+        else next.add(jobId)
+        lastShiftAnchorRef.current = jobId
+      }
+      return next
+    })
+  }
+
+  function clearBatch() {
+    setBatchSelected(new Set())
+    lastShiftAnchorRef.current = null
+  }
+
+  // ESC clears selection while in batch mode.
+  useEffect(() => {
+    if (batchSelected.size === 0) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') clearBatch()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [batchSelected.size])
+
+  async function handleBatchDelete() {
+    if (batchSelected.size === 0 || batchBusy) return
+    const ids = Array.from(batchSelected)
+    if (!window.confirm(`Xóa ${ids.length} job đã chọn? Thao tác không thể hoàn tác.`)) return
+    setBatchBusy(true)
+    let okCount = 0
+    let failCount = 0
+    for (const id of ids) {
+      try {
+        await deleteJob(id, true)
+        okCount++
+      } catch {
+        failCount++
+      }
+    }
+    addNotification({
+      title: `Đã xóa ${okCount} / ${ids.length} job`,
+      message: failCount > 0 ? `${failCount} job xóa thất bại` : undefined,
+      type: failCount > 0 ? 'warning' : 'success',
+    })
+    clearBatch()
+    setBatchBusy(false)
+    await refreshJobs()
+  }
+
+  async function handleBatchRetry() {
+    if (batchSelected.size === 0 || batchBusy) return
+    const ids = Array.from(batchSelected)
+    setBatchBusy(true)
+    let okCount = 0
+    let failCount = 0
+    for (const id of ids) {
+      try {
+        await resumeRender(id)
+        okCount++
+      } catch {
+        failCount++
+      }
+    }
+    addNotification({
+      title: `Đã re-run ${okCount} / ${ids.length} job`,
+      message: failCount > 0 ? `${failCount} job thất bại` : undefined,
+      type: failCount > 0 ? 'warning' : 'success',
+    })
+    clearBatch()
+    setBatchBusy(false)
+    await refreshJobs()
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   const activeCount    = items.filter(i => isActiveStatus(i.status)).length
   const completedCount = items.filter(i => i.status === 'completed' || i.status === 'partial').length
@@ -249,6 +345,85 @@ export function HistoryScreen() {
         onStatusFilterChange={setStatusFilter}
       />
 
+      {/* S3.3 — batch action bar (only when selection > 0) */}
+      {batchSelected.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 14px',
+          background: 'var(--accent-dim, rgba(123,97,255,.12))',
+          borderBottom: '1px solid var(--border)',
+          flexShrink: 0,
+          fontSize: 11,
+        }}>
+          <span style={{ fontWeight: 700, color: 'var(--accent)' }}>
+            {batchSelected.size} đã chọn
+          </span>
+          <span style={{ flex: 1 }} />
+          <button
+            onClick={handleBatchRetry}
+            disabled={batchBusy}
+            style={{
+              padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700,
+              border: '1px solid var(--border)', background: 'var(--bg-card)',
+              color: 'var(--text-1)', cursor: batchBusy ? 'not-allowed' : 'pointer',
+              opacity: batchBusy ? .5 : 1,
+            }}
+          >
+            {batchBusy ? '…' : 'Re-run'}
+          </button>
+          <button
+            onClick={handleBatchDelete}
+            disabled={batchBusy}
+            style={{
+              padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700,
+              border: '1px solid rgba(var(--fail-rgb),.4)',
+              background: 'rgba(var(--fail-rgb),.08)',
+              color: 'var(--fail)', cursor: batchBusy ? 'not-allowed' : 'pointer',
+              opacity: batchBusy ? .5 : 1,
+            }}
+          >
+            {batchBusy ? '…' : 'Xóa'}
+          </button>
+          <button
+            onClick={clearBatch}
+            disabled={batchBusy}
+            style={{
+              padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
+              border: '1px solid var(--border)', background: 'transparent',
+              color: 'var(--text-2)', cursor: 'pointer',
+            }}
+          >
+            Bỏ chọn (Esc)
+          </button>
+        </div>
+      )}
+
+      {/* Toggle batch-mode hint when no selection yet — minimal nudge */}
+      {batchSelected.size === 0 && filteredItems.length > 0 && (
+        <div style={{
+          padding: '4px 14px',
+          fontSize: 9, color: 'var(--text-3)',
+          background: 'var(--bg-panel)',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexShrink: 0,
+        }}>
+          <span>Click vào row để xem chi tiết · Shift+click để batch-select</span>
+          <button
+            onClick={() => {
+              if (filteredItems[0]) toggleBatch(filteredItems[0].job_id, false)
+            }}
+            style={{
+              padding: '2px 8px', borderRadius: 5, fontSize: 9, fontWeight: 700,
+              border: '1px solid var(--border)', background: 'var(--bg-card)',
+              color: 'var(--text-2)', cursor: 'pointer',
+            }}
+          >
+            Bật batch-mode
+          </button>
+        </div>
+      )}
+
       {/* Main content area */}
       <div className="history-content">
         <div className="history-list-pane">
@@ -267,6 +442,8 @@ export function HistoryScreen() {
             onRerun={handleRerun}
             onDelete={handleDelete}
             onDuplicate={handleDuplicate}
+            batchSelected={batchSelected.size > 0 ? batchSelected : undefined}
+            onToggleBatch={toggleBatch}
             onRetryFetch={() => fetchPage(offset)}
             onPrevPage={() => fetchPage(Math.max(0, offset - PAGE_SIZE))}
             onNextPage={() => fetchPage(offset + PAGE_SIZE)}

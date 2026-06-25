@@ -26,12 +26,19 @@ export interface JobListItemProps {
   onRerun: (jobId: string) => void
   onDelete: (jobId: string) => void
   onDuplicate?: (jobId: string) => void
+  /** S3.3 — batch mode: when isBatchSelected !== undefined, the row
+   *  renders a checkbox and clicks toggle batch selection instead of
+   *  opening the detail drawer. Pass undefined to disable batch UI. */
+  isBatchSelected?: boolean
+  onToggleBatch?: (jobId: string, withShift: boolean) => void
 }
 
 export function JobListItem({
   item, isSelected, actionLoading,
   onSelect, onCancel, onRetry, onRerun, onDelete, onDuplicate,
+  isBatchSelected, onToggleBatch,
 }: JobListItemProps) {
+  const inBatchMode = isBatchSelected !== undefined
   const isActive = isActiveStatus(item.status)
   const st = STATUS_CFG[item.status] ?? FALLBACK
   const progressPct = item.total_count > 0
@@ -41,10 +48,18 @@ export function JobListItem({
   return (
     <div
       data-testid={`job-list-item-${item.job_id}`}
-      onClick={() => onSelect(item.job_id)}
+      onClick={(e) => {
+        if (inBatchMode && onToggleBatch) {
+          onToggleBatch(item.job_id, e.shiftKey)
+          return
+        }
+        onSelect(item.job_id)
+      }}
       style={{
         display: 'flex', cursor: 'pointer', transition: 'background .1s',
-        background: isSelected ? 'var(--bg-hover)' : 'transparent',
+        background: isBatchSelected
+          ? 'var(--accent-dim, rgba(123,97,255,.12))'
+          : isSelected ? 'var(--bg-hover)' : 'transparent',
         borderBottom: '1px solid var(--border)',
         overflow: 'hidden',
         position: 'relative',
@@ -54,9 +69,32 @@ export function JobListItem({
       <div style={{
         width: 3, flexShrink: 0,
         background: st.color,
-        opacity: isSelected ? 1 : 0.45,
+        opacity: isSelected || isBatchSelected ? 1 : 0.45,
         transition: 'opacity .12s',
       }} />
+
+      {/* S3.3 batch checkbox — only when batch mode is wired */}
+      {inBatchMode && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 28, flexShrink: 0,
+            borderRight: '1px solid var(--border)',
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (onToggleBatch) onToggleBatch(item.job_id, e.shiftKey)
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={!!isBatchSelected}
+            readOnly
+            style={{ cursor: 'pointer' }}
+            data-testid={`batch-cb-${item.job_id}`}
+          />
+        </div>
+      )}
 
       <div style={{ flex: 1, minWidth: 0, padding: '9px 10px' }}>
         {/* Row 1: title + time */}

@@ -21,6 +21,10 @@ export interface JobListProps {
   onRerun: (jobId: string) => void
   onDelete: (jobId: string) => void
   onDuplicate?: (jobId: string) => void
+  /** S3.3 — batch selection. Pass a Set + toggle to enable; pass
+   *  undefined to keep the standard single-select behaviour. */
+  batchSelected?: Set<string>
+  onToggleBatch?: (jobId: string, withShift: boolean) => void
   onRetryFetch: () => void
   onPrevPage: () => void
   onNextPage: () => void
@@ -30,6 +34,7 @@ export function JobList({
   items, loading, error, hasFilters, selectedJobId,
   actionLoading, hasMore, offset,
   onSelect, onCancel, onRetry, onRerun, onDelete, onDuplicate,
+  batchSelected, onToggleBatch,
   onRetryFetch, onPrevPage, onNextPage,
 }: JobListProps) {
   if (loading) return <JobLoadingState />
@@ -79,6 +84,8 @@ export function JobList({
                 onRerun={onRerun}
                 onDelete={onDelete}
                 onDuplicate={onDuplicate}
+                isBatchSelected={batchSelected ? batchSelected.has(item.job_id) : undefined}
+                onToggleBatch={onToggleBatch}
               />
             )
           })

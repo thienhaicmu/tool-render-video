@@ -14,6 +14,8 @@ import type { ActivePanel } from './stores/uiStore'
 import { Notifications } from './components/ui/Notifications'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { useJobCompletionNotifier } from './hooks/useJobCompletionNotifier'
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts'
+import { CommandPalette } from './components/CommandPalette'
 
 // Code-split each top-level screen into its own chunk (F1). The initial
 // bundle no longer carries every screen's code; a screen's chunk is fetched
@@ -73,6 +75,9 @@ export function App() {
   // Watch jobsStore for terminal transitions and fire OS notifications.
   useJobCompletionNotifier()
 
+  // Global keyboard shortcuts (⌘N / ⌘, / ?).
+  useGlobalShortcuts()
+
   // Prefetch all screen chunks once the browser is idle so the first open of
   // any panel is instant. Best-effort: requestIdleCallback when available,
   // else a short timeout. Failures are ignored (the lazy() import retries).
@@ -102,6 +107,7 @@ export function App() {
             <ActiveScreen />
           </Suspense>
           <ActiveJobsDock />
+          <CommandPalette />
           <Notifications />
         </div>
       </ErrorBoundary>
@@ -115,6 +121,7 @@ export function App() {
           <ActiveScreen />
         </Suspense>
       </AppShell>
+      <CommandPalette />
     </ErrorBoundary>
   )
 }

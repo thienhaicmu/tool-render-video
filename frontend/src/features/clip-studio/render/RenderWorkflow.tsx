@@ -158,15 +158,47 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   // don't hijack their intent ("start a fresh render with old settings")
   // into "monitor the unrelated job that happens to be running".
   const duplicateInProgressRef = useRef(false)
+  // S3.5 — when this ref is true, the user just pressed ⌘N / chose
+  // "Render mới" from the command palette. Auto-reattach must skip so
+  // the user lands on Step 1 with a clean slate. Reset on next render
+  // cycle after the new-render effect handles the reset.
+  const newRenderInProgressRef = useRef(false)
   useEffect(() => {
     if (jobId) return // already attached
     if (duplicateInProgressRef.current) return // S2.5 duplicate hydration in flight
+    if (newRenderInProgressRef.current) return // S3.5 new-render reset in flight
     if (activeJob) {
       setJobId(activeJob.job_id)
       setStep(3)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob])
+
+  // S3.2/S3.5 — consume newRenderRequest counter. On every increment,
+  // reset Render Workflow state to a clean Step 1. Auto-reattach is
+  // suppressed via the ref so an unrelated running render doesn't
+  // hijack the user's intent.
+  const newRenderRequest = useUIStore((s) => s.newRenderRequest)
+  const prevNewRenderRequestRef = useRef(newRenderRequest)
+  useEffect(() => {
+    if (newRenderRequest === prevNewRenderRequestRef.current) return
+    prevNewRenderRequestRef.current = newRenderRequest
+    newRenderInProgressRef.current = true
+    setJobId(null)
+    setSources([])
+    setPrepareResult(null)
+    setPrepareError(null)
+    setSubmitError(null)
+    setParts([])
+    setPartScores({})
+    setPartRanks({})
+    setQualityReports({})
+    setQualityLoadFailed(false)
+    setStep(1)
+    // Release the lock on the next microtask so future activeJob
+    // updates can resume auto-reattach behaviour.
+    queueMicrotask(() => { newRenderInProgressRef.current = false })
+  }, [newRenderRequest])
 
   // S2.5 — consume duplicate seed: fetch old job payload, hydrate cfg +
   // source, jump to Step 2 so user can tweak before submitting a fresh
@@ -299,26 +331,38 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   // ── Source actions ──────────────────────────────────────────────────────────
   function removeSource(i: number) { setSources((p) => p.filter((_, idx) => idx !== i)) }
 
+  // S3.4 — drag-drop / picker callback that accepts multiple files and
+  // appends them to the source list (deduping by path).
+  function addSourcePaths(paths: string[]) {
+    if (!paths.length) return
+    setSources((prev) => {
+      const seen = new Set(prev.map((s) => s.value))
+      const additions = paths
+        .map((p) => p.trim())
+        .filter((p) => p && !seen.has(p))
+        .map((p) => ({ value: p }))
+      return [...prev, ...additions]
+    })
+  }
+
   async function goToConfigure() {
     if (sources.length === 0) return
+    // Validate ALL picked sources still exist (S3.4 — multi-file
+    // support). Using prepareSource on the FIRST source is sufficient
+    // to derive output_dir + Whisper preview; subsequent sources will
+    // each get their own render job at submit time.
     const src = sources[0]
-    // Bug #6 fix: verify the file still exists on disk before going through
-    // the prepare-source flow. Without this check, a file that was renamed
-    // or deleted after the user picked it surfaces as a cryptic FFmpeg
-    // error 60 seconds into prepare-source instead of an instant
-    // "file not found" with the option to re-pick. Uses the Electron IPC
-    // `pathExists` (preload.js); in pure-web mode the check is skipped and
-    // the backend's own existence check (_validate_render_source) is the
-    // safety net.
     if (window.electronAPI?.pathExists) {
-      const exists = await window.electronAPI.pathExists(src.value)
-      if (exists === false) {
-        setPrepareError(
-          lang === 'VI'
-            ? `File không tìm thấy: "${src.value}". Có thể bị đổi tên hoặc xoá. Chọn file khác.`
-            : `File not found: "${src.value}". It may have been moved or deleted. Pick another.`,
-        )
-        return
+      for (const s of sources) {
+        const exists = await window.electronAPI.pathExists(s.value)
+        if (exists === false) {
+          setPrepareError(
+            lang === 'VI'
+              ? `File không tìm thấy: "${s.value}". Có thể bị đổi tên hoặc xoá.`
+              : `File not found: "${s.value}". It may have been moved or deleted.`,
+          )
+          return
+        }
       }
     }
     prepareCancelledRef.current = false
@@ -368,49 +412,15 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   }
 
   // ── Render actions ──────────────────────────────────────────────────────────
-  async function handleStartRender() {
-    if (isSubmitting) return  // hard guard against double-submit
-    const src = sources[0]
-    // Bug #7 fix: pre-flight validate before the POST so we surface clear,
-    // localised errors at click time instead of waiting for the backend to
-    // reject. Same checks the backend runs in _validate_render_source +
-    // _validate_output_dir, mirrored here for instant feedback.
-    if (!src || !(src.value || '').trim()) {
-      setSubmitError(lang === 'VI' ? 'Chưa chọn file nguồn.' : 'No source file selected.')
-      return
-    }
-    if (window.electronAPI?.pathExists) {
-      const exists = await window.electronAPI.pathExists(src.value)
-      if (exists === false) {
-        setSubmitError(
-          lang === 'VI'
-            ? `File nguồn không còn tồn tại: ${src.value}`
-            : `Source file no longer exists: ${src.value}`,
-        )
-        return
-      }
-    }
-    if (!(cfg.outputDir || '').trim()) {
-      setSubmitError(lang === 'VI' ? 'Chưa chọn thư mục lưu (Save folder).' : 'Save folder is empty.')
-      return
-    }
-    if (cfg.minSec > cfg.maxSec) {
-      setSubmitError(
-        lang === 'VI'
-          ? `Min clip duration (${cfg.minSec}s) lớn hơn max (${cfg.maxSec}s).`
-          : `Min clip duration (${cfg.minSec}s) is greater than max (${cfg.maxSec}s).`,
-      )
-      return
-    }
-    if (cfg.outputCount < 1) {
-      setSubmitError(lang === 'VI' ? 'Số clip xuất ra phải ≥ 1.' : 'Output count must be ≥ 1.')
-      return
-    }
-    setIsSubmitting(true)
-    setSubmitError(null)
-    const payload: RenderRequest = {
+
+  // S3.4 — payload builder factored out so the multi-source batch loop
+  // can call it once per source. Behaviour is identical to the
+  // single-source path: every field comes from cfg + the source path
+  // passed in.
+  function buildPayloadForSource(srcValue: string): RenderRequest {
+    return {
       source_mode:       'local',
-      source_video_path: src.value,
+      source_video_path: srcValue,
       output_dir:          cfg.outputDir || 'output',
       aspect_ratio:        RATIO_INFO[cfg.ratio].api,
       min_part_sec:        cfg.minSec,
@@ -490,6 +500,94 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       asset_intro_path:    cfg.assetIntroPath ?? undefined,
       asset_outro_path:    cfg.assetOutroPath ?? undefined,
     }
+  }
+
+  async function handleStartRender() {
+    if (isSubmitting) return  // hard guard against double-submit
+
+    // ── Validation: same checks as before, mirrored from the backend
+    //    so failures surface instantly without round-tripping. ─────────
+    if (sources.length === 0) {
+      setSubmitError(lang === 'VI' ? 'Chưa chọn file nguồn.' : 'No source file selected.')
+      return
+    }
+    for (const s of sources) {
+      if (!(s.value || '').trim()) {
+        setSubmitError(lang === 'VI' ? 'File nguồn rỗng.' : 'A source file path is empty.')
+        return
+      }
+    }
+    if (window.electronAPI?.pathExists) {
+      for (const s of sources) {
+        const exists = await window.electronAPI.pathExists(s.value)
+        if (exists === false) {
+          setSubmitError(
+            lang === 'VI'
+              ? `File nguồn không còn tồn tại: ${s.value}`
+              : `Source file no longer exists: ${s.value}`,
+          )
+          return
+        }
+      }
+    }
+    if (!(cfg.outputDir || '').trim()) {
+      setSubmitError(lang === 'VI' ? 'Chưa chọn thư mục lưu (Save folder).' : 'Save folder is empty.')
+      return
+    }
+    if (cfg.minSec > cfg.maxSec) {
+      setSubmitError(
+        lang === 'VI'
+          ? `Min clip duration (${cfg.minSec}s) lớn hơn max (${cfg.maxSec}s).`
+          : `Min clip duration (${cfg.minSec}s) is greater than max (${cfg.maxSec}s).`,
+      )
+      return
+    }
+    if (cfg.outputCount < 1) {
+      setSubmitError(lang === 'VI' ? 'Số clip xuất ra phải ≥ 1.' : 'Output count must be ≥ 1.')
+      return
+    }
+    setIsSubmitting(true)
+    setSubmitError(null)
+
+    // ── S3.4 multi-source batch path. For len > 1, submit each source
+    //    sequentially with the same cfg. First success becomes the
+    //    attached jobId so the user lands on Step 3 monitoring it; the
+    //    rest run in the background and appear in ActiveJobsDock.
+    if (sources.length > 1) {
+      const submitted: string[] = []
+      const failed: string[] = []
+      for (const s of sources) {
+        try {
+          const id = await submitRender(buildPayloadForSource(s.value))
+          submitted.push(id)
+        } catch {
+          failed.push(s.value)
+        }
+      }
+      addNotification({
+        type: failed.length === 0 ? 'success' : (submitted.length === 0 ? 'error' : 'warning'),
+        title: lang === 'VI'
+          ? `Đã queue ${submitted.length}/${sources.length} render`
+          : `Queued ${submitted.length}/${sources.length} renders`,
+        message: failed.length > 0
+          ? (lang === 'VI'
+            ? `${failed.length} job submit thất bại — kiểm tra file path`
+            : `${failed.length} jobs failed to submit — check paths`)
+          : undefined,
+        duration: 6000,
+      })
+      if (submitted.length > 0) {
+        setJobId(submitted[0])
+        setStep(3)
+      } else {
+        setIsSubmitting(false)
+      }
+      return
+    }
+
+    // ── Single-source path (unchanged behaviour).
+    const src = sources[0]
+    const payload = buildPayloadForSource(src.value)
     try {
       const id = await submitRender(payload)
       setJobId(id)
@@ -717,14 +815,36 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                   </p>
                 </div>
 
-                {/* Drop zone — illustrated */}
-                <div className="src-cards">
+                {/* Drop zone — illustrated · S3.4 multi-file drag-drop */}
+                <div
+                  className="src-cards"
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'copy'
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const files = Array.from(e.dataTransfer.files || [])
+                    if (files.length === 0) return
+                    // Electron exposes the absolute path on File.path; pure-
+                    // web browsers don't, so we fall back to the filename
+                    // (which the backend will reject — instructive for the
+                    // user). dragData.files cannot supply a Vietnamese
+                    // localised error here because we don't know lang at
+                    // closure time; the validator inside handleStartRender
+                    // surfaces it on submit.
+                    const paths = files
+                      .map((f) => (f as File & { path?: string }).path || f.name)
+                      .filter((p) => p && p.length > 0)
+                    addSourcePaths(paths)
+                  }}
+                >
                   <button
                     type="button"
                     className={`src-card highlight${sources.length > 0 ? ' has-file' : ''}`}
                     onClick={async () => {
                       const picked = await window.electronAPI?.pickVideoFile?.()
-                      if (picked) setSources([{ value: picked }])
+                      if (picked) addSourcePaths([picked])
                       else fileInputRef.current?.click()
                     }}
                   >
@@ -1095,10 +1215,15 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       )}
 
       <input
-        ref={fileInputRef} type="file" accept="video/*" style={{ display: 'none' }}
+        ref={fileInputRef} type="file" accept="video/*" multiple style={{ display: 'none' }}
         onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f) setSources([{ value: (f as File & { path?: string }).path || f.name }])
+          const files = Array.from(e.target.files || [])
+          const paths = files
+            .map((f) => (f as File & { path?: string }).path || f.name)
+            .filter((p) => p && p.length > 0)
+          if (paths.length) addSourcePaths(paths)
+          // Allow re-picking the same file by resetting the input.
+          e.target.value = ''
         }}
       />
     </div>

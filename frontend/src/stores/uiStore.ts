@@ -37,6 +37,12 @@ export interface UIStore {
    *  Cleared once consumed so a second visit to clip-studio doesn't
    *  re-apply stale state. */
   duplicateSeedJobId: string | null
+  /** S3.2/S3.5 — monotonic counter incremented every time the user
+   *  asks for a fresh render (⌘N, palette action, or future "+ New"
+   *  button). RenderWorkflow watches this counter and force-resets to
+   *  Step 1, ignoring auto-reattach. A counter beats a boolean because
+   *  React's useEffect deduplicates on identical values. */
+  newRenderRequest: number
 
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
@@ -46,6 +52,7 @@ export interface UIStore {
   clearNotifications: () => void
   setLang: (lang: Lang) => void
   setDuplicateSeedJobId: (jobId: string | null) => void
+  requestNewRender: () => void
 }
 
 let _notifCounter = 0
@@ -56,6 +63,7 @@ export const useUIStore = create<UIStore>((set) => ({
   notifications: [],
   lang: 'en' as Lang,
   duplicateSeedJobId: null,
+  newRenderRequest: 0,
 
   toggleSidebar: () => {
     set((s) => ({ sidebarOpen: !s.sidebarOpen }))
@@ -93,4 +101,6 @@ export const useUIStore = create<UIStore>((set) => ({
   setLang: (lang: Lang) => set({ lang }),
 
   setDuplicateSeedJobId: (jobId: string | null) => set({ duplicateSeedJobId: jobId }),
+
+  requestNewRender: () => set((s) => ({ newRenderRequest: s.newRenderRequest + 1 })),
 }))
