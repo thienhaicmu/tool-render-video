@@ -11,6 +11,7 @@
 #      symbols from here, and the tests/* suite imports asset / audio /
 #      qa / event helpers from this module's namespace. These are
 #      marked with a noqa comment carrying the F401 code.
+import hashlib
 import os
 import shutil
 import subprocess  # noqa: F401 (re-exported for mock.patch in tests/test_render_pipeline_guards.py)
@@ -760,6 +761,17 @@ def run_render_pipeline(
                     _llm_clip_lock = getattr(payload, "clip_lock", None) or None
                     _llm_clip_excl = getattr(payload, "clip_exclude", None) or None
                     _llm_tgt_plat = str(getattr(payload, "target_platform", "") or "").lower()
+                    # S5 — creator preference hints (B+C: surfaced to the
+                    # prompt + included in the cache key so changing them
+                    # invalidates the cache).
+                    _llm_video_type = str(getattr(payload, "video_type", "auto") or "auto")
+                    _llm_hook_strength = str(getattr(payload, "hook_strength", "balanced") or "balanced")
+                    _llm_market = str(getattr(payload, "ai_target_market", "") or "")
+                    _llm_sub_emph_val = getattr(payload, "subtitle_emphasis", None)
+                    _llm_sub_emph = str(_llm_sub_emph_val) if _llm_sub_emph_val else ""
+                    _llm_multi_variant = bool(getattr(payload, "multi_variant", False))
+                    _llm_structure_bias_val = getattr(payload, "structure_bias", None)
+                    _llm_structure_bias = str(_llm_structure_bias_val) if _llm_structure_bias_val else ""
                     # Scale source-clip duration limits by the platform speed so the
                     # AI selects segments that produce outputs within the user's desired
                     # duration range after rendering. e.g. user wants 45–60s output on
@@ -780,6 +792,56 @@ def run_render_pipeline(
                         clip_lock_repr=str(_llm_clip_lock),
                         clip_exclude_repr=str(_llm_clip_excl),
                         language=getattr(payload, "llm_language", "auto") or "auto",
+                        # S5 — creator preferences (B+C)
+                        video_type=_llm_video_type,
+                        hook_strength=_llm_hook_strength,
+                        ai_target_market=_llm_market,
+                        subtitle_emphasis=_llm_sub_emph,
+                        multi_variant=_llm_multi_variant,
+                        structure_bias=_llm_structure_bias,
+                    )
+                    # Diagnostic emit: surface every input that goes into the
+                    # cache key so a user can grep the log to verify which
+                    # values produced this key. The 3 fields the user most
+                    # commonly tunes are shown first; the rest are in
+                    # cache_inputs so nothing is hidden. SRT shows hash only
+                    # (full content is 100 KB+).
+                    _ai_srt_hash = hashlib.sha256(_ai_srt_content.encode("utf-8")).hexdigest()[:16]
+                    _job_log(
+                        effective_channel, job_id,
+                        f"llm_plan.cache.lookup key={_llm_cache_key[:12]} "
+                        f"output_count={_llm_out_count} "
+                        f"min_sec_raw={_seg_min_sec} max_sec_raw={_seg_max_sec} "
+                        f"min_sec_scaled={_llm_min_sec:.1f} max_sec_scaled={_llm_max_sec:.1f} "
+                        f"plat_speed={_llm_plat_speed:.3f} platform={_llm_tgt_plat} "
+                        f"provider={_ai_provider} srt_hash={_ai_srt_hash}",
+                    )
+                    _emit_render_event(
+                        channel_code=effective_channel,
+                        job_id=job_id,
+                        event="render.plan.cache_lookup",
+                        level="INFO",
+                        message=f"LLM plan cache lookup key={_llm_cache_key[:12]}",
+                        step="render.llm_pipeline",
+                        context={
+                            "cache_key": _llm_cache_key,
+                            "output_count": _llm_out_count,
+                            "min_part_sec_raw": int(_seg_min_sec),
+                            "max_part_sec_raw": int(_seg_max_sec),
+                            "min_sec_scaled": round(_llm_min_sec, 1),
+                            "max_sec_scaled": round(_llm_max_sec, 1),
+                            "platform_speed": round(_llm_plat_speed, 3),
+                            "target_platform": _llm_tgt_plat,
+                            "provider": _ai_provider,
+                            "model": _llm_model,
+                            "target_duration": _llm_target_dur,
+                            "language": getattr(payload, "llm_language", "auto") or "auto",
+                            "srt_hash": _ai_srt_hash,
+                            "srt_chars": len(_ai_srt_content),
+                            "editorial_hint_len": len(_ai_editorial_hint or ""),
+                            "clip_lock_count": len(_llm_clip_lock or []),
+                            "clip_exclude_count": len(_llm_clip_excl or []),
+                        },
                     )
                     _cached_plan_json = _llm_plan_cache_get(_llm_cache_key)
                     if _cached_plan_json:
@@ -789,6 +851,12 @@ def run_render_pipeline(
                                 "render_plan: llm_cache hit — skipping LLM call (clips=%d)",
                                 len(_render_plan.clips),
                             )
+                            _job_log(
+                                effective_channel, job_id,
+                                f"llm_plan.cache.HIT key={_llm_cache_key[:12]} "
+                                f"clips={len(_render_plan.clips)} "
+                                f"— reusing plan from prior render with identical inputs",
+                            )
                             _emit_render_event(
                                 channel_code=effective_channel,
                                 job_id=job_id,
@@ -796,8 +864,21 @@ def run_render_pipeline(
                                 level="INFO",
                                 message=f"RenderPlan from LLM cache (clips={len(_render_plan.clips)}, LLM skipped)",
                                 step="render.llm_pipeline",
-                                context={"clips_count": len(_render_plan.clips), "reason": "llm_response_cache"},
+                                context={
+                                    "clips_count": len(_render_plan.clips),
+                                    "reason": "llm_response_cache",
+                                    "cache_key": _llm_cache_key,
+                                    "output_count": _llm_out_count,
+                                    "min_part_sec_raw": int(_seg_min_sec),
+                                    "max_part_sec_raw": int(_seg_max_sec),
+                                },
                             )
+                    if _render_plan is None and _cached_plan_json is None:
+                        _job_log(
+                            effective_channel, job_id,
+                            f"llm_plan.cache.MISS key={_llm_cache_key[:12]} "
+                            f"— will call {_ai_provider} (one or more inputs differ from any prior render)",
+                        )
 
                     if _render_plan is None:
                         logger.info(
@@ -819,6 +900,13 @@ def run_render_pipeline(
                             clip_lock=_llm_clip_lock,
                             clip_exclude=_llm_clip_excl,
                             target_platform=_llm_tgt_plat,
+                            # S5 — creator preferences (B+C)
+                            video_type=_llm_video_type,
+                            hook_strength=_llm_hook_strength,
+                            ai_target_market=_llm_market,
+                            subtitle_emphasis=(_llm_sub_emph or None),
+                            multi_variant=_llm_multi_variant,
+                            structure_bias=(_llm_structure_bias or None),
                         )
                         if _render_plan is not None:
                             _llm_plan_cache_put(_llm_cache_key, _render_plan.to_json())

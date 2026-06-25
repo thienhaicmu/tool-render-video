@@ -311,6 +311,19 @@ def _llm_plan_cache_key(
     clip_lock_repr: str,
     clip_exclude_repr: str,
     language: str = "auto",
+    # S5 — creator preference hints that now reach the prompt. Adding
+    # them here ensures changing video_type / hook_strength / market /
+    # subtitle_emphasis / multi_variant / structure_bias invalidates the
+    # plan cache so a fresh AI call runs. Defaults match what
+    # _build_creator_preferences_section treats as "no hint", so callers
+    # not passing them produce the same key as pre-S5 only when the new
+    # arg literals also match defaults — see compat note below.
+    video_type: str = "auto",
+    hook_strength: str = "balanced",
+    ai_target_market: str = "",
+    subtitle_emphasis: str = "",
+    multi_variant: bool = False,
+    structure_bias: str = "",
 ) -> str:
     """MD5 of the LLM inputs that fully determine the RenderPlan output.
 
@@ -322,6 +335,14 @@ def _llm_plan_cache_key(
     so the key reflects all of the content the LLM saw. Existing cache
     entries keyed on the old prefix become orphans and age out via the
     72 h TTL; no migration needed.
+
+    S5 — added video_type / hook_strength / ai_target_market /
+    subtitle_emphasis / multi_variant / structure_bias to the key so the
+    new prompt section those hints feed (creator_preferences_section in
+    prompts.py) properly invalidates cache when changed. Backward compat:
+    old cache entries hash with the OLD key arity so they orphan on
+    deploy — acceptable (it's a cache, free to rebuild) and matches what
+    the R17 comment above set the precedent for.
     """
     srt_full_hash = hashlib.sha256(srt_content.encode("utf-8")).hexdigest()
     return _render_cache_key(
@@ -330,6 +351,13 @@ def _llm_plan_cache_key(
         editorial_hint or "", target_duration,
         clip_lock_repr, clip_exclude_repr,
         language or "auto",
+        # S5 — extra dimensions
+        (video_type or "auto"),
+        (hook_strength or "balanced"),
+        (ai_target_market or ""),
+        (subtitle_emphasis or ""),
+        bool(multi_variant),
+        (structure_bias or ""),
     )
 
 

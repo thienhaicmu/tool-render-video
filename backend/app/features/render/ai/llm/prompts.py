@@ -189,7 +189,7 @@ overlays is an array. Emit at most one entry per kind:
                (subscribe, comment, part 2). Set "type" to one of
                "comment" | "part_2" | "follow" | "auto".
 
-When no overlay fits, return overlays=[] instead of inventing one.{clip_lock_section}{clip_exclude_section}
+When no overlay fits, return overlays=[] instead of inventing one.{clip_lock_section}{clip_exclude_section}{creator_preferences_section}
 
 ─── TRANSCRIPT ───
 
@@ -318,6 +318,75 @@ def check_srt_truncation(srt_content: str, max_srt_chars: int | None = None) -> 
     }
 
 
+def _build_creator_preferences_section(
+    video_type: str = "auto",
+    hook_strength: str = "balanced",
+    ai_target_market: str = "",
+    subtitle_emphasis: str | None = None,
+    multi_variant: bool = False,
+    structure_bias: str | None = None,
+) -> str:
+    """Render a labelled prompt section for the creator's editorial preferences.
+
+    These are HINTS that bias clip selection + sub-plan choices without
+    overriding the hard constraints (min/max duration, output count,
+    transcript content). Suppressed when every field is at its default
+    so the prompt is byte-for-byte identical to the pre-S5 baseline for
+    all callers that don't pass the new kwargs.
+
+    Hints surfaced (when not default):
+    - content_type_hint    — `video_type` (auto / talking / cinematic / ...)
+    - hook_intensity_target — `hook_strength` (light / balanced / aggressive)
+    - target_market        — `ai_target_market` (us / eu / jp / vn / global)
+    - subtitle_emphasis    — `subtitle_emphasis` (when explicit, biases the
+                              emphasis_pass decision in subtitle_policy)
+    - variant_emission     — `multi_variant=True` asks the model to emit
+                              multiple stylistically distinct variants per
+                              hook moment instead of one canonical pick
+    - ranking_priority     — `structure_bias` (used to break ties when two
+                              clips have similar viral+retention scores)
+    """
+    parts: list[str] = []
+    vt = (video_type or "").strip().lower()
+    if vt and vt != "auto":
+        parts.append(f"content_type_hint: {vt}  (bias clip selection toward this content shape)")
+    hs = (hook_strength or "").strip().lower()
+    if hs and hs != "balanced":
+        # 'light' → softer openings, 'aggressive' → punchier hook moments.
+        parts.append(
+            f"hook_intensity_target: {hs}  "
+            f"({'softer openings, less front-loaded' if hs == 'light' else 'punchier hooks, front-load the surprise'})"
+        )
+    mk = (ai_target_market or "").strip().lower()
+    if mk:
+        parts.append(f"target_market: {mk}  (favor clips that resonate with this audience)")
+    if subtitle_emphasis:
+        parts.append(
+            f"subtitle_emphasis_preference: {subtitle_emphasis}  "
+            f"(set emphasis_pass=true on clips matching this style)"
+        )
+    if multi_variant:
+        parts.append(
+            "variant_emission: ON  "
+            "(when a single hook anchors multiple viable cuts, emit each as a separate clip)"
+        )
+    sb = (structure_bias or "").strip().lower() if structure_bias else ""
+    if sb:
+        parts.append(
+            f"ranking_priority: {sb}  "
+            f"(use this as a tiebreaker between clips with similar viral+retention scores)"
+        )
+    if not parts:
+        return ""
+    body = "\n".join(f"  • {p}" for p in parts)
+    return (
+        "\n\n─── CREATOR PREFERENCES ───\n"
+        f"{body}\n\n"
+        "These are HINTS, not hard rules. Hard constraints "
+        "(min/max duration, output count, transcript content) still win."
+    )
+
+
 def build_render_plan_prompt(
     srt_content: str,
     output_count: int,
@@ -330,6 +399,16 @@ def build_render_plan_prompt(
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
     target_platform: str = "",
+    # S5 — creator preference hints. Each defaults to a value that
+    # suppresses its prompt line so the prompt is byte-for-byte identical
+    # to the pre-S5 baseline for all callers that don't pass them. See
+    # _build_creator_preferences_section docstring for semantics.
+    video_type: str = "auto",
+    hook_strength: str = "balanced",
+    ai_target_market: str = "",
+    subtitle_emphasis: str | None = None,
+    multi_variant: bool = False,
+    structure_bias: str | None = None,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for LLM RenderPlan emission.
 
@@ -430,6 +509,17 @@ def build_render_plan_prompt(
     # example always demonstrates a compliant clip.
     example_end = round(45.2 + (min_sec + max_sec) / 2, 1)
 
+    # S5 — creator preferences section. Builder suppresses to "" when
+    # all hints are at default so existing prompt is byte-for-byte same.
+    creator_preferences_section = _build_creator_preferences_section(
+        video_type=video_type,
+        hook_strength=hook_strength,
+        ai_target_market=ai_target_market,
+        subtitle_emphasis=subtitle_emphasis,
+        multi_variant=multi_variant,
+        structure_bias=structure_bias,
+    )
+
     user = _USER_TEMPLATE_RP.format(
         language=language,
         srt_content=truncated,
@@ -442,6 +532,7 @@ def build_render_plan_prompt(
         target_platform_section=target_platform_section,
         clip_lock_section=clip_lock_section,
         clip_exclude_section=clip_exclude_section,
+        creator_preferences_section=creator_preferences_section,
     )
     return system, user
 

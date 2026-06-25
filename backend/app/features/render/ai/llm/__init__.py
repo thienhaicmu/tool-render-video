@@ -62,6 +62,15 @@ def select_render_plan(
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
     target_platform: str = "",
+    # S5 — creator preference hints (B+C). Defaults match what
+    # build_render_plan_prompt treats as "no hint" so providers that
+    # don't yet thread these through behave exactly as before.
+    video_type: str = "auto",
+    hook_strength: str = "balanced",
+    ai_target_market: str = "",
+    subtitle_emphasis: Optional[str] = None,
+    multi_variant: bool = False,
+    structure_bias: Optional[str] = None,
 ) -> Optional["RenderPlan"]:
     """Dispatch RenderPlan emission to the named LLM provider.
 
@@ -111,6 +120,13 @@ def select_render_plan(
         clip_lock=clip_lock,
         clip_exclude=clip_exclude,
         target_platform=target_platform,
+        # S5 — creator preferences (B+C)
+        video_type=video_type,
+        hook_strength=hook_strength,
+        ai_target_market=ai_target_market,
+        subtitle_emphasis=subtitle_emphasis,
+        multi_variant=multi_variant,
+        structure_bias=structure_bias,
     )
 
     for _p in chain:

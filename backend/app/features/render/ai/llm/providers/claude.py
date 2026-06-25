@@ -55,6 +55,13 @@ def select_render_plan(
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
     target_platform: str = "",
+    # S5 — creator preferences (B+C). Forwarded to build_render_plan_prompt.
+    video_type: str = "auto",
+    hook_strength: str = "balanced",
+    ai_target_market: str = "",
+    subtitle_emphasis: Optional[str] = None,
+    multi_variant: bool = False,
+    structure_bias: Optional[str] = None,
 ) -> Optional[RenderPlan]:
     """Send SRT to Claude and return a RenderPlan emitted in one pass.
 
@@ -83,6 +90,12 @@ def select_render_plan(
             clip_lock=clip_lock,
             clip_exclude=clip_exclude,
             target_platform=target_platform,
+            video_type=video_type,
+            hook_strength=hook_strength,
+            ai_target_market=ai_target_market,
+            subtitle_emphasis=subtitle_emphasis,
+            multi_variant=multi_variant,
+            structure_bias=structure_bias,
         )
     except Exception as exc:
         logger.warning("claude_client: select_render_plan unexpected error — %s", exc, exc_info=True)
@@ -103,6 +116,13 @@ def _run_render_plan(
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
     target_platform: str = "",
+    # S5 — creator preferences.
+    video_type: str = "auto",
+    hook_strength: str = "balanced",
+    ai_target_market: str = "",
+    subtitle_emphasis: Optional[str] = None,
+    multi_variant: bool = False,
+    structure_bias: Optional[str] = None,
 ) -> Optional[RenderPlan]:
     if not _ANTHROPIC_SDK:
         logger.warning("claude_client: anthropic SDK not installed (render_plan path)")
@@ -125,6 +145,12 @@ def _run_render_plan(
         target_duration=target_duration,
         clip_lock=clip_lock,
         clip_exclude=clip_exclude,
+        video_type=video_type,
+        hook_strength=hook_strength,
+        ai_target_market=ai_target_market,
+        subtitle_emphasis=subtitle_emphasis,
+        multi_variant=multi_variant,
+        structure_bias=structure_bias,
         target_platform=target_platform,
     )
 
