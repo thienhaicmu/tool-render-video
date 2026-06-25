@@ -30,10 +30,12 @@ from app.db.creator_repo import (
     get_creator_context_for_channel,
     get_default_output_dir,
     get_job_retention_days,
+    get_render_defaults,
     upsert_creator_context,
     upsert_creator_context_for_channel,
     upsert_default_output_dir,
     upsert_job_retention_days,
+    upsert_render_defaults,
 )
 from app.domain.creator_context import CreatorContext
 
@@ -268,6 +270,102 @@ def put_settings_data_retention(payload: DataRetentionPayload) -> DataRetentionE
     return DataRetentionEnvelope(
         is_configured=saved is not None,
         data_retention=DataRetentionPayload(job_retention_days=saved or 0),
+    )
+
+
+# ── S2.1 (Sprint 2 UX) — render-defaults endpoints ─────────────────────
+#
+# Lets the Configure step of the render workflow pre-fill from saved
+# user preferences instead of forcing a re-pick every render. Wire
+# shape is a strict subset of RenderRequestPublic so it can be merged
+# directly into the FE form state without any field-name translation.
+#
+# All fields are Optional and default to None — Sacred Contract #2 is
+# unaffected because this payload is NEVER merged into RenderRequest
+# server-side. The FE applies it as form pre-fill only; the actual
+# render submit still validates against RenderRequestPublic.
+
+
+class RenderDefaultsPayload(BaseModel):
+    """User-presetable subset of RenderRequestPublic.
+
+    Every field is Optional → null means "no preference, ask user". A
+    PUT with `{}` clears the entire saved-defaults blob. Unknown keys
+    are silently ignored (extra='ignore') so older / newer FE builds
+    don't break each other.
+    """
+    model_config = ConfigDict(extra="ignore")
+
+    # Aspect / format
+    aspect_ratio: Optional[str] = None       # "9:16" | "16:9" | "1:1" | "3:4" | "4:5" | ...
+    preset: Optional[str] = None             # e.g. "viral" | "story" | "tutorial"
+
+    # Voice / TTS
+    voice_provider: Optional[str] = None
+    voice_id: Optional[str] = None
+
+    # Subtitle
+    subtitle_style: Optional[str] = None
+
+    # AI provider
+    llm_provider: Optional[str] = None       # "gemini" | "openai" | "claude"
+
+    def to_dict(self) -> dict:
+        """Return a dict with only non-null, non-empty fields."""
+        return {
+            k: v for k, v in self.model_dump().items()
+            if v is not None and v != ""
+        }
+
+
+class RenderDefaultsEnvelope(BaseModel):
+    """Response shape — `is_configured` lets the FE distinguish "user
+    deliberately cleared" (False, empty payload) from "first boot,
+    nothing saved" (also False, also empty)."""
+    is_configured: bool
+    render_defaults: RenderDefaultsPayload
+
+
+@router.get("/render-defaults", response_model=RenderDefaultsEnvelope)
+def get_settings_render_defaults() -> RenderDefaultsEnvelope:
+    """Return the persisted render-defaults blob or empty defaults.
+
+    Never 404 — like the sibling settings endpoints, always returns a
+    valid envelope so the FE can render the form unconditionally.
+    """
+    try:
+        stored = get_render_defaults()
+    except Exception as exc:  # pragma: no cover — repo helper is defensive
+        raise HTTPException(status_code=500, detail=f"render_defaults read failed: {exc}")
+    if stored:
+        return RenderDefaultsEnvelope(
+            is_configured=True,
+            render_defaults=RenderDefaultsPayload(**stored),
+        )
+    return RenderDefaultsEnvelope(
+        is_configured=False,
+        render_defaults=RenderDefaultsPayload(),
+    )
+
+
+@router.put("/render-defaults", response_model=RenderDefaultsEnvelope)
+def put_settings_render_defaults(payload: RenderDefaultsPayload) -> RenderDefaultsEnvelope:
+    """Persist render-defaults and return what was actually saved.
+
+    A PUT with `{}` (or every field null) clears the saved defaults.
+    """
+    try:
+        saved = upsert_render_defaults(payload.to_dict())
+    except Exception as exc:  # pragma: no cover — repo helper is defensive
+        raise HTTPException(status_code=500, detail=f"render_defaults write failed: {exc}")
+    if saved:
+        return RenderDefaultsEnvelope(
+            is_configured=True,
+            render_defaults=RenderDefaultsPayload(**saved),
+        )
+    return RenderDefaultsEnvelope(
+        is_configured=False,
+        render_defaults=RenderDefaultsPayload(),
     )
 
 

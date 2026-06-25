@@ -32,6 +32,11 @@ export interface UIStore {
   activePanel: ActivePanel
   notifications: Notification[]
   lang: Lang
+  /** S2.5 — jobId being duplicated, picked up by RenderWorkflow on
+   *  mount to pre-fill cfg + source from the old job's payload_json.
+   *  Cleared once consumed so a second visit to clip-studio doesn't
+   *  re-apply stale state. */
+  duplicateSeedJobId: string | null
 
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
@@ -40,6 +45,7 @@ export interface UIStore {
   removeNotification: (id: string) => void
   clearNotifications: () => void
   setLang: (lang: Lang) => void
+  setDuplicateSeedJobId: (jobId: string | null) => void
 }
 
 let _notifCounter = 0
@@ -49,6 +55,7 @@ export const useUIStore = create<UIStore>((set) => ({
   activePanel: 'clip-studio',
   notifications: [],
   lang: 'en' as Lang,
+  duplicateSeedJobId: null,
 
   toggleSidebar: () => {
     set((s) => ({ sidebarOpen: !s.sidebarOpen }))
@@ -84,4 +91,6 @@ export const useUIStore = create<UIStore>((set) => ({
   },
 
   setLang: (lang: Lang) => set({ lang }),
+
+  setDuplicateSeedJobId: (jobId: string | null) => set({ duplicateSeedJobId: jobId }),
 }))

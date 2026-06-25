@@ -6,6 +6,8 @@ import { useUIStore } from '@/stores/uiStore'
 import { useJobsStore } from '@/stores/jobsStore'
 import { useRenderSocket } from '@/hooks/useRenderSocket'
 import { prepareSource, cancelRender, cancelPrepareSource, retryRender, resumeRender } from '@/api/render'
+import { getRenderDefaults } from '@/api/renderDefaults'
+import { getJob } from '@/api/jobs'
 import type { PrepareSourceResponse } from '@/api/render'
 import { getJobParts, getJobQualitySummary, getJobRanking } from '@/api/jobs'
 import type { RenderRequest, JobPart, QualityReport, PartRankResult } from '@/types/api'
@@ -63,6 +65,61 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const [submitError, setSubmitError]   = useState<string | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
 
+  // S2.4 — auto-fill cfg from server-side render defaults on mount.
+  // Fields only patch in if the server has them; null defaults stay
+  // untouched so existing locally-stored choices (e.g. localStorage
+  // ai_provider) still win when the user hasn't configured Settings.
+  // Runs once — user edits to cfg after mount are NOT overwritten.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const env = await getRenderDefaults()
+        if (cancelled || !env.is_configured) return
+        const d = env.render_defaults
+        // Reverse-map "9:16" → "r916" etc. Skip when null or unknown.
+        const ratioReverseMap: Record<string, ConfigState['ratio']> = {
+          '9:16': 'r916', '3:4': 'r34', '4:5': 'r45',
+          '1:1':  'r11',  '16:9': 'r169',
+        }
+        setCfg((prev) => {
+          const patch: Partial<ConfigState> = {}
+          if (d.aspect_ratio && ratioReverseMap[d.aspect_ratio]) {
+            patch.ratio = ratioReverseMap[d.aspect_ratio]
+          }
+          if (d.subtitle_style) patch.subStyle = d.subtitle_style
+          // voice_provider only patches when it matches one of the
+          // engines cfg.ttsEngine accepts (edge | xtts). 'elevenlabs'
+          // is a valid backend default but no FE field maps yet.
+          if (d.voice_provider === 'edge' || d.voice_provider === 'xtts') {
+            patch.ttsEngine = d.voice_provider
+          }
+          if (
+            d.llm_provider === 'gemini' ||
+            d.llm_provider === 'openai' ||
+            d.llm_provider === 'claude'
+          ) {
+            patch.aiProvider = d.llm_provider
+          }
+          // Preset = bundle of platform + style + ratio. Apply via
+          // applyPreset semantics: look up PRESET entry, patch platform
+          // + ratio. The user can still override after mount.
+          if (d.preset) {
+            const presetEntry = PRESETS.find((p) => p.id === d.preset)
+            if (presetEntry) {
+              patch.platform = presetEntry.platform
+            }
+          }
+          return Object.keys(patch).length ? { ...prev, ...patch } : prev
+        })
+      } catch {
+        // Defaults endpoint failure must never block the render flow.
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const [parts, setParts]                   = useState<JobPart[]>([])
   const [partScores, setPartScores]         = useState<Record<number, number>>({})
   const [partRanks, setPartRanks]           = useState<Record<number, PartRankResult>>({})
@@ -96,14 +153,86 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   // it; we just pick up their already-fetched `active` value on first
   // non-null render after mount.
   const activeJob = useJobsStore((s) => s.active)
+  // S2.5 — when this ref is true, the user just clicked "Duplicate" from
+  // History. The seed hydration takes priority over auto-reattach so we
+  // don't hijack their intent ("start a fresh render with old settings")
+  // into "monitor the unrelated job that happens to be running".
+  const duplicateInProgressRef = useRef(false)
   useEffect(() => {
     if (jobId) return // already attached
+    if (duplicateInProgressRef.current) return // S2.5 duplicate hydration in flight
     if (activeJob) {
       setJobId(activeJob.job_id)
       setStep(3)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob])
+
+  // S2.5 — consume duplicate seed: fetch old job payload, hydrate cfg +
+  // source, jump to Step 2 so user can tweak before submitting a fresh
+  // render. The seed is cleared immediately so a navigation back to
+  // clip-studio doesn't re-apply stale state.
+  const duplicateSeedJobId    = useUIStore((s) => s.duplicateSeedJobId)
+  const setDuplicateSeedJobId = useUIStore((s) => s.setDuplicateSeedJobId)
+  useEffect(() => {
+    if (!duplicateSeedJobId) return
+    const seedId = duplicateSeedJobId
+    duplicateInProgressRef.current = true
+    setDuplicateSeedJobId(null)
+
+    ;(async () => {
+      try {
+        const job = await getJob(seedId)
+        let payload: Record<string, unknown> = {}
+        try {
+          payload = job.payload_json ? JSON.parse(job.payload_json) : {}
+        } catch {
+          payload = {}
+        }
+        // Inverse-map the same RenderRequest fields S2.4 reads from
+        // server-side defaults. Anything else stays at whatever S2.4
+        // defaults already chose (or hard-coded constructor defaults).
+        const ratioReverseMap: Record<string, ConfigState['ratio']> = {
+          '9:16': 'r916', '3:4': 'r34', '4:5': 'r45',
+          '1:1':  'r11',  '16:9': 'r169',
+        }
+        setCfg((prev) => {
+          const patch: Partial<ConfigState> = {}
+          const aspect = payload.aspect_ratio as string | undefined
+          if (aspect && ratioReverseMap[aspect]) patch.ratio = ratioReverseMap[aspect]
+          const subStyle = payload.subtitle_style as string | undefined
+          if (subStyle) patch.subStyle = subStyle
+          const ttsEng = payload.tts_engine as string | undefined
+          if (ttsEng === 'edge' || ttsEng === 'xtts') patch.ttsEngine = ttsEng
+          const ai = payload.ai_provider as string | undefined
+          if (ai === 'gemini' || ai === 'openai' || ai === 'claude') patch.aiProvider = ai
+          const dur = payload.target_duration as number | undefined
+          if (typeof dur === 'number' && dur > 0) patch.targetDuration = dur
+          const out = payload.output_dir as string | undefined
+          if (out) patch.outputDir = out
+          return Object.keys(patch).length ? { ...prev, ...patch } : prev
+        })
+
+        // Pre-fill the source step. Best-effort: the original payload may
+        // be a local file (source_video_path) or an edit session ID. Only
+        // the local-file path is reusable for "duplicate" semantics; for
+        // edit sessions we leave Step 1 empty so the user re-picks.
+        const srcPath = payload.source_video_path as string | undefined
+        if (srcPath) {
+          setSources([{ value: srcPath }])
+        }
+
+        // Land on Configure so the user reviews settings before submit.
+        setStep(2)
+      } catch {
+        // Silent fallback: stay on Step 1 with whatever was already
+        // pre-filled. Duplicate UX failures must not block the screen.
+      } finally {
+        duplicateInProgressRef.current = false
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [duplicateSeedJobId])
 
   useEffect(() => {
     if (!jobId || !isTerminal) return

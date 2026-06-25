@@ -5,14 +5,6 @@ import type { ActivePanel } from '../stores/uiStore'
 
 // ── SVG Icon set (CapCut-style line icons 20x20) ───────────────────────────────
 
-function IconHome() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 10.5L12 3L21 10.5V20C21 20.55 20.55 21 20 21H15V16H9V21H4C3.45 21 3 20.55 3 20V10.5Z"/>
-    </svg>
-  )
-}
-
 function IconScissors() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
@@ -69,19 +61,19 @@ function IconSettings() {
 
 interface NavItem {
   panel: ActivePanel
-  labelKey: 'nav_home' | 'nav_studio' | 'nav_library' | 'nav_download' | 'nav_publish' | 'nav_settings'
+  labelKey: 'nav_studio' | 'nav_library' | 'nav_download' | 'nav_publish' | 'nav_settings'
   icon: React.ReactNode
 }
 
 // Sprint 5.6 follow-up: the Studio nav item used to route to features/studio/
 // (retired in commit e7771e4); now routes to the canonical clip-studio panel.
 //
-// Audit followup_2: dropped the `as ActivePanel` casts that previously hid
-// the type error. Each `panel` literal is now type-checked against the
-// ActivePanel union directly — if uiStore ever removes one of these values
-// from the union, this file will fail compilation immediately.
+// S2.6: removed the standalone "Home" entry. "Library" is now the only
+// canonical jobs/history surface — previously Home and Library both
+// pointed at HistoryScreen which doubled the IA for no benefit. The
+// `home` ActivePanel value remains in uiStore for deep-link backward
+// compatibility but is no longer surfaced in the sidebar nav.
 const MAIN_NAV: NavItem[] = [
-  { panel: 'home',        labelKey: 'nav_home',     icon: <IconHome /> },
   { panel: 'clip-studio', labelKey: 'nav_studio',   icon: <IconScissors /> },
   { panel: 'library',     labelKey: 'nav_library',  icon: <IconGrid /> },
   { panel: 'download',    labelKey: 'nav_download', icon: <IconDownload /> },

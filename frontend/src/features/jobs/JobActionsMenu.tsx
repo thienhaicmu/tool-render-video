@@ -14,6 +14,9 @@ export interface JobActionsMenuProps {
   onRerun: (jobId: string) => void
   onDelete: (jobId: string) => void
   onDetails: (jobId: string) => void
+  /** S2.5 — clone this job's payload into a fresh render. Optional so
+   *  legacy mount sites without the action still compile. */
+  onDuplicate?: (jobId: string) => void
 }
 
 export function JobActionsMenu({
@@ -24,6 +27,7 @@ export function JobActionsMenu({
   onRerun,
   onDelete,
   onDetails,
+  onDuplicate,
 }: JobActionsMenuProps) {
   const isLoading = actionLoading.has(item.job_id)
 
@@ -69,6 +73,17 @@ export function JobActionsMenu({
           data-testid={`rerun-btn-${item.job_id}`}
         >
           Re-run
+        </Button>
+      )}
+
+      {onDuplicate && item.kind === 'render' && (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onDuplicate(item.job_id)}
+          data-testid={`duplicate-btn-${item.job_id}`}
+        >
+          Duplicate
         </Button>
       )}
 

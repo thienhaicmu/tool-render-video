@@ -14,6 +14,11 @@ import {
   getDefaultOutputDir,
   putDefaultOutputDir,
 } from '@/api/outputDir'
+import {
+  clearRenderDefaults,
+  getRenderDefaults,
+  putRenderDefaults,
+} from '@/api/renderDefaults'
 
 interface CacheInfo {
   total_mb: number
@@ -699,35 +704,62 @@ export function SettingsScreen() {
     }
   }
 
+  // S2.2 IA refactor: section anchors + a sticky left rail for fast
+  // scanning. Existing form components are unchanged — each is wrapped
+  // in a section that the nav can scrollIntoView({behavior:'smooth'}).
+  // Order intentionally matches the FE-facing mental model:
+  //   1. Creator    — who is rendering
+  //   2. Defaults   — render workflow form pre-fill (NEW S2.3)
+  //   3. Output     — where files go
+  //   4. Retention  — when to prune
+  //   5. Storage    — cache + db
+  //   6. Stats      — system stats + help
   return (
     <div style={{
-      height: '100%', overflowY: 'auto', padding: '20px 24px',
-      maxWidth: 520, margin: '0 auto',
-      display: 'flex', flexDirection: 'column', gap: 24,
+      height: '100%', overflowY: 'auto',
+      display: 'grid',
+      gridTemplateColumns: 'minmax(180px, 220px) 1fr',
+      gap: 24,
+      padding: '20px 24px',
     }}>
+      <SettingsNav />
 
-      {/* Header */}
-      <div>
-        <div style={{ fontFamily: 'var(--font-family-base)', fontSize: 16, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.5px' }}>
-          CÀI ĐẶT
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 24,
+        maxWidth: 560, minWidth: 0,
+      }}>
+        {/* Header */}
+        <div>
+          <div style={{ fontFamily: 'var(--font-family-base)', fontSize: 16, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.5px' }}>
+            CÀI ĐẶT
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
+            Tùy chỉnh creator, defaults render, output, storage và thống kê hệ thống
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
-          Thông tin hệ thống và quản lý bộ nhớ cache
-        </div>
-      </div>
 
-      <CreatorContextSection />
+        <section id="settings-creator">
+          <CreatorContextSection />
+        </section>
 
-      <OutputDirSection />
+        <section id="settings-defaults">
+          <RenderDefaultsSection />
+        </section>
 
-      <DataRetentionSection />
+        <section id="settings-output">
+          <OutputDirSection />
+        </section>
+
+        <section id="settings-retention">
+          <DataRetentionSection />
+        </section>
 
       {loading ? (
         <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Đang tải…</div>
       ) : info ? (
         <>
           {/* Cache section */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
+          <section id="settings-storage" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
             <SectionTitle>Render Cache</SectionTitle>
             <InfoRow label="Tổng dung lượng" value={`${info.cache.total_mb} MB`} />
             {Object.entries(info.cache.subdirs).map(([name, mb]) => (
@@ -753,26 +785,26 @@ export function SettingsScreen() {
                 <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{clearResult}</span>
               )}
             </div>
-          </div>
+          </section>
 
           {/* Database section */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
+          <section id="settings-database" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
             <SectionTitle>Database</SectionTitle>
             <InfoRow label="Kích thước" value={`${info.database.size_mb} MB`} />
             <InfoRow label="Đường dẫn" value={info.database.path} />
-          </div>
+          </section>
 
           {/* Jobs section */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
+          <section id="settings-stats" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
             <SectionTitle>Thống kê Job</SectionTitle>
             <InfoRow label="Tổng số job" value={info.jobs.total} />
             <InfoRow label="Hoàn thành" value={<span style={{ color: 'var(--ok)' }}>{info.jobs.completed}</span>} />
             <InfoRow label="Lỗi" value={<span style={{ color: 'var(--fail)' }}>{info.jobs.failed}</span>} />
             <InfoRow label="Đang chạy" value={<span style={{ color: 'var(--accent)' }}>{info.jobs.active}</span>} />
-          </div>
+          </section>
 
           {/* Tips */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
+          <section id="settings-help" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
             <SectionTitle>Hướng dẫn</SectionTitle>
             <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.8 }}>
               <div>• Cache lưu kết quả scene detection, transcription, motion path — tăng tốc render lại cùng video</div>
@@ -780,10 +812,322 @@ export function SettingsScreen() {
               <div>• Database <code>app.db</code> chứa toàn bộ lịch sử job — không xóa thủ công</div>
               <div>• Để tăng/giảm số job song song, đặt biến môi trường <code>MAX_CONCURRENT_JOBS</code></div>
             </div>
-          </div>
+          </section>
         </>
       ) : (
         <div style={{ color: 'var(--fail)', fontSize: 12 }}>Không thể tải thông tin hệ thống</div>
+      )}
+      </div>
+    </div>
+  )
+}
+
+// ── S2.2 IA refactor — section nav rail ───────────────────────────────
+//
+// Sticky left rail listing every section anchor. Click → smooth-scrolls
+// to the matching `<section id="...">`. No active-section highlight in
+// v1 (would require an IntersectionObserver) — kept minimal so the rail
+// is purely a faster jump table.
+
+const _NAV_ITEMS: Array<{ id: string; label: string }> = [
+  { id: 'settings-creator',   label: 'Creator' },
+  { id: 'settings-defaults',  label: 'Render Defaults' },
+  { id: 'settings-output',    label: 'Output' },
+  { id: 'settings-retention', label: 'Data Retention' },
+  { id: 'settings-storage',   label: 'Cache' },
+  { id: 'settings-database',  label: 'Database' },
+  { id: 'settings-stats',     label: 'Thống kê' },
+  { id: 'settings-help',      label: 'Hướng dẫn' },
+]
+
+function SettingsNav() {
+  function scrollTo(id: string) {
+    const el = document.getElementById(id)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  return (
+    <nav style={{
+      position: 'sticky', top: 0, alignSelf: 'flex-start',
+      display: 'flex', flexDirection: 'column', gap: 2,
+      paddingTop: 38,
+    }}>
+      <div style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: '.1em',
+        color: 'var(--text-3)', textTransform: 'uppercase',
+        marginBottom: 6, paddingLeft: 8,
+      }}>
+        Mục
+      </div>
+      {_NAV_ITEMS.map((it) => (
+        <button
+          key={it.id}
+          onClick={() => scrollTo(it.id)}
+          style={{
+            textAlign: 'left',
+            padding: '6px 8px',
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-2)',
+            fontSize: 12,
+            borderRadius: 6,
+            cursor: 'pointer',
+            transition: 'background-color 0.12s ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-card-hover)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+        >
+          {it.label}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
+// ── S2.3 — render defaults form ───────────────────────────────────────
+//
+// Persists user preset defaults via /api/settings/render-defaults so the
+// Configure step of the render workflow can auto-fill (S2.4 consumes
+// this on Step 2 mount). Field choices match the canonical lists in
+// features/clip-studio/render/constants.ts so the saved defaults round-
+// trip 1:1 with what the render form accepts.
+
+const _DEFAULTS_ASPECT_OPTIONS = ['9:16', '3:4', '4:5', '1:1', '16:9']
+const _DEFAULTS_PRESET_OPTIONS = [
+  { value: 'viral',   label: 'VIRAL SHORT (TikTok)' },
+  { value: 'gaming',  label: 'GAMING HYPE (YT Short)' },
+  { value: 'clean',   label: 'CLEAN STORY (Reels)' },
+  { value: 'podcast', label: 'PODCAST CLIP' },
+]
+const _DEFAULTS_SUB_STYLE_OPTIONS = [
+  { value: 'opus_pop',        label: 'Pop' },
+  { value: 'capcut_box',      label: 'Box' },
+  { value: 'punch_green',     label: 'Punch' },
+  { value: 'karaoke_clean',   label: 'Karaoke' },
+  { value: 'smooth_premiere', label: 'Smooth' },
+]
+const _DEFAULTS_LLM_OPTIONS = [
+  { value: 'gemini', label: 'Google Gemini' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'claude', label: 'Anthropic Claude' },
+]
+const _DEFAULTS_VOICE_PROVIDER_OPTIONS = [
+  { value: 'xtts',       label: 'XTTS (local)' },
+  { value: 'elevenlabs', label: 'ElevenLabs (cloud)' },
+  { value: 'edge',       label: 'Edge TTS' },
+]
+
+function RenderDefaultsSection() {
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<string | null>(null)
+  const [isConfigured, setIsConfigured] = useState(false)
+
+  const [aspectRatio, setAspectRatio] = useState('')
+  const [preset, setPreset] = useState('')
+  const [voiceProvider, setVoiceProvider] = useState('')
+  const [voiceId, setVoiceId] = useState('')
+  const [subtitleStyle, setSubtitleStyle] = useState('')
+  const [llmProvider, setLlmProvider] = useState('')
+
+  // Initial load — mirror the existing pattern in CreatorContextSection.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const env = await getRenderDefaults()
+        if (cancelled) return
+        setIsConfigured(env.is_configured)
+        setAspectRatio(env.render_defaults.aspect_ratio || '')
+        setPreset(env.render_defaults.preset || '')
+        setVoiceProvider(env.render_defaults.voice_provider || '')
+        setVoiceId(env.render_defaults.voice_id || '')
+        setSubtitleStyle(env.render_defaults.subtitle_style || '')
+        setLlmProvider(env.render_defaults.llm_provider || '')
+      } catch {
+        // Silently fall back to defaults — non-critical.
+      } finally {
+        if (!cancelled) setLoaded(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  async function handleSave() {
+    setSaving(true)
+    setSaveMsg(null)
+    try {
+      const env = await putRenderDefaults({
+        aspect_ratio:   aspectRatio   || null,
+        preset:         preset        || null,
+        voice_provider: voiceProvider || null,
+        voice_id:       voiceId.trim() || null,
+        subtitle_style: subtitleStyle || null,
+        llm_provider:   llmProvider   || null,
+      })
+      setIsConfigured(env.is_configured)
+      setSaveMsg(env.is_configured ? 'Đã lưu defaults' : 'Đã xóa defaults')
+    } catch {
+      setSaveMsg('Lưu thất bại — kiểm tra log')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleClear() {
+    if (!window.confirm('Xóa toàn bộ render defaults? Step 2 sẽ trở lại trắng.')) return
+    setSaving(true)
+    setSaveMsg(null)
+    try {
+      await clearRenderDefaults()
+      setAspectRatio('')
+      setPreset('')
+      setVoiceProvider('')
+      setVoiceId('')
+      setSubtitleStyle('')
+      setLlmProvider('')
+      setIsConfigured(false)
+      setSaveMsg('Đã xóa defaults')
+    } catch {
+      setSaveMsg('Xóa thất bại')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
+      borderRadius: 10, padding: '16px 18px',
+    }}>
+      <SectionTitle>
+        Render Defaults
+        {isConfigured && (
+          <span style={{
+            marginLeft: 8,
+            fontSize: 9, fontWeight: 700, letterSpacing: '.04em',
+            color: 'var(--ok)',
+          }}>
+            • ĐÃ CẤU HÌNH
+          </span>
+        )}
+      </SectionTitle>
+
+      {!loaded ? (
+        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Đang tải…</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12, lineHeight: 1.5 }}>
+            Mỗi field tùy chọn — bỏ trống nghĩa "không có defaults, hỏi user mỗi render".
+          </div>
+
+          <FormRow label="Aspect ratio" hint="Tỉ lệ output mặc định">
+            <select
+              value={aspectRatio}
+              onChange={(e) => setAspectRatio(e.target.value)}
+              style={_inputStyle}
+            >
+              <option value="">— (không default)</option>
+              {_DEFAULTS_ASPECT_OPTIONS.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </FormRow>
+
+          <FormRow label="Preset" hint="Template style mặc định">
+            <select
+              value={preset}
+              onChange={(e) => setPreset(e.target.value)}
+              style={_inputStyle}
+            >
+              <option value="">— (không default)</option>
+              {_DEFAULTS_PRESET_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </FormRow>
+
+          <FormRow label="Subtitle style" hint="Style phụ đề mặc định">
+            <select
+              value={subtitleStyle}
+              onChange={(e) => setSubtitleStyle(e.target.value)}
+              style={_inputStyle}
+            >
+              <option value="">— (không default)</option>
+              {_DEFAULTS_SUB_STYLE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </FormRow>
+
+          <FormRow label="Voice provider" hint="Engine TTS mặc định">
+            <select
+              value={voiceProvider}
+              onChange={(e) => setVoiceProvider(e.target.value)}
+              style={_inputStyle}
+            >
+              <option value="">— (không default)</option>
+              {_DEFAULTS_VOICE_PROVIDER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </FormRow>
+
+          <FormRow label="Voice ID" hint="ID giọng cụ thể (vd: rachel_v2). Để trống nếu chưa có preference.">
+            <input
+              type="text"
+              value={voiceId}
+              onChange={(e) => setVoiceId(e.target.value)}
+              placeholder="rachel_v2 / vi-VN-HoaiMyNeural / …"
+              style={_inputStyle}
+            />
+          </FormRow>
+
+          <FormRow label="LLM provider" hint="Provider cho AI Director mặc định">
+            <select
+              value={llmProvider}
+              onChange={(e) => setLlmProvider(e.target.value)}
+              style={_inputStyle}
+            >
+              <option value="">— (không default)</option>
+              {_DEFAULTS_LLM_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </FormRow>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                padding: '6px 16px', borderRadius: 7, fontSize: 11, fontWeight: 700,
+                fontFamily: 'var(--font-family-base)', letterSpacing: '.04em',
+                border: '1px solid var(--accent)', background: 'var(--accent)',
+                color: '#fff', cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? .5 : 1,
+              }}
+            >
+              {saving ? 'Đang lưu…' : 'Lưu defaults'}
+            </button>
+            <button
+              onClick={handleClear}
+              disabled={saving || !isConfigured}
+              style={{
+                padding: '6px 12px', borderRadius: 7, fontSize: 11, fontWeight: 600,
+                fontFamily: 'var(--font-family-base)', letterSpacing: '.04em',
+                border: '1px solid var(--border)', background: 'transparent',
+                color: 'var(--text-2)',
+                cursor: (saving || !isConfigured) ? 'not-allowed' : 'pointer',
+                opacity: (saving || !isConfigured) ? .5 : 1,
+              }}
+            >
+              Xóa hết
+            </button>
+            {saveMsg && (
+              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{saveMsg}</span>
+            )}
+          </div>
+        </>
       )}
     </div>
   )

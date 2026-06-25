@@ -385,3 +385,67 @@ def upsert_job_retention_days(days: int) -> Optional[int]:
         logger.warning("upsert_job_retention_days: write failed: %s", exc)
         return None
     return get_job_retention_days()
+
+
+# ── S2.1 (Sprint 2 UX) — render defaults helpers ────────────────────────
+#
+# Stores FE-facing render preset defaults so the Configure step of the
+# render workflow can auto-fill instead of forcing the user to re-pick
+# every time. The wire shape is decided by routes/settings.py — this
+# layer is intentionally schema-agnostic and stores whatever dict the
+# endpoint hands in. Adding new fields on the wire never requires a DB
+# migration.
+
+_RENDER_DEFAULTS_KEY = "render_defaults"
+
+
+def get_render_defaults() -> Optional[dict]:
+    """Return the persisted render defaults dict or None when not set.
+
+    Never raises — returns None on any DB or parse error so a transient
+    failure can't break the Settings screen.
+    """
+    try:
+        prefs = get_creator_prefs()
+    except Exception as exc:
+        logger.warning("get_render_defaults: read failed: %s", exc)
+        return None
+    nested = prefs.get(_RENDER_DEFAULTS_KEY)
+    if not isinstance(nested, dict):
+        return None
+    return nested
+
+
+def upsert_render_defaults(defaults: Optional[dict]) -> Optional[dict]:
+    """Persist render defaults under the singleton creator_prefs row.
+
+    Passing None or an empty dict clears the key. Other top-level prefs
+    keys are preserved verbatim. Returns the value that was actually
+    persisted, or None on error.
+    """
+    try:
+        current = get_creator_prefs()
+    except Exception as exc:
+        logger.warning("upsert_render_defaults: read failed: %s", exc)
+        current = {}
+    if not defaults:
+        current.pop(_RENDER_DEFAULTS_KEY, None)
+    else:
+        # Only persist keys whose value is not None — the FE sends every
+        # field on every PUT (mirroring the form), so a null field means
+        # "no preference, don't preserve a stale value". Empty strings
+        # are treated the same as None to keep the wire surface forgiving.
+        cleaned = {
+            k: v for k, v in defaults.items()
+            if v is not None and v != ""
+        }
+        if not cleaned:
+            current.pop(_RENDER_DEFAULTS_KEY, None)
+        else:
+            current[_RENDER_DEFAULTS_KEY] = cleaned
+    try:
+        upsert_creator_prefs(current)
+    except Exception as exc:
+        logger.warning("upsert_render_defaults: write failed: %s", exc)
+        return None
+    return get_render_defaults()

@@ -38,6 +38,8 @@ export function HistoryScreen() {
   const [actionLoading, setActionLoading] = useState<Set<string>>(new Set())
 
   const addNotification = useUIStore((s) => s.addNotification)
+  const setActivePanel = useUIStore((s) => s.setActivePanel)
+  const setDuplicateSeedJobId = useUIStore((s) => s.setDuplicateSeedJobId)
 
   // ── Auto-refresh when active jobs exist ───────────────────────────────────
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -156,6 +158,18 @@ export function HistoryScreen() {
     }
   }
 
+  function handleDuplicate(jobId: string) {
+    // S2.5 — RenderWorkflow picks up duplicateSeedJobId on its next mount
+    // and hydrates Step 2 + source from the old job's payload_json.
+    setDuplicateSeedJobId(jobId)
+    setActivePanel('clip-studio')
+    addNotification({
+      title: 'Đã copy settings',
+      message: 'Configure step đã pre-fill từ job cũ',
+      type: 'info',
+    })
+  }
+
   async function handleDelete(jobId: string) {
     if (!window.confirm('Delete this job and its files?')) return
     addToLoading(jobId)
@@ -252,6 +266,7 @@ export function HistoryScreen() {
             onRetry={handleRetry}
             onRerun={handleRerun}
             onDelete={handleDelete}
+            onDuplicate={handleDuplicate}
             onRetryFetch={() => fetchPage(offset)}
             onPrevPage={() => fetchPage(Math.max(0, offset - PAGE_SIZE))}
             onNextPage={() => fetchPage(offset + PAGE_SIZE)}

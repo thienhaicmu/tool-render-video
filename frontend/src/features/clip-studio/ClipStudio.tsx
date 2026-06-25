@@ -2,12 +2,14 @@ import { useState } from 'react'
 import './ClipStudio.css'
 import { RenderWorkflow } from './render/RenderWorkflow'
 import { DownloadTab } from './download/DownloadTab'
-import { HistoryTab } from './history/HistoryTab'
 import { ThemeToggle } from '../../components/ui/ThemeToggle'
 import { ActiveJobBadge } from './ActiveJobBadge'
 import { useUIStore } from '../../stores/uiStore'
 
-type Tab = 'render' | 'download' | 'history'
+// S2.6 — collapsed the in-Studio History tab; the sidebar Library is now
+// the single canonical jobs/history surface. HistoryTab.tsx remains in
+// the codebase as a viable component but is no longer mounted here.
+type Tab = 'render' | 'download'
 export type Lang = 'EN' | 'VI'
 
 const SettingsIcon = () => (
@@ -47,12 +49,6 @@ export function ClipStudio() {
           >
             Download
           </button>
-          <button
-            className={`cs-nav-tab${activeTab === 'history' ? ' active' : ''}`}
-            onClick={() => setActiveTab('history')}
-          >
-            History
-          </button>
         </nav>
 
         <div className="cs-topbar-right">
@@ -79,9 +75,6 @@ export function ClipStudio() {
         </div>
         <div className={`cs-tab-pane${activeTab === 'download' ? ' active' : ''}`}>
           <DownloadTab lang={lang} />
-        </div>
-        <div className={`cs-tab-pane${activeTab === 'history'  ? ' active' : ''}`}>
-          <HistoryTab lang={lang} onSwitchToRender={() => setActiveTab('render')} />
         </div>
       </div>
 

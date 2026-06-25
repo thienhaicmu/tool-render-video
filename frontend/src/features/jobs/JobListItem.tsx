@@ -25,11 +25,12 @@ export interface JobListItemProps {
   onRetry: (jobId: string) => void
   onRerun: (jobId: string) => void
   onDelete: (jobId: string) => void
+  onDuplicate?: (jobId: string) => void
 }
 
 export function JobListItem({
   item, isSelected, actionLoading,
-  onSelect, onCancel, onRetry, onRerun, onDelete,
+  onSelect, onCancel, onRetry, onRerun, onDelete, onDuplicate,
 }: JobListItemProps) {
   const isActive = isActiveStatus(item.status)
   const st = STATUS_CFG[item.status] ?? FALLBACK
@@ -130,6 +131,7 @@ export function JobListItem({
               onRetry={onRetry}
               onRerun={onRerun}
               onDelete={onDelete}
+              onDuplicate={onDuplicate}
               onDetails={onSelect}
             />
             {item.can_open_folder && item.output_dir && (

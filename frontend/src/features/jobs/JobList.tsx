@@ -20,6 +20,7 @@ export interface JobListProps {
   onRetry: (jobId: string) => void
   onRerun: (jobId: string) => void
   onDelete: (jobId: string) => void
+  onDuplicate?: (jobId: string) => void
   onRetryFetch: () => void
   onPrevPage: () => void
   onNextPage: () => void
@@ -28,7 +29,7 @@ export interface JobListProps {
 export function JobList({
   items, loading, error, hasFilters, selectedJobId,
   actionLoading, hasMore, offset,
-  onSelect, onCancel, onRetry, onRerun, onDelete,
+  onSelect, onCancel, onRetry, onRerun, onDelete, onDuplicate,
   onRetryFetch, onPrevPage, onNextPage,
 }: JobListProps) {
   if (loading) return <JobLoadingState />
@@ -77,6 +78,7 @@ export function JobList({
                 onRetry={onRetry}
                 onRerun={onRerun}
                 onDelete={onDelete}
+                onDuplicate={onDuplicate}
               />
             )
           })
