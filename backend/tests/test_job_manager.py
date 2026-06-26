@@ -185,3 +185,59 @@ def test_shutdown_sets_stopping_flag():
     manager.shutdown(wait=False)
     with manager._lock:
         assert manager._stopping is True
+
+
+# ---------------------------------------------------------------------------
+# Pha 3 — pending_order / move_job_to_front
+#
+# Deterministic pattern (same as test_submit_job_increments_pending_count):
+# pre-fill _active_job_ids to MAX_CONCURRENT_JOBS so the scheduler never pops,
+# keeping the submitted jobs in the pending heap for inspection/reorder.
+# ---------------------------------------------------------------------------
+
+def _fill_slots():
+    with manager._cond:
+        for i in range(manager.MAX_CONCURRENT_JOBS):
+            manager._active_job_ids.add(f"slot-filler-{i}")
+
+
+def test_pending_order_reflects_fifo_within_same_priority():
+    fn = MagicMock()
+    _fill_slots()
+    with patch("app.jobs.manager._mark_job_running"):
+        manager.submit_job("job-a", fn)
+        manager.submit_job("job-b", fn)
+        manager.submit_job("job-c", fn)
+    assert manager.pending_order() == ["job-a", "job-b", "job-c"]
+
+
+def test_move_job_to_front_reorders_pending():
+    fn = MagicMock()
+    _fill_slots()
+    with patch("app.jobs.manager._mark_job_running"):
+        manager.submit_job("job-a", fn)
+        manager.submit_job("job-b", fn)
+        manager.submit_job("job-c", fn)
+    assert manager.move_job_to_front("job-c") is True
+    # c jumps to front; a and b keep their relative order behind it.
+    assert manager.pending_order() == ["job-c", "job-a", "job-b"]
+
+
+def test_move_job_to_front_unknown_returns_false():
+    assert manager.move_job_to_front("does-not-exist") is False
+
+
+def test_move_job_to_front_twice_keeps_newest_first():
+    fn = MagicMock()
+    _fill_slots()
+    with patch("app.jobs.manager._mark_job_running"):
+        manager.submit_job("job-a", fn)
+        manager.submit_job("job-b", fn)
+        manager.submit_job("job-c", fn)
+    manager.move_job_to_front("job-b")
+    manager.move_job_to_front("job-c")  # last bump wins the front slot
+    assert manager.pending_order()[0] == "job-c"
+
+
+def test_pending_order_empty_when_no_pending():
+    assert manager.pending_order() == []

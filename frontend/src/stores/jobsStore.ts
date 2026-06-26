@@ -20,7 +20,7 @@
  * without a 4 s wait).
  */
 import { create } from 'zustand'
-import { getJobHistory } from '@/api/jobs'
+import { getJobHistory, getQueueStatus } from '@/api/jobs'
 import type { HistoryItem } from '@/types/api'
 
 const POLL_MS = 4000
@@ -32,6 +32,9 @@ interface JobsStore {
   active: HistoryItem | null
   /** Count of running/queued jobs. */
   activeCount: number
+  /** Pha 3 — pending job_ids in dispatch order (front-first), from the
+   *  scheduler heap. Lets the dock show a queued job's position #N/M. */
+  queueOrder: string[]
   loading: boolean
   error: string | null
   /** Number of subscribers currently polling. The interval is alive
@@ -46,7 +49,12 @@ interface JobsStore {
 
 async function _fetchAndUpdate(set: (partial: Partial<JobsStore>) => void) {
   try {
-    const res = await getJobHistory(30, 0)
+    // Queue order is best-effort — a failure there must not blank the
+    // history list, so it resolves to null and falls back to [].
+    const [res, queue] = await Promise.all([
+      getJobHistory(30, 0),
+      getQueueStatus().catch(() => null),
+    ])
     const items = res.items
     const activeItems = items.filter(
       (j) => j.status === 'running' || j.status === 'queued',
@@ -55,6 +63,7 @@ async function _fetchAndUpdate(set: (partial: Partial<JobsStore>) => void) {
       items,
       active: activeItems[0] ?? null,
       activeCount: activeItems.length,
+      queueOrder: queue?.order ?? [],
       error: null,
       loading: false,
     })
@@ -70,6 +79,7 @@ export const useJobsStore = create<JobsStore>((set, get) => ({
   items: [],
   active: null,
   activeCount: 0,
+  queueOrder: [],
   loading: false,
   error: null,
   _refcount: 0,

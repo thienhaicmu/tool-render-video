@@ -36,6 +36,36 @@ export async function extendJob(
 }
 
 /**
+ * Pha 3 — queue status incl. dispatch order of the pending jobs.
+ * GET /api/jobs/queue/status → `order` is pending job_ids, front-first,
+ * so the UI can show each waiting job's position (#N of M).
+ */
+export interface QueueStatus {
+  max_concurrent: number
+  active: number
+  pending: number
+  available_slots: number
+  order: string[]
+}
+export async function getQueueStatus(): Promise<QueueStatus> {
+  return apiFetch<QueueStatus>('/api/jobs/queue/status')
+}
+
+/**
+ * Pha 3 — move a still-pending job to the front of the dispatch queue.
+ * POST /api/jobs/{jobId}/queue/move-top. 404 when the job is no longer
+ * waiting (already running / finished / unknown).
+ */
+export async function moveJobToTop(
+  jobId: string,
+): Promise<{ job_id: string; moved: boolean }> {
+  return apiFetch(
+    `/api/jobs/${encodeURIComponent(jobId)}/queue/move-top`,
+    { method: 'POST' },
+  )
+}
+
+/**
  * Paginated job history. ALWAYS use this instead of listJobs() for history UI.
  * GET /api/jobs/history?limit=20&offset=0
  */

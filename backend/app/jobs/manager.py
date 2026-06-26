@@ -356,6 +356,47 @@ def pending_count() -> int:
         return len(_pending)
 
 
+# ---------------------------------------------------------------------------
+# Pha 3 — Queue Workspace surface (read order + move-to-front)
+# ---------------------------------------------------------------------------
+
+def pending_order() -> list[str]:
+    """Return pending job_ids in dispatch order (highest priority / FIFO first).
+
+    ``sorted(_pending)`` orders by the heap key ``(-priority, seq)`` — both
+    ints — so it never compares the callable. Used by the queue UI to show a
+    job's position (#N of M) while it waits for a slot. Read-only snapshot.
+    """
+    with _lock:
+        return [entry[2] for entry in sorted(_pending)]
+
+
+def move_job_to_front(job_id: str) -> bool:
+    """Bump a *pending* job to the front of the queue (dispatched next).
+
+    Sets the job's priority to one above the current maximum pending priority
+    and re-heapifies in place under ``_cond`` so the change is atomic w.r.t.
+    the scheduler, then notifies it. The existing ``seq`` is preserved so FIFO
+    ordering within the new priority tier stays stable.
+
+    Returns True if the job was found in the pending heap, False otherwise
+    (already running, finished, or unknown — none of which can be reordered).
+    """
+    with _cond:
+        idx = next((i for i, e in enumerate(_pending) if e[2] == job_id), -1)
+        if idx < 0:
+            return False
+        # Highest priority currently waiting (entry[0] is the *negated*
+        # priority), then go one above it so this job pops first.
+        top_priority = max((-e[0] for e in _pending), default=0) + 1
+        e = _pending[idx]
+        _pending[idx] = (-top_priority, e[1], e[2], e[3], e[4], e[5])
+        heapq.heapify(_pending)
+        _cond.notify_all()
+        logger.info("Job %s moved to front of queue (priority=%d)", job_id, top_priority)
+        return True
+
+
 def shutdown(wait: bool = True, timeout: float = 30.0) -> None:
     """Stop the scheduler and drain in-flight workers.
 

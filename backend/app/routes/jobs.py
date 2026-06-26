@@ -169,12 +169,17 @@ def api_jobs_history(limit: int = 20, offset: int = 0):
 
 @router.get("/queue/status")
 def api_queue_status():
-    from app.jobs.manager import active_count, pending_count, MAX_CONCURRENT_JOBS
+    # Pha 3 — `order` is the pending job_ids in dispatch order so the queue
+    # UI can show each waiting job's position (#N of M). Additive field.
+    from app.jobs.manager import (
+        active_count, pending_count, pending_order, MAX_CONCURRENT_JOBS,
+    )
     return {
         "max_concurrent": MAX_CONCURRENT_JOBS,
         "active": active_count(),
         "pending": pending_count(),
         "available_slots": max(0, MAX_CONCURRENT_JOBS - active_count()),
+        "order": pending_order(),
     }
 
 
@@ -749,6 +754,25 @@ def api_extend_job_age(job_id: str, extra_seconds: int = 3600) -> dict:
         "granted_seconds": extra,
         "cumulative_override": get_job_age_override(job_id),
     }
+
+
+# Pha 3 — Queue Workspace: bump a still-pending job to the front of the
+# queue so it's dispatched next. 404 when the job isn't pending (already
+# running, finished, or unknown — none of which can be reordered).
+@router.post("/{job_id}/queue/move-top")
+def api_move_job_to_top(job_id: str) -> dict:
+    """Move a queued job to the front of the dispatch queue.
+
+    Only affects jobs still waiting for a concurrency slot. Returns
+    ``{job_id, moved: true}`` on success; raises 404 otherwise.
+    """
+    from app.jobs.manager import move_job_to_front
+    if not move_job_to_front(job_id):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} is not waiting in the queue (cannot reorder).",
+        )
+    return {"job_id": job_id, "moved": True}
 
 
 @router.delete("/{job_id}/parts/{part_no}/output")

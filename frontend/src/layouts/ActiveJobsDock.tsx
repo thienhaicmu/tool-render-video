@@ -9,11 +9,12 @@
  * auto-reattach in StepRendering already consumes `renderStore.activeJobId`).
  */
 import React, { useState } from 'react'
-import { useActiveJobs } from '../stores/jobsStore'
+import { useActiveJobs, useJobsStore } from '../stores/jobsStore'
 import { useUIStore } from '../stores/uiStore'
 import { useRenderStore } from '../stores/renderStore'
 import { useI18n } from '../i18n/useI18n'
 import { cancelRender } from '../api/render'
+import { moveJobToTop } from '../api/jobs'
 import { cancelJob as cancelDownloadJob } from '../api/platformDownloader'
 import type { HistoryItem } from '../types/api'
 
@@ -25,6 +26,7 @@ const FULLSCREEN_PANELS = ['clip-studio']
 
 export function ActiveJobsDock() {
   const { items, refresh } = useActiveJobs()
+  const queueOrder = useJobsStore((s) => s.queueOrder)
   const { t } = useI18n()
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const activePanel = useUIStore((s) => s.activePanel)
@@ -78,6 +80,17 @@ export function ActiveJobsDock() {
     }
   }
 
+  // Pha 3 — bump a queued render to the front of the dispatch queue, then
+  // refresh so the new position shows without waiting for the 4 s poll.
+  async function handleMoveTop(job: HistoryItem) {
+    try {
+      await moveJobToTop(job.job_id)
+      void refresh()
+    } catch (_err) {
+      // 404 = job already started / finished between poll + click — ignore.
+    }
+  }
+
   return (
     <div
       style={{
@@ -89,7 +102,14 @@ export function ActiveJobsDock() {
     >
       <div style={styles.inner}>
         {visible.map((job) => (
-          <DockRow key={job.job_id} job={job} onOpen={handleOpen} onCancel={handleCancel} />
+          <DockRow
+            key={job.job_id}
+            job={job}
+            queueOrder={queueOrder}
+            onOpen={handleOpen}
+            onCancel={handleCancel}
+            onMoveTop={handleMoveTop}
+          />
         ))}
         {overflow > 0 && (
           <button
@@ -107,16 +127,21 @@ export function ActiveJobsDock() {
 
 function DockRow({
   job,
+  queueOrder,
   onOpen,
   onCancel,
+  onMoveTop,
 }: {
   job: HistoryItem
+  queueOrder: string[]
   onOpen: (job: HistoryItem) => void
   onCancel: (job: HistoryItem) => void
+  onMoveTop: (job: HistoryItem) => void
 }) {
   const { t } = useI18n()
   const [hovered, setHovered] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [moving, setMoving] = useState(false)
 
   const pct = Math.max(0, Math.min(100, job.progress_percent || 0))
   const isQueued = job.status === 'queued'
@@ -124,8 +149,13 @@ function DockRow({
   const kindBg = job.kind === 'render' ? 'var(--accent-subtle)' : 'rgba(34, 197, 94, 0.12)'
   const kindFg = job.kind === 'render' ? 'var(--accent-primary)' : 'rgb(34, 197, 94)'
   const title = job.title || job.source_hint || job.job_id.slice(0, 8)
+  // Pha 3 — position in the dispatch queue (render jobs only; downloads
+  // run on a separate engine and aren't in queueOrder → posIdx === -1).
+  const posIdx = isQueued ? queueOrder.indexOf(job.job_id) : -1
+  const queueTotal = queueOrder.length
+  const canMoveTop = posIdx > 0   // already #1 → nothing to bump
   const subtitle = isQueued
-    ? t('dock_queued')
+    ? (posIdx >= 0 ? `${t('dock_queued')} · #${posIdx + 1}/${queueTotal}` : t('dock_queued'))
     : job.message || job.stage || t('dock_processing')
 
   return (
@@ -154,6 +184,23 @@ function DockRow({
         </span>
         <span style={styles.pct}>{isQueued ? 'queued' : `${Math.round(pct)}%`}</span>
       </button>
+      {canMoveTop && (
+        <button
+          style={styles.moveBtn}
+          onClick={async (e) => {
+            e.stopPropagation()
+            if (moving) return
+            setMoving(true)
+            await onMoveTop(job)
+            setMoving(false)
+          }}
+          disabled={moving}
+          title={t('dock_move_top')}
+          aria-label={t('dock_move_top')}
+        >
+          {moving ? '…' : '⤴'}
+        </button>
+      )}
       <button
         style={styles.cancelBtn}
         onClick={async (e) => {
@@ -277,6 +324,19 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-tertiary)',
     cursor: 'pointer',
     fontSize: 16,
+    lineHeight: 1,
+  },
+  // Pha 3 — move-to-top control for queued jobs (accent-toned to read as
+  // a positive action vs the cancel ×).
+  moveBtn: {
+    width: 30,
+    height: '100%',
+    border: 'none',
+    borderLeft: '1px solid var(--border-subtle)',
+    background: 'transparent',
+    color: 'var(--accent-primary)',
+    cursor: 'pointer',
+    fontSize: 15,
     lineHeight: 1,
   },
   overflow: {
