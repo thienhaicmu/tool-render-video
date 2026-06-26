@@ -3,9 +3,10 @@
  *
  * Replaces the deleted navigation-polish.test.tsx which asserted the old
  * 4-item ("Render/History/Editor/Settings") sidebar. The current sidebar
- * has 5 main nav items (home/studio/library/download/publish) + 1 bottom
- * item (settings), all labeled via i18n. This file tests the current shape
- * + the panel-switching behavior that Sprint 5.6 affected.
+ * has 4 main nav items (studio/library/download/publish) + 1 bottom item
+ * (settings), all labeled via i18n. ("Home" was removed in S2.6 — Library
+ * is the canonical jobs/history surface; the `home` panel survives only as
+ * a deep-link alias, not a nav item.) This file tests the current shape.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -33,14 +34,15 @@ afterEach(() => {
 
 
 describe('Sidebar — nav item rendering', () => {
-  it('renders 5 main nav items by their i18n labels', () => {
+  it('renders 4 main nav items by their i18n labels', () => {
     render(<Sidebar />)
     // Default lang is 'en', so labels come from translations.en
-    expect(screen.getByTitle('Home')).toBeTruthy()
     expect(screen.getByTitle('Studio')).toBeTruthy()
     expect(screen.getByTitle('Library')).toBeTruthy()
     expect(screen.getByTitle('Download')).toBeTruthy()
     expect(screen.getByTitle('Publish')).toBeTruthy()
+    // "Home" was removed from the nav in S2.6.
+    expect(screen.queryByTitle('Home')).toBeNull()
   })
 
   it('renders the Settings nav item in the bottom group', () => {
@@ -57,9 +59,9 @@ describe('Sidebar — nav item rendering', () => {
 
 describe('Sidebar — active-item highlighting', () => {
   it('marks the currently active panel with aria-current="page"', () => {
-    useUIStore.setState({ activePanel: 'home' })
+    useUIStore.setState({ activePanel: 'clip-studio' })
     render(<Sidebar />)
-    const activeBtn = screen.getByTitle('Home')
+    const activeBtn = screen.getByTitle('Studio')
     expect(activeBtn.getAttribute('aria-current')).toBe('page')
   })
 
@@ -74,7 +76,7 @@ describe('Sidebar — active-item highlighting', () => {
     useUIStore.setState({ activePanel: 'library' })
     render(<Sidebar />)
     expect(screen.getByTitle('Library').getAttribute('aria-current')).toBe('page')
-    expect(screen.getByTitle('Home').getAttribute('aria-current')).toBeNull()
+    expect(screen.getByTitle('Studio').getAttribute('aria-current')).toBeNull()
   })
 })
 

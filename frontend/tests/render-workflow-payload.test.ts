@@ -60,35 +60,40 @@ function readApiTypes(): string {
 }
 
 /**
- * Find the `buildPayload`'s payload object body. We scope the search
- * to `const payload: RenderRequest = { ... }` so commits to OTHER
- * parts of the file (e.g., a hint string mentioning a dead field
- * name in passing) don't spuriously fail this guard.
+ * Find the wire payload object body. RenderWorkflow builds it in
+ *   function buildPayloadForSource(srcValue: string): RenderRequest {
+ *     return { ... }
+ *   }
+ * (factored out in S3.4 for the multi-source batch loop — previously a
+ * `const payload: RenderRequest = {`). We locate that function, then
+ * balance the braces of its `return { ... }` literal so dead-field-name
+ * mentions elsewhere in the file can't spuriously trip this guard.
  */
 function extractPayloadBody(source: string): string {
-  // Match `const payload: RenderRequest = {` then balance braces until
-  // the matching `}`. Naive but the payload object doesn't contain
-  // nested object literals at the depth this regex traverses, so the
-  // first balanced `{...}` block IS the payload.
-  const startIdx = source.indexOf('const payload: RenderRequest = {')
-  if (startIdx === -1) {
+  const fnIdx = source.indexOf('function buildPayloadForSource')
+  if (fnIdx === -1) {
     throw new Error(
-      'Could not locate `const payload: RenderRequest = {` in ' +
-        'RenderWorkflow.tsx. The buildPayload structure may have ' +
-        'been refactored — update this test to match the new shape.',
+      'Could not locate `function buildPayloadForSource` in ' +
+        'RenderWorkflow.tsx. The payload builder may have been ' +
+        'refactored — update this test to match the new shape.',
     )
   }
-  // Find the matching close brace by depth counting.
+  const returnIdx = source.indexOf('return {', fnIdx)
+  if (returnIdx === -1) {
+    throw new Error('Could not locate `return {` inside buildPayloadForSource')
+  }
+  // The payload object is flat (no nested object literals as values), so
+  // balancing from the first `{` after `return` yields the whole literal.
   let depth = 0
-  let i = source.indexOf('{', startIdx)
-  if (i === -1) throw new Error('Open brace not found after const payload')
+  let i = source.indexOf('{', returnIdx)
+  if (i === -1) throw new Error('Open brace not found after return')
   for (; i < source.length; i++) {
     const ch = source[i]
     if (ch === '{') depth++
     else if (ch === '}') {
       depth--
       if (depth === 0) {
-        return source.slice(startIdx, i + 1)
+        return source.slice(returnIdx, i + 1)
       }
     }
   }
