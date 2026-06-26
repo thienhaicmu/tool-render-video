@@ -63,6 +63,13 @@ _seq: int = 0                               # monotonic counter, never reset
 
 _active_job_ids: set[str] = set()          # jobs currently executing
 
+# Pha 3.3b — paused ("held") queued jobs: their heap entry is pulled OUT of
+# _pending so the scheduler won't dispatch them, but they STAY in
+# _pending_job_ids (so dedup / is_running keep working). resume_job pushes
+# the entry back. In-memory only — a restart drops holds (jobs become
+# 'interrupted' via the normal queued-recovery path). Mutate under _cond.
+_held: dict[str, tuple] = {}
+
 _executor: concurrent.futures.ThreadPoolExecutor | None = None
 _scheduler_thread: threading.Thread | None = None
 _stopping: bool = False
@@ -260,8 +267,14 @@ def _scheduler_loop() -> None:
                 with _cond:
                     _active_job_ids.discard(jid)
                     _cond.notify_all()  # a slot just opened — wake the scheduler
-                    # Snapshot valid IDs while holding the lock for prune below
-                    _valid_ids = frozenset(_active_job_ids) | frozenset(e[2] for e in _pending)
+                    # Snapshot valid IDs while holding the lock for prune below.
+                    # Pha 3.3b — include held jobs so a cancel signal queued for
+                    # a paused job isn't pruned before it's resumed + dispatched.
+                    _valid_ids = (
+                        frozenset(_active_job_ids)
+                        | frozenset(e[2] for e in _pending)
+                        | frozenset(_held.keys())
+                    )
                     # Sprint 6.C: refresh the active gauge after a slot opens.
                     try:
                         from app.services.metrics import JOB_QUEUE_ACTIVE, JOB_QUEUE_PENDING
@@ -455,6 +468,57 @@ def move_job(job_id: str, delta: int) -> bool:
         _cond.notify_all()
         logger.info("Job %s moved %s one step", job_id, "down" if step > 0 else "up")
         return True
+
+
+# ---------------------------------------------------------------------------
+# Pha 3.3b — pause / resume (hold) a queued job
+# ---------------------------------------------------------------------------
+
+def hold_job(job_id: str) -> bool:
+    """Pause a *pending* job: pull its entry out of the dispatch heap.
+
+    The job stays in ``_pending_job_ids`` (dedup / is_running still report it),
+    so a paused job can't be re-submitted and still appears 'queued' in the DB.
+    Returns True if the job was pending (and is now held), False otherwise
+    (running, unknown, or already held).
+    """
+    with _cond:
+        idx = next((i for i, e in enumerate(_pending) if e[2] == job_id), -1)
+        if idx < 0:
+            return False
+        entry = _pending.pop(idx)
+        heapq.heapify(_pending)
+        _held[job_id] = entry
+        logger.info("Job %s held (paused)", job_id)
+        return True
+
+
+def resume_job(job_id: str) -> bool:
+    """Resume a held job: push its entry back into the dispatch heap.
+
+    Returns True if the job was held (and is now pending again), False
+    otherwise (never held / unknown).
+    """
+    with _cond:
+        entry = _held.pop(job_id, None)
+        if entry is None:
+            return False
+        heapq.heappush(_pending, entry)
+        _cond.notify_all()
+        logger.info("Job %s resumed", job_id)
+        return True
+
+
+def is_held(job_id: str) -> bool:
+    """True if the job is currently paused (held out of the dispatch heap)."""
+    with _lock:
+        return job_id in _held
+
+
+def held_ids() -> list[str]:
+    """Snapshot of currently-held (paused) job_ids."""
+    with _lock:
+        return list(_held.keys())
 
 
 def shutdown(wait: bool = True, timeout: float = 30.0) -> None:

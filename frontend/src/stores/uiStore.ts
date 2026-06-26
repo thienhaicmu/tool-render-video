@@ -59,6 +59,10 @@ export interface UIStore {
    *  source on a clean Step 1, then clears it so a second visit doesn't
    *  re-apply a stale path. Mirrors the duplicateSeedJobId handshake. */
   sendToRenderSourcePath: string | null
+  /** Pha 3.3a — whether the Queue drawer (full queue-management overlay)
+   *  is open. Opened from the dock; the dock + drawer communicate through
+   *  this flag since they're sibling-mounted, not parent/child. */
+  queueDrawerOpen: boolean
   /** S3.2/S3.5 — monotonic counter incremented every time the user
    *  asks for a fresh render (⌘N, palette action, or future "+ New"
    *  button). RenderWorkflow watches this counter and force-resets to
@@ -75,6 +79,7 @@ export interface UIStore {
   setLang: (lang: Lang) => void
   setDuplicateSeedJobId: (jobId: string | null) => void
   setSendToRenderSourcePath: (path: string | null) => void
+  setQueueDrawerOpen: (open: boolean) => void
   requestNewRender: () => void
   /** S4.7 — mark a single history entry as read. */
   markNotificationRead: (id: string) => void
@@ -118,6 +123,7 @@ export const useUIStore = create<UIStore>((set) => ({
   lang: 'en' as Lang,
   duplicateSeedJobId: null,
   sendToRenderSourcePath: null,
+  queueDrawerOpen: false,
   newRenderRequest: 0,
 
   toggleSidebar: () => {
@@ -171,6 +177,8 @@ export const useUIStore = create<UIStore>((set) => ({
   setDuplicateSeedJobId: (jobId: string | null) => set({ duplicateSeedJobId: jobId }),
 
   setSendToRenderSourcePath: (path: string | null) => set({ sendToRenderSourcePath: path }),
+
+  setQueueDrawerOpen: (open: boolean) => set({ queueDrawerOpen: open }),
 
   requestNewRender: () => set((s) => ({ newRenderRequest: s.newRenderRequest + 1 })),
 

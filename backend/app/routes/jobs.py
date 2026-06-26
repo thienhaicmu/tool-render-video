@@ -172,7 +172,7 @@ def api_queue_status():
     # Pha 3 — `order` is the pending job_ids in dispatch order so the queue
     # UI can show each waiting job's position (#N of M). Additive field.
     from app.jobs.manager import (
-        active_count, pending_count, pending_order, MAX_CONCURRENT_JOBS,
+        active_count, pending_count, pending_order, held_ids, MAX_CONCURRENT_JOBS,
     )
     return {
         "max_concurrent": MAX_CONCURRENT_JOBS,
@@ -180,6 +180,8 @@ def api_queue_status():
         "pending": pending_count(),
         "available_slots": max(0, MAX_CONCURRENT_JOBS - active_count()),
         "order": pending_order(),
+        # Pha 3.3b — paused (held) job_ids; not in `order` (not dispatchable).
+        "held": held_ids(),
     }
 
 
@@ -786,6 +788,33 @@ def api_move_job_to_bottom(job_id: str) -> dict:
             detail=f"Job {job_id} is not waiting in the queue (cannot reorder).",
         )
     return {"job_id": job_id, "moved": True}
+
+
+# Pha 3.3b — pause a queued job (pull it out of the dispatch heap).
+@router.post("/{job_id}/queue/hold")
+def api_hold_job(job_id: str) -> dict:
+    """Pause a queued job so the scheduler won't dispatch it. 404 if the job
+    isn't currently waiting (running / unknown / already held)."""
+    from app.jobs.manager import hold_job
+    if not hold_job(job_id):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} is not waiting in the queue (cannot pause).",
+        )
+    return {"job_id": job_id, "held": True}
+
+
+# Pha 3.3b — resume a paused job (push it back into the dispatch heap).
+@router.post("/{job_id}/queue/resume")
+def api_resume_job(job_id: str) -> dict:
+    """Resume a paused job. 404 if the job isn't currently held."""
+    from app.jobs.manager import resume_job
+    if not resume_job(job_id):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} is not paused (cannot resume).",
+        )
+    return {"job_id": job_id, "held": False}
 
 
 # Pha 3.2 — nudge a pending job one step up (delta<0) or down (delta>0).

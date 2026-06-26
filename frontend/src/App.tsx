@@ -9,6 +9,7 @@
 import React, { Suspense, lazy } from 'react'
 import { AppShell } from './layouts/AppShell'
 import { ActiveJobsDock } from './layouts/ActiveJobsDock'
+import { QueueDrawer } from './layouts/QueueDrawer'
 import { useUIStore } from './stores/uiStore'
 import type { ActivePanel } from './stores/uiStore'
 import { Notifications } from './components/ui/Notifications'
@@ -107,6 +108,7 @@ export function App() {
             <ActiveScreen />
           </Suspense>
           <ActiveJobsDock />
+          <QueueDrawer />
           <CommandPalette />
           <Notifications />
         </div>

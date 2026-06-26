@@ -574,4 +574,12 @@ def cancel_render_job(job_id: str):
     update_job_progress(job_id, "cancelling", 0, "Cancelling…", status="cancelling")
     from app.jobs import cancel as cancel_registry
     cancel_registry.request_cancel(job_id)
+    # Pha 3.3b — a paused (held) job is OUT of the dispatch heap, so it would
+    # never reach process_render to observe the cancel signal (stuck at
+    # 'cancelling'). Resume it AFTER request_cancel: it's pushed back to the
+    # heap, dispatched, and register() pre-sets the already-queued cancel
+    # event → the job cancels at its first guard. Reuses the tested path.
+    from app.jobs import manager
+    if manager.is_held(job_id):
+        manager.resume_job(job_id)
     return {"job_id": job_id, "status": "cancelling"}

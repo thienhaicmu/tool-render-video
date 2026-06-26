@@ -190,6 +190,18 @@ export const translations = {
     dock_cancel: 'Cancel',
     dock_move_top: 'Move to top of queue',
     dock_move_bottom: 'Move to bottom of queue',
+    // Pha 3.3a — Queue drawer
+    queue_title: 'Render queue',
+    queue_empty: 'No active jobs',
+    queue_manage: 'Manage queue',
+    queue_close: 'Close',
+    queue_move_up: 'Move up',
+    queue_move_down: 'Move down',
+    queue_running: 'Running',
+    queue_cancel: 'Cancel',
+    queue_paused: 'Paused',
+    queue_pause: 'Pause',
+    queue_resume: 'Resume',
 
     // Pha 1.2 — CommandPalette (were hardcoded VI)
     cmd_section_nav: 'Navigation',
@@ -405,6 +417,18 @@ export const translations = {
     dock_cancel: 'Hủy',
     dock_move_top: 'Đưa lên đầu hàng đợi',
     dock_move_bottom: 'Đưa xuống cuối hàng đợi',
+    // Pha 3.3a — Queue drawer
+    queue_title: 'Hàng đợi render',
+    queue_empty: 'Không có job nào đang chạy',
+    queue_manage: 'Quản lý hàng đợi',
+    queue_close: 'Đóng',
+    queue_move_up: 'Lên một bậc',
+    queue_move_down: 'Xuống một bậc',
+    queue_running: 'Đang chạy',
+    queue_cancel: 'Hủy',
+    queue_paused: 'Tạm dừng',
+    queue_pause: 'Tạm dừng',
+    queue_resume: 'Tiếp tục',
 
     // Pha 1.2 — CommandPalette
     cmd_section_nav: 'Điều hướng',

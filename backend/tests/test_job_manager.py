@@ -18,6 +18,7 @@ def _reset_manager():
         manager._pending.clear()
         manager._pending_job_ids.clear()
         manager._active_job_ids.clear()
+        manager._held.clear()
         manager._stopping = False
     if manager._executor is not None:
         try:
@@ -288,3 +289,54 @@ def test_move_job_past_edge_is_noop_success():
 def test_move_job_unknown_returns_false():
     _submit_abc()
     assert manager.move_job("nope", 1) is False
+
+
+# ---------------------------------------------------------------------------
+# Pha 3.3b — hold / resume (pause)
+# ---------------------------------------------------------------------------
+
+def test_hold_job_removes_from_dispatch_order():
+    _submit_abc()
+    assert manager.hold_job("job-b") is True
+    assert manager.is_held("job-b") is True
+    # b is out of the dispatch order; a + c remain.
+    assert manager.pending_order() == ["job-a", "job-c"]
+    assert manager.held_ids() == ["job-b"]
+    # Still tracked for dedup / is_running.
+    assert manager.is_running("job-b") is True
+
+
+def test_resume_restores_original_position():
+    _submit_abc()
+    manager.hold_job("job-b")
+    assert manager.resume_job("job-b") is True
+    assert manager.is_held("job-b") is False
+    # seq is preserved → b returns between a and c.
+    assert manager.pending_order() == ["job-a", "job-b", "job-c"]
+    assert manager.held_ids() == []
+
+
+def test_hold_unknown_returns_false():
+    assert manager.hold_job("nope") is False
+
+
+def test_hold_already_held_returns_false():
+    _submit_abc()
+    assert manager.hold_job("job-a") is True
+    # Second hold finds it no longer in the pending heap.
+    assert manager.hold_job("job-a") is False
+
+
+def test_resume_not_held_returns_false():
+    _submit_abc()
+    assert manager.resume_job("job-a") is False
+
+
+def test_hold_excludes_from_pending_count_but_keeps_dedup():
+    _submit_abc()
+    before = manager.pending_count()
+    manager.hold_job("job-b")
+    # Pending count drops (held job not dispatchable)…
+    assert manager.pending_count() == before - 1
+    # …but a re-submit is still rejected (job_id still tracked).
+    assert manager.submit_job("job-b", MagicMock()) is False

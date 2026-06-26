@@ -46,6 +46,8 @@ export interface QueueStatus {
   pending: number
   available_slots: number
   order: string[]
+  /** Pha 3.3b — paused (held) job_ids; not in `order` (not dispatchable). */
+  held: string[]
 }
 export async function getQueueStatus(): Promise<QueueStatus> {
   return apiFetch<QueueStatus>('/api/jobs/queue/status')
@@ -91,6 +93,22 @@ export async function moveJob(
     `/api/jobs/${encodeURIComponent(jobId)}/queue/move?delta=${encodeURIComponent(delta)}`,
     { method: 'POST' },
   )
+}
+
+/**
+ * Pha 3.3b — pause a queued job (hold it out of the dispatch queue).
+ * POST /api/jobs/{jobId}/queue/hold. 404 if not currently waiting.
+ */
+export async function holdJob(jobId: string): Promise<{ job_id: string; held: boolean }> {
+  return apiFetch(`/api/jobs/${encodeURIComponent(jobId)}/queue/hold`, { method: 'POST' })
+}
+
+/**
+ * Pha 3.3b — resume a paused job (push it back into the dispatch queue).
+ * POST /api/jobs/{jobId}/queue/resume. 404 if not currently paused.
+ */
+export async function resumeJob(jobId: string): Promise<{ job_id: string; held: boolean }> {
+  return apiFetch(`/api/jobs/${encodeURIComponent(jobId)}/queue/resume`, { method: 'POST' })
 }
 
 /**

@@ -29,6 +29,7 @@ export function ActiveJobsDock() {
   const queueOrder = useJobsStore((s) => s.queueOrder)
   const { t } = useI18n()
   const setActivePanel = useUIStore((s) => s.setActivePanel)
+  const setQueueDrawerOpen = useUIStore((s) => s.setQueueDrawerOpen)
   const activePanel = useUIStore((s) => s.activePanel)
   const isFullscreen = FULLSCREEN_PANELS.includes(activePanel)
 
@@ -125,12 +126,21 @@ export function ActiveJobsDock() {
         {overflow > 0 && (
           <button
             style={styles.overflow}
-            onClick={() => setActivePanel('home')}
-            title={t('dock_open_all')}
+            onClick={() => setQueueDrawerOpen(true)}
+            title={t('queue_manage')}
           >
             +{overflow} {t('dock_running_suffix')}
           </button>
         )}
+        {/* Pha 3.3a — always-present entry point to the full queue drawer. */}
+        <button
+          style={styles.manage}
+          onClick={() => setQueueDrawerOpen(true)}
+          title={t('queue_manage')}
+          aria-label={t('queue_manage')}
+        >
+          ⛁
+        </button>
       </div>
     </div>
   )
@@ -380,6 +390,17 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-secondary)',
     fontSize: 11,
     fontWeight: 600,
+    cursor: 'pointer',
+  },
+  manage: {
+    flexShrink: 0,
+    width: 40,
+    height: 40,
+    border: '1px solid var(--border-subtle)',
+    borderRadius: 8,
+    background: 'transparent',
+    color: 'var(--accent-primary)',
+    fontSize: 16,
     cursor: 'pointer',
   },
 }

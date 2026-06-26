@@ -35,6 +35,9 @@ interface JobsStore {
   /** Pha 3 — pending job_ids in dispatch order (front-first), from the
    *  scheduler heap. Lets the dock show a queued job's position #N/M. */
   queueOrder: string[]
+  /** Pha 3.3b — paused (held) job_ids. Shown as "Paused" instead of a
+   *  queue position; not dispatchable until resumed. */
+  heldIds: string[]
   loading: boolean
   error: string | null
   /** Number of subscribers currently polling. The interval is alive
@@ -64,6 +67,7 @@ async function _fetchAndUpdate(set: (partial: Partial<JobsStore>) => void) {
       active: activeItems[0] ?? null,
       activeCount: activeItems.length,
       queueOrder: queue?.order ?? [],
+      heldIds: queue?.held ?? [],
       error: null,
       loading: false,
     })
@@ -80,6 +84,7 @@ export const useJobsStore = create<JobsStore>((set, get) => ({
   active: null,
   activeCount: 0,
   queueOrder: [],
+  heldIds: [],
   loading: false,
   error: null,
   _refcount: 0,
