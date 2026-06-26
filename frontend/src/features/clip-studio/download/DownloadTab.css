@@ -119,6 +119,9 @@
 .dlt-row-btn { padding: 5px 11px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--surface-card); color: var(--text-secondary); font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; transition: all .12s; white-space: nowrap; }
 .dlt-row-btn:hover { background: var(--surface-card-hover); border-color: var(--border-strong); color: var(--text-primary); }
 .dlt-row-btn.is-danger { border-color: color-mix(in srgb, var(--status-error) 35%, transparent); color: var(--status-error); background: transparent; }
+/* Pha 1.1 — primary action: Download→Render handoff button stands out. */
+.dlt-row-btn.is-primary { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.dlt-row-btn.is-primary:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); color: var(--accent); }
 .dlt-x { width: 28px; height: 28px; flex-shrink: 0; border-radius: var(--radius-md); border: 1px solid transparent; background: transparent; color: var(--text-tertiary); font-size: 16px; line-height: 1; cursor: pointer; transition: all .12s; }
 .dlt-x:hover { border-color: color-mix(in srgb, var(--status-error) 35%, transparent); color: var(--status-error); }
 .dlt-fail-inline { font-size: 10.5px; color: var(--status-error); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -10,6 +10,8 @@
  */
 import { useState, useRef, useEffect } from 'react'
 import { useUIStore } from '../stores/uiStore'
+import { useI18n } from '../i18n/useI18n'
+import type { Lang } from '../i18n/translations'
 
 function IconBell({ size = 16 }: { size?: number }) {
   return (
@@ -27,19 +29,22 @@ const TYPE_COLOR: Record<string, string> = {
   info:    'var(--color-info, #3b82f6)',
 }
 
-function formatRelative(ts: number): string {
+// Pha 1.2 — lang-aware relative time. Minute unit differs (vi "p" for
+// phút, en "m"); ``ago`` is the localized trailing word.
+function formatRelative(ts: number, lang: Lang, ago: string): string {
   const diff = Date.now() - ts
   const sec = Math.floor(diff / 1000)
-  if (sec < 60) return `${sec}s trước`
+  if (sec < 60) return `${sec}s ${ago}`
   const min = Math.floor(sec / 60)
-  if (min < 60) return `${min}p trước`
+  if (min < 60) return `${min}${lang === 'vi' ? 'p' : 'm'} ${ago}`
   const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}h trước`
+  if (hr < 24) return `${hr}h ${ago}`
   const day = Math.floor(hr / 24)
-  return `${day}d trước`
+  return `${day}d ${ago}`
 }
 
 export function NotificationCenter() {
+  const { t, lang } = useI18n()
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
 
@@ -65,8 +70,8 @@ export function NotificationCenter() {
     <div ref={wrapperRef} style={{ position: 'relative', display: 'inline-flex' }}>
       <button
         onClick={() => setOpen((p) => !p)}
-        title="Notifications"
-        aria-label="Notifications"
+        title={t('notif_title')}
+        aria-label={t('notif_title')}
         style={{
           position: 'relative',
           width: 28, height: 28,
@@ -108,10 +113,10 @@ export function NotificationCenter() {
             display: 'flex', alignItems: 'center', gap: 8,
           }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary, var(--text-1))', flex: 1 }}>
-              Thông báo
+              {t('notif_title')}
               {unreadCount > 0 && (
                 <span style={{ marginLeft: 6, color: 'var(--text-tertiary, var(--text-3))', fontWeight: 500 }}>
-                  ({unreadCount} chưa đọc)
+                  ({unreadCount} {t('notif_unread_suffix')})
                 </span>
               )}
             </span>
@@ -128,11 +133,11 @@ export function NotificationCenter() {
                     cursor: unreadCount === 0 ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  Đánh dấu đã đọc
+                  {t('notif_mark_all')}
                 </button>
                 <button
                   onClick={() => {
-                    if (window.confirm('Xóa toàn bộ lịch sử thông báo?')) clearNotificationHistory()
+                    if (window.confirm(t('notif_clear_confirm'))) clearNotificationHistory()
                   }}
                   style={{
                     fontSize: 10, fontWeight: 600,
@@ -141,7 +146,7 @@ export function NotificationCenter() {
                     color: 'var(--text-secondary)', cursor: 'pointer',
                   }}
                 >
-                  Xóa
+                  {t('notif_clear')}
                 </button>
               </>
             )}
@@ -150,7 +155,7 @@ export function NotificationCenter() {
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {history.length === 0 ? (
               <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 11, color: 'var(--text-tertiary)' }}>
-                Chưa có thông báo nào
+                {t('notif_empty')}
               </div>
             ) : (
               history.map((n) => {
@@ -195,7 +200,7 @@ export function NotificationCenter() {
                       fontSize: 9, color: 'var(--text-tertiary, var(--text-3))',
                       whiteSpace: 'nowrap',
                     }}>
-                      {formatRelative(n.created_at)}
+                      {formatRelative(n.created_at, lang, t('notif_ago'))}
                     </span>
                   </div>
                 )

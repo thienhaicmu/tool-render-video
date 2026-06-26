@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './ClipStudio.css'
 import { RenderWorkflow } from './render/RenderWorkflow'
 import { DownloadTab } from './download/DownloadTab'
@@ -49,12 +49,26 @@ function ResourceDot({
 
 export function ClipStudio() {
   const [activeTab, setActiveTab] = useState<Tab>('render')
-  const [lang, setLang] = useState<Lang>('EN')
+  // Pha 1.2 — language is sourced from the single global uiStore.lang
+  // ('en' | 'vi') instead of component-local state, so the EN/VI toggle
+  // here drives the whole app (dock, palette, notifications) in lockstep.
+  // RenderWorkflow + render/i18n.ts still speak 'EN' | 'VI', so map across.
+  const uiLang = useUIStore((s) => s.lang)
+  const setUiLang = useUIStore((s) => s.setLang)
+  const lang: Lang = uiLang === 'vi' ? 'VI' : 'EN'
   // N4 (audit 2026-06-15): Settings gear icon was previously a dead button
   // with no onClick. Wire it to switch the global active panel to
   // 'settings' so AppShell takes over and renders SettingsScreen.
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const { snapshot: sysSnap } = useSystemResources()
+
+  // Pha 1.1 — when a finished download is sent to Render, flip to the
+  // Render tab so the user lands where the source was just pre-filled.
+  // RenderWorkflow owns consuming + clearing sendToRenderSourcePath.
+  const sendToRenderSourcePath = useUIStore((s) => s.sendToRenderSourcePath)
+  useEffect(() => {
+    if (sendToRenderSourcePath) setActiveTab('render')
+  }, [sendToRenderSourcePath])
 
   return (
     <div className="cs-root">
@@ -85,8 +99,8 @@ export function ClipStudio() {
           <NotificationCenter />
           <ThemeToggle size="sm" />
           <div className="cs-lang-sw">
-            <button className={`cs-lang-btn${lang === 'EN' ? ' active' : ''}`} onClick={() => setLang('EN')}>EN</button>
-            <button className={`cs-lang-btn${lang === 'VI' ? ' active' : ''}`} onClick={() => setLang('VI')}>VI</button>
+            <button className={`cs-lang-btn${lang === 'EN' ? ' active' : ''}`} onClick={() => setUiLang('en')}>EN</button>
+            <button className={`cs-lang-btn${lang === 'VI' ? ' active' : ''}`} onClick={() => setUiLang('vi')}>VI</button>
           </div>
           <button
             className="cs-top-icon"

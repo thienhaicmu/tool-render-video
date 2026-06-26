@@ -24,17 +24,27 @@ import { useJobsStore } from '../stores/jobsStore'
 import { useThemeStore } from '../stores/themeStore'
 import { isTerminalStatus } from '../types/enums'
 import { cancelRender } from '../api/render'
+import { useI18n } from '../i18n/useI18n'
+import type { TranslationKey } from '../i18n/translations'
 
 interface CommandAction {
   id: string
   label: string
   keywords?: string
   shortcut?: string
-  section: 'Điều hướng' | 'Render' | 'Tùy chỉnh' | 'Lịch sử'
+  /** Section id — mapped to a localized label via SECTION_LABEL_KEY. */
+  section: 'nav' | 'render' | 'prefs'
   /** Returns true to keep palette open (rare); default closes after run. */
   run: () => void | Promise<void>
   /** Hidden when false; used for context-sensitive actions like Cancel. */
   available?: boolean
+}
+
+// Pha 1.2 — section id → localized header label.
+const SECTION_LABEL_KEY: Record<CommandAction['section'], TranslationKey> = {
+  nav:    'cmd_section_nav',
+  render: 'cmd_section_render',
+  prefs:  'cmd_section_prefs',
 }
 
 function isEditableTarget(t: EventTarget | null): boolean {
@@ -64,6 +74,7 @@ export function CommandPalette() {
   const [selectedIdx, setSelectedIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const { t } = useI18n()
   const setActivePanel        = useUIStore((s) => s.setActivePanel)
   const setDuplicateSeedJobId = useUIStore((s) => s.setDuplicateSeedJobId)
   const requestNewRender      = useUIStore((s) => s.requestNewRender)
@@ -87,41 +98,41 @@ export function CommandPalette() {
       // Navigation
       {
         id: 'nav-studio',
-        label: 'Mở Clip Studio',
+        label: t('cmd_nav_studio'),
         keywords: 'render workflow editor studio',
-        section: 'Điều hướng',
+        section: 'nav',
         run: () => setActivePanel('clip-studio'),
       },
       {
         id: 'nav-library',
-        label: 'Mở Library',
+        label: t('cmd_nav_library'),
         keywords: 'history jobs lịch sử thư viện',
-        section: 'Điều hướng',
+        section: 'nav',
         run: () => setActivePanel('library'),
       },
       {
         id: 'nav-download',
-        label: 'Mở Download',
+        label: t('cmd_nav_download'),
         keywords: 'youtube tiktok tải về',
-        section: 'Điều hướng',
+        section: 'nav',
         run: () => setActivePanel('download'),
       },
       {
         id: 'nav-settings',
-        label: 'Mở Settings',
+        label: t('cmd_nav_settings'),
         keywords: 'cài đặt cấu hình preferences',
         shortcut: '⌘,',
-        section: 'Điều hướng',
+        section: 'nav',
         run: () => setActivePanel('settings'),
       },
 
       // Render
       {
         id: 'render-new',
-        label: 'Render mới',
+        label: t('cmd_render_new'),
         keywords: 'new render fresh start step 1 nguồn',
         shortcut: '⌘N',
-        section: 'Render',
+        section: 'render',
         run: () => {
           // S3.5 — force-reset even when an unrelated render is
           // running. RenderWorkflow watches uiStore.newRenderRequest
@@ -132,25 +143,25 @@ export function CommandPalette() {
       },
       {
         id: 'render-cancel',
-        label: 'Hủy render đang chạy',
+        label: t('cmd_render_cancel'),
         keywords: 'cancel stop dừng',
-        section: 'Render',
+        section: 'render',
         available: canCancelActive,
         run: async () => {
           if (!activeRenderJobId) return
           try {
             await cancelRender(activeRenderJobId)
-            addNotification({ title: 'Đã yêu cầu hủy render', type: 'info' })
+            addNotification({ title: t('cmd_toast_cancel_requested'), type: 'info' })
           } catch {
-            addNotification({ title: 'Hủy render thất bại', type: 'error' })
+            addNotification({ title: t('cmd_toast_cancel_failed'), type: 'error' })
           }
         },
       },
       {
         id: 'render-duplicate-last',
-        label: 'Duplicate render gần nhất',
+        label: t('cmd_render_dup'),
         keywords: 'clone copy rerun lặp lại',
-        section: 'Render',
+        section: 'render',
         available: !!lastCompletedRender,
         run: () => {
           if (!lastCompletedRender) return
@@ -162,9 +173,9 @@ export function CommandPalette() {
       // Preferences
       {
         id: 'pref-defaults',
-        label: 'Mở Render Defaults',
+        label: t('cmd_pref_defaults'),
         keywords: 'preset aspect ratio voice subtitle settings defaults',
-        section: 'Tùy chỉnh',
+        section: 'prefs',
         run: () => {
           setActivePanel('settings')
           // Smooth-scroll to defaults section after Settings mounts.
@@ -176,13 +187,14 @@ export function CommandPalette() {
       },
       {
         id: 'pref-theme-cycle',
-        label: 'Đổi theme (light / dark / system)',
+        label: t('cmd_pref_theme'),
         keywords: 'theme dark light màu giao diện',
-        section: 'Tùy chỉnh',
+        section: 'prefs',
         run: () => cyclePreference(),
       },
     ]
   }, [
+    t,
     setActivePanel, setDuplicateSeedJobId, requestNewRender,
     addNotification, cyclePreference,
     activeRenderJobId, renderJobs, jobsItems,
@@ -273,7 +285,7 @@ export function CommandPalette() {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Gõ để tìm action…"
+            placeholder={t('cmd_placeholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -284,7 +296,7 @@ export function CommandPalette() {
 
         <div style={styles.list}>
           {visible.length === 0 ? (
-            <div style={styles.empty}>Không có action khớp “{query}”</div>
+            <div style={styles.empty}>{t('cmd_empty')} “{query}”</div>
           ) : (
             (() => {
               const nodes: React.ReactNode[] = []
@@ -294,7 +306,7 @@ export function CommandPalette() {
                   lastSection = a.section
                   nodes.push(
                     <div key={`sect-${a.section}`} style={styles.sectionHeader}>
-                      {a.section}
+                      {t(SECTION_LABEL_KEY[a.section])}
                     </div>,
                   )
                 }
@@ -323,9 +335,9 @@ export function CommandPalette() {
         </div>
 
         <div style={styles.footer}>
-          <span><span style={styles.kbd}>↑↓</span> di chuyển</span>
-          <span><span style={styles.kbd}>↵</span> chọn</span>
-          <span><span style={styles.kbd}>⌘K</span> đóng/mở</span>
+          <span><span style={styles.kbd}>↑↓</span> {t('cmd_foot_move')}</span>
+          <span><span style={styles.kbd}>↵</span> {t('cmd_foot_select')}</span>
+          <span><span style={styles.kbd}>⌘K</span> {t('cmd_foot_toggle')}</span>
         </div>
       </div>
     </div>

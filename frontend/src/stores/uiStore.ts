@@ -53,6 +53,12 @@ export interface UIStore {
    *  Cleared once consumed so a second visit to clip-studio doesn't
    *  re-apply stale state. */
   duplicateSeedJobId: string | null
+  /** Pha 1.1 — absolute path of a finished download the user chose to
+   *  "Send to Render". DownloadTab sets it; ClipStudio watches it to
+   *  flip to the Render tab; RenderWorkflow consumes it to pre-fill the
+   *  source on a clean Step 1, then clears it so a second visit doesn't
+   *  re-apply a stale path. Mirrors the duplicateSeedJobId handshake. */
+  sendToRenderSourcePath: string | null
   /** S3.2/S3.5 — monotonic counter incremented every time the user
    *  asks for a fresh render (⌘N, palette action, or future "+ New"
    *  button). RenderWorkflow watches this counter and force-resets to
@@ -68,6 +74,7 @@ export interface UIStore {
   clearNotifications: () => void
   setLang: (lang: Lang) => void
   setDuplicateSeedJobId: (jobId: string | null) => void
+  setSendToRenderSourcePath: (path: string | null) => void
   requestNewRender: () => void
   /** S4.7 — mark a single history entry as read. */
   markNotificationRead: (id: string) => void
@@ -110,6 +117,7 @@ export const useUIStore = create<UIStore>((set) => ({
   notificationHistory: _loadHistory(),
   lang: 'en' as Lang,
   duplicateSeedJobId: null,
+  sendToRenderSourcePath: null,
   newRenderRequest: 0,
 
   toggleSidebar: () => {
@@ -161,6 +169,8 @@ export const useUIStore = create<UIStore>((set) => ({
   setLang: (lang: Lang) => set({ lang }),
 
   setDuplicateSeedJobId: (jobId: string | null) => set({ duplicateSeedJobId: jobId }),
+
+  setSendToRenderSourcePath: (path: string | null) => set({ sendToRenderSourcePath: path }),
 
   requestNewRender: () => set((s) => ({ newRenderRequest: s.newRenderRequest + 1 })),
 

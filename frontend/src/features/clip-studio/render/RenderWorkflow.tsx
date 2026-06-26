@@ -163,10 +163,16 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   // the user lands on Step 1 with a clean slate. Reset on next render
   // cycle after the new-render effect handles the reset.
   const newRenderInProgressRef = useRef(false)
+  // Pha 1.1 — set while a Download→Render handoff is hydrating the source
+  // so auto-reattach doesn't hijack the wizard into monitoring an
+  // unrelated running job instead of starting the fresh render the user
+  // just asked for.
+  const sendToRenderInProgressRef = useRef(false)
   useEffect(() => {
     if (jobId) return // already attached
     if (duplicateInProgressRef.current) return // S2.5 duplicate hydration in flight
     if (newRenderInProgressRef.current) return // S3.5 new-render reset in flight
+    if (sendToRenderInProgressRef.current) return // Pha 1.1 download→render handoff in flight
     if (activeJob) {
       setJobId(activeJob.job_id)
       setStep(3)
@@ -265,6 +271,34 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duplicateSeedJobId])
+
+  // Pha 1.1 — consume a Download→Render handoff. Reset the wizard to a
+  // clean Step 1 with the downloaded file pre-filled as the source, then
+  // clear the seed so navigating back to clip-studio doesn't re-apply it.
+  // Lands on Step 1 (not Step 2) because the source still needs the
+  // prepare-source probe that "Configure" triggers — same as a manual pick.
+  const sendToRenderSourcePath    = useUIStore((s) => s.sendToRenderSourcePath)
+  const setSendToRenderSourcePath = useUIStore((s) => s.setSendToRenderSourcePath)
+  useEffect(() => {
+    if (!sendToRenderSourcePath) return
+    const path = sendToRenderSourcePath
+    sendToRenderInProgressRef.current = true
+    setSendToRenderSourcePath(null)
+    setJobId(null)
+    setPrepareResult(null)
+    setPrepareError(null)
+    setSubmitError(null)
+    setParts([])
+    setPartScores({})
+    setPartRanks({})
+    setQualityReports({})
+    setQualityLoadFailed(false)
+    setIsSubmitting(false)
+    setSources([{ value: path }])
+    setStep(1)
+    queueMicrotask(() => { sendToRenderInProgressRef.current = false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendToRenderSourcePath])
 
   useEffect(() => {
     if (!jobId || !isTerminal) return
@@ -405,6 +439,12 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     const p = PRESETS.find((x) => x.id === id)
     if (!p) return
     setCfg((prev) => ({ ...prev, platform: p.platform, ratio: 'r916' }))
+  }
+  // Pha 2 — apply a saved Render Profile: merge its config patch over the
+  // current cfg. Machine/source fields (outputDir, etc.) are excluded from
+  // the snapshot at save time, so they're preserved here.
+  function applyProfile(patch: Partial<ConfigState>) {
+    setCfg((prev) => ({ ...prev, ...patch }))
   }
   async function pickOutputDir() {
     const dir = await window.electronAPI?.pickDirectory?.()
@@ -1028,7 +1068,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
             <ErrorBoundary>
               <StepConfigure
                 cfg={cfg} cfgTab={cfgTab} setCfgTab={setCfgTab}
-                setCfgKey={setCfgKey} applyPreset={applyPreset}
+                setCfgKey={setCfgKey} applyPreset={applyPreset} applyProfile={applyProfile}
                 sources={sources} prepareResult={prepareResult}
                 pickOutputDir={pickOutputDir} onChangeSource={handleChangeSource} t={t}
               />

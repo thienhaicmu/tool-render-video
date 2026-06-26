@@ -5,6 +5,7 @@ import type { TranscriptSegment, PrepareSourceResponse } from '@/api/render'
 import type { ConfigState, CfgTab, Source, Ratio } from '../types'
 import type { Strings } from '../i18n'
 import { RATIO_INFO, STYLES, SUB_STYLE_GROUPS, QUALITY_MAP } from '../constants'
+import { listProfiles, saveProfile, deleteProfile, type RenderProfile } from '../profiles'
 import {
   DEMO_VARIANTS,
   DEMO_HIGHLIGHT_COLORS,
@@ -200,7 +201,7 @@ function TranscriptOverlay({ sessionId, subStyle, subEnabled }: { sessionId: str
 // all 4 steps and toggles `.active` via class, so without memo every state
 // tick in step 3 (progress) re-renders steps 1, 2, 4 unnecessarily.
 function StepConfigureBase({
-  cfg, cfgTab, setCfgTab, setCfgKey, applyPreset,
+  cfg, cfgTab, setCfgTab, setCfgKey, applyPreset, applyProfile,
   sources, prepareResult, pickOutputDir, onChangeSource, t,
 }: {
   cfg: ConfigState
@@ -208,6 +209,7 @@ function StepConfigureBase({
   setCfgTab: (tab: CfgTab) => void
   setCfgKey: <K extends keyof ConfigState>(k: K, v: ConfigState[K]) => void
   applyPreset: (id: string) => void
+  applyProfile: (patch: Partial<ConfigState>) => void
   sources: Source[]
   prepareResult: PrepareSourceResponse | null
   pickOutputDir: () => void
@@ -217,6 +219,21 @@ function StepConfigureBase({
   void applyPreset
   const [cfgMode, setCfgMode] = React.useState<'quick' | 'advanced'>('quick')
   const adv = cfgMode === 'advanced'
+
+  // Pha 2 — Render Profiles. List = built-ins + localStorage-saved.
+  // Re-read after save/delete so the chip row reflects the change.
+  const [profiles, setProfiles] = React.useState<RenderProfile[]>(() => listProfiles())
+  function handleSaveProfile() {
+    const name = window.prompt(t.cfgProfileNamePrompt)
+    if (name === null) return            // user cancelled the prompt
+    if (!name.trim()) return             // empty name — no-op
+    saveProfile(name, cfg)
+    setProfiles(listProfiles())
+  }
+  function handleDeleteProfile(id: string) {
+    deleteProfile(id)
+    setProfiles(listProfiles())
+  }
 
   type TestStatus = 'idle' | 'testing' | 'ok' | 'error'
   const [testStatus, setTestStatus] = React.useState<TestStatus>('idle')
@@ -277,6 +294,40 @@ function StepConfigureBase({
                 {m === 'quick' ? 'Quick' : 'Advanced'}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Pha 2 — Render Profiles: one-click apply of a saved config
+            snapshot. Built-ins (TikTok/Reels/Shorts) always present;
+            user profiles carry a delete affordance. */}
+        <div className="cfg-section">
+          <div className="cfg-sec-hd">
+            <span>{t.cfgProfiles}</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+            {profiles.map((p) => (
+              <div
+                key={p.id}
+                className="seg-b"
+                title={t.cfgProfileApply}
+                onClick={() => applyProfile(p.cfg)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                {p.name}
+                {!p.builtin && (
+                  <span
+                    role="button"
+                    aria-label={t.cfgProfileDelete}
+                    title={t.cfgProfileDelete}
+                    onClick={(e) => { e.stopPropagation(); handleDeleteProfile(p.id) }}
+                    style={{ cursor: 'pointer', opacity: 0.55, fontSize: '13px', lineHeight: 1 }}
+                  >
+                    ×
+                  </span>
+                )}
+              </div>
+            ))}
+            <button className="btn-xs" onClick={handleSaveProfile}>{t.cfgProfileSave}</button>
           </div>
         </div>
 

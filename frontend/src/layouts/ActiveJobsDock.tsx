@@ -12,6 +12,7 @@ import React, { useState } from 'react'
 import { useActiveJobs } from '../stores/jobsStore'
 import { useUIStore } from '../stores/uiStore'
 import { useRenderStore } from '../stores/renderStore'
+import { useI18n } from '../i18n/useI18n'
 import { cancelRender } from '../api/render'
 import { cancelJob as cancelDownloadJob } from '../api/platformDownloader'
 import type { HistoryItem } from '../types/api'
@@ -24,6 +25,7 @@ const FULLSCREEN_PANELS = ['clip-studio']
 
 export function ActiveJobsDock() {
   const { items, refresh } = useActiveJobs()
+  const { t } = useI18n()
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const activePanel = useUIStore((s) => s.activePanel)
   const isFullscreen = FULLSCREEN_PANELS.includes(activePanel)
@@ -93,9 +95,9 @@ export function ActiveJobsDock() {
           <button
             style={styles.overflow}
             onClick={() => setActivePanel('home')}
-            title="Mở Library để xem tất cả jobs"
+            title={t('dock_open_all')}
           >
-            +{overflow} đang chạy
+            +{overflow} {t('dock_running_suffix')}
           </button>
         )}
       </div>
@@ -112,6 +114,7 @@ function DockRow({
   onOpen: (job: HistoryItem) => void
   onCancel: (job: HistoryItem) => void
 }) {
+  const { t } = useI18n()
   const [hovered, setHovered] = useState(false)
   const [cancelling, setCancelling] = useState(false)
 
@@ -122,8 +125,8 @@ function DockRow({
   const kindFg = job.kind === 'render' ? 'var(--accent-primary)' : 'rgb(34, 197, 94)'
   const title = job.title || job.source_hint || job.job_id.slice(0, 8)
   const subtitle = isQueued
-    ? 'Đang chờ trong queue…'
-    : job.message || job.stage || 'Đang xử lý…'
+    ? t('dock_queued')
+    : job.message || job.stage || t('dock_processing')
 
   return (
     <div
@@ -137,7 +140,7 @@ function DockRow({
       <button
         style={styles.rowBody}
         onClick={() => onOpen(job)}
-        title="Mở chi tiết"
+        title={t('dock_open_detail')}
       >
         <span style={{ ...styles.kindBadge, backgroundColor: kindBg, color: kindFg }}>
           {kindLabel}
@@ -161,8 +164,8 @@ function DockRow({
           setCancelling(false)
         }}
         disabled={cancelling}
-        title="Hủy job"
-        aria-label="Hủy"
+        title={t('dock_cancel_job')}
+        aria-label={t('dock_cancel')}
       >
         {cancelling ? '…' : '×'}
       </button>

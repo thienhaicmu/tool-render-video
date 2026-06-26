@@ -403,7 +403,7 @@ function StepRenderingBase({
                 <span style={{ opacity: 0.5, marginLeft: 6, fontWeight: 400 }}>ETA {etaMm}:{etaSs}</span>
               ) : etaShowEstimating ? (
                 <span style={{ opacity: 0.45, marginLeft: 6, fontWeight: 400, fontStyle: 'italic' }}>
-                  ETA đang ước tính…
+                  {t.rndEtaEstimating}
                 </span>
               ) : null}
             </span>
@@ -472,126 +472,110 @@ function StepRenderingBase({
         </div>
       )}
 
-      {showWatchdogAdvisory && !watchdogDismissed && jobStatus !== 'cancelling' && (
-        <div style={{
-          padding: '10px 16px',
-          background: 'rgba(234,179,8,.16)',
-          borderBottom: '1px solid rgba(234,179,8,.3)',
-          fontSize: 11,
-          color: 'var(--warn)',
-          flexShrink: 0,
-          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-        }}>
-          <span style={{ fontSize: 14 }}>⏰</span>
-          <span style={{ fontWeight: 600 }}>
-            Render đã chạy {Math.floor(elapsed / 60)} phút
-          </span>
-          <span style={{ opacity: 0.8 }}>
-            — sắp đạt giới hạn watchdog 2h. Cấp thêm 1h?
-          </span>
-          <span style={{ flex: 1 }} />
-          <button
-            disabled={watchdogExtending}
-            onClick={async () => {
-              if (!jobId) return
-              setWatchdogExtending(true)
-              try {
-                await extendJob(jobId, 3600)
-                setWatchdogDismissed(true)
-              } catch {
-                // 404 = job no longer active (just finished/cancelled)
-                // — dismiss banner silently in that case.
-                setWatchdogDismissed(true)
-              } finally {
-                setWatchdogExtending(false)
-              }
-            }}
-            style={{
-              padding: '4px 12px', borderRadius: 6,
-              fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
-              border: '1px solid var(--warn)',
-              background: 'var(--warn)',
-              color: '#000',
-              cursor: watchdogExtending ? 'not-allowed' : 'pointer',
-              opacity: watchdogExtending ? 0.5 : 1,
-            }}
-          >
-            {watchdogExtending ? 'Đang xin…' : '+1h'}
-          </button>
-          <button
-            onClick={() => setWatchdogDismissed(true)}
-            style={{
-              padding: '4px 10px', borderRadius: 6,
-              fontSize: 10, fontWeight: 600,
-              border: '1px solid var(--border)', background: 'transparent',
-              color: 'var(--text-2)', cursor: 'pointer',
-            }}
-          >
-            Để render bị hủy
-          </button>
-        </div>
-      )}
+      {/* Pha 1.3 — single adaptive status line. The four previously-
+          stacked advisories (cancelling / stuck / watchdog / WS) answered
+          the same user question ("is this fine, slow, stuck, or
+          disconnected?") and could pile up three-high. Now exactly one
+          shows, by severity priority:
+            cancelling > stuck > watchdog > ws-error > ws-reconnecting > ws-polling
+          Behaviour + copy are unchanged; the watchdog +1h / dismiss
+          actions are preserved inline. */}
+      {(() => {
+        if (isTerminal) return null
+        type StatusKind = 'cancelling' | 'stuck' | 'watchdog' | 'ws-error' | 'ws-reconnecting' | 'ws-polling'
+        let kind: StatusKind | null = null
+        if (jobStatus === 'cancelling') kind = 'cancelling'
+        else if (stuckParts.length > 0) kind = 'stuck'
+        else if (showWatchdogAdvisory && !watchdogDismissed) kind = 'watchdog'
+        else if (wsError) kind = 'ws-error'
+        else if (wsReconnecting) kind = 'ws-reconnecting'
+        else if (wsPolling) kind = 'ws-polling'
+        if (!kind) return null
 
-      {!isTerminal && stuckParts.length > 0 && jobStatus !== 'cancelling' && (
-        <div style={{
-          padding: '8px 16px',
-          background: 'rgba(234,179,8,.12)',
-          borderBottom: '1px solid rgba(234,179,8,.25)',
-          fontSize: 11,
-          color: 'var(--warn)',
-          flexShrink: 0,
-          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-        }}>
-          <span>⚠</span>
-          <span style={{ fontWeight: 600 }}>
-            {stuckParts.length === 1
-              ? `Clip #${stuckParts[0].part_no} có vẻ bị chậm bất thường`
-              : `${stuckParts.length} clip có vẻ bị chậm bất thường`
-            }
-          </span>
-          <span style={{ opacity: 0.7 }}>
-            (không cập nhật trong {Math.round(longestStuckSec)}s)
-          </span>
-          <span style={{ flex: 1 }} />
-          <span style={{ opacity: 0.6, fontSize: 10 }}>
-            Render vẫn đang chạy — chờ thêm 1-2 phút trước khi cancel
-          </span>
-        </div>
-      )}
+        // ws-polling is informational (render unaffected) → accent tone;
+        // every other status is an attention/warning → warn tone.
+        const isPolling = kind === 'ws-polling'
+        return (
+          <div style={{
+            padding: '9px 16px',
+            background: isPolling ? 'rgba(var(--accent-rgb),.08)' : 'rgba(234,179,8,.12)',
+            borderBottom: `1px solid ${isPolling ? 'rgba(var(--accent-rgb),.20)' : 'rgba(234,179,8,.25)'}`,
+            fontSize: 11,
+            color: isPolling ? 'var(--accent)' : 'var(--warn)',
+            flexShrink: 0,
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          }}>
+            {kind === 'cancelling' && <span>{`◐ ${t.rndCancelling}`}</span>}
+            {kind === 'ws-error' && <span>{`⚠ ${t.rndWsError}`}</span>}
+            {kind === 'ws-reconnecting' && <span>{`↻ ${t.rndWsReconnecting}`}</span>}
+            {kind === 'ws-polling' && <span>{`● ${t.rndWsPolling}`}</span>}
 
-      {!isTerminal && jobStatus === 'cancelling' && (
-        <div style={{
-          padding: '8px 16px',
-          background: 'rgba(234,179,8,.10)',
-          borderBottom: '1px solid rgba(234,179,8,.2)',
-          fontSize: '11px',
-          color: 'var(--warn)',
-          flexShrink: 0,
-        }}>
-          {`◐ ${t.rndCancelling}`}
-        </div>
-      )}
+            {kind === 'stuck' && (
+              <>
+                <span>⚠</span>
+                <span style={{ fontWeight: 600 }}>
+                  {stuckParts.length === 1
+                    ? t.rndStuckOne(stuckParts[0].part_no)
+                    : t.rndStuckMany(stuckParts.length)}
+                </span>
+                <span style={{ opacity: 0.7 }}>
+                  {t.rndStuckNoUpdate(Math.round(longestStuckSec))}
+                </span>
+                <span style={{ flex: 1 }} />
+                <span style={{ opacity: 0.6, fontSize: 10 }}>{t.rndStuckHint}</span>
+              </>
+            )}
 
-      {!isTerminal && jobStatus !== 'cancelling' && (wsReconnecting || wsError || wsPolling) && (
-        <div style={{
-          padding: '8px 16px',
-          background: wsPolling
-            ? 'rgba(var(--accent-rgb),.08)'
-            : 'rgba(234,179,8,.1)',
-          borderBottom: `1px solid ${wsPolling ? 'rgba(var(--accent-rgb),.20)' : 'rgba(234,179,8,.2)'}`,
-          fontSize: '11px',
-          color: wsPolling ? 'var(--accent)' : 'var(--warn)',
-          flexShrink: 0,
-        }}>
-          {wsReconnecting
-            ? `↻ ${t.rndWsReconnecting}`
-            : wsPolling
-              // N5 (2026-06-15): WS exhausted reconnect → 5 s HTTP polling.
-              // Copy reassures the user that the render itself is unaffected.
-              ? `● ${t.rndWsPolling}`
-              : `⚠ ${t.rndWsError}`}
-        </div>
-      )}
+            {kind === 'watchdog' && (
+              <>
+                <span style={{ fontSize: 14 }}>⏰</span>
+                <span style={{ fontWeight: 600 }}>{t.rndWatchdogElapsed(Math.floor(elapsed / 60))}</span>
+                <span style={{ opacity: 0.8 }}>{t.rndWatchdogWarn}</span>
+                <span style={{ flex: 1 }} />
+                <button
+                  disabled={watchdogExtending}
+                  onClick={async () => {
+                    if (!jobId) return
+                    setWatchdogExtending(true)
+                    try {
+                      await extendJob(jobId, 3600)
+                      setWatchdogDismissed(true)
+                    } catch {
+                      // 404 = job no longer active (just finished/cancelled)
+                      // — dismiss banner silently in that case.
+                      setWatchdogDismissed(true)
+                    } finally {
+                      setWatchdogExtending(false)
+                    }
+                  }}
+                  style={{
+                    padding: '4px 12px', borderRadius: 6,
+                    fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
+                    border: '1px solid var(--warn)',
+                    background: 'var(--warn)',
+                    color: '#000',
+                    cursor: watchdogExtending ? 'not-allowed' : 'pointer',
+                    opacity: watchdogExtending ? 0.5 : 1,
+                  }}
+                >
+                  {watchdogExtending ? t.rndWatchdogExtending : '+1h'}
+                </button>
+                <button
+                  onClick={() => setWatchdogDismissed(true)}
+                  style={{
+                    padding: '4px 10px', borderRadius: 6,
+                    fontSize: 10, fontWeight: 600,
+                    border: '1px solid var(--border)', background: 'transparent',
+                    color: 'var(--text-2)', cursor: 'pointer',
+                  }}
+                >
+                  {t.rndWatchdogDismiss}
+                </button>
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {clipSlots.length === 0 ? (
         <div className="rnd-waiting-msg">
@@ -617,7 +601,7 @@ function StepRenderingBase({
       )}
 
       {/* S4.5 — event log tail panel */}
-      <EventLogPanel events={liveEvents || []} />
+      <EventLogPanel events={liveEvents || []} t={t} />
 
       <div className="rd-abp-toolbar">
         <div className="rd-abp-job">
@@ -659,7 +643,7 @@ const EVENT_LEVEL_COLORS: Record<string, string> = {
   DEBUG:    'var(--text-3)',
 }
 
-function EventLogPanel({ events }: { events: WsLogEvent[] }) {
+function EventLogPanel({ events, t }: { events: WsLogEvent[]; t: Strings }) {
   const [open, setOpen] = useState(false)
   const [filterErrors, setFilterErrors] = useState(false)
 
@@ -733,7 +717,7 @@ function EventLogPanel({ events }: { events: WsLogEvent[] }) {
         }}>
           {visible.length === 0 ? (
             <div style={{ color: 'var(--text-3)', padding: '8px 0', textAlign: 'center' }}>
-              Không có event nào khớp filter
+              {t.rndEventNoMatch}
             </div>
           ) : (
             visible.map((ev, i) => {

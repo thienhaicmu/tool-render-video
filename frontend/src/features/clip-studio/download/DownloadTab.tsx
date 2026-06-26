@@ -6,6 +6,7 @@ import {
 } from '@/api/platformDownloader'
 import type { DownloadJob } from '@/api/platformDownloader'
 import { getDefaultOutputDir, putDefaultOutputDir } from '@/api/outputDir'
+import { useUIStore } from '@/stores/uiStore'
 import './DownloadTab.css'
 
 // Instant client-side platform guess from the URL host (replaced by the real
@@ -81,7 +82,9 @@ let _keySeq = 0
 const nextKey = () => `s${Date.now()}_${_keySeq++}`
 
 /* ── Active download row (in-progress / done / failed) ────────────────────── */
-function DownloadRow({ job, onCancel }: { job: DownloadJob; onCancel: (id: string) => void }) {
+function DownloadRow({ job, onCancel, onSendToRender }: {
+  job: DownloadJob; onCancel: (id: string) => void; onSendToRender: (path: string) => void
+}) {
   const pColor = platformColor(job.platform)
   const pLabel = platformLabel(job.platform)
   const pFull = PLATFORM_FULL[job.platform] || job.platform
@@ -124,6 +127,18 @@ function DownloadRow({ job, onCancel }: { job: DownloadJob; onCancel: (id: strin
         {isDone && (
           <>
             {job.filesize > 0 && <span className="dlt-size">{formatFilesize(job.filesize)}</span>}
+            {/* Pha 1.1 — Download→Render handoff. Pre-fills the Render
+                source with this file + switches to the Render tab so the
+                user skips the manual tab-switch + browse + re-find. */}
+            {job.output_path && (
+              <button
+                className="dlt-row-btn is-primary"
+                title="Tạo clip từ video này — chuyển sang tab Render"
+                onClick={() => onSendToRender(job.output_path)}
+              >
+                → Render
+              </button>
+            )}
             {job.output_dir && <button className="dlt-row-btn" title="Open folder" onClick={() => window.electronAPI?.openPath?.(job.output_dir)}>Open</button>}
             {job.output_path && <button className="dlt-row-btn" title="Copy path" onClick={() => { navigator.clipboard.writeText(job.output_path).catch(() => {}) }}>Copy</button>}
           </>
@@ -196,6 +211,10 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
   const [cookieError, setCookieError] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const autoPasted = useRef(false)
+  // Pha 1.1 — stash the chosen file in uiStore; ClipStudio flips to the
+  // Render tab and RenderWorkflow consumes it. Decoupled handoff (no
+  // direct cross-tab prop wiring), mirrors the duplicateSeedJobId flow.
+  const setSendToRenderSourcePath = useUIStore((s) => s.setSendToRenderSourcePath)
 
   const fetchCookieStatus = useCallback(async () => {
     try { setCookieStatus(await (await fetch('/api/downloader/cookie-status')).json()) } catch { /* ignore */ }
@@ -462,7 +481,14 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
                 <span className="count">{jobs.length}</span>
               </div>
               <div className="dlt-list">
-                {jobs.map(job => <DownloadRow key={job.id} job={job} onCancel={cancelJob} />)}
+                {jobs.map(job => (
+                  <DownloadRow
+                    key={job.id}
+                    job={job}
+                    onCancel={cancelJob}
+                    onSendToRender={(path) => { if (path) setSendToRenderSourcePath(path) }}
+                  />
+                ))}
               </div>
             </>
           )}

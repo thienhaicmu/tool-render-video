@@ -179,6 +179,45 @@ export const translations = {
     results_new_project: 'New Project →',
     results_total: 'Total',
     results_no_clips: 'No rendered clips found.',
+
+    // Pha 1.2 — ActiveJobsDock (were hardcoded VI)
+    dock_queued: 'Waiting in queue…',
+    dock_processing: 'Processing…',
+    dock_running_suffix: 'running',
+    dock_open_all: 'Open Library to see all jobs',
+    dock_open_detail: 'Open details',
+    dock_cancel_job: 'Cancel job',
+    dock_cancel: 'Cancel',
+
+    // Pha 1.2 — CommandPalette (were hardcoded VI)
+    cmd_section_nav: 'Navigation',
+    cmd_section_render: 'Render',
+    cmd_section_prefs: 'Preferences',
+    cmd_nav_studio: 'Open Clip Studio',
+    cmd_nav_library: 'Open Library',
+    cmd_nav_download: 'Open Download',
+    cmd_nav_settings: 'Open Settings',
+    cmd_render_new: 'New render',
+    cmd_render_cancel: 'Cancel the running render',
+    cmd_render_dup: 'Duplicate the last render',
+    cmd_pref_defaults: 'Open Render Defaults',
+    cmd_pref_theme: 'Switch theme (light / dark / system)',
+    cmd_placeholder: 'Type to find an action…',
+    cmd_empty: 'No action matches',
+    cmd_foot_move: 'move',
+    cmd_foot_select: 'select',
+    cmd_foot_toggle: 'open/close',
+    cmd_toast_cancel_requested: 'Render cancel requested',
+    cmd_toast_cancel_failed: 'Failed to cancel render',
+
+    // Pha 1.2 — NotificationCenter (were hardcoded VI)
+    notif_title: 'Notifications',
+    notif_unread_suffix: 'unread',
+    notif_mark_all: 'Mark all read',
+    notif_clear: 'Clear',
+    notif_clear_confirm: 'Clear all notification history?',
+    notif_empty: 'No notifications yet',
+    notif_ago: 'ago',
   },
 
   vi: {
@@ -353,6 +392,45 @@ export const translations = {
     results_new_project: 'Dự án mới →',
     results_total: 'Tổng',
     results_no_clips: 'Không tìm thấy clip.',
+
+    // Pha 1.2 — ActiveJobsDock
+    dock_queued: 'Đang chờ trong queue…',
+    dock_processing: 'Đang xử lý…',
+    dock_running_suffix: 'đang chạy',
+    dock_open_all: 'Mở Library để xem tất cả jobs',
+    dock_open_detail: 'Mở chi tiết',
+    dock_cancel_job: 'Hủy job',
+    dock_cancel: 'Hủy',
+
+    // Pha 1.2 — CommandPalette
+    cmd_section_nav: 'Điều hướng',
+    cmd_section_render: 'Render',
+    cmd_section_prefs: 'Tùy chỉnh',
+    cmd_nav_studio: 'Mở Clip Studio',
+    cmd_nav_library: 'Mở Library',
+    cmd_nav_download: 'Mở Download',
+    cmd_nav_settings: 'Mở Settings',
+    cmd_render_new: 'Render mới',
+    cmd_render_cancel: 'Hủy render đang chạy',
+    cmd_render_dup: 'Duplicate render gần nhất',
+    cmd_pref_defaults: 'Mở Render Defaults',
+    cmd_pref_theme: 'Đổi theme (light / dark / system)',
+    cmd_placeholder: 'Gõ để tìm action…',
+    cmd_empty: 'Không có action khớp',
+    cmd_foot_move: 'di chuyển',
+    cmd_foot_select: 'chọn',
+    cmd_foot_toggle: 'đóng/mở',
+    cmd_toast_cancel_requested: 'Đã yêu cầu hủy render',
+    cmd_toast_cancel_failed: 'Hủy render thất bại',
+
+    // Pha 1.2 — NotificationCenter
+    notif_title: 'Thông báo',
+    notif_unread_suffix: 'chưa đọc',
+    notif_mark_all: 'Đánh dấu đã đọc',
+    notif_clear: 'Xóa',
+    notif_clear_confirm: 'Xóa toàn bộ lịch sử thông báo?',
+    notif_empty: 'Chưa có thông báo nào',
+    notif_ago: 'trước',
   },
 } as const
 
