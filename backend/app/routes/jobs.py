@@ -775,6 +775,36 @@ def api_move_job_to_top(job_id: str) -> dict:
     return {"job_id": job_id, "moved": True}
 
 
+# Pha 3.2 — send a pending job to the back of the queue.
+@router.post("/{job_id}/queue/move-bottom")
+def api_move_job_to_bottom(job_id: str) -> dict:
+    """Move a queued job to the back of the dispatch queue. 404 if not pending."""
+    from app.jobs.manager import move_job_to_back
+    if not move_job_to_back(job_id):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} is not waiting in the queue (cannot reorder).",
+        )
+    return {"job_id": job_id, "moved": True}
+
+
+# Pha 3.2 — nudge a pending job one step up (delta<0) or down (delta>0).
+@router.post("/{job_id}/queue/move")
+def api_move_job(job_id: str, delta: int) -> dict:
+    """Move a queued job one position in the dispatch queue.
+
+    ``delta`` < 0 moves up (toward the front), > 0 moves down. A move past
+    an edge is a no-op success. 404 only when the job isn't pending.
+    """
+    from app.jobs.manager import move_job
+    if not move_job(job_id, delta):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} is not waiting in the queue (cannot reorder).",
+        )
+    return {"job_id": job_id, "moved": True}
+
+
 @router.delete("/{job_id}/parts/{part_no}/output")
 def delete_part_output_endpoint(job_id: str, part_no: int):
     """Delete the output file of a single rendered part and clear its DB path.

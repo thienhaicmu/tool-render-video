@@ -397,6 +397,66 @@ def move_job_to_front(job_id: str) -> bool:
         return True
 
 
+# ---------------------------------------------------------------------------
+# Pha 3.2 — full reorder (move-to-back + up/down one step)
+# ---------------------------------------------------------------------------
+
+def _apply_pending_order(ids: list[str]) -> None:
+    """Reassign priorities so the heap dispatches in *ids* order (front-first).
+
+    Caller MUST hold ``_cond``. Each entry's ``seq`` + payload are preserved;
+    only the priority key is rewritten (descending) so the dispatch order
+    matches ``ids`` exactly. O(n) — fine for the small desktop queue.
+    """
+    entry_by_id = {e[2]: e for e in _pending}
+    n = len(ids)
+    new: list[tuple] = []
+    for rank, jid in enumerate(ids):
+        e = entry_by_id[jid]
+        new.append((-(n - rank), e[1], e[2], e[3], e[4], e[5]))
+    _pending[:] = new
+    heapq.heapify(_pending)
+
+
+def move_job_to_back(job_id: str) -> bool:
+    """Send a *pending* job to the back of the queue (dispatched last).
+
+    Returns True if found in the pending heap, False otherwise.
+    """
+    with _cond:
+        ids = [e[2] for e in sorted(_pending)]
+        if job_id not in ids:
+            return False
+        ids.append(ids.pop(ids.index(job_id)))
+        _apply_pending_order(ids)
+        _cond.notify_all()
+        logger.info("Job %s moved to back of queue", job_id)
+        return True
+
+
+def move_job(job_id: str, delta: int) -> bool:
+    """Nudge a *pending* job one position up (delta<0) or down (delta>0).
+
+    Moves a single step in the sign direction regardless of magnitude. A move
+    past either edge is a no-op that still returns True (the job is simply
+    already at the boundary). Returns False only when the job isn't pending.
+    """
+    step = 1 if delta > 0 else -1 if delta < 0 else 0
+    with _cond:
+        ids = [e[2] for e in sorted(_pending)]
+        if job_id not in ids:
+            return False
+        pos = ids.index(job_id)
+        target = pos + step
+        if step == 0 or target < 0 or target >= len(ids):
+            return True  # at an edge / no movement — nothing to do
+        ids.insert(target, ids.pop(pos))
+        _apply_pending_order(ids)
+        _cond.notify_all()
+        logger.info("Job %s moved %s one step", job_id, "down" if step > 0 else "up")
+        return True
+
+
 def shutdown(wait: bool = True, timeout: float = 30.0) -> None:
     """Stop the scheduler and drain in-flight workers.
 

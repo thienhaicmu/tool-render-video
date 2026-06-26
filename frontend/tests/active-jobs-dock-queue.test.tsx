@@ -28,6 +28,7 @@ vi.mock('../src/api/jobs', async () => {
       order: ['job-A', 'job-B'],
     }),
     moveJobToTop: vi.fn().mockResolvedValue({ job_id: 'job-B', moved: true }),
+    moveJobToBottom: vi.fn().mockResolvedValue({ job_id: 'job-A', moved: true }),
   }
 })
 
@@ -51,6 +52,7 @@ beforeEach(() => {
     loading: false, error: null, _refcount: 0, _intervalId: null,
   })
   ;(JobsAPI.moveJobToTop as ReturnType<typeof vi.fn>).mockClear()
+  ;(JobsAPI.moveJobToBottom as ReturnType<typeof vi.fn>).mockClear()
 })
 
 describe('Pha 3 — dock queue position + move-to-top', () => {
@@ -68,5 +70,18 @@ describe('Pha 3 — dock queue position + move-to-top', () => {
 
     expect(JobsAPI.moveJobToTop).toHaveBeenCalledTimes(1)
     expect(JobsAPI.moveJobToTop).toHaveBeenCalledWith('job-B')
+  })
+
+  it('shows move-to-bottom for a non-last job and bumps it down', async () => {
+    const user = userEvent.setup()
+    render(<ActiveJobsDock />)
+    await screen.findByText(/#1\/2/)
+
+    // job-A is #1 (not last) → has move-to-bottom; job-B is last → not.
+    const downBtn = screen.getByTitle('Move to bottom of queue')
+    await user.click(downBtn)
+
+    expect(JobsAPI.moveJobToBottom).toHaveBeenCalledTimes(1)
+    expect(JobsAPI.moveJobToBottom).toHaveBeenCalledWith('job-A')
   })
 })

@@ -66,6 +66,34 @@ export async function moveJobToTop(
 }
 
 /**
+ * Pha 3.2 — move a pending job to the back of the queue.
+ * POST /api/jobs/{jobId}/queue/move-bottom.
+ */
+export async function moveJobToBottom(
+  jobId: string,
+): Promise<{ job_id: string; moved: boolean }> {
+  return apiFetch(
+    `/api/jobs/${encodeURIComponent(jobId)}/queue/move-bottom`,
+    { method: 'POST' },
+  )
+}
+
+/**
+ * Pha 3.2 — nudge a pending job one step up (delta<0) or down (delta>0).
+ * POST /api/jobs/{jobId}/queue/move?delta={n}. Exposed for the dedicated
+ * queue panel (3.3); the dock uses top/bottom.
+ */
+export async function moveJob(
+  jobId: string,
+  delta: number,
+): Promise<{ job_id: string; moved: boolean }> {
+  return apiFetch(
+    `/api/jobs/${encodeURIComponent(jobId)}/queue/move?delta=${encodeURIComponent(delta)}`,
+    { method: 'POST' },
+  )
+}
+
+/**
  * Paginated job history. ALWAYS use this instead of listJobs() for history UI.
  * GET /api/jobs/history?limit=20&offset=0
  */

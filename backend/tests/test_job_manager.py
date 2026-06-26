@@ -241,3 +241,50 @@ def test_move_job_to_front_twice_keeps_newest_first():
 
 def test_pending_order_empty_when_no_pending():
     assert manager.pending_order() == []
+
+
+# ---------------------------------------------------------------------------
+# Pha 3.2 — move_job_to_back / move_job(delta)
+# ---------------------------------------------------------------------------
+
+def _submit_abc():
+    fn = MagicMock()
+    _fill_slots()
+    with patch("app.jobs.manager._mark_job_running"):
+        manager.submit_job("job-a", fn)
+        manager.submit_job("job-b", fn)
+        manager.submit_job("job-c", fn)
+
+
+def test_move_job_to_back_sends_to_end():
+    _submit_abc()
+    assert manager.move_job_to_back("job-a") is True
+    assert manager.pending_order() == ["job-b", "job-c", "job-a"]
+
+
+def test_move_job_to_back_unknown_returns_false():
+    assert manager.move_job_to_back("nope") is False
+
+
+def test_move_job_up_one_step():
+    _submit_abc()
+    assert manager.move_job("job-c", -1) is True
+    assert manager.pending_order() == ["job-a", "job-c", "job-b"]
+
+
+def test_move_job_down_one_step():
+    _submit_abc()
+    assert manager.move_job("job-a", 1) is True
+    assert manager.pending_order() == ["job-b", "job-a", "job-c"]
+
+
+def test_move_job_past_edge_is_noop_success():
+    _submit_abc()
+    # job-a already first → moving up is a no-op but still True.
+    assert manager.move_job("job-a", -1) is True
+    assert manager.pending_order() == ["job-a", "job-b", "job-c"]
+
+
+def test_move_job_unknown_returns_false():
+    _submit_abc()
+    assert manager.move_job("nope", 1) is False

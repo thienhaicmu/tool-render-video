@@ -14,7 +14,7 @@ import { useUIStore } from '../stores/uiStore'
 import { useRenderStore } from '../stores/renderStore'
 import { useI18n } from '../i18n/useI18n'
 import { cancelRender } from '../api/render'
-import { moveJobToTop } from '../api/jobs'
+import { moveJobToTop, moveJobToBottom } from '../api/jobs'
 import { cancelJob as cancelDownloadJob } from '../api/platformDownloader'
 import type { HistoryItem } from '../types/api'
 
@@ -91,6 +91,16 @@ export function ActiveJobsDock() {
     }
   }
 
+  // Pha 3.2 — send a queued render to the back of the dispatch queue.
+  async function handleMoveBottom(job: HistoryItem) {
+    try {
+      await moveJobToBottom(job.job_id)
+      void refresh()
+    } catch (_err) {
+      // 404 = no longer pending — ignore.
+    }
+  }
+
   return (
     <div
       style={{
@@ -109,6 +119,7 @@ export function ActiveJobsDock() {
             onOpen={handleOpen}
             onCancel={handleCancel}
             onMoveTop={handleMoveTop}
+            onMoveBottom={handleMoveBottom}
           />
         ))}
         {overflow > 0 && (
@@ -131,12 +142,14 @@ function DockRow({
   onOpen,
   onCancel,
   onMoveTop,
+  onMoveBottom,
 }: {
   job: HistoryItem
   queueOrder: string[]
   onOpen: (job: HistoryItem) => void
   onCancel: (job: HistoryItem) => void
   onMoveTop: (job: HistoryItem) => void
+  onMoveBottom: (job: HistoryItem) => void
 }) {
   const { t } = useI18n()
   const [hovered, setHovered] = useState(false)
@@ -153,7 +166,8 @@ function DockRow({
   // run on a separate engine and aren't in queueOrder → posIdx === -1).
   const posIdx = isQueued ? queueOrder.indexOf(job.job_id) : -1
   const queueTotal = queueOrder.length
-  const canMoveTop = posIdx > 0   // already #1 → nothing to bump
+  const canMoveTop = posIdx > 0                       // already #1 → nothing to bump
+  const canMoveBottom = posIdx >= 0 && posIdx < queueTotal - 1  // already last → nothing
   const subtitle = isQueued
     ? (posIdx >= 0 ? `${t('dock_queued')} · #${posIdx + 1}/${queueTotal}` : t('dock_queued'))
     : job.message || job.stage || t('dock_processing')
@@ -199,6 +213,23 @@ function DockRow({
           aria-label={t('dock_move_top')}
         >
           {moving ? '…' : '⤴'}
+        </button>
+      )}
+      {canMoveBottom && (
+        <button
+          style={styles.moveBtn}
+          onClick={async (e) => {
+            e.stopPropagation()
+            if (moving) return
+            setMoving(true)
+            await onMoveBottom(job)
+            setMoving(false)
+          }}
+          disabled={moving}
+          title={t('dock_move_bottom')}
+          aria-label={t('dock_move_bottom')}
+        >
+          {moving ? '…' : '⤓'}
         </button>
       )}
       <button

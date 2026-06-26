@@ -189,6 +189,7 @@ export const translations = {
     dock_cancel_job: 'Cancel job',
     dock_cancel: 'Cancel',
     dock_move_top: 'Move to top of queue',
+    dock_move_bottom: 'Move to bottom of queue',
 
     // Pha 1.2 — CommandPalette (were hardcoded VI)
     cmd_section_nav: 'Navigation',
@@ -403,6 +404,7 @@ export const translations = {
     dock_cancel_job: 'Hủy job',
     dock_cancel: 'Hủy',
     dock_move_top: 'Đưa lên đầu hàng đợi',
+    dock_move_bottom: 'Đưa xuống cuối hàng đợi',
 
     // Pha 1.2 — CommandPalette
     cmd_section_nav: 'Điều hướng',
