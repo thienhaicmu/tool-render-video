@@ -63,6 +63,11 @@ export interface UIStore {
    *  is open. Opened from the dock; the dock + drawer communicate through
    *  this flag since they're sibling-mounted, not parent/child. */
   queueDrawerOpen: boolean
+  /** Pha 4 — explicit "open the Monitor (Step 3) for this job" signal.
+   *  RenderWorkflow consumes + clears it. This is the ONLY way a
+   *  background/other job opens the monitor now that the broad
+   *  auto-reattach hijack is gone — set by dock/drawer/notification/409. */
+  monitorJobId: string | null
   /** S3.2/S3.5 — monotonic counter incremented every time the user
    *  asks for a fresh render (⌘N, palette action, or future "+ New"
    *  button). RenderWorkflow watches this counter and force-resets to
@@ -80,6 +85,7 @@ export interface UIStore {
   setDuplicateSeedJobId: (jobId: string | null) => void
   setSendToRenderSourcePath: (path: string | null) => void
   setQueueDrawerOpen: (open: boolean) => void
+  setMonitorJobId: (jobId: string | null) => void
   requestNewRender: () => void
   /** S4.7 — mark a single history entry as read. */
   markNotificationRead: (id: string) => void
@@ -124,6 +130,7 @@ export const useUIStore = create<UIStore>((set) => ({
   duplicateSeedJobId: null,
   sendToRenderSourcePath: null,
   queueDrawerOpen: false,
+  monitorJobId: null,
   newRenderRequest: 0,
 
   toggleSidebar: () => {
@@ -179,6 +186,8 @@ export const useUIStore = create<UIStore>((set) => ({
   setSendToRenderSourcePath: (path: string | null) => set({ sendToRenderSourcePath: path }),
 
   setQueueDrawerOpen: (open: boolean) => set({ queueDrawerOpen: open }),
+
+  setMonitorJobId: (jobId: string | null) => set({ monitorJobId: jobId }),
 
   requestNewRender: () => set((s) => ({ newRenderRequest: s.newRenderRequest + 1 })),
 

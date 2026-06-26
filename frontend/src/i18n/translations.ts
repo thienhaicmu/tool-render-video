@@ -202,6 +202,7 @@ export const translations = {
     queue_paused: 'Paused',
     queue_pause: 'Pause',
     queue_resume: 'Resume',
+    queue_open: 'Open monitor',
 
     // Pha 1.2 — CommandPalette (were hardcoded VI)
     cmd_section_nav: 'Navigation',
@@ -429,6 +430,7 @@ export const translations = {
     queue_paused: 'Tạm dừng',
     queue_pause: 'Tạm dừng',
     queue_resume: 'Tiếp tục',
+    queue_open: 'Mở màn theo dõi',
 
     // Pha 1.2 — CommandPalette
     cmd_section_nav: 'Điều hướng',

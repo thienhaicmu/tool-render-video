@@ -140,45 +140,33 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   } = useRenderSocket(jobId)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // ── Auto-reattach to active job on mount ────────────────────────────────────
-  // Bug fix 2026-06-15: when the user navigates away from the Rendering
-  // screen (e.g. clicks History tab, then comes back to Render), the local
-  // jobId is null and they land on Step 1 (Source). Clicking Start Render
-  // hits the server dedup with HTTP 409 because the previous job is still
-  // running. Detect that on mount and jump straight to the rendering view
-  // so the user can monitor / cancel without bouncing through Source.
+  // ── Compose ↔ Monitor (Pha 4) ───────────────────────────────────────────────
+  // The old broad "auto-reattach" effect forced Step 3 whenever ANY
+  // background job was running (watching jobsStore.active), hijacking the
+  // user out of composing the next render. It's removed: a running job is
+  // now discoverable in the always-visible queue dock, and the Monitor opens
+  // only on an EXPLICIT user action via uiStore.monitorJobId (dock / drawer /
+  // notification click / 409-navigate).
   //
-  // Subscribes to the shared jobs store so we don't fire an extra
-  // /api/jobs/history GET when ActiveJobBadge + HistoryTab already poll
-  // it; we just pick up their already-fetched `active` value on first
-  // non-null render after mount.
-  const activeJob = useJobsStore((s) => s.active)
-  // S2.5 — when this ref is true, the user just clicked "Duplicate" from
-  // History. The seed hydration takes priority over auto-reattach so we
-  // don't hijack their intent ("start a fresh render with old settings")
-  // into "monitor the unrelated job that happens to be running".
+  // These refs were guards for that removed effect. They're still set by the
+  // duplicate / new-render / send-to-render effects below; harmless no-ops
+  // now, kept to avoid churning those working flows.
   const duplicateInProgressRef = useRef(false)
-  // S3.5 — when this ref is true, the user just pressed ⌘N / chose
-  // "Render mới" from the command palette. Auto-reattach must skip so
-  // the user lands on Step 1 with a clean slate. Reset on next render
-  // cycle after the new-render effect handles the reset.
   const newRenderInProgressRef = useRef(false)
-  // Pha 1.1 — set while a Download→Render handoff is hydrating the source
-  // so auto-reattach doesn't hijack the wizard into monitoring an
-  // unrelated running job instead of starting the fresh render the user
-  // just asked for.
   const sendToRenderInProgressRef = useRef(false)
+
+  // Pha 4 — open Monitor (Step 3) for a specific job on explicit request.
+  // Compose state (sources / cfg) lives in separate useState and is
+  // preserved — only `step` + `jobId` change, so the user can navigate
+  // back to Configure with their work intact.
+  const monitorJobId = useUIStore((s) => s.monitorJobId)
+  const setMonitorJobId = useUIStore((s) => s.setMonitorJobId)
   useEffect(() => {
-    if (jobId) return // already attached
-    if (duplicateInProgressRef.current) return // S2.5 duplicate hydration in flight
-    if (newRenderInProgressRef.current) return // S3.5 new-render reset in flight
-    if (sendToRenderInProgressRef.current) return // Pha 1.1 download→render handoff in flight
-    if (activeJob) {
-      setJobId(activeJob.job_id)
-      setStep(3)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeJob])
+    if (!monitorJobId) return
+    setJobId(monitorJobId)
+    setStep(3)
+    setMonitorJobId(null)
+  }, [monitorJobId, setMonitorJobId])
 
   // S3.2/S3.5 — consume newRenderRequest counter. On every increment,
   // reset Render Workflow state to a clean Step 1. Auto-reattach is
@@ -616,25 +604,43 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
           : undefined,
         duration: 6000,
       })
+      // Pha 4 — Add-to-Queue: jobs run in the background (queue dock);
+      // return Compose to a clean Step 1 instead of pinning to the first
+      // job's monitor. cfg kept; sources cleared.
       if (submitted.length > 0) {
-        setJobId(submitted[0])
-        setStep(3)
-      } else {
-        setIsSubmitting(false)
+        setSources([]); setPrepareResult(null); setPrepareError(null)
+        setParts([]); setPartScores({}); setPartRanks({})
+        setQualityReports({}); setQualityLoadFailed(false)
+        setJobId(null)
+        setStep(1)
       }
+      setIsSubmitting(false)
       return
     }
 
-    // ── Single-source path (unchanged behaviour).
+    // ── Single-source path.
     const src = sources[0]
     const payload = buildPayloadForSource(src.value)
     try {
-      const id = await submitRender(payload)
-      setJobId(id)
-      setStep(3)
-      // intentional: do NOT reset isSubmitting on success — step changed
-      // to 3 so the Configure-screen button unmounts. Resetting would race
-      // with React's commit and let a stray click resubmit before unmount.
+      await submitRender(payload)
+      // Pha 4 — "Add to Queue": the job runs in the background (visible in
+      // the queue dock); return Compose to a clean Step 1 so the user can
+      // start the next render immediately instead of being pinned to the
+      // monitor. cfg is kept for convenience; the source is cleared.
+      addNotification({
+        type: 'success',
+        title: lang === 'VI' ? 'Đã thêm vào hàng đợi' : 'Added to queue',
+        message: lang === 'VI'
+          ? 'Theo dõi ở thanh hàng đợi phía dưới.'
+          : 'Track it in the queue bar below.',
+        duration: 5000,
+      })
+      setSources([]); setPrepareResult(null); setPrepareError(null)
+      setParts([]); setPartScores({}); setPartRanks({})
+      setQualityReports({}); setQualityLoadFailed(false)
+      setJobId(null)
+      setStep(1)
+      setIsSubmitting(false)
     } catch (e) {
       // Extract a user-friendly message. Backend dedup (409) returns a
       // detail string explaining the duplicate is already running; surface

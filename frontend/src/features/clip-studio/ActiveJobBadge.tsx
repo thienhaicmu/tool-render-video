@@ -10,6 +10,7 @@
  * lands the user on the monitor view.
  */
 import { useActiveJobs } from '@/stores/jobsStore'
+import { useUIStore } from '@/stores/uiStore'
 
 interface ActiveJobBadgeProps {
   onClick: () => void
@@ -20,8 +21,16 @@ export function ActiveJobBadge({ onClick }: ActiveJobBadgeProps) {
   // mounting this component bumps the refcount, unmounting decrements
   // it, and the interval is alive while any one subscriber is mounted.
   const { active, activeCount } = useActiveJobs()
+  const setMonitorJobId = useUIStore((s) => s.setMonitorJobId)
 
   if (activeCount === 0 || !active) return null
+
+  // Pha 4 — clicking the badge opens the active render's Monitor explicitly
+  // (the old auto-reattach that did this on tab switch is gone).
+  const handleClick = () => {
+    if (active.kind === 'render') setMonitorJobId(active.job_id)
+    onClick()
+  }
 
   const pct = Math.max(0, Math.min(100, active.progress_percent || 0))
   const label = active.status === 'queued'
@@ -33,7 +42,7 @@ export function ActiveJobBadge({ onClick }: ActiveJobBadgeProps) {
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={handleClick}
       title={active.title || active.source_hint || 'Active render job'}
       style={{
         position: 'relative',

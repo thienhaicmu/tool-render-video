@@ -70,6 +70,13 @@ export function ClipStudio() {
     if (sendToRenderSourcePath) setActiveTab('render')
   }, [sendToRenderSourcePath])
 
+  // Pha 4 — opening a job's Monitor (from dock / drawer / notification)
+  // must land on the Render tab where RenderWorkflow shows Step 3.
+  const monitorJobId = useUIStore((s) => s.monitorJobId)
+  useEffect(() => {
+    if (monitorJobId) setActiveTab('render')
+  }, [monitorJobId])
+
   return (
     <div className="cs-root">
       {/* Topbar */}

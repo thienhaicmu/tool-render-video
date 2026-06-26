@@ -30,6 +30,7 @@ export function ActiveJobsDock() {
   const { t } = useI18n()
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const setQueueDrawerOpen = useUIStore((s) => s.setQueueDrawerOpen)
+  const setMonitorJobId = useUIStore((s) => s.setMonitorJobId)
   const activePanel = useUIStore((s) => s.activePanel)
   const isFullscreen = FULLSCREEN_PANELS.includes(activePanel)
 
@@ -64,6 +65,9 @@ export function ActiveJobsDock() {
               } as never,
             },
       }))
+      // Pha 4 — explicit "open this job's Monitor". RenderWorkflow consumes
+      // monitorJobId (Step 3); ClipStudio flips to the Render tab.
+      setMonitorJobId(job.job_id)
       setActivePanel('clip-studio')
     } else {
       setActivePanel('download')

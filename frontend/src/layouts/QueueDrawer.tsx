@@ -24,6 +24,7 @@ import type { HistoryItem } from '../types/api'
 export function QueueDrawer() {
   const open = useUIStore((s) => s.queueDrawerOpen)
   const setOpen = useUIStore((s) => s.setQueueDrawerOpen)
+  const setMonitorJobId = useUIStore((s) => s.setMonitorJobId)
   const { items, refresh } = useActiveJobs()
   const queueOrder = useJobsStore((s) => s.queueOrder)
   const heldIds = useJobsStore((s) => s.heldIds)
@@ -56,6 +57,14 @@ export function QueueDrawer() {
     void refresh()
   }
 
+  // Pha 4 — open a render job's detailed Monitor (Step 3) and close the
+  // drawer. Downloads have no monitor in RenderWorkflow → no-op.
+  function openMonitor(job: HistoryItem) {
+    if (job.kind !== 'render') return
+    setMonitorJobId(job.job_id)
+    setOpen(false)
+  }
+
   return (
     <div style={styles.backdrop} role="dialog" aria-modal="true" aria-label={t('queue_title')} onClick={() => setOpen(false)}>
       <div style={styles.panel} onClick={(e) => e.stopPropagation()}>
@@ -73,7 +82,7 @@ export function QueueDrawer() {
             <div style={styles.empty}>{t('queue_empty')}</div>
           ) : (
             activeItems.map((job) => (
-              <QueueRow key={job.job_id} job={job} queueOrder={queueOrder} heldIds={heldIds} act={act} t={t} />
+              <QueueRow key={job.job_id} job={job} queueOrder={queueOrder} heldIds={heldIds} act={act} onOpen={openMonitor} t={t} />
             ))
           )}
         </div>
@@ -87,14 +96,17 @@ function QueueRow({
   queueOrder,
   heldIds,
   act,
+  onOpen,
   t,
 }: {
   job: HistoryItem
   queueOrder: string[]
   heldIds: string[]
   act: (fn: () => Promise<unknown>) => void
+  onOpen: (job: HistoryItem) => void
   t: (key: TranslationKey) => string
 }) {
+  const canOpen = job.kind === 'render'
   const pct = Math.max(0, Math.min(100, job.progress_percent || 0))
   const isQueued = job.status === 'queued'
   const isRenderQueued = isQueued && job.kind === 'render'
@@ -126,7 +138,17 @@ function QueueRow({
     <div style={styles.row}>
       <div style={styles.rowTop}>
         <span style={{ ...styles.kindBadge, background: kindBg, color: kindFg }}>{kindLabel}</span>
-        <span style={styles.rowTitle}>{title}</span>
+        {canOpen ? (
+          <button
+            style={{ ...styles.rowTitle, ...styles.rowTitleBtn }}
+            title={t('queue_open')}
+            onClick={() => onOpen(job)}
+          >
+            {title}
+          </button>
+        ) : (
+          <span style={styles.rowTitle}>{title}</span>
+        )}
         <span style={{ ...styles.rowSub, ...(isHeld ? { color: 'var(--status-warning, #eab308)', fontWeight: 700 } : null) }}>{subtitle}</span>
       </div>
 
@@ -202,6 +224,10 @@ const styles: Record<string, React.CSSProperties> = {
   rowTitle: {
     fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', flex: 1,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  rowTitleBtn: {
+    border: 'none', background: 'transparent', textAlign: 'left',
+    cursor: 'pointer', padding: 0, minWidth: 0,
   },
   rowSub: { fontSize: 10, color: 'var(--text-tertiary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0 },
   progressWrap: { position: 'relative', height: 4, background: 'var(--border-subtle)', borderRadius: 2, overflow: 'hidden' },

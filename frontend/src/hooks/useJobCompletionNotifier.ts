@@ -47,6 +47,7 @@ export function useJobCompletionNotifier() {
   // is also mounted.
   const { items } = useActiveJobs()
   const setActivePanel = useUIStore((s) => s.setActivePanel)
+  const setMonitorJobId = useUIStore((s) => s.setMonitorJobId)
 
   // Map<job_id, last-seen status>. Used to diff transitions across polls.
   const prevStatuses = useRef<Map<string, string> | null>(null)
@@ -125,6 +126,9 @@ export function useJobCompletionNotifier() {
             jobs: { ...state.jobs, [jobId]: stub },
           }
         })
+        // Pha 4 — open the job's Monitor explicitly (the broad auto-reattach
+        // that used to do this on panel switch is gone).
+        setMonitorJobId(jobId)
         setActivePanel('clip-studio')
       } else if (jobId && kind === 'download') {
         setActivePanel('download')
@@ -132,5 +136,5 @@ export function useJobCompletionNotifier() {
     })
 
     return unsubscribe
-  }, [setActivePanel])
+  }, [setActivePanel, setMonitorJobId])
 }
