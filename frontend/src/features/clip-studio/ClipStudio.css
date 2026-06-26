@@ -8,9 +8,11 @@
 .cs-root {
   position: fixed;
   inset: 0;
+  /* Reserve room for the fixed ActiveJobsDock so it doesn't overlap the
+     workflow footer / status bar. Var is 0px when the dock is hidden. */
+  bottom: var(--active-jobs-dock-h, 0px);
   display: flex;
   flex-direction: column;
-  height: 100vh;
   overflow: hidden;
   font-family: var(--font-family-base);
   background: var(--surface-base);

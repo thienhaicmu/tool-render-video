@@ -8,7 +8,7 @@
  * Click a row → jump to Clip Studio with the job attached (RenderWorkflow
  * auto-reattach in StepRendering already consumes `renderStore.activeJobId`).
  */
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useActiveJobs, useJobsStore } from '../stores/jobsStore'
 import { useUIStore } from '../stores/uiStore'
 import { useRenderStore } from '../stores/renderStore'
@@ -37,6 +37,17 @@ export function ActiveJobsDock() {
   const activeItems = items.filter(
     (j) => j.status === 'running' || j.status === 'queued',
   )
+
+  // The dock is a fixed bottom strip mounted as a sibling of the app shell.
+  // Without reserving space it would overlap the bottom of the content (the
+  // workflow's action footer + status bar). Publish its height as a CSS var
+  // so the shell (`.cs-root`) can shrink from the bottom by exactly that much.
+  // Height is constant (one 40px row + 8px padding top/bottom + 1px border).
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty('--active-jobs-dock-h', activeItems.length > 0 ? '57px' : '0px')
+    return () => { root.style.setProperty('--active-jobs-dock-h', '0px') }
+  }, [activeItems.length])
 
   if (activeItems.length === 0) return null
 
