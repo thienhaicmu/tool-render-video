@@ -4,6 +4,7 @@ import type { ClipSlot } from '../types'
 import type { Strings } from '../i18n'
 import type { WsLogEvent } from '@/websocket/events'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
+import { estimateRenderEtaSec } from '../eta'
 import { extendJob } from '@/api/jobs'
 
 function buildClipSlots(liveParts: JobPart[], progress: WsProgressSummary | null): ClipSlot[] {
@@ -336,7 +337,33 @@ function StepRenderingBase({
   const mm = Math.floor(elapsed / 60).toString().padStart(2, '0')
   const ss = (elapsed % 60).toString().padStart(2, '0')
 
-  const etaSec = pct > 2 && !isTerminal ? Math.round(elapsed * (100 - pct) / pct) : null
+  // Pha 5.2 — record the wall-clock gap each time a clip finishes, so the ETA
+  // can project from real clip throughput instead of a stage-blind linear
+  // extrapolation. Refs (not state) — purely an input to the estimate.
+  const clipIntervalsRef = useRef<number[]>([])
+  const lastDoneAtRef = useRef<number | null>(null)
+  const prevDoneCountRef = useRef(0)
+  useEffect(() => {
+    if (doneCount > prevDoneCountRef.current) {
+      const now = Date.now()
+      if (lastDoneAtRef.current !== null) clipIntervalsRef.current.push(now - lastDoneAtRef.current)
+      lastDoneAtRef.current = now
+      prevDoneCountRef.current = doneCount
+    }
+  }, [doneCount])
+
+  const etaRaw = isTerminal
+    ? null
+    : estimateRenderEtaSec({
+        elapsedSec: elapsed,
+        overallPct: pct,
+        doneCount,
+        totalCount,
+        clipIntervalsMs: clipIntervalsRef.current,
+      })
+  // Clamp out implausible values (negative / > 6 h) so a noisy early estimate
+  // doesn't show a wild number.
+  const etaSec = etaRaw !== null && etaRaw > 0 && etaRaw <= 6 * 3600 ? etaRaw : null
   const etaMm  = etaSec !== null ? Math.floor(etaSec / 60).toString().padStart(2, '0') : null
   const etaSs  = etaSec !== null ? (etaSec % 60).toString().padStart(2, '0') : null
   // S4.1 — before the heuristic stabilises (< 2% progress), show an

@@ -24,6 +24,7 @@ import { useJobsStore } from '../stores/jobsStore'
 import { useThemeStore } from '../stores/themeStore'
 import { isTerminalStatus } from '../types/enums'
 import { cancelRender } from '../api/render'
+import { holdJob, resumeJob } from '../api/jobs'
 import { useI18n } from '../i18n/useI18n'
 import type { TranslationKey } from '../i18n/translations'
 
@@ -77,12 +78,15 @@ export function CommandPalette() {
   const { t } = useI18n()
   const setActivePanel        = useUIStore((s) => s.setActivePanel)
   const setDuplicateSeedJobId = useUIStore((s) => s.setDuplicateSeedJobId)
+  const setMonitorJobId       = useUIStore((s) => s.setMonitorJobId)
   const requestNewRender      = useUIStore((s) => s.requestNewRender)
   const addNotification       = useUIStore((s) => s.addNotification)
   const cyclePreference       = useThemeStore((s) => s.cyclePreference)
   const activeRenderJobId     = useRenderStore((s) => s.activeJobId)
   const renderJobs            = useRenderStore((s) => s.jobs)
   const jobsItems             = useJobsStore((s) => s.items)
+  const queueOrder            = useJobsStore((s) => s.queueOrder)
+  const heldIds               = useJobsStore((s) => s.heldIds)
 
   // ── Action registry — re-computed when context changes so context-
   // sensitive actions (Cancel, Duplicate-last) reflect current state.
@@ -93,6 +97,10 @@ export function CommandPalette() {
     const lastCompletedRender = jobsItems.find(
       (j) => j.kind === 'render' && (j.status === 'completed' || j.status === 'partial' || j.status === 'completed_with_errors'),
     )
+    // Pha 5.3 — keyboard-driven queue actions.
+    const runningRender = jobsItems.find((j) => j.kind === 'render' && j.status === 'running')
+    const firstQueued = queueOrder[0]   // pending render at the front of the queue
+    const firstHeld = heldIds[0]        // a paused render
 
     return [
       // Navigation
@@ -169,6 +177,50 @@ export function CommandPalette() {
           setActivePanel('clip-studio')
         },
       },
+      {
+        id: 'queue-open-monitor',
+        label: t('cmd_open_monitor'),
+        keywords: 'monitor watch theo dõi render đang chạy progress',
+        section: 'render',
+        available: !!runningRender,
+        run: () => {
+          if (!runningRender) return
+          setMonitorJobId(runningRender.job_id)
+          setActivePanel('clip-studio')
+        },
+      },
+      {
+        id: 'queue-pause-next',
+        label: t('cmd_pause_next'),
+        keywords: 'pause hold tạm dừng queue hàng đợi',
+        section: 'render',
+        available: !!firstQueued,
+        run: async () => {
+          if (!firstQueued) return
+          try {
+            await holdJob(firstQueued)
+            addNotification({ title: t('cmd_toast_paused'), type: 'info' })
+          } catch {
+            addNotification({ title: t('cmd_toast_action_failed'), type: 'error' })
+          }
+        },
+      },
+      {
+        id: 'queue-resume-paused',
+        label: t('cmd_resume_paused'),
+        keywords: 'resume tiếp tục paused tạm dừng',
+        section: 'render',
+        available: !!firstHeld,
+        run: async () => {
+          if (!firstHeld) return
+          try {
+            await resumeJob(firstHeld)
+            addNotification({ title: t('cmd_toast_resumed'), type: 'info' })
+          } catch {
+            addNotification({ title: t('cmd_toast_action_failed'), type: 'error' })
+          }
+        },
+      },
 
       // Preferences
       {
@@ -195,9 +247,9 @@ export function CommandPalette() {
     ]
   }, [
     t,
-    setActivePanel, setDuplicateSeedJobId, requestNewRender,
+    setActivePanel, setDuplicateSeedJobId, setMonitorJobId, requestNewRender,
     addNotification, cyclePreference,
-    activeRenderJobId, renderJobs, jobsItems,
+    activeRenderJobId, renderJobs, jobsItems, queueOrder, heldIds,
   ])
 
   // Filter + section grouping.

@@ -37,11 +37,13 @@ function computeWsBase(): string {
   return 'ws://127.0.0.1:8000'
 }
 const WS_BASE = computeWsBase()
-// 20 attempts covers ~20 minutes of retries (2s → 4s → … → 30s cap).
-// Long renders (55–60 min) can experience transient drops; 3 was too few.
-const MAX_RECONNECT_ATTEMPTS = 20
+// Pha 5.1 — 6 attempts ≈ 40 s (2s → 4s → 8s → 10s cap …) before giving up and
+// handing off to the 5 s HTTP polling fallback. The old 20-attempt / 30s-cap
+// budget left the UI looking frozen for ~20 min on a flaky link; polling keeps
+// progress moving much sooner. Terminal status still stops reconnects entirely.
+const MAX_RECONNECT_ATTEMPTS = 6
 const RECONNECT_BASE_DELAY_MS = 2000
-const MAX_RECONNECT_DELAY_MS = 30_000
+const MAX_RECONNECT_DELAY_MS = 10_000
 
 export class RenderSocketClient {
   private jobId: string | null = null

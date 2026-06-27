@@ -6,7 +6,7 @@
  * for long renders (55–60 min) where transient drops happen routinely:
  *
  *   - On WS close: reconnect with exponential backoff (2s → 4s → … → 30s cap)
- *   - Up to 20 attempts before emitting 'max_reconnect_attempts_reached'
+ *   - Up to 6 attempts before emitting 'max_reconnect_attempts_reached'
  *   - Terminal status (completed/failed/cancelled) STOPS reconnects
  *   - disconnect() stops reconnects too
  *
@@ -100,7 +100,7 @@ describe('RenderSocketClient', () => {
     MockWebSocket.instances[0].triggerClose()
 
     // Reconnect handler fires synchronously inside _maybeReconnect.
-    expect(reconnecting).toHaveBeenCalledWith(1, 20)
+    expect(reconnecting).toHaveBeenCalledWith(1, 6)
     expect(MockWebSocket.instances).toHaveLength(1)  // not yet reopened
 
     // Advance the scheduled timer → next WebSocket constructed.
@@ -108,7 +108,7 @@ describe('RenderSocketClient', () => {
     expect(MockWebSocket.instances).toHaveLength(2)
   })
 
-  it('applies exponential backoff capped at 30s', () => {
+  it('applies exponential backoff capped at 10s', () => {
     const client = new RenderSocketClient()
     const reconnecting = vi.fn()
     client.onReconnecting(reconnecting)
@@ -124,7 +124,7 @@ describe('RenderSocketClient', () => {
 
     // 5 reconnect attempts logged + initial connect → 6 sockets opened.
     expect(MockWebSocket.instances.length).toBe(6)
-    // Reconnect handler reports the attempt count, capped at MAX (20).
+    // Reconnect handler reports the attempt count, capped at MAX (6).
     const attemptArgs = reconnecting.mock.calls.map((c) => c[0])
     expect(attemptArgs).toEqual([1, 2, 3, 4, 5])
   })

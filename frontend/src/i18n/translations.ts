@@ -224,6 +224,12 @@ export const translations = {
     cmd_foot_toggle: 'open/close',
     cmd_toast_cancel_requested: 'Render cancel requested',
     cmd_toast_cancel_failed: 'Failed to cancel render',
+    cmd_open_monitor: 'Open running render monitor',
+    cmd_pause_next: 'Pause next queued render',
+    cmd_resume_paused: 'Resume a paused render',
+    cmd_toast_paused: 'Render paused',
+    cmd_toast_resumed: 'Render resumed',
+    cmd_toast_action_failed: 'Action failed',
 
     // Pha 1.2 — NotificationCenter (were hardcoded VI)
     notif_title: 'Notifications',
@@ -452,6 +458,12 @@ export const translations = {
     cmd_foot_toggle: 'đóng/mở',
     cmd_toast_cancel_requested: 'Đã yêu cầu hủy render',
     cmd_toast_cancel_failed: 'Hủy render thất bại',
+    cmd_open_monitor: 'Mở Monitor render đang chạy',
+    cmd_pause_next: 'Tạm dừng render kế tiếp',
+    cmd_resume_paused: 'Tiếp tục render đang tạm dừng',
+    cmd_toast_paused: 'Đã tạm dừng render',
+    cmd_toast_resumed: 'Đã tiếp tục render',
+    cmd_toast_action_failed: 'Thao tác thất bại',
 
     // Pha 1.2 — NotificationCenter
     notif_title: 'Thông báo',
