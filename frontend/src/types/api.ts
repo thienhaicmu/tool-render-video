@@ -138,10 +138,11 @@ export interface RenderRequest {
   voice_enabled?: boolean
   voice_language?: 'vi-VN' | 'ja-JP' | 'ko-KR' | 'en-US' | 'en-GB'
   voice_gender?: 'female' | 'male'
-  voice_source?: 'manual' | 'subtitle' | 'translated_subtitle'
+  voice_source?: 'manual' | 'subtitle' | 'translated_subtitle' | 'ai_rewrite'
   voice_text?: string | null
   tts_engine?: 'edge' | 'piper' | 'xtts'
   voice_mix_mode?: 'replace_original' | 'keep_original_low'
+  rewrite_tone?: string
   hook_apply_enabled?: boolean
   hook_overlay_enabled?: boolean
 

@@ -1056,9 +1056,10 @@ function StepConfigureBase({
               </div>
               <div className="seg" style={{ flexDirection: 'column', gap: '3px' }}>
                 {([
-                  { v: 'subtitle'            as const, l: t.cfgVoiceSrcAuto,   d: t.cfgVoiceSrcAutoDesc   },
-                  { v: 'translated_subtitle' as const, l: t.cfgVoiceSrcTrans,  d: t.cfgVoiceSrcTransDesc  },
-                  { v: 'manual'              as const, l: t.cfgVoiceSrcManual, d: t.cfgVoiceSrcManualDesc },
+                  { v: 'subtitle'            as const, l: t.cfgVoiceSrcAuto,    d: t.cfgVoiceSrcAutoDesc    },
+                  { v: 'translated_subtitle' as const, l: t.cfgVoiceSrcTrans,   d: t.cfgVoiceSrcTransDesc   },
+                  { v: 'ai_rewrite'          as const, l: t.cfgVoiceSrcRewrite, d: t.cfgVoiceSrcRewriteDesc },
+                  { v: 'manual'              as const, l: t.cfgVoiceSrcManual,  d: t.cfgVoiceSrcManualDesc  },
                 ]).map(({ v, l, d }) => (
                   <div key={v} className={`seg-b${cfg.voiceSource === v ? ' on' : ''}`}
                     style={{ textAlign: 'left', padding: '7px 10px' }}
@@ -1076,6 +1077,18 @@ function StepConfigureBase({
                     value={cfg.voiceText}
                     onChange={(e) => setCfgKey('voiceText', e.target.value)}
                     style={{ width: '100%', minHeight: '80px', resize: 'vertical', fontFamily: 'var(--fb)', fontSize: '12px' }}
+                  />
+                </div>
+              )}
+              {cfg.voiceSource === 'ai_rewrite' && (
+                <div style={{ marginTop: '8px' }}>
+                  <input
+                    type="text"
+                    className="dir-in"
+                    placeholder={t.cfgRewriteToneHint}
+                    value={cfg.rewriteTone || ''}
+                    onChange={(e) => setCfgKey('rewriteTone', e.target.value)}
+                    style={{ width: '100%', fontFamily: 'var(--fb)', fontSize: '12px' }}
                   />
                 </div>
               )}

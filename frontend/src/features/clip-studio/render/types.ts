@@ -38,8 +38,9 @@ export interface ConfigState {
   voiceLang:     string
   voiceGender:   'female' | 'male'
   ttsEngine:     'edge' | 'xtts'
-  voiceSource:   'subtitle' | 'translated_subtitle' | 'manual'
+  voiceSource:   'subtitle' | 'translated_subtitle' | 'manual' | 'ai_rewrite'
   voiceText:     string
+  rewriteTone:   string
   voiceMixMode:  'replace_original' | 'keep_original_low'
   outputDir:     string
   renderProfile: 'fast' | 'balanced' | 'quality' | 'best'
