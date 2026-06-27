@@ -203,6 +203,11 @@ export const translations = {
     queue_pause: 'Pause',
     queue_resume: 'Resume',
     queue_open: 'Open monitor',
+    // Pha 5B — interrupted-jobs banner
+    interrupted_jobs: 'render(s) interrupted — resume to continue',
+    resume_all: 'Resume all',
+    banner_dismiss: 'Dismiss',
+    resume_all_done: 'Resuming interrupted renders',
 
     // Pha 1.2 — CommandPalette (were hardcoded VI)
     cmd_section_nav: 'Navigation',
@@ -437,6 +442,11 @@ export const translations = {
     queue_pause: 'Tạm dừng',
     queue_resume: 'Tiếp tục',
     queue_open: 'Mở màn theo dõi',
+    // Pha 5B — banner job gián đoạn
+    interrupted_jobs: 'render bị gián đoạn — tiếp tục để hoàn tất',
+    resume_all: 'Tiếp tục tất cả',
+    banner_dismiss: 'Bỏ qua',
+    resume_all_done: 'Đang tiếp tục các render gián đoạn',
 
     // Pha 1.2 — CommandPalette
     cmd_section_nav: 'Điều hướng',

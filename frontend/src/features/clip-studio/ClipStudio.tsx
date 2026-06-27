@@ -4,6 +4,7 @@ import { RenderWorkflow } from './render/RenderWorkflow'
 import { DownloadTab } from './download/DownloadTab'
 import { ThemeToggle } from '../../components/ui/ThemeToggle'
 import { ActiveJobBadge } from './ActiveJobBadge'
+import { InterruptedJobsBanner } from './InterruptedJobsBanner'
 import { useUIStore } from '../../stores/uiStore'
 import { useSystemResources } from '../../hooks/useSystemResources'
 import { NotificationCenter } from '../../components/NotificationCenter'
@@ -118,6 +119,9 @@ export function ClipStudio() {
           </button>
         </div>
       </header>
+
+      {/* Pha 5B — one-click recovery of jobs interrupted by a restart. */}
+      <InterruptedJobsBanner />
 
       {/* Content */}
       <div className="cs-content">
