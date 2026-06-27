@@ -20,13 +20,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { RenderSocketClient } from '../websocket/RenderSocketClient'
 import type { WsLogEvent } from '../websocket/events'
-import { isTerminalStatus } from '../types/enums'
+import { isTerminalStatus, type JobPartStageEnum } from '../types/enums'
 import { useRenderStore } from '../stores/renderStore'
 import { getJob, getJobParts } from '../api/jobs'
 import type { JobStatus, WsProgressSummary, JobPart, JobErrorKind } from '../types/api'
 
 const POLLING_FALLBACK_INTERVAL_MS = 5_000
-const PART_IN_PROGRESS_STATUSES = ['cutting', 'transcribing', 'rendering', 'waiting'] as const
+const PART_IN_PROGRESS_STATUSES = ['cutting', 'transcribing', 'rendering', 'waiting'] as const satisfies readonly JobPartStageEnum[]
 // T3.1 — Audit 2026-06-08 closure (Batch A V8-C1). Cap the live-event
 // buffer at a small number — the UI consumes the latest events and
 // older ones drop off. The BE side already drops oldest under

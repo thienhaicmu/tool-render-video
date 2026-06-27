@@ -16,4 +16,8 @@ COPY app /app/app
 COPY static /app/static
 
 EXPOSE 8000
+# Explicit opt-in to the non-loopback (0.0.0.0) bind below. The API has no
+# auth; app.main refuses a network bind unless ALLOW_REMOTE=1 (B1 guard).
+# A container is an intentional network-exposed deployment, so opt in here.
+ENV ALLOW_REMOTE=1
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

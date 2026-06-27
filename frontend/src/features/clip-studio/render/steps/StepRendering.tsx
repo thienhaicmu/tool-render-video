@@ -7,6 +7,7 @@ import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 import { estimateRenderEtaSec } from '../eta'
 import { stageBlendedPercent } from '../progress'
 import { extendJob } from '@/api/jobs'
+import type { JobPartStageEnum } from '@/types/enums'
 
 function buildClipSlots(liveParts: JobPart[], progress: WsProgressSummary | null): ClipSlot[] {
   if (liveParts.length > 0) {
@@ -57,7 +58,7 @@ const STEP_NODES = [
   { key: 'cutting',      label: 'Cut' },
   { key: 'transcribing', label: 'Sub' },
   { key: 'rendering',    label: 'Render' },
-]
+] as const satisfies readonly { key: JobPartStageEnum; label: string }[]
 
 function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
   slot: ClipSlot; statusLabel: string; jobId: string | null; thumbRatio: string; compact?: boolean

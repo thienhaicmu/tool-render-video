@@ -57,6 +57,10 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     "cleanup_temp_files",
     # Profile / quality
     "render_profile", "output_fps", "whisper_model",
+    # F2 (2026-06-27): the built-in/saved preset the FE selected. The server
+    # merges this preset's params for fields the user didn't explicitly send
+    # (see routers/lifecycle._apply_render_preset).
+    "render_preset_id",
     # Segmentation
     "auto_detect_scene", "min_part_sec", "max_part_sec",
     # T1.4 follow-up — Audit 2026-06-08: `max_export_parts` and
@@ -177,9 +181,10 @@ RenderRequestPublic = create_model(  # type: ignore[call-overload]
 )
 
 RenderRequestPublic.__doc__ = (
-    "FE-facing slice of RenderRequest (71 of 152 fields after the T1.4 "
+    "FE-facing slice of RenderRequest (72 of 152 fields after the T1.4 "
     "audit-2026-06-08 cleanup + follow-up + Strategic-1/1c full UP26 "
-    "restoration, down from the pre-audit 88). Strictly forbids unknown "
+    "restoration + F2 render_preset_id, down from the pre-audit 88). "
+    "Strictly forbids unknown "
     "fields (``extra='forbid'``). The wire endpoint /api/render/process "
     "accepts this surface and expands to the full RenderRequest "
     "server-side. See module docstring for the migration history."

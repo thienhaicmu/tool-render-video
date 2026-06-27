@@ -4,8 +4,10 @@
  * Current stage is highlighted. Future stages are muted.
  */
 
+import type { RenderStage } from '../../types/enums'
+
 interface Stage {
-  key: string
+  key: RenderStage   // C1: validated against the backend stage contract
   label: string
 }
 

@@ -69,3 +69,45 @@ def assert_devtools_safe(host: str | None) -> None:
 def is_loopback_client(client_host: str | None) -> bool:
     """Return True if `client_host` is a loopback peer."""
     return client_host is not None and client_host in _LOOPBACK_CLIENT_HOSTS
+
+
+def assert_main_bind_safe(host: str | None, allow_remote: bool) -> None:
+    """Refuse startup when the WHOLE API would bind to a network host.
+
+    B1 (2026-06-27). This guards the main application surface, not just
+    devtools: the render / jobs / files endpoints have NO authentication,
+    so binding to a non-loopback host exposes the entire offline-first
+    desktop API (and its file/render capabilities) to the local network.
+
+    Semantics — deliberately fail OPEN on an undetectable host so the
+    desktop run-scripts and the test suite (which never pass ``--host``)
+    are unaffected:
+
+      - ``allow_remote=True``        → allowed (explicit operator opt-in,
+                                       e.g. the Docker image sets
+                                       ``ALLOW_REMOTE=1``).
+      - ``host is None``             → allowed. uvicorn's own default bind
+                                       is ``127.0.0.1`` when ``--host`` is
+                                       omitted, so "undetectable" means
+                                       "loopback by default".
+      - ``host`` is a loopback addr  → allowed.
+      - anything else (0.0.0.0, LAN  → RuntimeError (refuse to start).
+        IP, real hostname)
+
+    Raising here fails the import of ``app.main`` before any router is
+    mounted — the API never binds on an unsafe host.
+    """
+    if allow_remote:
+        return
+    if host is None:
+        return
+    if host in _SAFE_LOOPBACK_HOSTS:
+        return
+    raise RuntimeError(
+        f"REFUSING TO START: backend is binding to non-loopback host "
+        f"{host!r}, which exposes the UNAUTHENTICATED API (render, jobs, "
+        f"file access) to the network. This is an offline-first desktop "
+        f"app — bind to 127.0.0.1. If network exposure is intentional "
+        f"(e.g. a container or trusted LAN), set ALLOW_REMOTE=1 to opt in "
+        f"explicitly."
+    )

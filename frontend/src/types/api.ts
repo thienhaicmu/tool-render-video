@@ -84,6 +84,9 @@ export interface RenderRequest {
   render_profile?: 'fast' | 'balanced' | 'quality' | 'best'
   output_fps?: number
   whisper_model?: string
+  // F2: selected built-in/saved preset id. Server merges its params for
+  // fields the user didn't explicitly send (see _apply_render_preset).
+  render_preset_id?: string
 
   // Segmentation
   auto_detect_scene?: boolean

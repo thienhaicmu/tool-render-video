@@ -14,6 +14,7 @@ import type { RenderRequest, JobPart, QualityReport, PartRankResult } from '@/ty
 import { useT, ERROR_KIND_KEY, ERROR_FIX_STEPS, inferErrorKind } from './i18n'
 import type { Step, CfgTab, ConfigState, Source } from './types'
 import { PRESETS, RATIO_INFO } from './constants'
+import { presetParamsToConfigPatch } from './presetMapping'
 import { StepConfigure } from './steps/StepConfigure'
 import { StepRendering } from './steps/StepRendering'
 import { StepResults } from './steps/StepResults'
@@ -53,6 +54,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     voiceSource: 'translated_subtitle', voiceText: '', voiceMixMode: 'replace_original',
     outputDir: '',
     renderProfile: 'balanced',
+    renderPresetId: '',
     targetDuration: 90, outputCount: 1, videoType: 'auto',
     hookStrength: 'balanced', focusMode: 'auto',
     llmEnabled:   true,
@@ -434,6 +436,16 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   function applyProfile(patch: Partial<ConfigState>) {
     setCfg((prev) => ({ ...prev, ...patch }))
   }
+  // F2 — apply a backend built-in preset: reflect its FE-facing params into
+  // the form (WYSIWYG) and record render_preset_id so the server fills the
+  // BE-only params (ai_clip_*). Passing '' clears the selection.
+  function applyRenderPreset(presetId: string, params: Record<string, unknown>) {
+    setCfg((prev) => ({
+      ...prev,
+      ...presetParamsToConfigPatch(params),
+      renderPresetId: presetId,
+    }))
+  }
   async function pickOutputDir() {
     const dir = await window.electronAPI?.pickDirectory?.()
     if (dir) setCfgKey('outputDir', dir)
@@ -450,6 +462,10 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       source_mode:       'local',
       source_video_path: srcValue,
       output_dir:          cfg.outputDir || 'output',
+      // F2 — provenance + safety net: the server applies this preset's
+      // BE-only params (ai_clip_*) for fields the FE didn't send. FE-facing
+      // params are already reflected into cfg by applyRenderPreset below.
+      render_preset_id:    cfg.renderPresetId || undefined,
       aspect_ratio:        RATIO_INFO[cfg.ratio].api,
       min_part_sec:        cfg.minSec,
       max_part_sec:        cfg.maxSec,
@@ -1079,6 +1095,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               <StepConfigure
                 cfg={cfg} cfgTab={cfgTab} setCfgTab={setCfgTab}
                 setCfgKey={setCfgKey} applyPreset={applyPreset} applyProfile={applyProfile}
+                applyRenderPreset={applyRenderPreset}
                 sources={sources} prepareResult={prepareResult}
                 pickOutputDir={pickOutputDir} onChangeSource={handleChangeSource} t={t}
               />

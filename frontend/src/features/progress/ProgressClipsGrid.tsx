@@ -3,6 +3,17 @@
  * Replaces ProgressPartList for the new layout.
  */
 import type { JobPart } from '@/types/api'
+import type { JobPartStageEnum, RenderStage } from '@/types/enums'
+
+// Statuses that mark a clip as actively processing. Mixes per-part stages
+// (rendering/cutting/transcribing) with the legacy 'downloading' job stage;
+// `satisfies` validates every member against the C1 contract unions.
+const ACTIVE_CLIP_STATUSES = [
+  'rendering',
+  'cutting',
+  'transcribing',
+  'downloading',
+] as const satisfies readonly (RenderStage | JobPartStageEnum)[]
 
 export interface ProgressClipsGridProps {
   liveParts: JobPart[]
@@ -32,7 +43,7 @@ function borderColor(status: string, hasScore: boolean, avgScore: number): strin
     if (hasScore && avgScore >= 80) return 'var(--color-success)'
     return 'var(--color-success)'
   }
-  const activeStatuses = new Set(['rendering', 'cutting', 'transcribing', 'downloading'])
+  const activeStatuses = new Set<string>(ACTIVE_CLIP_STATUSES)
   if (activeStatuses.has(status)) return 'var(--color-accent)'
   return 'var(--color-border)'
 }
@@ -105,7 +116,7 @@ export function ProgressClipsGrid({
 
   const clips = Array.from(clipMap.values()).sort((a, b) => a.part_no - b.part_no)
 
-  const activeStatuses = new Set(['rendering', 'cutting', 'transcribing', 'downloading'])
+  const activeStatuses = new Set<string>(ACTIVE_CLIP_STATUSES)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>

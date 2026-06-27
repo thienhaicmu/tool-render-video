@@ -6,6 +6,7 @@ import type { ConfigState, CfgTab, Source, Ratio } from '../types'
 import type { Strings } from '../i18n'
 import { RATIO_INFO, STYLES, SUB_STYLE_GROUPS, QUALITY_MAP } from '../constants'
 import { listProfiles, saveProfile, deleteProfile, type RenderProfile } from '../profiles'
+import { listBuiltinPresets, type RenderPresetDto } from '@/api/presets'
 import {
   DEMO_VARIANTS,
   DEMO_HIGHLIGHT_COLORS,
@@ -257,7 +258,7 @@ function SourceTrim({ duration, trimIn, trimOut, setCfgKey, t }: {
 // all 4 steps and toggles `.active` via class, so without memo every state
 // tick in step 3 (progress) re-renders steps 1, 2, 4 unnecessarily.
 function StepConfigureBase({
-  cfg, cfgTab, setCfgTab, setCfgKey, applyPreset, applyProfile,
+  cfg, cfgTab, setCfgTab, setCfgKey, applyPreset, applyProfile, applyRenderPreset,
   sources, prepareResult, pickOutputDir, onChangeSource, t,
 }: {
   cfg: ConfigState
@@ -266,6 +267,7 @@ function StepConfigureBase({
   setCfgKey: <K extends keyof ConfigState>(k: K, v: ConfigState[K]) => void
   applyPreset: (id: string) => void
   applyProfile: (patch: Partial<ConfigState>) => void
+  applyRenderPreset: (presetId: string, params: Record<string, unknown>) => void
   sources: Source[]
   prepareResult: PrepareSourceResponse | null
   pickOutputDir: () => void
@@ -273,6 +275,18 @@ function StepConfigureBase({
   t: Strings
 }) {
   void applyPreset
+
+  // F2 — built-in render presets fetched from the backend (single source).
+  // Selecting one reflects its FE-facing params into cfg and records
+  // render_preset_id; '' = custom. Fetch is best-effort (offline-tolerant).
+  const [builtinPresets, setBuiltinPresets] = React.useState<RenderPresetDto[]>([])
+  React.useEffect(() => {
+    let alive = true
+    listBuiltinPresets()
+      .then((ps) => { if (alive) setBuiltinPresets(ps) })
+      .catch(() => { /* offline / no presets — section just hides */ })
+    return () => { alive = false }
+  }, [])
   const [cfgMode, setCfgMode] = React.useState<'quick' | 'advanced'>('quick')
   const adv = cfgMode === 'advanced'
 
@@ -352,6 +366,46 @@ function StepConfigureBase({
             ))}
           </div>
         </div>
+
+        {/* F2 — Smart Presets: pick a curated backend preset. Reflects its
+            FE-facing params into the form (WYSIWYG) and sends
+            render_preset_id so the server fills the BE-only params. The
+            section hides when the backend has no presets / is offline. */}
+        {builtinPresets.length > 0 && (
+          <div className="cfg-section">
+            <div className="cfg-sec-hd">
+              <span>Presets</span>
+              <span className="cfg-sec-api">render_preset_id</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+              <div
+                className="seg-b"
+                title="Custom — no preset"
+                onClick={() => applyRenderPreset('', {})}
+                style={{
+                  opacity: cfg.renderPresetId === '' ? 1 : 0.6,
+                  outline: cfg.renderPresetId === '' ? '1px solid var(--accent)' : 'none',
+                }}
+              >
+                Custom
+              </div>
+              {builtinPresets.map((p) => (
+                <div
+                  key={p.preset_id}
+                  className="seg-b"
+                  title={p.description}
+                  onClick={() => applyRenderPreset(p.preset_id, p.params)}
+                  style={{
+                    opacity: cfg.renderPresetId === p.preset_id ? 1 : 0.6,
+                    outline: cfg.renderPresetId === p.preset_id ? '1px solid var(--accent)' : 'none',
+                  }}
+                >
+                  {p.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Pha 2 — Render Profiles: one-click apply of a saved config
             snapshot. Built-ins (TikTok/Reels/Shorts) always present;

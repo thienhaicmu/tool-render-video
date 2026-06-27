@@ -106,10 +106,65 @@ export type RenderStage =
   | 'writing_report'
   | 'done'
   | 'failed'
+  | 'cancelled'
   // legacy values kept for backward compat
   | 'finalizing'
   | 'complete'
   | 'error'
+
+// ── FE↔BE contract mirror (C1) ────────────────────────────────────────────────
+// These three arrays MUST stay byte-identical to the backend canonical
+// declaration in backend/app/core/contracts.py. The parity test
+// backend/tests/test_fe_be_contract_parity.py fails CI if they drift.
+// Do NOT add legacy aliases here (the RenderStage union above may carry
+// legacy values for render tolerance; these arrays are the exact wire set).
+
+// Frozen job-stage names — Sacred Contract #4 (mirrors JobStage).
+export const JOB_STAGE_VALUES = [
+  'queued',
+  'starting',
+  'running',
+  'analyzing',
+  'downloading',
+  'scene_detection',
+  'segment_building',
+  'transcribing_full',
+  'rendering',
+  'rendering_parallel',
+  'writing_report',
+  'done',
+  'failed',
+  'cancelled',
+] as const
+
+// Frozen per-part status names — Sacred Contract #5 (mirrors JobPartStage).
+export type JobPartStageEnum =
+  | 'queued'
+  | 'waiting'
+  | 'cutting'
+  | 'transcribing'
+  | 'rendering'
+  | 'done'
+  | 'failed'
+  | 'skipped'
+
+export const JOB_PART_STAGE_VALUES = [
+  'queued',
+  'waiting',
+  'cutting',
+  'transcribing',
+  'rendering',
+  'done',
+  'failed',
+  'skipped',
+] as const
+
+// Sacred Contract #1 — keys that MUST exist in every result_json blob.
+export const RESULT_JSON_REQUIRED_KEYS = [
+  'output_rank_score',
+  'is_best_output',
+  'is_best_clip',
+] as const
 
 // ── Quality severity levels (§8.4) ───────────────────────────────────────────
 

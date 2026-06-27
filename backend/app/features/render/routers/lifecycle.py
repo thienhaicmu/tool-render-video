@@ -46,6 +46,45 @@ router = APIRouter(tags=["render"])
 logger = logging.getLogger("app.render")
 
 
+def _apply_render_preset(payload: RenderRequest, user_set: set[str]) -> None:
+    """F2 (2026-06-27) — fill preset params the user did not explicitly send.
+
+    When the payload carries ``render_preset_id`` matching a saved/built-in
+    preset, apply each preset param that the FE did NOT explicitly set on the
+    wire. Precedence: explicit user value > preset value > default.
+
+    ``user_set`` is ``RenderRequestPublic.model_fields_set`` — the fields the
+    FE actually sent. A preset param the user sent is left untouched (user
+    wins); a BE-only preset param (never on the Public wire) always applies.
+
+    The merged values are baked into the ``payload`` that gets stored, so
+    historical replay is preset-independent — a later edit to the preset
+    definition cannot retroactively change a stored job (Sacred Contract #2
+    unaffected). Never raises — a preset lookup failure leaves the payload as
+    the user submitted it.
+    """
+    preset_id = (getattr(payload, "render_preset_id", "") or "").strip()
+    if not preset_id:
+        return
+    try:
+        from app.db.presets_repo import get_preset
+        preset = get_preset(preset_id)
+    except Exception:
+        return
+    params = getattr(preset, "params", None) if preset else None
+    if not params:
+        return
+    for key, value in params.items():
+        if key in user_set:
+            continue  # explicit user value wins
+        if not hasattr(payload, key):
+            continue  # defensive — preset references an unknown field
+        try:
+            setattr(payload, key, value)
+        except Exception:
+            continue
+
+
 @router.post("/process")
 def create_render_job(public_payload: RenderRequestPublic):
     # Audit MT-3 phase 2 closure (Batch 10O, 2026-06-06): the wire surface
@@ -72,6 +111,9 @@ def create_render_job(public_payload: RenderRequestPublic):
     # Resume/retry: ai_provider stays as stored.
     if "ai_provider" not in public_payload.model_fields_set:
         payload.ai_provider = _cfg.AI_PROVIDER_DEFAULT
+    # F2: apply a selected preset's params for fields the user didn't send.
+    # After the ai_provider default so a preset may still override it.
+    _apply_render_preset(payload, set(public_payload.model_fields_set))
     try:
         _validate_render_source(payload)
         _validate_text_layers_or_400(payload)

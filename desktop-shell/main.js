@@ -44,6 +44,29 @@ function appendBootstrapLog(message) {
   } catch (_) {}
 }
 
+// B2 follow-up (2026-06-27): forward hard renderer / child-process crashes
+// to the backend so they land in the structured data/logs/errors.jsonl
+// sink. Soft renderer JS errors are reported by the renderer itself
+// (frontend lib/clientErrorReporter.ts). Fire-and-forget, never throws.
+function reportClientError(payload) {
+  try {
+    const data = JSON.stringify(payload);
+    const req = http.request(
+      `${BACKEND_URL}/api/client/error`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
+        timeout: 3000,
+      },
+      (res) => { res.resume(); },  // drain so the socket frees
+    );
+    req.on('error', () => {});
+    req.on('timeout', () => { try { req.destroy(); } catch (_) {} });
+    req.write(data);
+    req.end();
+  } catch (_) { /* the error reporter must never throw */ }
+}
+
 function readBootstrapState() {
   try {
     if (!fs.existsSync(BOOTSTRAP_STATE_FILE)) return null;
@@ -416,6 +439,18 @@ function createWindow() {
     closeSplash();
     mainWindow.show();
   });
+  // B2 follow-up: hard renderer crashes (process gone / unresponsive) cannot
+  // be caught by the renderer's own error handlers — capture them here.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    reportClientError({
+      source: 'electron-main',
+      kind: 'render-process-gone',
+      message: `renderer process gone: reason=${details.reason} exitCode=${details.exitCode}`,
+    });
+  });
+  mainWindow.webContents.on('unresponsive', () => {
+    reportClientError({ source: 'electron-main', kind: 'unresponsive', message: 'renderer became unresponsive' });
+  });
   if (isDev) {
     mainWindow.loadURL(VITE_DEV_URL);
   } else {
@@ -480,6 +515,16 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on('before-quit', () => { isQuitting = true; });
+
+// B2 follow-up: GPU / utility / Pepper child-process crashes (e.g. the GPU
+// process dying mid-render-preview) → structured errors.jsonl.
+app.on('child-process-gone', (_e, details) => {
+  reportClientError({
+    source: 'electron-main',
+    kind: 'child-process-gone',
+    message: `child process gone: type=${details.type} reason=${details.reason} exitCode=${details.exitCode}`,
+  });
+});
 
 app.on('window-all-closed', () => {
   if (backendProc && !backendProc.killed) {

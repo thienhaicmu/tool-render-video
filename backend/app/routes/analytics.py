@@ -18,6 +18,7 @@ Blast radius: LOW — new file, no existing routes modified.
 """
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import APIRouter, Query
@@ -50,6 +51,24 @@ def _safe_int(v, default: int = 0) -> int:
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.get("/presets")
+def get_preset_usage(days: int = Query(0, ge=0, le=365)):
+    """Preset adoption (B3) — job counts grouped by render_preset_id.
+
+    Closes the F2 loop: which built-in/saved presets do creators actually
+    pick? ``days=0`` → all time. Read-only, never raises. The render
+    pipeline records ``render_preset_id`` / ``render_preset`` in each job's
+    ``result_json`` (pipeline_finalize); jobs that ran without a preset
+    carry the pipeline default ``'custom'``.
+    """
+    usage = _query_preset_usage(days)
+    return {
+        "presets": usage,
+        "total_jobs": sum(e["count"] for e in usage),
+        "days": days,
+    }
+
 
 @router.get("/overview")
 def get_overview():
@@ -217,6 +236,46 @@ def _query_job_counts() -> dict:
         }
     except Exception:
         return {"completed": 0, "failed": 0, "running": 0, "total": 0}
+
+
+def _query_preset_usage(days: int = 0) -> list[dict]:
+    """Aggregate job counts per render_preset_id from result_json.
+
+    Python-side aggregation (not SQLite json_extract) so a single row with
+    malformed result_json can't fail the whole query. Returns [] on error.
+    """
+    try:
+        with db_conn() as conn:
+            sql = "SELECT result_json, status FROM jobs"
+            if days and days > 0:
+                sql += " WHERE " + _days_clause(days, "created_at")
+            rows = conn.execute(sql).fetchall()
+    except Exception:
+        return []
+
+    counts: dict[tuple[str, str], dict] = {}
+    for r in rows or []:
+        raw = r["result_json"] if r is not None else None
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        preset_id = str(data.get("render_preset_id") or "").strip() or "custom"
+        preset_name = str(data.get("render_preset") or "").strip() or preset_id
+        key = (preset_id, preset_name)
+        entry = counts.setdefault(
+            key,
+            {"preset_id": preset_id, "preset_name": preset_name, "count": 0, "completed": 0},
+        )
+        entry["count"] += 1
+        if str(r["status"]) in ("completed", "completed_with_errors"):
+            entry["completed"] += 1
+
+    return sorted(counts.values(), key=lambda e: e["count"], reverse=True)
 
 
 def _query_feedback_totals() -> dict:

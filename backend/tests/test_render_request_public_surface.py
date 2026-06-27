@@ -123,8 +123,10 @@ def test_public_field_count_pinned():
     from app.models.render import RenderRequest
     from app.models.render_public import BE_ONLY_FIELDS, FE_FACING_FIELDS
 
-    assert len(FE_FACING_FIELDS) == 71, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
-    assert len(BE_ONLY_FIELDS)   == 81, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
+    # F2 (2026-06-27): render_preset_id promoted BE-only → Public (71→72,
+    # BE-only 81→80). Total stays 152.
+    assert len(FE_FACING_FIELDS) == 72, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    assert len(BE_ONLY_FIELDS)   == 80, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
     assert len(RenderRequest.model_fields) == 152, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."

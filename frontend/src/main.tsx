@@ -7,7 +7,9 @@ import './styles/motion.css'
 import './styles/polish.css'
 import { App } from './App'
 import { initThemeStore } from './stores/themeStore'
+import { initClientErrorReporter } from './lib/clientErrorReporter'
 
+initClientErrorReporter()
 initThemeStore()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
