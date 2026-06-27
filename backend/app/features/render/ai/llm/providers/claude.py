@@ -23,6 +23,8 @@ from app.features.render.ai.llm.cache import llm_cache_get, llm_cache_put
 from app.features.render.ai.llm.parser import parse_render_plan_response
 from app.features.render.ai.llm.prompts import build_render_plan_prompt
 from app.features.render.ai.llm.retry import call_with_retry
+from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
+from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.claude_client")
@@ -221,5 +223,105 @@ def _call_claude(api_key: str, model: str, system_prompt: str, user_prompt: str)
     )
     if result is not None:
         llm_cache_put("claude", model, system_prompt, user_prompt, result)
+    return result
+
+
+def rewrite_subtitle(
+    text: str,
+    target_duration_sec: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional[str]:
+    """Rewrite per-part transcript into TTS narration sized for target_duration_sec.
+
+    Returns None on any failure (Sacred Contract #3). Uses cache + retry
+    pattern identical to select_render_plan.
+    """
+    try:
+        return _run_rewrite(
+            text=text,
+            target_duration_sec=target_duration_sec,
+            target_language=target_language,
+            tone=tone,
+            api_key=api_key,
+            model=model,
+        )
+    except Exception as exc:
+        logger.warning("claude_client: rewrite_subtitle unexpected error %s", exc, exc_info=True)
+        return None
+
+
+def _run_rewrite(
+    text: str,
+    target_duration_sec: float,
+    target_language: str,
+    tone: str,
+    api_key: str,
+    model: Optional[str],
+) -> Optional[str]:
+    if not _ANTHROPIC_SDK:
+        logger.warning("claude_client: anthropic SDK not installed (rewrite path)")
+        return None
+    if not api_key:
+        logger.warning("claude_client: no api_key supplied (rewrite path)")
+        return None
+    if not text or not text.strip():
+        logger.warning("claude_client: empty text (rewrite path)")
+        return None
+    system_prompt, user_prompt = build_rewrite_prompt(
+        text=text,
+        target_duration_sec=target_duration_sec,
+        target_language=target_language,
+        tone=tone,
+    )
+    resolved_model = model or _DEFAULT_MODEL
+    word_budget = _compute_word_budget(target_duration_sec, target_language)
+    logger.info(
+        "claude_client: calling rewrite model=%s dur=%.1fs lang=%s tone=%r text_chars=%d budget=%d",
+        resolved_model, target_duration_sec, target_language, tone, len(text), word_budget,
+    )
+    raw = _call_claude_rewrite(api_key, resolved_model, system_prompt, user_prompt)
+    if not raw:
+        logger.warning("claude_client: empty rewrite response (model=%s)", resolved_model)
+        return None
+    parsed = parse_rewrite_response(raw, target_duration_sec, word_budget)
+    if parsed is not None:
+        logger.info(
+            "claude_client: rewrite OK model=%s in_chars=%d out_chars=%d",
+            resolved_model, len(text), len(parsed),
+        )
+    return parsed
+
+
+def _call_claude_rewrite_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Single Anthropic Messages call for rewrite — raises on SDK error."""
+    client = _AnthClient(api_key=api_key, timeout=30)
+    resp = client.messages.create(
+        model=model,
+        max_tokens=2048,
+        temperature=_TEMPERATURE,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    if not resp.content:
+        return None
+    parts = [block.text for block in resp.content if getattr(block, "type", "") == "text"]
+    return "\n".join(parts) if parts else None
+
+
+def _call_claude_rewrite(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Rewrite call with cache + retry. Cache namespaced by 'claude-rewrite'."""
+    cached = llm_cache_get("claude-rewrite", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("claude_client: rewrite cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
+        lambda: _call_claude_rewrite_once(api_key, model, system_prompt, user_prompt),
+        label="claude-rewrite",
+    )
+    if result is not None:
+        llm_cache_put("claude-rewrite", model, system_prompt, user_prompt, result)
     return result
 

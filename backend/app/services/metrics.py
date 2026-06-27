@@ -165,6 +165,31 @@ if _AVAILABLE:
         registry=REGISTRY,
     )
 
+    # AI rewrite (voice_source="ai_rewrite") — per-part LLM call that
+    # rewrites the per-part transcript into TTS narration sized for the
+    # clip duration. Mirrors LLM_RENDER_PLAN_* shape so dashboards can
+    # render both calls side-by-side.
+    LLM_REWRITE_CALLS = Counter(
+        "llm_rewrite_calls_total",
+        "LLM rewrite calls by provider and outcome",
+        ["provider", "status"],   # status: success | empty
+        registry=REGISTRY,
+    )
+    LLM_REWRITE_LATENCY = Histogram(
+        "llm_rewrite_seconds",
+        "Latency of rewrite LLM call per provider",
+        ["provider"],
+        buckets=(0.5, 1, 2, 5, 10, 30, 60, 120),
+        registry=REGISTRY,
+    )
+    LLM_REWRITE_CHAR_DELTA = Histogram(
+        "llm_rewrite_char_delta",
+        "Char-count delta (rewritten - original) per provider, per part",
+        ["provider"],
+        buckets=(-2000, -1000, -500, -200, -50, 0, 50, 200, 500, 1000, 2000),
+        registry=REGISTRY,
+    )
+
     # Phase A — AI/Render boundary visibility.
     # Tracks how often the render engine overrides an empty or invalid AI
     # field with its own editorial fallback.  field label: the RenderPlan
@@ -237,6 +262,9 @@ else:
     LLM_RENDER_PLAN_CALLS = _NoOpMetric()     # type: ignore[assignment]
     LLM_RENDER_PLAN_LATENCY = _NoOpMetric()   # type: ignore[assignment]
     LLM_SEGMENTS_SELECTED = _NoOpMetric()     # type: ignore[assignment]
+    LLM_REWRITE_CALLS = _NoOpMetric()         # type: ignore[assignment]
+    LLM_REWRITE_LATENCY = _NoOpMetric()       # type: ignore[assignment]
+    LLM_REWRITE_CHAR_DELTA = _NoOpMetric()    # type: ignore[assignment]
     RENDER_ENGINE_EDITORIAL_OVERRIDES = _NoOpMetric()  # type: ignore[assignment]
     RENDER_STAGE_DURATION = _NoOpMetric()      # type: ignore[assignment]
     CACHE_LOOKUPS_TOTAL = _NoOpMetric()        # type: ignore[assignment]
