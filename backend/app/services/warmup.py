@@ -115,6 +115,29 @@ def _warmup_gpu():
         _set("gpu", "skipped", f"GPU detection skipped: {exc}")
         logger.warning("Warmup GPU: %s", exc)
 
+    # A1/R2 closure (2026-06-27) — warm the NVENC runtime probe cache here,
+    # at startup, while the GPU is idle. `nvenc_runtime_ready` opens a real
+    # (tiny, `-f null`) NVENC session via raw subprocess WITHOUT acquiring
+    # NVENC_SEMAPHORE. If that probe ran lazily DURING a concurrent-render
+    # burst it could become the session that pushes the GPU past its
+    # hardware cap (which fails ALL active sessions). `@lru_cache` means it
+    # runs at most once per codec per process — so warming it now, before
+    # the job queue dispatches any encode, closes the window: every later
+    # codec resolution hits the cache and never spawns the probe again.
+    # We probe only codecs that actually exist (mirrors the resolver gate
+    # `has_encoder(...) and nvenc_runtime_ready(...)`), so CPU-only
+    # machines do no extra work. Fully guarded — never breaks warmup.
+    try:
+        from app.features.render.engine.encoder.encoder_helpers import (
+            has_encoder,
+            nvenc_runtime_ready,
+        )
+        for _codec in ("h264_nvenc", "hevc_nvenc"):
+            if has_encoder(_codec):
+                nvenc_runtime_ready(_codec)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("Warmup GPU: NVENC probe cache warm skipped — %s", exc)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 4. yt-dlp

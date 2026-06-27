@@ -400,13 +400,19 @@ backend/app/features/render/engine/stages/part_db.py           # MT-4 phase B: 3
 
 ### ⛔ devtools.py — Unauthenticated Shell Execution Route
 
-`backend/app/routes/devtools.py` exposes a shell command execution endpoint protected only by checking for the `ENABLE_DEVTOOLS=1` environment variable. There is no authentication. There is no rate limiting.
+`backend/app/routes/devtools.py` exposes a shell command execution endpoint. There is no authentication and no rate limiting, so it is defended by THREE layers (refreshed 2026-06-27 — B1 audit; the old "protected only by `ENABLE_DEVTOOLS=1`" description was stale):
+
+1. **Default off** — the router is not mounted unless `ENABLE_DEVTOOLS=1`.
+2. **Mount-time loopback gate (fail-closed)** — even with `ENABLE_DEVTOOLS=1`, `main.py:146-159` calls `assert_devtools_safe(detect_uvicorn_bind_host())` and refuses to mount the router unless uvicorn is bound to a loopback host. Undetectable host → refused.
+3. **Request-time loopback check** — `devtools.py` rejects any non-loopback client peer via `is_loopback_client` (`core/devtools_safety.py`).
 
 - **NEVER** make it easier to enable (do not add a UI toggle, do not default to enabled)
 - **NEVER** enable it in any production deployment
 - **NEVER** add new endpoints or capabilities to `devtools.py`
-- **NEVER** lower or remove the `ENABLE_DEVTOOLS=1` requirement
+- **NEVER** lower or remove the `ENABLE_DEVTOOLS=1` requirement or weaken either loopback gate
 - Any change to `devtools.py` requires explicit HIGH-risk user approval
+
+**Main-API bind guard (B1, 2026-06-27):** the WHOLE API is unauthenticated, not just devtools. `app.main` calls `assert_main_bind_safe(detect_uvicorn_bind_host(), allow_remote=ALLOW_REMOTE==1)` at import time and **refuses to start** when binding to a non-loopback host without an explicit `ALLOW_REMOTE=1` opt-in. Fails OPEN on an undetectable host (uvicorn defaults to `127.0.0.1`) so the desktop run-scripts and the test suite are unaffected. The Docker image sets `ALLOW_REMOTE=1` (a container is an intentional network deployment). Guard logic + matrix pinned by `tests/test_main_bind_guard.py`. Do NOT weaken the default-refuse on `0.0.0.0`.
 
 ### ⛔ AI modules — Canonical Location is `features/render/ai/`
 
@@ -445,7 +451,34 @@ These constants and code paths protect hardware resources. They are not performa
 
 **What breaks if raised beyond hardware limit:** All concurrent renders fail simultaneously with opaque FFmpeg errors. No warning before failure. Recovery requires restarting all affected jobs. The failure mode is non-obvious and hard to diagnose.
 
-**Known gap:** Other FFmpeg call sites (`encoder/clip_ops.py`, `motion/crop.py`, `audio/mixer.py`, `preview/ffmpeg_probers.py`) do NOT acquire `NVENC_SEMAPHORE`. If any of those paths invoke an NVENC codec, the session limit can be silently exceeded.
+**Coverage (refreshed 2026-06-27 — A1 audit):** the earlier "Known gap"
+warning here was stale. Current state, verified against code:
+- `_run_ffmpeg_with_retry` AUTO-acquires `NVENC_SEMAPHORE` when the argv
+  contains an NVENC codec (`_argv_uses_nvenc`), unless the caller passes
+  `nvenc_externally_held=True` while already holding it
+  (`ffmpeg_helpers.py:265-275`). Base-clip encode and overlay composite
+  use the `with NVENC_SEMAPHORE:` + `externally_held=True` pattern.
+- `motion/crop.py` runs a RAW `subprocess.Popen` (crop.py:756) with NO
+  auto-lock; all THREE `render_motion_aware_crop` call sites in
+  `encoder/clip_renderer.py` acquire the semaphore externally first
+  (pinned by `tests/test_nvenc_semaphore_external_acquire.py`).
+- `encoder/clip_ops.py` (libx264 only), `audio/mixer.py` (`-c:v copy`),
+  `preview/ffmpeg_probers.py` (`-f null` probes), `remotion_adapter.py`
+  (libx264) and `pipeline_source_prep.py` (`-c:v copy`) are CPU-only /
+  no-encode — they MUST NOT regress into an NVENC codec (pinned by the
+  false-positive list in the same test).
+
+**Remaining latent risks (A1, not active bugs):**
+- The acquire decision (`ffmpeg_helpers._resolve_codec`) and crop's own
+  codec resolution (`encoder_helpers.resolve_encoder`) are DUPLICATE
+  logic. They are equivalent today; divergence on a future edit would
+  let crop run NVENC unguarded. Pinned by
+  `tests/test_nvenc_codec_resolver_parity.py` — keep both resolvers in
+  lockstep, or unify them (CRITICAL-tier, separate approved plan).
+- `encoder_helpers.nvenc_runtime_ready()` opens a brief (`-f null`)
+  NVENC probe session via raw `subprocess.run` WITHOUT the semaphore
+  (`encoder_helpers.py:42-48`). `@lru_cache` bounds it to ≤2 runs per
+  process; low probability but non-zero under a concurrent-render burst.
 
 **Rule:** Never change `NVENC_MAX_SESSIONS` without an explicit user request that includes documented reasoning and knowledge of the target hardware class.
 

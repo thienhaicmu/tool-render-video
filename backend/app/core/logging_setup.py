@@ -104,8 +104,14 @@ def configure_logging(logs_dir: Path) -> None:
 
     # app.log — all events at the configured level
     app_lg.addHandler(_rotating(logs_dir / "app.log",   level,          _FMT_STANDARD, max_mb=100, backups=10))
-    # error.log — ERROR and above with full file context
+    # error.log — ERROR and above with full file context (human-readable)
     app_lg.addHandler(_rotating(logs_dir / "error.log", logging.ERROR,  _FMT_ERROR,    max_mb=20,  backups=10))
+    # errors.jsonl — B2: structured (machine-parseable) twin of error.log.
+    # Captures every ERROR+ event (HTTP layer AND render worker threads)
+    # as one JSON object per line, with product context (job_id/stage/...)
+    # from logging extra={...}. Foundation for product observability (B3).
+    from app.core.error_sink import build_errors_jsonl_handler
+    app_lg.addHandler(build_errors_jsonl_handler(logs_dir))
 
     # ── Download subsystem — app.downloader.* ─────────────────────────────
     dl_lg = logging.getLogger("app.downloader")

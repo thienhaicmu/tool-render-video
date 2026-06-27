@@ -135,6 +135,21 @@ if not _fontconfig_conf.exists():
     )
 os.environ.setdefault("FONTCONFIG_FILE", str(_fontconfig_conf))
 
+# Security (B1, 2026-06-27): the API has NO authentication. Refuse to start
+# if uvicorn is binding to a non-loopback host without an explicit
+# ALLOW_REMOTE=1 opt-in — otherwise the unauthenticated render/jobs/file
+# surface is exposed to the network. Fails open on an undetectable host
+# (uvicorn's default bind is 127.0.0.1) so the desktop run-scripts and the
+# test suite are unaffected. Docker opts in via ALLOW_REMOTE=1 in its image.
+from app.core.devtools_safety import (
+    assert_main_bind_safe as _assert_main_bind_safe,
+    detect_uvicorn_bind_host as _detect_bind_host,
+)
+_assert_main_bind_safe(
+    _detect_bind_host(),
+    allow_remote=os.getenv("ALLOW_REMOTE") == "1",
+)
+
 app = FastAPI(title="YT TikTok Desktop Local Platform")
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(render_router)
