@@ -13,6 +13,7 @@ import { getJobHistory } from '@/api/jobs'
 import { cancelRender, retryRender, resumeRender } from '@/api/render'
 import { deleteJob } from '@/api/jobs'
 import { useUIStore } from '@/stores/uiStore'
+import { useActiveJobs } from '@/stores/jobsStore'
 import { ApiError } from '@/api/client'
 import type { HistoryItem } from '@/types/api'
 import type { StatusFilter } from './jobs.types'
@@ -49,9 +50,6 @@ export function HistoryScreen() {
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const setDuplicateSeedJobId = useUIStore((s) => s.setDuplicateSeedJobId)
 
-  // ── Auto-refresh when active jobs exist ───────────────────────────────────
-  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
   // ── Fetch ─────────────────────────────────────────────────────────────────
   const fetchPage = useCallback(async (newOffset: number) => {
     setLoading(true)
@@ -76,15 +74,15 @@ export function HistoryScreen() {
 
   const refreshJobs = useCallback(() => fetchPage(offset), [fetchPage, offset])
 
-  // Auto-refresh every 5s while any job is active
+  // Pha 5.5 — auto-refresh off the shared jobsStore poll instead of a second
+  // dedicated 5 s interval. Subscribing arms the single shared poll; each tick
+  // (its `items` reference changes) re-fetches the current page while any job
+  // on it is still active. One timer for the whole app, not two.
+  const { items: liveJobs } = useActiveJobs()
   useEffect(() => {
-    if (autoRefreshRef.current) clearInterval(autoRefreshRef.current)
-    const hasActive = items.some(i => isActiveStatus(i.status))
-    if (hasActive) {
-      autoRefreshRef.current = setInterval(() => fetchPage(offset), 5000)
-    }
-    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current) }
-  }, [items, offset, fetchPage])
+    if (items.some((i) => isActiveStatus(i.status))) fetchPage(offset)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveJobs])
 
   // ── Filtered items ────────────────────────────────────────────────────────
   const filteredItems = useMemo(() => {

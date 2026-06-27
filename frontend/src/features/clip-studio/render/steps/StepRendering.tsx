@@ -5,6 +5,7 @@ import type { Strings } from '../i18n'
 import type { WsLogEvent } from '@/websocket/events'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 import { estimateRenderEtaSec } from '../eta'
+import { stageBlendedPercent } from '../progress'
 import { extendJob } from '@/api/jobs'
 
 function buildClipSlots(liveParts: JobPart[], progress: WsProgressSummary | null): ClipSlot[] {
@@ -312,6 +313,10 @@ function StepRenderingBase({
   aiAnalysisMode?: string; aiCloudProvider?: string
 }) {
   const pct         = progress?.overall_progress_percent ?? 0
+  // Pha 5.6 — smoother display bar: blend the job stage with the raw parts
+  // percent so the bar moves through the pre-render phases instead of sitting
+  // at 0 then jumping. `pct` (raw) is still used for the ETA math.
+  const displayPct  = stageBlendedPercent(stage || jobStatus, pct)
   const doneCount   = progress?.completed_parts ?? 0
   const totalCount  = progress?.total_parts ?? liveParts.length
   const failedCount = progress?.failed_parts ?? 0
@@ -454,8 +459,8 @@ function StepRenderingBase({
 
         <div className="rd-overall">
           <span className="rd-overall-pct">
-            {Math.round(pct)}%
-            {!isTerminal && pct > 0 && pct < 100 && (
+            {Math.round(displayPct)}%
+            {!isTerminal && displayPct > 0 && displayPct < 100 && (
               <span style={{ fontSize: '0.65em', opacity: 0.45, marginLeft: 4, fontWeight: 400 }}>est.</span>
             )}
           </span>
@@ -467,7 +472,7 @@ function StepRenderingBase({
               </span>
             )}
             <div className="rd-bar-track">
-              <div className="rd-bar-fill" style={{ width: `${pct}%` }} />
+              <div className="rd-bar-fill" style={{ width: `${displayPct}%` }} />
             </div>
           </div>
         </div>
@@ -637,11 +642,11 @@ function StepRenderingBase({
         </div>
         <div className="rd-abp-progress">
           <div className="rd-abp-bar-track">
-            <div className="rd-abp-bar-fill" style={{ width: `${pct}%` }} />
+            <div className="rd-abp-bar-fill" style={{ width: `${displayPct}%` }} />
           </div>
           <div className="rd-abp-msg">{displayMsg}</div>
         </div>
-        <span className="rd-abp-pct">{Math.round(pct)}%</span>
+        <span className="rd-abp-pct">{Math.round(displayPct)}%</span>
         <span className={`rd-abp-badge rd-status-${isFailed ? 'failed' : isTerminal ? 'done' : 'running'}`}>
           {isFailed ? 'FAILED' : isTerminal ? 'DONE' : 'RUNNING'}
         </span>
