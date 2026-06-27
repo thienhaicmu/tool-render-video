@@ -208,6 +208,12 @@ describe('T1.4 — RenderWorkflow.buildPayload omits dead fields', () => {
     const payloadBody = extractPayloadBody(readWorkflow())
     expect(payloadBody).toMatch(/(^|\s|,)subtitle_emphasis\s*:/)
   })
+
+  it('sends edit_trim_in / edit_trim_out (Pha 5.7 source trim)', () => {
+    const payloadBody = extractPayloadBody(readWorkflow())
+    expect(payloadBody).toMatch(/(^|\s|,)edit_trim_in\s*:/)
+    expect(payloadBody).toMatch(/(^|\s|,)edit_trim_out\s*:/)
+  })
 })
 
 describe('T1.4 — `RenderRequest` TS interface omits dead fields', () => {

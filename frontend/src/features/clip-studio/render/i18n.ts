@@ -27,6 +27,11 @@ const T = {
     cfgProfileDelete: 'Delete profile',
     cfgFrame: 'FRAME',
     cfgDuration: 'DURATION',
+    // Pha 5.7 — source trim
+    cfgTrim: 'TRIM SOURCE',
+    cfgTrimIn: 'In', cfgTrimOut: 'Out',
+    cfgTrimSelected: (d: string) => `Selected: ${d}`,
+    cfgTrimReset: 'Reset',
     cfgMinClip: 'Min Clip', cfgMaxClip: 'Max Clip', cfgClipCount: 'Clip Count',
     cfgMotionCrop: 'Motion-Aware Crop', cfgFps: '60 FPS',
     cfgVisualStyle: 'VISUAL STYLE',
@@ -143,6 +148,11 @@ const T = {
     cfgProfileDelete: 'Xoá hồ sơ',
     cfgFrame: 'KHUNG HÌNH',
     cfgDuration: 'THỜI LƯỢNG',
+    // Pha 5.7 — cắt nguồn
+    cfgTrim: 'CẮT NGUỒN',
+    cfgTrimIn: 'Đầu', cfgTrimOut: 'Cuối',
+    cfgTrimSelected: (d: string) => `Đã chọn: ${d}`,
+    cfgTrimReset: 'Đặt lại',
     cfgMinClip: 'Tối thiểu', cfgMaxClip: 'Tối đa', cfgClipCount: 'Số lượng clip',
     cfgMotionCrop: 'Crop thông minh', cfgFps: '60 FPS',
     cfgVisualStyle: 'PHONG CÁCH',

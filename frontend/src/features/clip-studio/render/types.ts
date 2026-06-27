@@ -8,6 +8,10 @@ export interface ConfigState {
   ratio:         Ratio
   minSec:        number
   maxSec:        number
+  // Pha 5.7 — source trim (seconds). 0 = no trim (whole source). Sent as
+  // edit_trim_in / edit_trim_out (already wire-supported + pipeline-consumed).
+  trimIn:        number
+  trimOut:       number
   style:         string
   platform:      'tiktok' | 'youtube_shorts' | 'instagram_reels'
   aiMarket:      string

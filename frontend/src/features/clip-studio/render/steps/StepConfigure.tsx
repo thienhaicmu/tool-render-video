@@ -195,6 +195,62 @@ function TranscriptOverlay({ sessionId, subStyle, subEnabled }: { sessionId: str
   )
 }
 
+// ── SourceTrim — Pha 5.7 — pick In/Out points on the source before render ──────
+// trimOut === 0 means "to the end". Stored values map directly to
+// edit_trim_in / edit_trim_out on the wire.
+function fmtMmSs(s: number): string {
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+}
+function SourceTrim({ duration, trimIn, trimOut, setCfgKey, t }: {
+  duration: number
+  trimIn: number
+  trimOut: number
+  setCfgKey: <K extends keyof ConfigState>(k: K, v: ConfigState[K]) => void
+  t: Strings
+}) {
+  const effOut = trimOut > 0 ? trimOut : duration
+  const rowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 }
+  const lblStyle: React.CSSProperties = { fontSize: 10, color: 'var(--text-3)', width: 28 }
+  const valStyle: React.CSSProperties = { fontSize: 11, fontFamily: 'monospace', width: 46, textAlign: 'right' }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={rowStyle}>
+        <span style={lblStyle}>{t.cfgTrimIn}</span>
+        <input
+          type="range" min={0} max={duration} step={1} value={trimIn}
+          onChange={(e) => setCfgKey('trimIn', Math.max(0, Math.min(Number(e.target.value), effOut - 1)))}
+          style={{ flex: 1 }}
+        />
+        <span style={valStyle}>{fmtMmSs(trimIn)}</span>
+      </div>
+      <div style={rowStyle}>
+        <span style={lblStyle}>{t.cfgTrimOut}</span>
+        <input
+          type="range" min={0} max={duration} step={1} value={effOut}
+          onChange={(e) => {
+            const v = Math.max(Number(e.target.value), trimIn + 1)
+            setCfgKey('trimOut', v >= duration ? 0 : v)
+          }}
+          style={{ flex: 1 }}
+        />
+        <span style={valStyle}>{fmtMmSs(effOut)}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: 'var(--text-3)' }}>
+        <span>{t.cfgTrimSelected(fmtMmSs(Math.max(0, effOut - trimIn)))}</span>
+        <span style={{ flex: 1 }} />
+        {(trimIn > 0 || trimOut > 0) && (
+          <button
+            onClick={() => { setCfgKey('trimIn', 0); setCfgKey('trimOut', 0) }}
+            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 10, textDecoration: 'underline', padding: 0 }}
+          >
+            {t.cfgTrimReset}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Step 2 — Configure ────────────────────────────────────────────────────────
 // Sprint 5.7: wrapped in React.memo (export below) so the step subtree only
 // re-renders when its props actually change. RenderWorkflow always-mounts
@@ -344,6 +400,24 @@ function StepConfigureBase({
             <button className="cfg-src-change" onClick={onChangeSource}>{t.cfgChangeSource}</button>
           </div>
         </div>
+
+        {/* Pha 5.7 — trim the source (In/Out) before render. Only meaningful
+            once the source is prepared and we know its duration. */}
+        {prepareResult && prepareResult.duration > 0 && (
+          <div className="cfg-section">
+            <div className="cfg-sec-hd">
+              <span>{t.cfgTrim}</span>
+              <span className="cfg-sec-api">edit_trim_in · edit_trim_out</span>
+            </div>
+            <SourceTrim
+              duration={prepareResult.duration}
+              trimIn={cfg.trimIn}
+              trimOut={cfg.trimOut}
+              setCfgKey={setCfgKey}
+              t={t}
+            />
+          </div>
+        )}
 
         {/* C. Duration */}
         <div className="cfg-section">

@@ -39,7 +39,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
 
   const [cfgTab, setCfgTab] = useState<CfgTab>('ai')
   const [cfg, setCfg] = useState<ConfigState>(() => ({
-    ratio: 'r916', minSec: 30, maxSec: 60,
+    ratio: 'r916', minSec: 30, maxSec: 60, trimIn: 0, trimOut: 0,
     style: 'slay_soft_01', platform: 'tiktok', aiMarket: 'us',
     multiVariant: false, ctaEnabled: false, ctaType: 'auto',
     hookApplyEnabled: false, hookOverlayEnabled: false, structureBias: null,
@@ -453,6 +453,10 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       aspect_ratio:        RATIO_INFO[cfg.ratio].api,
       min_part_sec:        cfg.minSec,
       max_part_sec:        cfg.maxSec,
+      // Pha 5.7 — source trim (omitted when 0 = whole source). Pipeline
+      // clips the source in pipeline_source_prep before segmentation.
+      edit_trim_in:        cfg.trimIn > 0 ? cfg.trimIn : undefined,
+      edit_trim_out:       cfg.trimOut > 0 ? cfg.trimOut : undefined,
       // T1.4 follow-up — Audit 2026-06-08: removed `max_export_parts:
       // cfg.outputCount` from the wire (engine reads `output_count`
       // instead via render_pipeline.py:576). Sending both was wire-

@@ -19,7 +19,7 @@ import {
 import type { ConfigState } from '../src/features/clip-studio/render/types'
 
 const fullCfg: ConfigState = {
-  ratio: 'r916', minSec: 30, maxSec: 60, style: 'slay_soft_01',
+  ratio: 'r916', minSec: 30, maxSec: 60, trimIn: 0, trimOut: 0, style: 'slay_soft_01',
   platform: 'tiktok', aiMarket: 'us',
   multiVariant: false, ctaEnabled: false, ctaType: 'auto',
   hookApplyEnabled: false, hookOverlayEnabled: false, structureBias: null,
