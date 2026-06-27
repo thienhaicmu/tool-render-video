@@ -2,13 +2,17 @@
  * AiActivityPanel — shows AI Director activity during active rendering.
  * Renders only when ai_director_enabled is true in the payload.
  */
+import type { RenderStage } from '../../types/enums'
 
-const AI_ANALYZING_STAGES = new Set([
+// `satisfies` validates every member is a real backend stage (C1) without
+// widening the Set's runtime/`.has(string)` ergonomics.
+const AI_ANALYZING_STAGE_LIST = [
   'analyzing',
   'segment_building',
   'transcribing_full',
   'scene_detection',
-])
+] as const satisfies readonly RenderStage[]
+const AI_ANALYZING_STAGES = new Set<string>(AI_ANALYZING_STAGE_LIST)
 
 const MODE_COLORS: Record<string, string> = {
   local: '#6B7280',
