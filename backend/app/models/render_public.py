@@ -92,6 +92,8 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # Voice
     "voice_enabled", "voice_language", "voice_gender", "voice_source",
     "voice_text", "tts_engine", "voice_mix_mode",
+    # AI rewrite (voice_source=="ai_rewrite") — creator-supplied tone hint.
+    "rewrite_tone",
     # Hook
     "hook_apply_enabled", "hook_overlay_enabled",
     # T1.4 — Audit 2026-06-08 closure (Batch A V8-B5 + UP26 + UP27 + v2).

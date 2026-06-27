@@ -107,14 +107,25 @@ def mix_narration_audio(
             ]
     elif str(mix_mode or "").strip() == "keep_original_low":
         if _has_audio_stream(str(source_video)):
-            # Dynamic ducking (2026-06-20): the original audio stays at full
-            # volume and is ducked ONLY while the narration is actually
-            # speaking, then recovers when it falls silent — instead of the
-            # previous static volume=0.25 that lowered the original across the
-            # whole clip. The narration stream is asplit into a playback copy
-            # ([narr]) and a key ([key]) that drives sidechaincompress on the
-            # original; the ducked original is then amixed with the narration.
-            _DUCK = "sidechaincompress=threshold=0.03:ratio=12:attack=20:release=400"
+            # Dynamic ducking — original audio stays at full volume and is
+            # ducked ONLY while the narration is actually speaking, then
+            # recovers when it falls silent. The narration stream is asplit
+            # into a playback copy ([narr]) and a key ([key]) that drives
+            # sidechaincompress on the original; the ducked original is
+            # then amixed with the narration.
+            #
+            # 2026-06-27 — softened ducking params for the ai_rewrite flow:
+            # the original aggressive setting (threshold=0.03 ratio=12) cut
+            # the original to ~5-15% during speech, which sounded muted.
+            # The new params (threshold=0.06 ratio=2.5) keep the original
+            # at ~30-40% during narration so background atmosphere stays
+            # audible, then recover to 100% during pauses.
+            # Override per-deployment via NARRATION_DUCK_PARAMS env var
+            # (raw ffmpeg sidechaincompress argument string).
+            _DUCK = os.getenv(
+                "NARRATION_DUCK_PARAMS",
+                "sidechaincompress=threshold=0.06:ratio=2.5:attack=25:release=500",
+            )
             if apply_atempo:
                 cmd += [
                     "-filter_complex",

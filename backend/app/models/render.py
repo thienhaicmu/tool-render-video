@@ -203,6 +203,12 @@ class RenderRequest(BaseModel):
     voice_text: Optional[str] = None
     voice_source: str = "manual"
     voice_id: Optional[str] = None
+    # AI rewrite tone hint (voice_source="ai_rewrite"). Free-text creator
+    # nudge rendered into the rewrite prompt's TONE line. Empty string
+    # defaults to "natural / informative" inside build_rewrite_prompt.
+    # Sacred Contract #2: default "" so stored historical payloads that
+    # never set this field replay with no behavioural change.
+    rewrite_tone: str = ""
     subtitle_translate_enabled: bool = False
     subtitle_target_language: str = "en"
     market_viral: Optional[dict] = None
@@ -509,8 +515,8 @@ class RenderRequest(BaseModel):
     def validate_voice_settings(self):
         if not self.voice_enabled:
             return self
-        if self.voice_source not in {"manual", "subtitle", "translated_subtitle"}:
-            raise ValueError("voice_source must be 'manual', 'subtitle', or 'translated_subtitle'")
+        if self.voice_source not in {"manual", "subtitle", "translated_subtitle", "ai_rewrite"}:
+            raise ValueError("voice_source must be 'manual', 'subtitle', 'translated_subtitle', or 'ai_rewrite'")
         if self.voice_source == "manual" and not (self.voice_text or "").strip():
             raise ValueError("voice_text is required when voice_enabled=true and voice_source=manual")
         if self.subtitle_target_language not in {"vi", "en", "ja", "ko"}:

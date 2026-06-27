@@ -125,9 +125,11 @@ def test_public_field_count_pinned():
 
     # F2 (2026-06-27): render_preset_id promoted BE-only → Public (71→72,
     # BE-only 81→80). Total stays 152.
-    assert len(FE_FACING_FIELDS) == 72, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    # AI rewrite (2026-06-27): rewrite_tone added (FE-facing, since UI binds it).
+    # FE 72→73, BE-only 80→80 (new field is FE-facing), total 152→153.
+    assert len(FE_FACING_FIELDS) == 73, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
     assert len(BE_ONLY_FIELDS)   == 80, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
-    assert len(RenderRequest.model_fields) == 152, (
+    assert len(RenderRequest.model_fields) == 153, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
     )

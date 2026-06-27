@@ -89,6 +89,8 @@ from app.features.render.engine.audio.mixer import mix_narration_audio, mix_with
 from app.features.render.engine.stages.manifest_writer import write_manifest
 from app.features.render.engine.subtitle.generator.srt import slice_srt_to_text
 from app.features.render.engine.audio.tts import generate_narration_audio
+from app.features.render.ai.llm.rewrite import rewrite_subtitle as _llm_rewrite_subtitle
+from app.features.render.engine.pipeline.llm_stage import _resolve_api_key as _resolve_llm_api_key
 
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5d).
 logger = logging.getLogger("app.render")
@@ -422,6 +424,171 @@ def run_part_voice_mix(
                 message=f"Translated subtitle voice source missing for part {idx}; narration skipped",
                 step="voice.tts",
                 context={"part_no": idx, "source": "translated_subtitle"},
+            )
+    elif (
+        _effective_voice_enabled
+        and getattr(ctx.payload, "voice_source", "manual") == "ai_rewrite"
+        and ctx.voice_audio_path is None
+    ):
+        # AI rewrite path — rewrite the per-part transcript into TTS-sized
+        # narration using the same provider+model selected for select_render_plan.
+        # Sacred Contract #3: any failure → fall back to the original transcript text.
+        _part_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
+        _part_srt_inmem_text: str | None = None
+        if _part_srt is None and ctx.full_srt_available:
+            try:
+                _part_srt_inmem_text = slice_srt_to_text(str(ctx.full_srt), seg["start"], seg["end"])
+                _part_srt = ctx.full_srt
+            except Exception:
+                _part_srt = None
+        if _part_srt:
+            _orig_text = (
+                _part_srt_inmem_text
+                if _part_srt_inmem_text is not None
+                else extract_text_from_srt(str(_part_srt))
+            )
+            if _orig_text.strip():
+                _target_dur = max(1.0, float(seg["end"]) - float(seg["start"]))
+                _provider = (getattr(ctx.payload, "ai_provider", "") or "gemini").strip().lower()
+                _model = getattr(ctx.payload, "llm_model", None)
+                # Reuse the same payload-then-env resolver that select_render_plan
+                # uses, so a server-side env var (e.g. GEMINI_API_KEY) works
+                # without the FE having to echo the key into every payload.
+                _api_key, _api_key_src = _resolve_llm_api_key(ctx.payload, _provider)
+                _tone = (getattr(ctx.payload, "rewrite_tone", "") or "").strip()
+                _voice_lang = ctx.payload.voice_language
+                _job_log(
+                    ctx.effective_channel, ctx.job_id,
+                    f"voice.ai_rewrite_started part_no={idx} provider={_provider} target_dur={_target_dur:.1f}s",
+                    kind="debug",
+                )
+                _emit_render_event(
+                    channel_code=ctx.effective_channel,
+                    job_id=ctx.job_id,
+                    event="voice_ai_rewrite_started",
+                    level="INFO",
+                    message=f"AI rewriting narration (part {idx})",
+                    step="voice.tts",
+                    context={"part_no": idx, "provider": _provider, "target_duration_sec": _target_dur},
+                )
+                _rewritten = _llm_rewrite_subtitle(
+                    provider=_provider,
+                    text=_orig_text,
+                    target_duration_sec=_target_dur,
+                    target_language=_voice_lang,
+                    tone=_tone,
+                    api_key=_api_key,
+                    model=_model,
+                )
+                if _rewritten:
+                    _part_narration_text = _rewritten
+                    _emit_render_event(
+                        channel_code=ctx.effective_channel,
+                        job_id=ctx.job_id,
+                        event="voice_ai_rewrite_completed",
+                        level="INFO",
+                        message=f"AI rewrite OK (part {idx})",
+                        step="voice.tts",
+                        context={"part_no": idx, "in_chars": len(_orig_text), "out_chars": len(_rewritten)},
+                    )
+                else:
+                    _part_narration_text = _orig_text
+                    _job_log(
+                        ctx.effective_channel, ctx.job_id,
+                        f"voice.ai_rewrite_fallback part_no={idx} using original text",
+                        kind="warning",
+                    )
+                    _emit_render_event(
+                        channel_code=ctx.effective_channel,
+                        job_id=ctx.job_id,
+                        event="voice_ai_rewrite_fallback",
+                        level="WARNING",
+                        message=f"AI rewrite returned None — using original transcript (part {idx})",
+                        step="voice.tts",
+                        context={"part_no": idx, "reason": "llm_returned_none"},
+                    )
+                ctx.voice_part_tts_attempts.append(idx)
+                _part_mp3 = str(TEMP_DIR / ctx.job_id / "voice" / f"part_{idx:03d}.mp3")
+                if ctx.cancel_registry.is_cancelled(ctx.job_id):
+                    raise ctx.cancel_registry.JobCancelledError()
+                try:
+                    _emit_render_event(
+                        channel_code=ctx.effective_channel,
+                        job_id=ctx.job_id,
+                        event="voice_tts_started",
+                        level="INFO",
+                        message=f"Generating AI voice from rewrite (part {idx})",
+                        step="voice.tts",
+                        context={"part_no": idx, "language": _voice_lang, "source": "ai_rewrite"},
+                    )
+                    _part_subtitle_voice_path = generate_narration_audio(
+                        text=_part_narration_text,
+                        language=_voice_lang,
+                        gender=ctx.payload.voice_gender,
+                        rate=ctx.payload.voice_rate,
+                        job_id=ctx.job_id,
+                        voice_id=getattr(ctx.payload, "voice_id", None),
+                        output_path=_part_mp3,
+                        content_type=str(seg.get("content_type_hint") or "vlog"),
+                        tts_engine=_resolve_voice_provider_from_plan(
+                            ctx, getattr(ctx.payload, "tts_engine", "edge")
+                        ),
+                    )
+                    _emit_render_event(
+                        channel_code=ctx.effective_channel,
+                        job_id=ctx.job_id,
+                        event="voice_tts_completed",
+                        level="INFO",
+                        message=f"AI voice from rewrite generated (part {idx})",
+                        step="voice.tts",
+                        context={"part_no": idx, "audio_path": _part_subtitle_voice_path, "voice_text_length": len(_part_narration_text)},
+                    )
+                    _part_subtitle_voice_path = _maybe_cleanup_narration_audio(
+                        str(_part_subtitle_voice_path),
+                        ctx.payload,
+                        effective_channel=ctx.effective_channel,
+                        job_id=ctx.job_id,
+                        part_no=idx,
+                        source="ai_rewrite",
+                    )
+                except Exception as _part_tts_exc:
+                    _part_subtitle_voice_path = None
+                    _job_log(
+                        ctx.effective_channel, ctx.job_id,
+                        f"voice_ai_rewrite_tts_failed part_no={idx}: {_part_tts_exc}",
+                        kind="error",
+                    )
+                    _emit_render_event(
+                        channel_code=ctx.effective_channel,
+                        job_id=ctx.job_id,
+                        event="voice_failed",
+                        level="ERROR",
+                        message=f"AI voice (ai_rewrite, part {idx}) failed: {_part_tts_exc}",
+                        step="voice.tts",
+                        exception=_part_tts_exc,
+                        traceback_text=traceback.format_exc(),
+                        context={"part_no": idx, "error_code": "VOICE001"},
+                    )
+            else:
+                _job_log(
+                    ctx.effective_channel, ctx.job_id,
+                    f"VOICE_SUBTITLE_EMPTY: part {idx} source text empty; narration skipped",
+                    kind="warning",
+                )
+        else:
+            _job_log(
+                ctx.effective_channel, ctx.job_id,
+                f"voice_subtitle_source_missing part_no={idx} source=ai_rewrite; narration skipped",
+                kind="warning",
+            )
+            _emit_render_event(
+                channel_code=ctx.effective_channel,
+                job_id=ctx.job_id,
+                event="voice_subtitle_source_missing",
+                level="WARNING",
+                message=f"AI rewrite source missing for part {idx}; narration skipped",
+                step="voice.tts",
+                context={"part_no": idx, "source": "ai_rewrite"},
             )
     _final_voice_path = ctx.voice_audio_path or _part_subtitle_voice_path
     if _final_voice_path:
