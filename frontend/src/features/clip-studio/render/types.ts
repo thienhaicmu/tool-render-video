@@ -43,6 +43,10 @@ export interface ConfigState {
   voiceMixMode:  'replace_original' | 'keep_original_low'
   outputDir:     string
   renderProfile: 'fast' | 'balanced' | 'quality' | 'best'
+  // F2 — selected built-in preset id ('' = custom/none). Sent as
+  // render_preset_id; the server fills BE-only preset params the FE can't
+  // (ai_clip_*), the FE reflects the FE-facing ones into the form above.
+  renderPresetId: string
   targetDuration:  number
   outputCount:     number
   videoType:       'auto' | 'viral' | 'storytelling' | 'educational' | 'emotional' | 'high_retention'
