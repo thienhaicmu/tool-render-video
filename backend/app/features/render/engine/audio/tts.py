@@ -24,7 +24,13 @@ _CONTENT_TYPE_VOICE_PROFILES: dict[str, dict] = {
     "gaming":     {"rate_nudge": "+12%", "pause_style": "light"},
 }
 _DEFAULT_VOICE_RATE = "+0%"
-_SENTENCE_END_RE = re.compile(r"(?<=[.!?])\s+")
+# Sentence boundary regex — accepts both Latin (.!?) and CJK (。！？)
+# punctuation, with optional whitespace. CJK text rarely has spaces
+# between sentences so the trailing \s+ requirement (pre-2026-06-28)
+# silently swallowed multi-sentence ja/ko/zh input into one chunk.
+_SENTENCE_END_RE = re.compile(r"(?<=[.!?。！？])\s*")
+# Question-mark terminator across Latin + CJK.
+_QUESTION_END_RE = re.compile(r"[?？]\s*$")
 _CONJUNCTIONS = frozenset(
     ("and", "but", "so", "because", "while", "when", "although", "however", "therefore")
 )
@@ -123,22 +129,59 @@ _SSML_BREAK_MS: dict[str, dict[str, int]] = {
 }
 
 # Lead-in pause: these words at sentence start signal a hook or pivot point.
-_HOOK_STARTERS = frozenset(
-    ("but", "wait", "so", "now", "here", "then", "and", "remember", "think", "imagine")
-)
+# 2026-06-28: previously English-only — now matched per-language so SSML
+# emphasis + hook lead-in apply to vi-VN / ja-JP / ko-KR / en-GB narration
+# (previously these languages had NO SSML emphasis — narration sounded
+# flat and robotic per user feedback).
+_HOOK_STARTERS_BY_LANG: dict[str, frozenset[str]] = {
+    "en": frozenset((
+        "but", "wait", "so", "now", "here", "then", "and",
+        "remember", "think", "imagine", "look", "listen",
+    )),
+    "vi": frozenset((
+        "nhưng", "đợi", "vậy", "rồi", "thế", "bây giờ", "hãy",
+        "nhớ", "thử", "nhìn", "nghe", "tưởng", "hỏi", "này",
+        "thật", "đúng", "thực sự", "đầu tiên", "cuối cùng",
+    )),
+    "ja": frozenset((
+        "でも", "しかし", "ちょっと", "さて", "今", "ここで", "それでは",
+        "思い出して", "想像して", "考えて", "見て", "聞いて",
+        "まず", "次に", "最後に", "実は",
+    )),
+    "ko": frozenset((
+        "그런데", "하지만", "잠깐", "자", "지금", "여기", "그럼",
+        "기억하세요", "상상해보세요", "생각해보세요", "보세요", "들어보세요",
+        "먼저", "다음으로", "마지막으로", "사실은",
+    )),
+}
 
+# Quoted phrases get emphasis in any language. ALLCAPS only triggers for
+# Latin-script languages because CJK doesn't have a "shouty" register.
 _ALLCAPS_RE = re.compile(r"\b([A-Z]{2,})\b")
+_QUOTED_RE = re.compile(r"[\"'“”‘’]([^\"'“”‘’]{2,30})[\"'“”‘’]")
+
+
+def _hook_set_for(language: str) -> frozenset[str]:
+    """Return hook-starter words for the language's primary tag (en/vi/ja/ko)."""
+    prefix = (language or "").split("-")[0].lower()
+    return _HOOK_STARTERS_BY_LANG.get(prefix, _HOOK_STARTERS_BY_LANG["en"])
 
 
 def _build_ssml_content(text: str, pause_style: str, language: str) -> str:
     """Build SSML fragment for insertion inside edge-tts <voice><prosody> wrapper.
 
-    Uses <break> and <emphasis> only — no outer <speak>/<voice> tags.
-    HTML-escapes text content before inserting SSML tags so user text
-    containing & < > doesn't corrupt the SSML document.
+    Uses <break>, <emphasis>, and inline <prosody> tweaks only — no outer
+    <speak>/<voice> tags. HTML-escapes text content before inserting SSML
+    tags so user text containing & < > doesn't corrupt the SSML document.
+
+    2026-06-28: dropped the English-only restriction on emphasis + hook
+    lead-in. Multi-language hook starters (en/vi/ja/ko) + quoted-phrase
+    emphasis apply to every language so non-English narration gets the
+    same expressive cadence as English.
     """
     brk = _SSML_BREAK_MS.get(pause_style, _SSML_BREAK_MS["normal"])
-    is_english = language.startswith("en-")
+    is_latin_script = (language or "").lower().startswith(("en-", "es-", "pt-", "fr-", "de-", "it-"))
+    hook_set = _hook_set_for(language)
 
     raw_sentences = _SENTENCE_END_RE.split(text.strip())
     parts: list[str] = []
@@ -159,22 +202,48 @@ def _build_ssml_content(text: str, pause_style: str, language: str) -> str:
         if brk["colon"] > 0:
             s = re.sub(r":\s*", f":<break time='{brk['colon']}ms'/> ", s)
 
-        # 3. English-only: ALL CAPS words get strong emphasis
-        if is_english:
+        # 3a. Quoted-phrase emphasis FIRST (before ALLCAPS) so the SSML
+        #     tag's own single-quotes can't be mis-matched as a "quote".
+        s = _QUOTED_RE.sub(
+            lambda m: f"<emphasis level='moderate'>{m.group(0)}</emphasis>",
+            s,
+        )
+        # 3b. ALLCAPS strong emphasis — latin-script languages only
+        #     (CJK has no shouty register). Runs AFTER quoted regex so
+        #     the `level='strong'` literal inside the new tag isn't
+        #     itself picked up as a quoted phrase by a re-scan.
+        if is_latin_script:
             s = _ALLCAPS_RE.sub(
                 lambda m: f"<emphasis level='strong'>{m.group(1)}</emphasis>",
                 s,
             )
 
-        # 4. Hook lead-in: small beat before pivot/hook starters (not first sentence)
-        if is_english and brk["hook"] > 0 and i > 0:
-            first_word = sent.split()[0].lower().rstrip(",")
-            if first_word in _HOOK_STARTERS:
-                s = f"<break time='{brk['hook']}ms'/> {s}"
+        # 4. Hook lead-in pause for ANY language (was English-only).
+        #    Looks up the first word against the language's hook-starter
+        #    set; on match, inserts a small beat before the sentence.
+        if brk["hook"] > 0 and i > 0:
+            _first_token = sent.split(maxsplit=1)
+            if _first_token:
+                _first_word = _first_token[0].lower().rstrip(",:;。、")
+                if _first_word in hook_set:
+                    s = f"<break time='{brk['hook']}ms'/> {s}"
+
+        # 5. Question sentences get a small pitch rise via <prosody>.
+        #    Latin: wrap the LAST whitespace-delimited word. CJK: wrap
+        #    the whole sentence (no whitespace to split on). Edge TTS
+        #    honours the tag for all neural voices.
+        if _QUESTION_END_RE.search(sent.rstrip()) and "<emphasis" not in s:
+            _words = s.rsplit(maxsplit=1)
+            if len(_words) == 2:
+                head, last = _words
+                s = f"{head} <prosody pitch='+1st'>{last}</prosody>"
+            else:
+                # CJK fallback — no whitespace boundaries.
+                s = f"<prosody pitch='+1st'>{s}</prosody>"
 
         parts.append(s)
 
-        # 5. Inter-sentence break before next sentence
+        # 6. Inter-sentence break before next sentence
         if i < len(raw_sentences) - 1:
             end = sent.rstrip()
             if end.endswith("?") and brk["question"] > 0:
