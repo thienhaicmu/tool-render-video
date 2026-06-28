@@ -183,30 +183,25 @@ describe('T1.4 — RenderWorkflow.buildPayload omits dead fields', () => {
     expect(payloadBody).toMatch(/(^|\s|,)output_count\s*:/)
     expect(payloadBody).toMatch(/(^|\s|,)min_part_sec\s*:/)
     expect(payloadBody).toMatch(/(^|\s|,)max_part_sec\s*:/)
-    expect(payloadBody).toMatch(/(^|\s|,)hook_strength\s*:/)
-    expect(payloadBody).toMatch(/(^|\s|,)video_type\s*:/)
   })
 
   /*
-   * UP26 widgets (audit-2026-06-08 follow-up). Strategic-1c wired
-   * structure_bias + subtitle_emphasis end-to-end on the BE. The FE
-   * form widgets land alongside this test — pin the wire so a future
-   * refactor that removes the form bindings doesn't silently break
-   * UP26 Pro Timeline Steering.
-   *
-   * clip_lock / clip_exclude stay API-only — no widget yet (the
-   * TimeRange editor is a separate task). They are NOT pinned as
-   * present here because the FE doesn't send them; the BE accepts
-   * them via the Public surface for API clients.
+   * UI cleanup 2026-06-28: removed 5 AI-tab creator-preference widgets
+   * (VIDEO TYPE / MARKET / HOOK / STRUCTURE BIAS / SUBTITLE EMPHASIS) and
+   * the 2 config-bundle sections (Presets / PROFILES). The FE now omits
+   * the corresponding payload keys; BE defaults take over passively
+   * (Sacred Contract #2 — all defaults are non-active state). These
+   * regression-guard tests assert the keys are NOT on the wire so a
+   * future revert is caught.
    */
-  it('sends structure_bias (Strategic-1c UP26 wiring)', () => {
+  it('does NOT send removed creator-preference fields (UI cleanup)', () => {
     const payloadBody = extractPayloadBody(readWorkflow())
-    expect(payloadBody).toMatch(/(^|\s|,)structure_bias\s*:/)
-  })
-
-  it('sends subtitle_emphasis (Strategic-1c UP26 wiring)', () => {
-    const payloadBody = extractPayloadBody(readWorkflow())
-    expect(payloadBody).toMatch(/(^|\s|,)subtitle_emphasis\s*:/)
+    expect(payloadBody).not.toMatch(/(^|\s|,)hook_strength\s*:/)
+    expect(payloadBody).not.toMatch(/(^|\s|,)video_type\s*:/)
+    expect(payloadBody).not.toMatch(/(^|\s|,)ai_target_market\s*:/)
+    expect(payloadBody).not.toMatch(/(^|\s|,)structure_bias\s*:/)
+    expect(payloadBody).not.toMatch(/(^|\s|,)subtitle_emphasis\s*:/)
+    expect(payloadBody).not.toMatch(/(^|\s|,)render_preset_id\s*:/)
   })
 
   it('sends edit_trim_in / edit_trim_out (Pha 5.7 source trim)', () => {

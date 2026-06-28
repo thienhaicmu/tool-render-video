@@ -5,8 +5,6 @@ import type { TranscriptSegment, PrepareSourceResponse } from '@/api/render'
 import type { ConfigState, CfgTab, Source, Ratio } from '../types'
 import type { Strings } from '../i18n'
 import { RATIO_INFO, STYLES, SUB_STYLE_GROUPS, QUALITY_MAP } from '../constants'
-import { listProfiles, saveProfile, deleteProfile, type RenderProfile } from '../profiles'
-import { listBuiltinPresets, type RenderPresetDto } from '@/api/presets'
 import {
   DEMO_VARIANTS,
   DEMO_HIGHLIGHT_COLORS,
@@ -258,7 +256,7 @@ function SourceTrim({ duration, trimIn, trimOut, setCfgKey, t }: {
 // all 4 steps and toggles `.active` via class, so without memo every state
 // tick in step 3 (progress) re-renders steps 1, 2, 4 unnecessarily.
 function StepConfigureBase({
-  cfg, cfgTab, setCfgTab, setCfgKey, applyPreset, applyProfile, applyRenderPreset,
+  cfg, cfgTab, setCfgTab, setCfgKey, applyPreset,
   sources, prepareResult, pickOutputDir, onChangeSource, t,
 }: {
   cfg: ConfigState
@@ -266,8 +264,6 @@ function StepConfigureBase({
   setCfgTab: (tab: CfgTab) => void
   setCfgKey: <K extends keyof ConfigState>(k: K, v: ConfigState[K]) => void
   applyPreset: (id: string) => void
-  applyProfile: (patch: Partial<ConfigState>) => void
-  applyRenderPreset: (presetId: string, params: Record<string, unknown>) => void
   sources: Source[]
   prepareResult: PrepareSourceResponse | null
   pickOutputDir: () => void
@@ -276,34 +272,8 @@ function StepConfigureBase({
 }) {
   void applyPreset
 
-  // F2 — built-in render presets fetched from the backend (single source).
-  // Selecting one reflects its FE-facing params into cfg and records
-  // render_preset_id; '' = custom. Fetch is best-effort (offline-tolerant).
-  const [builtinPresets, setBuiltinPresets] = React.useState<RenderPresetDto[]>([])
-  React.useEffect(() => {
-    let alive = true
-    listBuiltinPresets()
-      .then((ps) => { if (alive) setBuiltinPresets(ps) })
-      .catch(() => { /* offline / no presets — section just hides */ })
-    return () => { alive = false }
-  }, [])
   const [cfgMode, setCfgMode] = React.useState<'quick' | 'advanced'>('quick')
   const adv = cfgMode === 'advanced'
-
-  // Pha 2 — Render Profiles. List = built-ins + localStorage-saved.
-  // Re-read after save/delete so the chip row reflects the change.
-  const [profiles, setProfiles] = React.useState<RenderProfile[]>(() => listProfiles())
-  function handleSaveProfile() {
-    const name = window.prompt(t.cfgProfileNamePrompt)
-    if (name === null) return            // user cancelled the prompt
-    if (!name.trim()) return             // empty name — no-op
-    saveProfile(name, cfg)
-    setProfiles(listProfiles())
-  }
-  function handleDeleteProfile(id: string) {
-    deleteProfile(id)
-    setProfiles(listProfiles())
-  }
 
   type TestStatus = 'idle' | 'testing' | 'ok' | 'error'
   const [testStatus, setTestStatus] = React.useState<TestStatus>('idle')
@@ -369,77 +339,11 @@ function StepConfigureBase({
 
         {/* F2 — Smart Presets: pick a curated backend preset. Reflects its
             FE-facing params into the form (WYSIWYG) and sends
-            render_preset_id so the server fills the BE-only params. The
-            section hides when the backend has no presets / is offline. */}
-        {builtinPresets.length > 0 && (
-          <div className="cfg-section">
-            <div className="cfg-sec-hd">
-              <span>Presets</span>
-              <span className="cfg-sec-api">render_preset_id</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-              <div
-                className="seg-b"
-                title="Custom — no preset"
-                onClick={() => applyRenderPreset('', {})}
-                style={{
-                  opacity: cfg.renderPresetId === '' ? 1 : 0.6,
-                  outline: cfg.renderPresetId === '' ? '1px solid var(--accent)' : 'none',
-                }}
-              >
-                Custom
-              </div>
-              {builtinPresets.map((p) => (
-                <div
-                  key={p.preset_id}
-                  className="seg-b"
-                  title={p.description}
-                  onClick={() => applyRenderPreset(p.preset_id, p.params)}
-                  style={{
-                    opacity: cfg.renderPresetId === p.preset_id ? 1 : 0.6,
-                    outline: cfg.renderPresetId === p.preset_id ? '1px solid var(--accent)' : 'none',
-                  }}
-                >
-                  {p.name}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Pha 2 — Render Profiles: one-click apply of a saved config
-            snapshot. Built-ins (TikTok/Reels/Shorts) always present;
-            user profiles carry a delete affordance. */}
-        <div className="cfg-section">
-          <div className="cfg-sec-hd">
-            <span>{t.cfgProfiles}</span>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-            {profiles.map((p) => (
-              <div
-                key={p.id}
-                className="seg-b"
-                title={t.cfgProfileApply}
-                onClick={() => applyProfile(p.cfg)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                {p.name}
-                {!p.builtin && (
-                  <span
-                    role="button"
-                    aria-label={t.cfgProfileDelete}
-                    title={t.cfgProfileDelete}
-                    onClick={(e) => { e.stopPropagation(); handleDeleteProfile(p.id) }}
-                    style={{ cursor: 'pointer', opacity: 0.55, fontSize: '13px', lineHeight: 1 }}
-                  >
-                    ×
-                  </span>
-                )}
-              </div>
-            ))}
-            <button className="btn-xs" onClick={handleSaveProfile}>{t.cfgProfileSave}</button>
-          </div>
-        </div>
+        {/* UI cleanup 2026-06-28: removed Presets + PROFILES sections.
+            Both were "apply config bundle" widgets that overlapped each
+            other and the explicit knobs below — user reported them as
+            redundant clutter. The localStorage key rw_render_profiles_v1
+            persists harmlessly for users who saved profiles. */}
 
         {/* Source card */}
         <div className="cfg-src-card">
@@ -700,115 +604,15 @@ function StepConfigureBase({
           {/* ── AI tab ── */}
           <div className={`cfg-tab-pane${cfgTab === 'ai' ? ' active' : ''}`}>
 
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>VIDEO TYPE</span>
-                <span className="cfg-sec-api">video_type</span>
-              </div>
-              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
-                {([
-                  { v: 'auto'          as ConfigState['videoType'], l: 'Auto'      },
-                  { v: 'viral'         as ConfigState['videoType'], l: 'Viral'     },
-                  { v: 'storytelling'  as ConfigState['videoType'], l: 'Story'     },
-                  { v: 'educational'   as ConfigState['videoType'], l: 'Edu'       },
-                  { v: 'emotional'     as ConfigState['videoType'], l: 'Emotional' },
-                  { v: 'high_retention'as ConfigState['videoType'], l: 'Retention' },
-                ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.videoType === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('videoType', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>MARKET</span>
-                <span className="cfg-sec-api">ai_target_market</span>
-              </div>
-              <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
-                {([
-                  { v: 'us',  l: '🇺🇸 US'  },
-                  { v: 'vn',  l: '🇻🇳 VN'  },
-                  { v: 'jp',  l: '🇯🇵 JP'  },
-                  { v: 'kr',  l: '🇰🇷 KR'  },
-                  { v: 'eu',  l: '🇪🇺 EU'  },
-                  { v: 'sea', l: '🌏 SEA' },
-                ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.aiMarket === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('aiMarket', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-            )}
-
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>HOOK</span>
-                <span className="cfg-sec-api">hook_strength</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: 'aggressive' as ConfigState['hookStrength'], l: 'Aggressive' },
-                  { v: 'balanced'   as ConfigState['hookStrength'], l: 'Balanced'   },
-                  { v: 'soft'       as ConfigState['hookStrength'], l: 'Soft'       },
-                ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.hookStrength === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('hookStrength', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-            )}
-
-            {/* UP26 Pro Timeline Steering — audit-2026-06-08 closure.
-                structure_bias re-weights the ranking formula (Strategic-1c).
-                'AI auto' = null payload, leaves the formula at the default
-                balanced weights. */}
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>STRUCTURE BIAS</span>
-                <span className="cfg-sec-api">structure_bias</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: null,       l: 'AI auto'  },
-                  { v: 'hook',     l: 'Hook'     },
-                  { v: 'balanced', l: 'Balanced' },
-                  { v: 'story',    l: 'Story'    },
-                ] as Array<{ v: ConfigState['structureBias']; l: string }>).map(({ v, l }) => (
-                  <div key={l} className={`seg-b${cfg.structureBias === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('structureBias', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-            )}
-
-            {/* UP26 Pro Timeline Steering — audit-2026-06-08 closure.
-                subtitle_emphasis multiplies sub_font_size (Strategic-1c).
-                'AI auto' = null payload, falls back to the operator-supplied
-                sub_font_size without the multiplier. */}
-            {adv && (
-            <div className="cfg-section">
-              <div className="cfg-sec-hd">
-                <span>SUBTITLE EMPHASIS</span>
-                <span className="cfg-sec-api">subtitle_emphasis</span>
-              </div>
-              <div className="seg">
-                {([
-                  { v: null,         l: 'AI auto'   },
-                  { v: 'subtle',     l: 'Subtle'    },
-                  { v: 'balanced',   l: 'Balanced'  },
-                  { v: 'aggressive', l: 'Aggressive'},
-                ] as Array<{ v: ConfigState['subEmphasis']; l: string }>).map(({ v, l }) => (
-                  <div key={l} className={`seg-b${cfg.subEmphasis === v ? ' on' : ''}`}
-                    onClick={() => setCfgKey('subEmphasis', v)}>{l}</div>
-                ))}
-              </div>
-            </div>
-            )}
-
+            {/* UI cleanup 2026-06-28: removed 5 creator-preference sections
+                (VIDEO TYPE / MARKET / HOOK / STRUCTURE BIAS / SUBTITLE EMPHASIS).
+                Backend defaults take over passively (Sacred Contract #2):
+                  video_type        = "auto"        (LLM decides)
+                  ai_target_market  = None          (no localisation)
+                  hook_strength     = "balanced"    (neutral editorial hint)
+                  structure_bias    = None          (default ranking formula)
+                  subtitle_emphasis = None          (no font multiplier)
+                These fields stay in RenderRequest for stored-job replay. */}
 
             {/* LLM segment selection — Phase I */}
             <div className="cfg-section">

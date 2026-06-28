@@ -14,13 +14,11 @@ export interface ConfigState {
   trimOut:       number
   style:         string
   platform:      'tiktok' | 'youtube_shorts' | 'instagram_reels'
-  aiMarket:      string
   multiVariant:       boolean
   ctaEnabled:         boolean
   ctaType:            'auto' | 'comment' | 'part_2' | 'follow'
   hookApplyEnabled:   boolean
   hookOverlayEnabled: boolean
-  structureBias:      'hook' | 'balanced' | 'story' | null
   clipLock:           Array<{ start_sec: number; end_sec: number }>
   clipExclude:        Array<{ start_sec: number; end_sec: number }>
   subEnabled:       boolean
@@ -29,7 +27,6 @@ export interface ConfigState {
   subFontSize:      number
   subTranslate:     boolean
   subTranslateLang: 'vi' | 'en' | 'ja'
-  subEmphasis:      'subtle' | 'balanced' | 'aggressive' | null
   assetLogoPath:     string | null
   assetIntroPath:    string | null
   assetOutroPath:    string | null
@@ -44,14 +41,8 @@ export interface ConfigState {
   voiceMixMode:  'replace_original' | 'keep_original_low'
   outputDir:     string
   renderProfile: 'fast' | 'balanced' | 'quality' | 'best'
-  // F2 — selected built-in preset id ('' = custom/none). Sent as
-  // render_preset_id; the server fills BE-only preset params the FE can't
-  // (ai_clip_*), the FE reflects the FE-facing ones into the form above.
-  renderPresetId: string
   targetDuration:  number
   outputCount:     number
-  videoType:       'auto' | 'viral' | 'storytelling' | 'educational' | 'emotional' | 'high_retention'
-  hookStrength:    'aggressive' | 'balanced' | 'soft'
   focusMode:       'auto' | 'face' | 'object' | 'center'
   // LLM segment selection — multi-provider
   llmEnabled:          boolean

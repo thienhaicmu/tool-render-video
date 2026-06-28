@@ -17,19 +17,18 @@ const t = useT('EN')
 
 const cfg: ConfigState = {
   ratio: 'r916', minSec: 30, maxSec: 60, trimIn: 0, trimOut: 0, style: 'slay_soft_01',
-  platform: 'tiktok', aiMarket: 'us',
+  platform: 'tiktok',
   multiVariant: false, ctaEnabled: false, ctaType: 'auto',
-  hookApplyEnabled: false, hookOverlayEnabled: false, structureBias: null,
+  hookApplyEnabled: false, hookOverlayEnabled: false,
   clipLock: [], clipExclude: [],
   subEnabled: true, subStyle: 'opus_pop', subHighlight: true, subFontSize: 0,
-  subTranslate: false, subTranslateLang: 'en', subEmphasis: null,
+  subTranslate: false, subTranslateLang: 'en',
   assetLogoPath: null, assetIntroPath: null, assetOutroPath: null,
   whisperModel: 'auto',
   narrEnabled: false, voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
-  voiceSource: 'translated_subtitle', voiceText: '', voiceMixMode: 'replace_original',
+  voiceSource: 'translated_subtitle', voiceText: '', rewriteTone: '', voiceMixMode: 'replace_original',
   outputDir: 'D:\\out',
-  renderProfile: 'balanced', targetDuration: 90, outputCount: 1, videoType: 'auto',
-  hookStrength: 'balanced', focusMode: 'auto',
+  renderProfile: 'balanced', targetDuration: 90, outputCount: 1, focusMode: 'auto',
   llmEnabled: true, aiProvider: 'gemini', llmModel: '', llmLanguage: 'auto',
 }
 

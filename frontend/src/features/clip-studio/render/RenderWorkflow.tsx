@@ -14,7 +14,6 @@ import type { RenderRequest, JobPart, QualityReport, PartRankResult } from '@/ty
 import { useT, ERROR_KIND_KEY, ERROR_FIX_STEPS, inferErrorKind } from './i18n'
 import type { Step, CfgTab, ConfigState, Source } from './types'
 import { PRESETS, RATIO_INFO } from './constants'
-import { presetParamsToConfigPatch } from './presetMapping'
 import { StepConfigure } from './steps/StepConfigure'
 import { StepRendering } from './steps/StepRendering'
 import { StepResults } from './steps/StepResults'
@@ -41,22 +40,19 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const [cfgTab, setCfgTab] = useState<CfgTab>('ai')
   const [cfg, setCfg] = useState<ConfigState>(() => ({
     ratio: 'r916', minSec: 30, maxSec: 60, trimIn: 0, trimOut: 0,
-    style: 'slay_soft_01', platform: 'tiktok', aiMarket: 'us',
+    style: 'slay_soft_01', platform: 'tiktok',
     multiVariant: false, ctaEnabled: false, ctaType: 'auto',
-    hookApplyEnabled: false, hookOverlayEnabled: false, structureBias: null,
+    hookApplyEnabled: false, hookOverlayEnabled: false,
     clipLock: [], clipExclude: [],
     subEnabled: true, subStyle: 'opus_pop',
     subHighlight: true, subFontSize: 0, subTranslate: false, subTranslateLang: 'en',
-    subEmphasis: null,
     assetLogoPath: null, assetIntroPath: null, assetOutroPath: null,
     whisperModel: 'auto',
     narrEnabled: false, voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
     voiceSource: 'translated_subtitle', voiceText: '', rewriteTone: '', voiceMixMode: 'replace_original',
     outputDir: '',
     renderProfile: 'balanced',
-    renderPresetId: '',
-    targetDuration: 90, outputCount: 1, videoType: 'auto',
-    hookStrength: 'balanced', focusMode: 'auto',
+    targetDuration: 90, outputCount: 1, focusMode: 'auto',
     llmEnabled:   true,
     aiProvider:   (localStorage.getItem('rw_ai_provider') as 'gemini' | 'openai' | 'claude') ?? 'gemini',
     llmModel:     '',
@@ -404,7 +400,16 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
         return
       }
       setPrepareResult(result)
-      setCfg((prev) => ({ ...prev, outputDir: result.export_dir || prev.outputDir }))
+      // UI cleanup (2026-06-28): default SAVE FOLDER = parent of source video,
+      // NOT the backend temp folder (`result.export_dir = work_dir/exports`).
+      // Preserves user-typed value when they've manually overridden.
+      const _srcPath = src.value || ''
+      const _lastSep = Math.max(_srcPath.lastIndexOf('\\'), _srcPath.lastIndexOf('/'))
+      const _parentDir = _lastSep > 0 ? _srcPath.slice(0, _lastSep) : ''
+      setCfg((prev) => ({
+        ...prev,
+        outputDir: prev.outputDir?.trim() ? prev.outputDir : (_parentDir || result.export_dir || ''),
+      }))
       setStep(2)
     } catch (e) {
       if (!prepareCancelledRef.current) {
@@ -430,22 +435,6 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     if (!p) return
     setCfg((prev) => ({ ...prev, platform: p.platform, ratio: 'r916' }))
   }
-  // Pha 2 — apply a saved Render Profile: merge its config patch over the
-  // current cfg. Machine/source fields (outputDir, etc.) are excluded from
-  // the snapshot at save time, so they're preserved here.
-  function applyProfile(patch: Partial<ConfigState>) {
-    setCfg((prev) => ({ ...prev, ...patch }))
-  }
-  // F2 — apply a backend built-in preset: reflect its FE-facing params into
-  // the form (WYSIWYG) and record render_preset_id so the server fills the
-  // BE-only params (ai_clip_*). Passing '' clears the selection.
-  function applyRenderPreset(presetId: string, params: Record<string, unknown>) {
-    setCfg((prev) => ({
-      ...prev,
-      ...presetParamsToConfigPatch(params),
-      renderPresetId: presetId,
-    }))
-  }
   async function pickOutputDir() {
     const dir = await window.electronAPI?.pickDirectory?.()
     if (dir) setCfgKey('outputDir', dir)
@@ -462,10 +451,6 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       source_mode:       'local',
       source_video_path: srcValue,
       output_dir:          cfg.outputDir || 'output',
-      // F2 — provenance + safety net: the server applies this preset's
-      // BE-only params (ai_clip_*) for fields the FE didn't send. FE-facing
-      // params are already reflected into cfg by applyRenderPreset below.
-      render_preset_id:    cfg.renderPresetId || undefined,
       aspect_ratio:        RATIO_INFO[cfg.ratio].api,
       min_part_sec:        cfg.minSec,
       max_part_sec:        cfg.maxSec,
@@ -490,16 +475,6 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       // cfg.partOrder`. The BE validator at models/render.py:451-463
       // coerces the value to "viral" then no engine consumer reads it
       // (FINDING-C01 closure). Pure UI deceit on the wire.
-      // UP26 Pro Timeline Steering — audit-2026-06-08 closures.
-      //   structure_bias    — Strategic-1c (ranking formula re-weight).
-      //   subtitle_emphasis — Strategic-1c (sub_font_size multiplier).
-      //   clip_lock / clip_exclude — Strategic-1/1b (LLM prompt + local
-      //     filter). FE state vars `clipLock` / `clipExclude` carry the
-      //     ranges but the FE has no TimeRange editor yet; they remain
-      //     API-only until a TimeRange editor lands. `[]` is the
-      //     no-op default — sending it has no effect on selection.
-      structure_bias:    cfg.structureBias ?? undefined,
-      subtitle_emphasis: cfg.subEmphasis ?? undefined,
       voice_enabled:               cfg.narrEnabled,
       voice_source:        cfg.narrEnabled ? cfg.voiceSource : undefined,
       voice_text:          cfg.narrEnabled && cfg.voiceSource === 'manual' ? cfg.voiceText : undefined,
@@ -532,11 +507,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       effect_preset:       cfg.style,
       render_profile:      cfg.renderProfile,
       whisper_model:       cfg.whisperModel !== 'auto' ? cfg.whisperModel : undefined,
-      ai_target_market:    cfg.aiMarket || undefined,
       target_duration:     cfg.targetDuration,
       output_count:        cfg.outputCount,
-      video_type:          cfg.videoType,
-      hook_strength:       cfg.hookStrength,
       reframe_mode:        cfg.focusMode,
       // T1.4 — Audit 2026-06-08 closure: removed `energy_style`,
       // `output_language`, `narration_style` (v2 vision dead — never
@@ -1095,8 +1067,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
             <ErrorBoundary>
               <StepConfigure
                 cfg={cfg} cfgTab={cfgTab} setCfgTab={setCfgTab}
-                setCfgKey={setCfgKey} applyPreset={applyPreset} applyProfile={applyProfile}
-                applyRenderPreset={applyRenderPreset}
+                setCfgKey={setCfgKey} applyPreset={applyPreset}
                 sources={sources} prepareResult={prepareResult}
                 pickOutputDir={pickOutputDir} onChangeSource={handleChangeSource} t={t}
               />
@@ -1245,7 +1216,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 onRetry={handleRetryRender} isRetrying={isRetrying}
                 aiAnalysisMode={cfg.llmEnabled ? 'cloud' : 'local'}
                 aiCloudProvider={cfg.aiProvider}
-                goal={cfg.videoType}
+                goal={'auto'}
               />
             </ErrorBoundary>
             <div className="screen-footer">

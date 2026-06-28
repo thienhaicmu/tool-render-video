@@ -20,11 +20,6 @@ const T = {
     // Configure
     cfgQuickPresets: 'QUICK PRESETS',
     // Pha 2 — Render Profiles
-    cfgProfiles: 'PROFILES',
-    cfgProfileSave: '+ Save current',
-    cfgProfileNamePrompt: 'Profile name:',
-    cfgProfileApply: 'Apply profile',
-    cfgProfileDelete: 'Delete profile',
     cfgFrame: 'FRAME',
     cfgDuration: 'DURATION',
     // Pha 5.7 — source trim
@@ -143,11 +138,6 @@ const T = {
     stepOf: (s: number) => `Bước ${s} / 4`,
     cfgQuickPresets: 'PRESET NHANH',
     // Pha 2 — Render Profiles
-    cfgProfiles: 'HỒ SƠ',
-    cfgProfileSave: '+ Lưu hiện tại',
-    cfgProfileNamePrompt: 'Tên hồ sơ:',
-    cfgProfileApply: 'Áp dụng hồ sơ',
-    cfgProfileDelete: 'Xoá hồ sơ',
     cfgFrame: 'KHUNG HÌNH',
     cfgDuration: 'THỜI LƯỢNG',
     // Pha 5.7 — cắt nguồn
