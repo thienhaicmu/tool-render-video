@@ -440,15 +440,17 @@ def run_part_voice_mix(
         #    each to its slot, and concats with silence pads.
         # 5. On rewrite=None → fallback to v1 single-segment narration of
         #    the full original transcript (Sacred Contract #3).
+        #
+        # 2026-06-28 bugfix: previous code fell back to ctx.full_srt VERBATIM
+        # when srt_part was missing — so every part received the WHOLE video
+        # transcript and the LLM produced near-identical narration across
+        # parts (user-reported symptom: "5 parts share same content"). Now
+        # the fallback slices full_srt to the clip window IN MEMORY and
+        # rebases timestamps to be clip-relative, matching what srt_part
+        # would have looked like.
         _part_srt = srt_part if srt_part.exists() and srt_part.stat().st_size > 0 else None
-        if _part_srt is None and ctx.full_srt_available:
-            try:
-                # full-srt slice — keep a path-shaped fallback for the v1 leg.
-                _ = slice_srt_to_text(str(ctx.full_srt), seg["start"], seg["end"])
-                _part_srt = ctx.full_srt
-            except Exception:
-                _part_srt = None
-
+        _src_blocks: list[dict] = []
+        _orig_text = ""
         if _part_srt:
             try:
                 _src_blocks = parse_srt_blocks(str(_part_srt))
@@ -456,6 +458,41 @@ def run_part_voice_mix(
                 logger.warning("voice.ai_rewrite: parse_srt_blocks failed: %s", _parse_exc)
                 _src_blocks = []
             _orig_text = extract_text_from_srt(str(_part_srt))
+        elif ctx.full_srt_available:
+            try:
+                from app.features.render.engine.subtitle.generator.srt import (
+                    _parse_srt_blocks as _parse_full_blocks,
+                )
+                _full_blocks = _parse_full_blocks(str(ctx.full_srt))
+                _seg_start = float(seg["start"])
+                _seg_end = float(seg["end"])
+                _src_blocks = []
+                for _b in _full_blocks:
+                    _ov_start = max(_seg_start, _b["start"])
+                    _ov_end = min(_seg_end, _b["end"])
+                    if _ov_end <= _ov_start:
+                        continue
+                    _src_blocks.append({
+                        "start": _ov_start - _seg_start,
+                        "end":   _ov_end - _seg_start,
+                        "text":  _b["text"],
+                    })
+                _orig_text = " ".join(b["text"] for b in _src_blocks).strip()
+                logger.info(
+                    "voice.ai_rewrite: srt_part missing — using full_srt slice "
+                    "[%.1fs - %.1fs] (%d blocks) for part %d",
+                    _seg_start, _seg_end, len(_src_blocks), idx,
+                )
+                # Mark _part_srt non-None so the downstream `if _part_srt:`
+                # branch enters with the in-memory blocks.
+                _part_srt = ctx.full_srt
+            except Exception as _slice_exc:
+                logger.warning(
+                    "voice.ai_rewrite: full_srt slice failed for part %d: %s",
+                    idx, _slice_exc,
+                )
+
+        if _part_srt:
             if _src_blocks and _orig_text.strip():
                 _clip_dur = max(1.0, float(seg["end"]) - float(seg["start"]))
                 _srt_segmented = format_segments_for_prompt(_src_blocks)
@@ -528,6 +565,18 @@ def run_part_voice_mix(
                         context={"part_no": idx, "reason": "llm_returned_none"},
                     )
                 else:
+                    # 2026-06-28: log per-part rewrite preview (first segment
+                    # text, truncated) so operators can verify the LLM
+                    # actually produced DIFFERENT content per clip. Earlier
+                    # bug: the full_srt fallback gave every part the same
+                    # whole-video transcript → identical narration across
+                    # parts. With the slice fix this log proves the variance
+                    # in production.
+                    _first_seg_preview = (_segments[0].get("text", "")[:140] + "…") if _segments else ""
+                    logger.info(
+                        "voice.ai_rewrite: part %d returned %d segments — first preview: %r",
+                        idx, len(_segments), _first_seg_preview,
+                    )
                     _emit_render_event(
                         channel_code=ctx.effective_channel,
                         job_id=ctx.job_id,
@@ -540,6 +589,7 @@ def run_part_voice_mix(
                             "src_blocks": len(_src_blocks),
                             "out_segments": len(_segments),
                             "total_chars": sum(len(s["text"]) for s in _segments),
+                            "first_segment_preview": _first_seg_preview,
                         },
                     )
                 ctx.voice_part_tts_attempts.append(idx)

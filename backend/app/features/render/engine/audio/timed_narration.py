@@ -107,6 +107,14 @@ def _concat_with_pads(
         # Build a filter graph that lays each segment at its start time using
         # adelay (in ms), then mixes them all together with amix. Cap to clip
         # duration with -t.
+        #
+        # 2026-06-28 volume bug fix: amix's default behaviour DIVIDES the
+        # output volume by N (number of input streams). With 19 segments
+        # the narration ended up at ~5% volume which sounded near-silent.
+        # Pin `normalize=0` so each segment plays at its full TTS volume.
+        # Since segments don't overlap in time (separated by silence pads
+        # from adelay), keeping all inputs at unity gain produces the
+        # expected per-segment loudness with no clipping.
         inputs: list[str] = []
         for _, p in segment_mp3s:
             inputs.extend(["-i", str(p)])
@@ -119,7 +127,7 @@ def _concat_with_pads(
             )
         mix_inputs = "".join(f"[d{i}]" for i in range(len(segment_mp3s)))
         filter_parts.append(
-            f"{mix_inputs}amix=inputs={len(segment_mp3s)}:duration=longest:dropout_transition=0[aout]"
+            f"{mix_inputs}amix=inputs={len(segment_mp3s)}:duration=longest:dropout_transition=0:normalize=0[aout]"
         )
         filter_graph = ";".join(filter_parts)
         cmd = [

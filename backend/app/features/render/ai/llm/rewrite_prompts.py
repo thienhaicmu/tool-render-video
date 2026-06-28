@@ -289,6 +289,16 @@ def _build_clip_context_section(
         else:
             pos = f"middle clip ({part_idx}/{total_parts}) — maintain rhythm without repeating earlier hooks"
         lines.append(f"PART POSITION:   {pos}")
+        # 2026-06-28: clips often come from the same source video, so the LLM
+        # tends to produce near-identical narration across parts. Explicitly
+        # ask for variation in word choice + sentence structure + opening
+        # device so each clip feels like a fresh take rather than a clone.
+        lines.append(
+            f"VARIATION:       this is clip {part_idx} of {total_parts} from the SAME source video. "
+            "Each part MUST sound DISTINCT — vary opening device (question vs claim vs "
+            "image), sentence rhythm, and vocabulary. Do NOT repeat phrasing patterns "
+            "the earlier clips may have used."
+        )
     if not lines:
         return ""
     body = "\n".join(lines)
