@@ -49,6 +49,12 @@ def rewrite_subtitle(
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
+    content_type: str = "",
+    hook_type: str = "",
+    clip_title: str = "",
+    target_platform: str = "",
+    part_idx: int = 0,
+    total_parts: int = 0,
 ) -> Optional[list[dict]]:
     """Dispatch segmented subtitle-rewrite to the named LLM provider.
 
@@ -79,6 +85,12 @@ def rewrite_subtitle(
         tone=tone,
         api_key=api_key,
         model=model,
+        content_type=content_type,
+        hook_type=hook_type,
+        clip_title=clip_title,
+        target_platform=target_platform,
+        part_idx=part_idx,
+        total_parts=total_parts,
     )
     for _p in chain:
         _impl = _get_provider_rewrite_impl(_p)

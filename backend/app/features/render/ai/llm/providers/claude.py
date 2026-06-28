@@ -154,6 +154,7 @@ def _run_render_plan(
         multi_variant=multi_variant,
         structure_bias=structure_bias,
         target_platform=target_platform,
+        video_duration_sec=video_duration,
     )
 
     resolved_model = model or _DEFAULT_MODEL
@@ -233,6 +234,12 @@ def rewrite_subtitle(
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
+    content_type: str = "",
+    hook_type: str = "",
+    clip_title: str = "",
+    target_platform: str = "",
+    part_idx: int = 0,
+    total_parts: int = 0,
 ) -> Optional[list[dict]]:
     """Rewrite per-part transcript into timed TTS narration segments.
 
@@ -249,6 +256,12 @@ def rewrite_subtitle(
             tone=tone,
             api_key=api_key,
             model=model,
+            content_type=content_type,
+            hook_type=hook_type,
+            clip_title=clip_title,
+            target_platform=target_platform,
+            part_idx=part_idx,
+            total_parts=total_parts,
         )
     except Exception as exc:
         logger.warning("claude_client: rewrite_subtitle unexpected error %s", exc, exc_info=True)
@@ -262,6 +275,12 @@ def _run_rewrite(
     tone: str,
     api_key: str,
     model: Optional[str],
+    content_type: str = "",
+    hook_type: str = "",
+    clip_title: str = "",
+    target_platform: str = "",
+    part_idx: int = 0,
+    total_parts: int = 0,
 ) -> Optional[list[dict]]:
     if not _ANTHROPIC_SDK:
         logger.warning("claude_client: anthropic SDK not installed (rewrite path)")
@@ -277,6 +296,12 @@ def _run_rewrite(
         clip_duration_sec=clip_duration_sec,
         target_language=target_language,
         tone=tone,
+        content_type=content_type,
+        hook_type=hook_type,
+        clip_title=clip_title,
+        target_platform=target_platform,
+        part_idx=part_idx,
+        total_parts=total_parts,
     )
     resolved_model = model or _DEFAULT_MODEL
     word_budget = _compute_word_budget(clip_duration_sec, target_language)

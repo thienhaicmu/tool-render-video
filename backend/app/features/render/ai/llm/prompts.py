@@ -189,7 +189,7 @@ overlays is an array. Emit at most one entry per kind:
                (subscribe, comment, part 2). Set "type" to one of
                "comment" | "part_2" | "follow" | "auto".
 
-When no overlay fits, return overlays=[] instead of inventing one.{clip_lock_section}{clip_exclude_section}{creator_preferences_section}
+When no overlay fits, return overlays=[] instead of inventing one.{video_meta_section}{clip_lock_section}{clip_exclude_section}{creator_preferences_section}
 
 ─── TRANSCRIPT ───
 
@@ -403,6 +403,7 @@ def build_render_plan_prompt(
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
     target_platform: str = "",
+    video_duration_sec: float = 0.0,
     # S5 — creator preference hints. Each defaults to a value that
     # suppresses its prompt line so the prompt is byte-for-byte identical
     # to the pre-S5 baseline for all callers that don't pass them. See
@@ -487,6 +488,20 @@ def build_render_plan_prompt(
         else ""
     )
 
+    # A2.3 (2026-06-28): pass the total source video duration to the LLM so it
+    # can size its clip count + pacing against the whole. A 30-second source
+    # has different opportunities than a 30-minute podcast — without this
+    # hint the model only saw the (possibly truncated) transcript window.
+    # Suppressed when 0.0 (default) for byte-identical pre-A2.3 baseline.
+    _vdur_min = float(video_duration_sec or 0.0) / 60.0
+    video_meta_section = (
+        f"\n\n─── SOURCE META ───\nTotal source video duration: {_vdur_min:.1f} minutes "
+        f"({int(video_duration_sec)}s). Account for this when choosing how spread out "
+        f"your selected clips should be across the timeline."
+        if video_duration_sec and video_duration_sec > 0
+        else ""
+    )
+
     clip_lock_section = _format_range_section(
         clip_lock,
         header="HARD LOCKED RANGES",
@@ -534,6 +549,7 @@ def build_render_plan_prompt(
         editorial_section=editorial_section,
         target_duration_section=target_duration_section,
         target_platform_section=target_platform_section,
+        video_meta_section=video_meta_section,
         clip_lock_section=clip_lock_section,
         clip_exclude_section=clip_exclude_section,
         creator_preferences_section=creator_preferences_section,

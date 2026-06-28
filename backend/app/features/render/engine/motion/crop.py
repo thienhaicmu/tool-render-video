@@ -20,11 +20,17 @@ from typing import List, Optional, Tuple
 # markers acknowledge the re-export contract.
 
 # Sprint 6.D-3.1: motion-path cache helpers.
+# B2-OPT-3 (ADR-008, 2026-06-28): coarse cache helpers added — full-source
+# scan cached without (start, end) so re-render of same source hits even when
+# the LLM selector picks different clip boundaries.
 from app.features.render.engine.motion.cache import (  # noqa: F401 (re-exported)
     _MOTION_CACHE_TTL_SEC,
     _motion_cache_key,
     _motion_path_cache_get,
     _motion_path_cache_put,
+    _motion_coarse_cache_get,
+    _motion_coarse_cache_put,
+    slice_motion_centers,
 )
 # Sprint 6.D-3.2: MotionCropConfig + content-type tracking overrides.
 from app.features.render.engine.motion.config import (
@@ -526,9 +532,60 @@ def render_motion_aware_crop(
         else:
             logger.info("scene-aware scenes=%d", len(scene_ranges))
 
-    # UP28.1: motion path cache — skip frame scan on rerender of same clip
+    # UP28.1 + B2-OPT-3 (ADR-008, 2026-06-28): motion path cache.
+    #
+    # Two layers:
+    #   • Coarse (NEW) — keyed on source + scan params, NOT clip boundaries.
+    #     Only safe in fuse-window mode where centers cover the full source.
+    #     Hits across ANY clip on the same source — major win on re-renders
+    #     because the LLM selector picks different boundaries each call.
+    #   • Fine (existing) — keyed including (start, end). Per-clip data.
+    #     Used in non-fuse mode and as fallback in fuse mode.
     _motion_hit = False
-    if _cache_key:
+    _coarse_used = False
+    # Build a coarse key for fuse mode: drops clip boundaries from the key
+    # but keeps everything else that affects motion scan (scaled crop box,
+    # reframe mode, content-type-driven tracker params, source identity).
+    _coarse_key = None
+    if _fuse_window_mode:
+        try:
+            _src_stat = Path(input_path).stat()
+            _coarse_key = _motion_cache_key(
+                "coarse_v1",
+                str(input_path),
+                _src_stat.st_mtime,
+                _src_stat.st_size,
+                aspect_ratio,
+                cfg.scale_x_percent,
+                cfg.scale_y_percent,
+                cfg.reframe_mode,
+                content_type,
+            )
+        except Exception:
+            _coarse_key = None
+
+    if _coarse_key:
+        _coarse_hit = _motion_coarse_cache_get(_coarse_key)
+        if _coarse_hit is not None:
+            full_centers, detected_fps = _coarse_hit
+            # Slice the window we actually need to encode. If the slice
+            # comes back shorter than expected we treat it as miss — the
+            # cache may have been written under different fps params.
+            centers = slice_motion_centers(
+                full_centers,
+                detected_fps,
+                float(source_start_sec or 0.0),
+                float(source_duration_sec or 0.0),
+            )
+            _expected = int(round(float(source_duration_sec or 0.0) * detected_fps))
+            if centers and len(centers) >= max(1, _expected - 5):
+                _motion_hit = True
+                _coarse_used = True
+                logger.info(
+                    "motion_cache_hit (coarse) key=%s sliced=%d/%d fps=%.2f",
+                    _coarse_key[:8], len(centers), len(full_centers), detected_fps,
+                )
+    if not _motion_hit and _cache_key:
         _cached_motion = _motion_path_cache_get(_cache_key)
         if _cached_motion is not None:
             centers, detected_fps = _cached_motion
@@ -557,6 +614,19 @@ def render_motion_aware_crop(
         if _cache_key:
             _motion_path_cache_put(_cache_key, centers, detected_fps)
             logger.info("motion_cache_miss key=%s centers=%d fps=%.2f", _cache_key[:8], len(centers), detected_fps)
+        # B2-OPT-3: also populate coarse cache when we just scanned the
+        # full source (fuse mode). _coarse_key was only built in fuse mode
+        # — so this branch fires safely without poisoning the coarse store
+        # with per-clip data.
+        if _coarse_key and not _coarse_used:
+            _motion_coarse_cache_put(_coarse_key, centers, detected_fps)
+            logger.info(
+                "motion_cache_write (coarse) key=%s centers=%d fps=%.2f",
+                _coarse_key[:8], len(centers), detected_fps,
+            )
+        # When we hit the coarse cache (centers sliced) we keep using it —
+        # don't re-scan to populate fine cache. Coarse covers all future
+        # windows on this source.
 
     # Diagnostic: log crop-box sample positions (first, midpoint, last)
     if centers:

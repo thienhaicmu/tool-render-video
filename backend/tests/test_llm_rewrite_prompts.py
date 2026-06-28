@@ -115,6 +115,81 @@ def test_system_prompt_mentions_human_like_speech():
     assert "rhythm" in sys.lower() or "emphasis" in sys.lower()
 
 
+# A2.1 + A2.2 (2026-06-28) — clip context wiring pins.
+
+def test_clip_context_section_suppressed_when_all_empty():
+    _, usr = build_rewrite_prompt("Hi.", 5.0, "en-US")
+    assert "CLIP CONTEXT" not in usr
+
+
+def test_clip_context_section_renders_when_fields_provided():
+    _, usr = build_rewrite_prompt(
+        "Hi.", 5.0, "vi-VN",
+        content_type="vlog",
+        hook_type="reveal",
+        clip_title="Khoảnh khắc bất ngờ",
+        target_platform="tiktok",
+        part_idx=1,
+        total_parts=3,
+    )
+    assert "CLIP CONTEXT" in usr
+    assert "vlog" in usr.lower()
+    assert "reveal" in usr.lower()
+    assert "Khoảnh khắc bất ngờ" in usr
+    assert "tiktok" in usr.lower()
+    assert "FIRST clip" in usr
+
+
+def test_clip_context_section_partial_fields():
+    # Only content_type provided — only that line shows, no other CLIP CONTEXT noise.
+    _, usr = build_rewrite_prompt(
+        "Hi.", 5.0, "en-US",
+        content_type="commentary",
+    )
+    assert "CLIP CONTEXT" in usr
+    assert "commentary" in usr.lower()
+    assert "HOOK ARCHETYPE" not in usr
+    assert "PART POSITION" not in usr
+
+
+def test_clip_context_position_last_clip_message():
+    _, usr = build_rewrite_prompt(
+        "Hi.", 5.0, "en-US",
+        content_type="vlog",
+        part_idx=3, total_parts=3,
+    )
+    assert "LAST clip" in usr
+
+
+def test_clip_context_position_middle_clip_message():
+    _, usr = build_rewrite_prompt(
+        "Hi.", 5.0, "en-US",
+        content_type="vlog",
+        part_idx=2, total_parts=4,
+    )
+    assert "middle clip" in usr or "2/4" in usr
+
+
+def test_select_prompt_video_meta_suppressed_when_zero():
+    from app.features.render.ai.llm.prompts import build_render_plan_prompt
+    _, usr = build_render_plan_prompt(
+        srt_content="1\n00:00:00,000 --> 00:00:05,000\nhi\n",
+        output_count=2, min_sec=15, max_sec=60,
+    )
+    assert "SOURCE META" not in usr
+
+
+def test_select_prompt_video_meta_renders_when_provided():
+    from app.features.render.ai.llm.prompts import build_render_plan_prompt
+    _, usr = build_render_plan_prompt(
+        srt_content="1\n00:00:00,000 --> 00:00:05,000\nhi\n",
+        output_count=2, min_sec=15, max_sec=60,
+        video_duration_sec=600.0,
+    )
+    assert "SOURCE META" in usr
+    assert "10.0 minutes" in usr or "600s" in usr
+
+
 def test_prompt_no_format_keyerror():
     # Format-safety regression guard — calling .format with the canonical
     # placeholder set must not raise. Any literal brace inside the template

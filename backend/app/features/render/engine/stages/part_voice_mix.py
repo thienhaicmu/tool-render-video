@@ -491,6 +491,17 @@ def run_part_voice_mix(
                     tone=_tone,
                     api_key=_api_key,
                     model=_model,
+                    # A2.1 + A2.2 (2026-06-28): forward clip context so the
+                    # rewriter adapts style to content_type / hook_type /
+                    # platform / position. All defaults are empty/0 so the
+                    # prompt's CLIP CONTEXT block self-suppresses on absent
+                    # fields (back-compat).
+                    content_type=str(seg.get("content_type_hint", "") or ""),
+                    hook_type=str(seg.get("hook_type", "") or ""),
+                    clip_title=str(seg.get("ai_title", "") or ""),
+                    target_platform=str(getattr(ctx.payload, "target_platform", "") or ""),
+                    part_idx=idx,
+                    total_parts=int(ctx.total_parts or 0),
                 )
                 _used_fallback = False
                 if not _segments:

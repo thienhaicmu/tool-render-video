@@ -72,6 +72,34 @@ _DEFAULT_LANG_INFO = {
 }
 
 
+# A2.1 (2026-06-28): translate clip-context hints into concrete wording guidance
+# that the rewriter can apply. Empty value suppresses its line in the prompt,
+# preserving back-compat for callers that don't pass the field.
+_CONTENT_TYPE_GUIDANCE: dict[str, str] = {
+    "vlog":       "first-person voice ('I', 'we'); informal, conversational tone",
+    "commentary": "opinionated stance, direct second-person ('you'), confident analytical",
+    "interview":  "neutral narrator framing the speaker's quote; third-person acceptable",
+    "tutorial":   "instructive, step-driven, imperative voice (\"Here's how...\")",
+    "montage":    "minimal — let visuals speak; short evocative phrases",
+    "gaming":     "high-energy reactive, present-tense action verbs, exclamations OK",
+}
+_HOOK_TYPE_GUIDANCE: dict[str, str] = {
+    "question":  "open with a rhetorical question mirroring the source hook moment",
+    "reveal":    "build tension in segment 1; save the reveal verb for the next segment",
+    "contrast":  "frame as 'X vs Y' with parallel sentence structure",
+    "humor":     "set up the joke in segment 1; deliver the punch in the last segment",
+    "emotion":   "soften pacing, lean on adjectives, use '—' for reflective beats",
+    "statement": "lead with the bold claim, then unpack it across following segments",
+}
+# Compact 1-liners — different from prompts.py's PLATFORM_PROMPT_HINTS which target
+# the segment selector. These target the narrator's wording cadence.
+_PLATFORM_NARRATOR_HINTS: dict[str, str] = {
+    "tiktok":          "punch the first 3 seconds, keep sentences short and rhythmic",
+    "youtube_shorts":  "clear narrative arc within 60s; setup → twist → payoff",
+    "instagram_reels": "polished, slightly slower cadence than tiktok; emotional resonance",
+}
+
+
 def _compute_word_budget(target_duration_sec: float, target_language: str) -> int:
     """Return target word count from duration + language WPM table.
     Floors at 3 words (TTS sanity); ceils at 800 (sanity)."""
@@ -119,7 +147,7 @@ LANGUAGE:        {target_lang_name} ({target_language}) — write in {target_lan
 CLIP DURATION:   {clip_duration_sec:.1f} seconds (TOTAL narration must fit within this)
 WORD BUDGET:     about {word_budget} total words (at {wpm} words/minute for {target_lang_name})
 TONE:            {tone_clause}
-LANGUAGE STYLE:  {style_note}
+LANGUAGE STYLE:  {style_note}{clip_context_section}
 
 ═══ HOW TO WORK ═══
 
@@ -225,11 +253,60 @@ CONSISTENTLY across EVERY segment.
 """
 
 
+def _build_clip_context_section(
+    *,
+    content_type: str,
+    hook_type: str,
+    clip_title: str,
+    target_platform: str,
+    part_idx: int,
+    total_parts: int,
+) -> str:
+    """Render the optional CLIP CONTEXT block. Returns "" when every hint is
+    empty / default so back-compat callers see the pre-A2.1 prompt verbatim.
+    """
+    lines: list[str] = []
+    ct = (content_type or "").strip().lower()
+    guidance_ct = _CONTENT_TYPE_GUIDANCE.get(ct, "")
+    if ct and guidance_ct:
+        lines.append(f"CONTENT TYPE:    {ct} — {guidance_ct}")
+    ht = (hook_type or "").strip().lower()
+    guidance_ht = _HOOK_TYPE_GUIDANCE.get(ht, "")
+    if ht and guidance_ht:
+        lines.append(f"HOOK ARCHETYPE:  {ht} — {guidance_ht}")
+    title = (clip_title or "").strip()
+    if title:
+        lines.append(f"CLIP TITLE:      {title} (AI-suggested — use as creative direction)")
+    pf = (target_platform or "").strip().lower()
+    guidance_pf = _PLATFORM_NARRATOR_HINTS.get(pf, "")
+    if pf and guidance_pf:
+        lines.append(f"TARGET PLATFORM: {pf} — {guidance_pf}")
+    if part_idx and total_parts and total_parts > 0:
+        if part_idx == 1:
+            pos = "FIRST clip — strongest hook, grab in first 3 seconds"
+        elif part_idx == total_parts:
+            pos = "LAST clip — give a satisfying close / call-back"
+        else:
+            pos = f"middle clip ({part_idx}/{total_parts}) — maintain rhythm without repeating earlier hooks"
+        lines.append(f"PART POSITION:   {pos}")
+    if not lines:
+        return ""
+    body = "\n".join(lines)
+    return f"\n\n═══ CLIP CONTEXT (use to inform wording — these are HINTS) ═══\n{body}"
+
+
 def build_rewrite_prompt(
     srt_segmented: str,
     clip_duration_sec: float,
     target_language: str,
     tone: str = "",
+    *,
+    content_type: str = "",
+    hook_type: str = "",
+    clip_title: str = "",
+    target_platform: str = "",
+    part_idx: int = 0,
+    total_parts: int = 0,
     # Back-compat alias for v1 callers passing `text` instead of `srt_segmented`.
     text: Optional[str] = None,
     target_duration_sec: Optional[float] = None,
@@ -258,6 +335,14 @@ def build_rewrite_prompt(
     wpm = _WPM_BY_LANG.get(target_language, _DEFAULT_WPM)
     tone_clause = (tone or "").strip() or "natural / informative"
     lang_info = _LANG_INFO.get(target_language, _DEFAULT_LANG_INFO)
+    clip_context_section = _build_clip_context_section(
+        content_type=content_type,
+        hook_type=hook_type,
+        clip_title=clip_title,
+        target_platform=target_platform,
+        part_idx=part_idx,
+        total_parts=total_parts,
+    )
     user = _USER_TEMPLATE_REWRITE.format(
         clip_duration_sec=float(clip_duration_sec),
         target_language=target_language,
@@ -268,5 +353,6 @@ def build_rewrite_prompt(
         wpm=wpm,
         tone_clause=tone_clause,
         srt_segmented=cleaned,
+        clip_context_section=clip_context_section,
     )
     return _SYSTEM_REWRITE, user
