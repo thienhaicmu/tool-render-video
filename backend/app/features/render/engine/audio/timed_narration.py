@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
@@ -38,6 +39,11 @@ _FFMPEG_TIMEOUT_SEC: int = max(60, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "600"
 _MIN_SEGMENT_SEC: float = 0.3   # below this, skip the segment (TTS would be a stub)
 _ATEMPO_MIN: float = 1.0
 _ATEMPO_MAX: float = 1.25       # cap speed-up so voice doesn't sound chipmunk
+
+# B1-OPT-1 (2026-06-28): synthesise segments in parallel. Default 3 keeps us
+# under Edge-TTS rate caps; raise via env when the user has paid TTS quota or
+# is running fully offline (Piper/XTTS). Cap at 8 to avoid disk/thread storms.
+_TTS_CONCURRENCY: int = max(1, min(8, int(os.getenv("TIMED_NARRATION_TTS_CONCURRENCY", "3"))))
 
 
 def _probe_duration_s(path: str) -> float:
@@ -167,55 +173,73 @@ def synthesize_timed_narration(
         logger.warning("timed_narration: cannot create work_dir: %s", exc)
         return None
 
-    placed: list[tuple[float, Path]] = []
-    for i, seg in enumerate(segments):
-        try:
-            start = float(seg.get("start", 0.0))
-            end = float(seg.get("end", 0.0))
-            text = str(seg.get("text", "")).strip()
-        except (TypeError, ValueError):
-            continue
-        if not text or end <= start:
-            continue
-        seg_dur = end - start
-        if seg_dur < _MIN_SEGMENT_SEC:
-            logger.info(
-                "timed_narration: skipping micro-segment %d dur=%.2fs",
-                i, seg_dur,
-            )
-            continue
-        raw_mp3 = work_dir / f"seg_{i:03d}_raw.mp3"
-        try:
-            generate_narration_audio(
-                text=text,
-                language=voice_language,
-                gender=voice_gender,
-                rate=voice_rate,
-                job_id=job_id,
-                voice_id=voice_id,
-                output_path=str(raw_mp3),
-                content_type=content_type,
-                tts_engine=tts_engine,
-            )
-        except Exception as exc:
-            logger.warning(
-                "timed_narration: TTS failed for seg %d (%.1f-%.1fs): %s",
-                i, start, end, exc,
-            )
-            continue
-        if not raw_mp3.exists() or raw_mp3.stat().st_size <= 0:
-            logger.warning("timed_narration: TTS produced empty file for seg %d", i)
-            continue
+    # B1-OPT-1 (2026-06-28): synthesise each segment in parallel. Each worker
+    # is fully self-contained (own raw + fit mp3 paths), Sacred Contract #3
+    # preserved (any one segment's TTS failure becomes a None return, the
+    # remaining segments still build the narration). Order is restored after
+    # the workers complete so silence padding at concat time stays correct.
 
-        # Fit duration via atempo if needed.
-        fit_mp3 = work_dir / f"seg_{i:03d}_fit.mp3"
-        if _atempo_fit(raw_mp3, seg_dur, fit_mp3):
-            placed.append((start, fit_mp3))
-            logger.info(
-                "timed_narration: seg %d atempo-fitted (target=%.2fs)", i, seg_dur,
-            )
-        else:
-            placed.append((start, raw_mp3))
+    def _synth_one_segment(i: int, seg: dict) -> Optional[tuple[float, Path]]:
+        """Synthesise segment i in isolation. Returns (start_sec, mp3_path)
+        on success, None on failure / skip. Never raises."""
+        try:
+            try:
+                start = float(seg.get("start", 0.0))
+                end = float(seg.get("end", 0.0))
+                text = str(seg.get("text", "")).strip()
+            except (TypeError, ValueError):
+                return None
+            if not text or end <= start:
+                return None
+            seg_dur = end - start
+            if seg_dur < _MIN_SEGMENT_SEC:
+                logger.info(
+                    "timed_narration: skipping micro-segment %d dur=%.2fs",
+                    i, seg_dur,
+                )
+                return None
+            raw_mp3 = work_dir / f"seg_{i:03d}_raw.mp3"
+            try:
+                generate_narration_audio(
+                    text=text,
+                    language=voice_language,
+                    gender=voice_gender,
+                    rate=voice_rate,
+                    job_id=job_id,
+                    voice_id=voice_id,
+                    output_path=str(raw_mp3),
+                    content_type=content_type,
+                    tts_engine=tts_engine,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "timed_narration: TTS failed for seg %d (%.1f-%.1fs): %s",
+                    i, start, end, exc,
+                )
+                return None
+            if not raw_mp3.exists() or raw_mp3.stat().st_size <= 0:
+                logger.warning("timed_narration: TTS produced empty file for seg %d", i)
+                return None
+            fit_mp3 = work_dir / f"seg_{i:03d}_fit.mp3"
+            if _atempo_fit(raw_mp3, seg_dur, fit_mp3):
+                logger.info(
+                    "timed_narration: seg %d atempo-fitted (target=%.2fs)", i, seg_dur,
+                )
+                return (start, fit_mp3)
+            return (start, raw_mp3)
+        except Exception as exc:
+            # Sacred Contract #3 — worker boundary catches everything.
+            logger.warning("timed_narration: worker for seg %d raised: %s", i, exc)
+            return None
+
+    workers = min(_TTS_CONCURRENCY, max(1, len(segments)))
+    results: list[Optional[tuple[float, Path]]] = [None] * len(segments)
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix=f"tts_{job_id[:8]}") as pool:
+        futures = {pool.submit(_synth_one_segment, i, seg): i for i, seg in enumerate(segments)}
+        for fut in futures:
+            results[futures[fut]] = fut.result()  # collect in original index order
+    placed: list[tuple[float, Path]] = [r for r in results if r is not None]
+    placed.sort(key=lambda x: x[0])
 
     if not placed:
         logger.warning("timed_narration: no segments synthesised — returning None")

@@ -1337,7 +1337,15 @@ def run_render_pipeline(
             ])
             heavy_penalty = min(cpu_extra, 1)
             base = max(2, cpu_total // 3)
-            hard_ceiling = 6
+            # B1-OPT-6 (2026-06-28): cap GPU-mode workers at NVENC session limit
+            # (default 3, hardware-bound). The old ceiling of 6 spawned workers
+            # that immediately blocked on NVENC_SEMAPHORE.acquire(), wasting
+            # threads + RAM with no throughput gain. Override via
+            # NVENC_MAX_SESSIONS env (must match GPU class — RTX 30/40 = 3,
+            # RTX A-series / paid SDK = 5+).
+            import os as _os
+            _nvenc_cap = max(1, int(_os.getenv("NVENC_MAX_SESSIONS", "3")))
+            hard_ceiling = _nvenc_cap
         else:
             # CPU-only: libx264/libx265 uses -threads 0 (all cores per worker).
             # Count all heavy opts but cap penalty at 2 (not 3) so higher core counts

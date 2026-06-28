@@ -350,6 +350,29 @@ def apply_micro_pacing(
     if segments_trimmed == 0 or len(keeps) <= 1:
         return _NO_OP
 
+    # B1-OPT-2 (2026-06-28): skip the full libx264 re-encode when the total
+    # trim is below MICRO_PACING_MIN_TRIM_MS (default 500 ms). Re-encoding a
+    # 60s clip with preset=medium crf=17 costs 90-110 seconds in production
+    # logs — paying that to remove <0.5s of silence is a bad trade. The
+    # output is essentially indistinguishable (humans can't notice <0.2s
+    # rhythm shifts on most clips). Override via env when tighter pacing
+    # matters more than render time (set to "0" to disable the skip entirely).
+    import os as _os
+    _min_trim_ms = max(0, int(_os.getenv("MICRO_PACING_MIN_TRIM_MS", "500")))
+    _total_trim_ms = int(total_trim * 1000)
+    if _total_trim_ms < _min_trim_ms:
+        logger.info(
+            "micro_pacing: skipped re-encode total_trim_ms=%d threshold_ms=%d "
+            "segments_trimmed=%d (saving ~90-110s)",
+            _total_trim_ms, _min_trim_ms, segments_trimmed,
+        )
+        return {
+            "applied": False,
+            "segments_trimmed": segments_trimmed,
+            "total_trim_ms": _total_trim_ms,
+            "method": "skipped_low_trim",
+        }
+
     has_audio = _has_audio_stream(input_path)
     n = len(keeps)
 

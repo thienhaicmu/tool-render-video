@@ -172,6 +172,24 @@ def run_llm_pre_render(
             except Exception:
                 pass
         _model = (_env_model or _channel_model or tuned["whisper_model"] or "base").strip()
+        # B1-OPT-5 (2026-06-28): auto-select `tiny` for short videos (< 3 min)
+        # when no operator-provided model is configured. tiny runs ~10x realtime
+        # vs base ~7x — saves 30–80s of shared Whisper time. LLM Call 1 tolerates
+        # tiny's lower transcript accuracy for segment selection; per-part
+        # subtitle generation still uses the configured model. Override via
+        # LLM_WHISPER_AUTO_SELECT=0 to disable.
+        if (
+            _os.getenv("LLM_WHISPER_AUTO_SELECT", "1") == "1"
+            and not _env_model and not _channel_model
+        ):
+            _video_dur_check = float(source.get("duration") or 0.0)
+            if 0 < _video_dur_check < 180 and _model == "base":
+                _model = "tiny"
+                _job_log(
+                    effective_channel, job_id,
+                    f"llm_pipeline.whisper_auto_select model=tiny "
+                    f"reason=short_video video_dur={_video_dur_check:.0f}s",
+                )
         _engine = getattr(payload, "subtitle_transcription_engine", "default")
         _llm_language_raw = (getattr(payload, "llm_language", None) or "").strip().lower()
         _language = None if _llm_language_raw in ("", "auto") else _llm_language_raw

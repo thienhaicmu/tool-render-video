@@ -254,6 +254,10 @@ Return EXACTLY this JSON object. No extra top-level keys, no markdown fences:
 }}
 
 FIELD RULES:
+- clip_name, title, reason: write these FREE-TEXT fields in {language}. Enum values
+  (subtitle_style, hook_type, content_type, pacing) and JSON keys stay in English,
+  but human-readable labels follow the transcript language. Example for vi-VN:
+  clip_name = "Khoảnh khắc bất ngờ", NOT "The shocking moment".
 - hook_type: question | reveal | contrast | humor | emotion | statement
 - content_type: interview | vlog | tutorial | commentary | montage | gaming
 - subtitle_style (pick exactly one per clip):

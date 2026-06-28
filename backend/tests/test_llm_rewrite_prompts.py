@@ -60,8 +60,8 @@ def test_prompt_truncates_long_input():
     _, usr = build_rewrite_prompt(big, 10.0, "en-US")
     assert "[truncated]" in usr
     # User prompt body bounded by MAX_REWRITE_INPUT_CHARS + truncation marker + template scaffolding
-    # Scaffolding is ~5KB now (added HUMAN-LIKE DELIVERY + TONE INTERPRETATION sections).
-    assert len(usr) < MAX_REWRITE_INPUT_CHARS + 6000
+    # Scaffolding is ~7KB now (added 11-tone multi-language table for en/vi/ja/ko).
+    assert len(usr) < MAX_REWRITE_INPUT_CHARS + 8000
 
 
 def test_prompt_default_tone_substituted():

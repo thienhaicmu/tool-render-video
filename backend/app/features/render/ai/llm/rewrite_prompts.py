@@ -139,6 +139,15 @@ the speaker speaks in the clip. Gaps between timestamps are SILENT pauses.
 STEP 4 — Emit a JSON array of narration segments, one per spoken utterance:
   - Each segment covers ONE [start - end] window from the source (or a merged
     pair if two utterances are close together, e.g. < 0.5s apart).
+  - If a single source utterance is LONGER than 12 seconds, SPLIT it into 2-3
+    sub-segments at natural sentence boundaries (use timestamps that fall
+    INSIDE the original source window). The TTS engine cannot safely speed
+    up beyond 1.25x — a single 30-second utterance with 60+ words of
+    narration would over-run and get truncated.
+  - If two source utterances are separated by a GAP > 1.5 seconds of silence,
+    KEEP them as separate segments — do NOT extend earlier segment.end into
+    the silent gap. The silence is intentional pacing and the TTS pipeline
+    will pad it back during concat.
   - Each segment.start / segment.end uses the SAME numbers as the source [start - end].
   - segment.text is your rewritten narration for that utterance.
   - Length of segment.text MUST fit (end - start) seconds at the {target_lang_name}
@@ -163,20 +172,32 @@ SENTENCE VARIETY:
   - Save the strongest point or twist for the LAST segment if the source allows it.
   - Avoid filler words ("basically", "you know", "kind of"). Every word earns its slot.
 
-TONE INTERPRETATION (apply analogously to ANY tone the creator gives):
-  Examples of how to translate a tone label into wording + punctuation choices:
-    "dramatic / kịch tính / gây cấn"  → short tense sentences, "..." before reveals,
-                                          rhetorical questions, strong verbs
-    "humorous / hài hước / vui nhộn"  → playful word choices, surprise endings,
-                                          1 light exclamation OK, conversational rhythm
-    "informative / nghiêm túc"         → clear declarative sentences, zero filler,
-                                          confident even pacing, no exclamations
-    "emotional / cảm xúc / truyền cảm" → warmer adjectives, longer reflective sentences,
-                                          "—" for reflection, gentler verbs
-    "energetic / năng động"            → present tense, action verbs, faster rhythm,
-                                          1-2 exclamations, short questions
-The creator's tone is "{tone_clause}". Map it to the closest pattern above (or invent your
-own pattern if it doesn't match) and apply it CONSISTENTLY across every segment.
+TONE INTERPRETATION (multi-language preset table)
+
+The creator may type the tone in ANY of the 5 supported languages: English (en),
+Vietnamese (vi), Japanese (ja), or Korean (ko). Match the input to the closest
+canonical row below and apply the WORDING + PUNCTUATION pattern in the right
+column. The guidance is the SAME regardless of input language — only WORDING
+LANGUAGE follows the target voice language ({target_language}).
+
+  English (canonical)  | Vietnamese        | Japanese       | Korean         | Pattern
+  ---------------------|-------------------|----------------|----------------|--------
+  dramatic             | kịch tính / gây cấn | 劇的 / 緊張感   | 극적 / 긴장감    | short tense sentences, "..." before reveals, rhetorical questions, strong verbs
+  humorous             | hài hước / vui nhộn | 面白い / コメディ| 유머러스 / 코믹  | playful word choices, surprise endings, 1 light "!" OK, conversational
+  informative          | nghiêm túc / chuyên nghiệp | 真面目 / 情報的 | 정보적 / 진지한 | clear declarative sentences, zero filler, confident even pacing, no "!"
+  emotional            | cảm xúc / truyền cảm | 感情的 / 感動的 | 감정적 / 감동적  | warmer adjectives, longer reflective sentences, "—" for reflection
+  energetic            | năng động / hào hứng | 元気 / 活発     | 활기찬 / 에너지  | present tense, action verbs, faster rhythm, 1-2 "!", short questions
+  calm                 | trầm tĩnh / nhẹ nhàng | 落ち着いた / 静か | 차분한 / 평온한 | measured pacing, soft verbs, longer breaths ("," "—" over "!"), no rushing
+  sarcastic            | châm biếm / mỉa mai | 皮肉 / 嫌味     | 빈정대는 / 풍자적 | understated delivery, deliberate pauses, ironic word choices, low-key declarative
+  anxious              | hốt hoảng / lo lắng | 不安 / 焦り     | 불안한 / 초조한  | fragmented short clauses, repetition for urgency, rising intonation, more "?"
+  confessional         | tâm sự / tự sự    | 告白 / 打ち明け  | 고백 / 토로     | personal voice ("I", "me"), vulnerable tone, gentler verbs, slower rhythm
+  mysterious           | bí mật / bí ẩn    | ミステリアス / 神秘的 | 신비로운 / 비밀스러운 | lowered voice register, hints not reveals, "..." for suspense, half-answers
+  investigative        | trinh thám / điều tra | 探偵 / 調査  | 탐정 / 수사     | analytical, building evidence step-by-step, "?" then declarative, deliberate
+
+The creator's tone is "{tone_clause}". If it matches ANY column (English, Vietnamese,
+Japanese, Korean) of one row, apply that row's pattern. If it matches NO row, invent
+a sensible pattern that captures the creator's intent. Apply the chosen pattern
+CONSISTENTLY across EVERY segment.
 
 ═══ OUTPUT FORMAT (STRICT — return ONLY this JSON, nothing else) ═══
 
