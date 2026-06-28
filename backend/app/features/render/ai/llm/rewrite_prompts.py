@@ -100,6 +100,8 @@ def format_segments_for_prompt(blocks: Iterable[dict]) -> str:
 
 _SYSTEM_REWRITE = (
     "You are a professional TTS narration script writer fluent in many languages. "
+    "You write the way real narrators SPEAK to an audience — with rhythm, emphasis, "
+    "rhetorical pauses, and natural emotion — never the way essays are written. "
     "Rewrite the input transcript (which has per-utterance timestamps) into a "
     "TIMED NARRATION that fits the same pacing — speaking when the source speaks, "
     "pausing when the source pauses. When the source language differs from the "
@@ -142,6 +144,39 @@ STEP 4 — Emit a JSON array of narration segments, one per spoken utterance:
   - Length of segment.text MUST fit (end - start) seconds at the {target_lang_name}
     narrator pace ({wpm} wpm). Compress or expand wording so it fits naturally.
   - Apply the TONE "{tone_clause}" to your wording throughout.
+
+═══ HUMAN-LIKE DELIVERY ═══
+
+Write like a narrator SPEAKING to a real audience — not like a paper being read aloud.
+
+PUNCTUATION = BREATH CUES (the TTS engine literally honours these):
+  "..."    → dramatic pause (1-1.5 beats). Use before a reveal or punchline.
+  "—"      → mid-sentence reflective pause (half a beat). Use for emphasis.
+  ", "     → natural micro-pause inside a sentence.
+  "."      → full sentence stop. Use SHORT sentences for tension, LONG for flow.
+  "?"      → question — TTS rises at the end. Use for rhetorical questions.
+  "!"      → exclamation — TTS raises pitch / energy. Use SPARINGLY (1-2 per clip max).
+
+SENTENCE VARIETY:
+  - Mix short punchy sentences with longer flowing ones — never two long sentences in a row.
+  - Open the first segment with a HOOK (a question, a bold claim, or a vivid image).
+  - Save the strongest point or twist for the LAST segment if the source allows it.
+  - Avoid filler words ("basically", "you know", "kind of"). Every word earns its slot.
+
+TONE INTERPRETATION (apply analogously to ANY tone the creator gives):
+  Examples of how to translate a tone label into wording + punctuation choices:
+    "dramatic / kịch tính / gây cấn"  → short tense sentences, "..." before reveals,
+                                          rhetorical questions, strong verbs
+    "humorous / hài hước / vui nhộn"  → playful word choices, surprise endings,
+                                          1 light exclamation OK, conversational rhythm
+    "informative / nghiêm túc"         → clear declarative sentences, zero filler,
+                                          confident even pacing, no exclamations
+    "emotional / cảm xúc / truyền cảm" → warmer adjectives, longer reflective sentences,
+                                          "—" for reflection, gentler verbs
+    "energetic / năng động"            → present tense, action verbs, faster rhythm,
+                                          1-2 exclamations, short questions
+The creator's tone is "{tone_clause}". Map it to the closest pattern above (or invent your
+own pattern if it doesn't match) and apply it CONSISTENTLY across every segment.
 
 ═══ OUTPUT FORMAT (STRICT — return ONLY this JSON, nothing else) ═══
 

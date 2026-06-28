@@ -60,8 +60,8 @@ def test_prompt_truncates_long_input():
     _, usr = build_rewrite_prompt(big, 10.0, "en-US")
     assert "[truncated]" in usr
     # User prompt body bounded by MAX_REWRITE_INPUT_CHARS + truncation marker + template scaffolding
-    # Scaffolding is ~2KB (4 sections, 7 rules, language-name table, language style note).
-    assert len(usr) < MAX_REWRITE_INPUT_CHARS + 3000
+    # Scaffolding is ~5KB now (added HUMAN-LIKE DELIVERY + TONE INTERPRETATION sections).
+    assert len(usr) < MAX_REWRITE_INPUT_CHARS + 6000
 
 
 def test_prompt_default_tone_substituted():
@@ -95,6 +95,24 @@ def test_prompt_includes_translate_or_rewrite_decision_block():
     assert "IF source language ==" in usr
     assert "IF source language !=" in usr
     assert "TRANSLATE + REWRITE" in usr
+
+
+def test_prompt_includes_human_like_delivery_section():
+    # Pins the HUMAN-LIKE DELIVERY block (Step A 2026-06-27): the LLM must
+    # be instructed about breath cues, sentence variety, tone interpretation.
+    _, usr = build_rewrite_prompt("Hello.", 10.0, "vi-VN", tone="gây cấn")
+    assert "HUMAN-LIKE DELIVERY" in usr
+    assert "BREATH CUES" in usr
+    assert "SENTENCE VARIETY" in usr
+    assert "TONE INTERPRETATION" in usr
+    # Tone substitution still works at the bottom of the new section.
+    assert "gây cấn" in usr
+
+
+def test_system_prompt_mentions_human_like_speech():
+    sys, _ = build_rewrite_prompt("Hi.", 5.0, "en-US")
+    assert "SPEAK" in sys.upper() or "speaking" in sys.lower()
+    assert "rhythm" in sys.lower() or "emphasis" in sys.lower()
 
 
 def test_prompt_no_format_keyerror():

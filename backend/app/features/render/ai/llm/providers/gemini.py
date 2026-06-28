@@ -310,6 +310,11 @@ def _run_rewrite(
         "gemini_client: calling rewrite model=%s clip_dur=%.1fs lang=%s tone=%r in_chars=%d budget=%d",
         resolved_model, clip_duration_sec, target_language, tone, len(srt_segmented), word_budget,
     )
+    # Step B (2026-06-27): log the actual prompt sent to the LLM so operators
+    # can diff prompt versions against narration quality. Truncated to 2000
+    # chars — full prompt is reproducible from the cache key.
+    _up_preview = user_prompt if len(user_prompt) <= 2000 else user_prompt[:2000] + f"\n... [+{len(user_prompt)-2000} chars]"
+    logger.info("gemini_client: rewrite prompt preview:\n--- SYSTEM ---\n%s\n--- USER ---\n%s\n--- END ---", system_prompt, _up_preview)
     raw = _call_gemini_rewrite(api_key, resolved_model, system_prompt, user_prompt)
     if not raw:
         logger.warning("gemini_client: empty rewrite response (model=%s)", resolved_model)
