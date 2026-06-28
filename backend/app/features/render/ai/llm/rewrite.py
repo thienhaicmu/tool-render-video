@@ -1,8 +1,11 @@
 """
 rewrite — multi-provider LLM dispatch for TTS subtitle rewrite.
 
-Routes rewrite_subtitle() to the right provider implementation by name.
-Each provider module exposes rewrite_subtitle(...) returning Optional[str].
+v2 (2026-06-27): segmented + timed return type.
+rewrite_subtitle() now returns `Optional[list[dict]]` — a list of
+{start, end, text} segments — instead of a single string. The plain-text
+fallback path is encapsulated in the parser: when the LLM ignores the
+JSON instruction, the parser returns ONE segment spanning the whole clip.
 
 Supported providers: gemini, openai, claude (mirrors __init__.py).
 """
@@ -40,22 +43,27 @@ def _get_provider_rewrite_impl(provider_name: str):
 def rewrite_subtitle(
     *,
     provider: str = DEFAULT_PROVIDER,
-    text: str,
-    target_duration_sec: float,
+    srt_segmented: str,
+    clip_duration_sec: float,
     target_language: str = "vi-VN",
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
-) -> Optional[str]:
-    """Dispatch subtitle-rewrite to the named LLM provider.
+) -> Optional[list[dict]]:
+    """Dispatch segmented subtitle-rewrite to the named LLM provider.
 
-    Returns the rewritten narration string, or None on any failure.
-    Sacred Contract #3 — provider modules catch all exceptions; this
-    function adds the fallback chain wrapper.
+    Inputs:
+      srt_segmented: source SRT pre-formatted as one line per utterance
+        ("[start - end] text"). Use llm.rewrite_prompts.format_segments_for_prompt
+        to produce it from a parsed SRT block list.
+      clip_duration_sec: total clip duration in seconds (TOTAL narration cap).
 
-    When LLM_FALLBACK_ENABLED=1 and primary returns None, the
-    remaining SUPPORTED_PROVIDERS are tried in order until one
-    succeeds (matches behaviour of select_render_plan dispatcher).
+    Returns: list of {start, end, text} segments (one per spoken utterance)
+    OR None on any failure. Sacred Contract #3 — provider modules catch all
+    exceptions; this function adds the fallback chain wrapper.
+
+    When LLM_FALLBACK_ENABLED=1 and primary returns None, the remaining
+    SUPPORTED_PROVIDERS are tried in order until one succeeds.
     """
     primary = (provider or DEFAULT_PROVIDER).strip().lower()
     if primary not in SUPPORTED_PROVIDERS:
@@ -65,8 +73,8 @@ def rewrite_subtitle(
     if _LLM_FALLBACK_ENABLED:
         chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
     kwargs = dict(
-        text=text,
-        target_duration_sec=target_duration_sec,
+        srt_segmented=srt_segmented,
+        clip_duration_sec=clip_duration_sec,
         target_language=target_language,
         tone=tone,
         api_key=api_key,
@@ -84,8 +92,9 @@ def rewrite_subtitle(
             LLM_REWRITE_CALLS.labels(provider=_p, status=_status).inc()
             LLM_REWRITE_LATENCY.labels(provider=_p).observe(_time.perf_counter() - _t0)
             if result:
-                delta = len(result) - len(text or "")
-                LLM_REWRITE_CHAR_DELTA.labels(provider=_p).observe(delta)
+                _out_chars = sum(len(s.get("text", "")) for s in result)
+                _in_chars = len(srt_segmented or "")
+                LLM_REWRITE_CHAR_DELTA.labels(provider=_p).observe(_out_chars - _in_chars)
         except Exception:
             pass
         if result:

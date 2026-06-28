@@ -1,34 +1,36 @@
-"""Tests for rewrite_subtitle dispatcher — provider routing + fallback chain + Sacred #3."""
+"""Tests for rewrite_subtitle dispatcher — v2 segmented return type."""
 import pytest
 
 
 _KW = dict(
-    text="Hello world",
-    target_duration_sec=10.0,
+    srt_segmented="[0.0 - 5.0] Hello world",
+    clip_duration_sec=5.0,
     target_language="en-US",
     tone="",
     api_key="fake",
     model=None,
 )
 
+_SAMPLE_SEGMENTS = [{"start": 0.0, "end": 5.0, "text": "Xin chào"}]
+
 
 def test_dispatch_to_named_provider(monkeypatch):
     monkeypatch.setattr(
         "app.features.render.ai.llm.providers.gemini.rewrite_subtitle",
-        lambda **kw: "REWRITTEN-GEMINI",
+        lambda **kw: _SAMPLE_SEGMENTS,
     )
     from app.features.render.ai.llm.rewrite import rewrite_subtitle
     out = rewrite_subtitle(provider="gemini", **_KW)
-    assert out == "REWRITTEN-GEMINI"
+    assert out == _SAMPLE_SEGMENTS
 
 
 def test_unknown_provider_falls_to_gemini(monkeypatch):
     monkeypatch.setattr(
         "app.features.render.ai.llm.providers.gemini.rewrite_subtitle",
-        lambda **kw: "REWRITTEN",
+        lambda **kw: _SAMPLE_SEGMENTS,
     )
     from app.features.render.ai.llm.rewrite import rewrite_subtitle
-    assert rewrite_subtitle(provider="bogus", **_KW) == "REWRITTEN"
+    assert rewrite_subtitle(provider="bogus", **_KW) == _SAMPLE_SEGMENTS
 
 
 def test_fallback_chain_enabled(monkeypatch):
@@ -42,7 +44,7 @@ def test_fallback_chain_enabled(monkeypatch):
 
     def _openai(**kw):
         call_log.append("openai")
-        return "OK"
+        return _SAMPLE_SEGMENTS
 
     monkeypatch.setattr(
         "app.features.render.ai.llm.providers.gemini.rewrite_subtitle", _gemini,
@@ -51,7 +53,7 @@ def test_fallback_chain_enabled(monkeypatch):
         "app.features.render.ai.llm.providers.openai.rewrite_subtitle", _openai,
     )
     out = rewrite_mod.rewrite_subtitle(provider="gemini", **_KW)
-    assert out == "OK"
+    assert out == _SAMPLE_SEGMENTS
     assert call_log == ["gemini", "openai"]
 
 
@@ -66,7 +68,7 @@ def test_fallback_disabled_returns_primary_only(monkeypatch):
 
     def _openai(**kw):
         call_log.append("openai")
-        return "OK"
+        return _SAMPLE_SEGMENTS
 
     monkeypatch.setattr(
         "app.features.render.ai.llm.providers.gemini.rewrite_subtitle", _gemini,
@@ -91,16 +93,25 @@ def test_all_providers_return_none(monkeypatch):
     assert out is None
 
 
-def test_provider_callable_returning_none_does_not_raise(monkeypatch):
-    # Sacred #3 spirit at the dispatcher boundary: a provider that returns
-    # None instead of raising must surface as None (and trigger fallback if
-    # enabled), never propagate as an exception.
+def test_provider_returning_none_does_not_raise(monkeypatch):
     import app.features.render.ai.llm.rewrite as rewrite_mod
     monkeypatch.setattr(rewrite_mod, "_LLM_FALLBACK_ENABLED", False)
     monkeypatch.setattr(
         "app.features.render.ai.llm.providers.gemini.rewrite_subtitle",
         lambda **kw: None,
     )
-    # Must not raise:
     out = rewrite_mod.rewrite_subtitle(provider="gemini", **_KW)
     assert out is None
+
+
+def test_dispatcher_returns_list_of_dicts(monkeypatch):
+    """v2 contract: return type is list[dict] with start/end/text keys."""
+    monkeypatch.setattr(
+        "app.features.render.ai.llm.providers.gemini.rewrite_subtitle",
+        lambda **kw: _SAMPLE_SEGMENTS,
+    )
+    from app.features.render.ai.llm.rewrite import rewrite_subtitle
+    out = rewrite_subtitle(provider="gemini", **_KW)
+    assert isinstance(out, list)
+    assert all(isinstance(s, dict) for s in out)
+    assert all({"start", "end", "text"} <= set(s.keys()) for s in out)

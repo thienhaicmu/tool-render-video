@@ -254,22 +254,23 @@ def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str)
 
 
 def rewrite_subtitle(
-    text: str,
-    target_duration_sec: float,
+    srt_segmented: str,
+    clip_duration_sec: float,
     target_language: str = "vi-VN",
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
-) -> Optional[str]:
-    """Rewrite per-part transcript into TTS narration sized for target_duration_sec.
+) -> Optional[list[dict]]:
+    """Rewrite per-part transcript into timed TTS narration segments.
 
-    Returns None on any failure (Sacred Contract #3). Uses cache + retry
-    pattern identical to select_render_plan.
+    Returns list of {start, end, text} segments, or None on any failure
+    (Sacred Contract #3). Uses cache + retry pattern identical to
+    select_render_plan.
     """
     try:
         return _run_rewrite(
-            text=text,
-            target_duration_sec=target_duration_sec,
+            srt_segmented=srt_segmented,
+            clip_duration_sec=clip_duration_sec,
             target_language=target_language,
             tone=tone,
             api_key=api_key,
@@ -281,50 +282,50 @@ def rewrite_subtitle(
 
 
 def _run_rewrite(
-    text: str,
-    target_duration_sec: float,
+    srt_segmented: str,
+    clip_duration_sec: float,
     target_language: str,
     tone: str,
     api_key: str,
     model: Optional[str],
-) -> Optional[str]:
+) -> Optional[list[dict]]:
     if not _GENAI_SDK:
         logger.warning("gemini_client: google-genai SDK not installed (rewrite path)")
         return None
     if not api_key:
         logger.warning("gemini_client: no api_key supplied (rewrite path)")
         return None
-    if not text or not text.strip():
-        logger.warning("gemini_client: empty text (rewrite path)")
+    if not srt_segmented or not srt_segmented.strip():
+        logger.warning("gemini_client: empty srt_segmented (rewrite path)")
         return None
     system_prompt, user_prompt = build_rewrite_prompt(
-        text=text,
-        target_duration_sec=target_duration_sec,
+        srt_segmented=srt_segmented,
+        clip_duration_sec=clip_duration_sec,
         target_language=target_language,
         tone=tone,
     )
     resolved_model = model or _DEFAULT_MODEL
-    word_budget = _compute_word_budget(target_duration_sec, target_language)
+    word_budget = _compute_word_budget(clip_duration_sec, target_language)
     logger.info(
-        "gemini_client: calling rewrite model=%s dur=%.1fs lang=%s tone=%r text_chars=%d budget=%d",
-        resolved_model, target_duration_sec, target_language, tone, len(text), word_budget,
+        "gemini_client: calling rewrite model=%s clip_dur=%.1fs lang=%s tone=%r in_chars=%d budget=%d",
+        resolved_model, clip_duration_sec, target_language, tone, len(srt_segmented), word_budget,
     )
     raw = _call_gemini_rewrite(api_key, resolved_model, system_prompt, user_prompt)
     if not raw:
         logger.warning("gemini_client: empty rewrite response (model=%s)", resolved_model)
         return None
-    parsed = parse_rewrite_response(raw, target_duration_sec, word_budget)
-    if parsed is not None:
+    segments = parse_rewrite_response(raw, clip_duration_sec, word_budget)
+    if segments:
         logger.info(
-            "gemini_client: rewrite OK model=%s in_chars=%d out_chars=%d",
-            resolved_model, len(text), len(parsed),
+            "gemini_client: rewrite OK model=%s segments=%d total_chars=%d",
+            resolved_model, len(segments), sum(len(s["text"]) for s in segments),
         )
-    return parsed
+    return segments
 
 
 def _call_gemini_rewrite_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-    """Single Gemini call for rewrite — raises on SDK error. Uses text/plain
-    (not JSON) since rewrite output is plain narration."""
+    """Single Gemini call for rewrite — raises on SDK error. v2 uses JSON
+    mime mode so segmented output parses reliably."""
     client = _genai.Client(
         api_key=api_key,
         http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000},
@@ -334,7 +335,7 @@ def _call_gemini_rewrite_once(api_key: str, model: str, system_prompt: str, user
         contents=user_prompt,
         config={
             "system_instruction": system_prompt,
-            "response_mime_type": "text/plain",
+            "response_mime_type": "application/json",
             "temperature": _TEMPERATURE,
             "max_output_tokens": _REWRITE_MAX_TOKENS,
             "thinking_config": {"thinking_budget": _THINKING_BUDGET},

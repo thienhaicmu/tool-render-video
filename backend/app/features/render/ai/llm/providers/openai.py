@@ -219,22 +219,22 @@ def _call_openai(api_key: str, model: str, system_prompt: str, user_prompt: str)
 
 
 def rewrite_subtitle(
-    text: str,
-    target_duration_sec: float,
+    srt_segmented: str,
+    clip_duration_sec: float,
     target_language: str = "vi-VN",
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
-) -> Optional[str]:
-    """Rewrite per-part transcript into TTS narration sized for target_duration_sec.
+) -> Optional[list[dict]]:
+    """Rewrite per-part transcript into timed TTS narration segments.
 
-    Returns None on any failure (Sacred Contract #3). Uses cache + retry
-    pattern identical to select_render_plan.
+    Returns list of {start, end, text} segments, or None on any failure
+    (Sacred Contract #3).
     """
     try:
         return _run_rewrite(
-            text=text,
-            target_duration_sec=target_duration_sec,
+            srt_segmented=srt_segmented,
+            clip_duration_sec=clip_duration_sec,
             target_language=target_language,
             tone=tone,
             api_key=api_key,
@@ -246,50 +246,51 @@ def rewrite_subtitle(
 
 
 def _run_rewrite(
-    text: str,
-    target_duration_sec: float,
+    srt_segmented: str,
+    clip_duration_sec: float,
     target_language: str,
     tone: str,
     api_key: str,
     model: Optional[str],
-) -> Optional[str]:
+) -> Optional[list[dict]]:
     if not _OPENAI_SDK:
         logger.warning("openai_client: openai SDK not installed (rewrite path)")
         return None
     if not api_key:
         logger.warning("openai_client: no api_key supplied (rewrite path)")
         return None
-    if not text or not text.strip():
-        logger.warning("openai_client: empty text (rewrite path)")
+    if not srt_segmented or not srt_segmented.strip():
+        logger.warning("openai_client: empty srt_segmented (rewrite path)")
         return None
     system_prompt, user_prompt = build_rewrite_prompt(
-        text=text,
-        target_duration_sec=target_duration_sec,
+        srt_segmented=srt_segmented,
+        clip_duration_sec=clip_duration_sec,
         target_language=target_language,
         tone=tone,
     )
     resolved_model = model or _DEFAULT_MODEL
-    word_budget = _compute_word_budget(target_duration_sec, target_language)
+    word_budget = _compute_word_budget(clip_duration_sec, target_language)
     logger.info(
-        "openai_client: calling rewrite model=%s dur=%.1fs lang=%s tone=%r text_chars=%d budget=%d",
-        resolved_model, target_duration_sec, target_language, tone, len(text), word_budget,
+        "openai_client: calling rewrite model=%s clip_dur=%.1fs lang=%s tone=%r in_chars=%d budget=%d",
+        resolved_model, clip_duration_sec, target_language, tone, len(srt_segmented), word_budget,
     )
     raw = _call_openai_rewrite(api_key, resolved_model, system_prompt, user_prompt)
     if not raw:
         logger.warning("openai_client: empty rewrite response (model=%s)", resolved_model)
         return None
-    parsed = parse_rewrite_response(raw, target_duration_sec, word_budget)
-    if parsed is not None:
+    segments = parse_rewrite_response(raw, clip_duration_sec, word_budget)
+    if segments:
         logger.info(
-            "openai_client: rewrite OK model=%s in_chars=%d out_chars=%d",
-            resolved_model, len(text), len(parsed),
+            "openai_client: rewrite OK model=%s segments=%d total_chars=%d",
+            resolved_model, len(segments), sum(len(s["text"]) for s in segments),
         )
-    return parsed
+    return segments
 
 
 def _call_openai_rewrite_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
     """Single OpenAI Chat Completions call for rewrite — raises on SDK error.
-    NOTE: no response_format={'type': 'json_object'} — rewrite is plain text."""
+    v2 uses JSON mode (response_format=json_object) so segmented output parses
+    reliably."""
     client = _openai.OpenAI(api_key=api_key, timeout=30)
     resp = client.chat.completions.create(
         model=model,
@@ -299,6 +300,7 @@ def _call_openai_rewrite_once(api_key: str, model: str, system_prompt: str, user
         ],
         max_tokens=2048,
         temperature=_TEMPERATURE,
+        response_format={"type": "json_object"},
     )
     return resp.choices[0].message.content
 

@@ -227,22 +227,24 @@ def _call_claude(api_key: str, model: str, system_prompt: str, user_prompt: str)
 
 
 def rewrite_subtitle(
-    text: str,
-    target_duration_sec: float,
+    srt_segmented: str,
+    clip_duration_sec: float,
     target_language: str = "vi-VN",
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
-) -> Optional[str]:
-    """Rewrite per-part transcript into TTS narration sized for target_duration_sec.
+) -> Optional[list[dict]]:
+    """Rewrite per-part transcript into timed TTS narration segments.
 
-    Returns None on any failure (Sacred Contract #3). Uses cache + retry
-    pattern identical to select_render_plan.
+    Returns list of {start, end, text} segments, or None on any failure
+    (Sacred Contract #3). Claude has no native JSON mode flag, but the
+    prompt explicitly asks for a single JSON object and the parser
+    tolerates surrounding text.
     """
     try:
         return _run_rewrite(
-            text=text,
-            target_duration_sec=target_duration_sec,
+            srt_segmented=srt_segmented,
+            clip_duration_sec=clip_duration_sec,
             target_language=target_language,
             tone=tone,
             api_key=api_key,
@@ -254,45 +256,45 @@ def rewrite_subtitle(
 
 
 def _run_rewrite(
-    text: str,
-    target_duration_sec: float,
+    srt_segmented: str,
+    clip_duration_sec: float,
     target_language: str,
     tone: str,
     api_key: str,
     model: Optional[str],
-) -> Optional[str]:
+) -> Optional[list[dict]]:
     if not _ANTHROPIC_SDK:
         logger.warning("claude_client: anthropic SDK not installed (rewrite path)")
         return None
     if not api_key:
         logger.warning("claude_client: no api_key supplied (rewrite path)")
         return None
-    if not text or not text.strip():
-        logger.warning("claude_client: empty text (rewrite path)")
+    if not srt_segmented or not srt_segmented.strip():
+        logger.warning("claude_client: empty srt_segmented (rewrite path)")
         return None
     system_prompt, user_prompt = build_rewrite_prompt(
-        text=text,
-        target_duration_sec=target_duration_sec,
+        srt_segmented=srt_segmented,
+        clip_duration_sec=clip_duration_sec,
         target_language=target_language,
         tone=tone,
     )
     resolved_model = model or _DEFAULT_MODEL
-    word_budget = _compute_word_budget(target_duration_sec, target_language)
+    word_budget = _compute_word_budget(clip_duration_sec, target_language)
     logger.info(
-        "claude_client: calling rewrite model=%s dur=%.1fs lang=%s tone=%r text_chars=%d budget=%d",
-        resolved_model, target_duration_sec, target_language, tone, len(text), word_budget,
+        "claude_client: calling rewrite model=%s clip_dur=%.1fs lang=%s tone=%r in_chars=%d budget=%d",
+        resolved_model, clip_duration_sec, target_language, tone, len(srt_segmented), word_budget,
     )
     raw = _call_claude_rewrite(api_key, resolved_model, system_prompt, user_prompt)
     if not raw:
         logger.warning("claude_client: empty rewrite response (model=%s)", resolved_model)
         return None
-    parsed = parse_rewrite_response(raw, target_duration_sec, word_budget)
-    if parsed is not None:
+    segments = parse_rewrite_response(raw, clip_duration_sec, word_budget)
+    if segments:
         logger.info(
-            "claude_client: rewrite OK model=%s in_chars=%d out_chars=%d",
-            resolved_model, len(text), len(parsed),
+            "claude_client: rewrite OK model=%s segments=%d total_chars=%d",
+            resolved_model, len(segments), sum(len(s["text"]) for s in segments),
         )
-    return parsed
+    return segments
 
 
 def _call_claude_rewrite_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:

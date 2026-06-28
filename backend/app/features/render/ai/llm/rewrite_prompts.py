@@ -1,13 +1,21 @@
 """
 rewrite_prompts.py — Prompt template for AI subtitle rewrite for TTS.
 
-Mirrors prompts.py organization but for a different LLM call: rewrite
-the per-part transcript text into TTS-friendly narration that fits a
-target duration in seconds. Used by app.features.render.ai.llm.rewrite.
+v2 (2026-06-27): segmented + timestamp-aware output.
+The LLM sees the source SRT WITH per-utterance timestamps and emits a
+JSON array of segments {start, end, text}. The downstream pipeline
+synthesizes TTS per segment, silence-pads the gaps, and concats them so
+the narration lands at the same pacing as the original speech.
+
+The v1 plain-text path (one rewritten paragraph for the whole clip)
+remains as the implicit fallback inside the parser: when the LLM
+response can't be parsed as JSON, the parser collapses it into a single
+segment spanning the whole clip.
 """
 from __future__ import annotations
 
 import os as _os
+from typing import Iterable, Optional
 
 # Word-per-minute rate per language (avg adult narrator pace).
 # Used to compute word budget = (target_duration_sec / 60) * wpm.
@@ -20,6 +28,11 @@ _WPM_BY_LANG: dict[str, int] = {
     "ko-KR": 180,   # Korean
 }
 _DEFAULT_WPM = 150  # fallback for unrecognised language
+
+# Hard cap on input SRT chars sent to the LLM (rewrite call).
+# Per-part SRTs are short (~15-90 sec → ~50-1500 chars including timestamps),
+# cap at 8000 to cover the long tail and reject pathologically long inputs.
+MAX_REWRITE_INPUT_CHARS = int(_os.getenv("REWRITE_MAX_INPUT_CHARS", "8000"))
 
 # Full language names + native examples so the LLM doesn't have to guess
 # what "vi-VN" means and writes in the right script/style. Critical when
@@ -58,11 +71,6 @@ _DEFAULT_LANG_INFO = {
     "style_note": "Use natural spoken style appropriate to a narrator voice-over.",
 }
 
-# Hard cap on input transcript chars sent to the LLM (rewrite call).
-# Per-part SRTs are short (~15-90 sec → ~50-500 chars), so cap at 4000
-# to cover the long tail and reject pathologically long inputs.
-MAX_REWRITE_INPUT_CHARS = int(_os.getenv("REWRITE_MAX_INPUT_CHARS", "4000"))
-
 
 def _compute_word_budget(target_duration_sec: float, target_language: str) -> int:
     """Return target word count from duration + language WPM table.
@@ -72,23 +80,42 @@ def _compute_word_budget(target_duration_sec: float, target_language: str) -> in
     return max(3, min(800, budget))
 
 
+def format_segments_for_prompt(blocks: Iterable[dict]) -> str:
+    """Render parsed SRT blocks ({start, end, text}) as compact lines
+    `[s.s - e.e] text` — same shape as prompts.py uses for select_render_plan.
+    Drops invalid blocks (missing fields, end <= start)."""
+    lines: list[str] = []
+    for b in blocks:
+        try:
+            s = float(b["start"])
+            e = float(b["end"])
+            t = str(b.get("text", "")).strip()
+        except (TypeError, ValueError, KeyError):
+            continue
+        if e <= s or not t:
+            continue
+        lines.append(f"[{s:.1f} - {e:.1f}] {t}")
+    return "\n".join(lines)
+
+
 _SYSTEM_REWRITE = (
     "You are a professional TTS narration script writer fluent in many languages. "
-    "Rewrite the input transcript to be spoken aloud as a voice-over that fits a "
-    "TARGET DURATION in a SPECIFIC TARGET LANGUAGE. When the source transcript is "
-    "in a different language than the target, TRANSLATE while rewriting — produce "
-    "natural, native-sounding output in the target language (NOT a literal word-for-word "
-    "translation). Preserve every key fact, name, and number. "
-    "Output ONLY the rewritten text — no prose wrappers, no markdown, no code fences, "
-    "no explanation, no language tags, no quotation marks around the output."
+    "Rewrite the input transcript (which has per-utterance timestamps) into a "
+    "TIMED NARRATION that fits the same pacing — speaking when the source speaks, "
+    "pausing when the source pauses. When the source language differs from the "
+    "target language, TRANSLATE while rewriting — produce natural, native-sounding "
+    "output in the target language (NOT a literal word-for-word translation). "
+    "Preserve every key fact, name, and number. "
+    "Output ONLY valid JSON in the exact shape requested — no prose, no markdown, "
+    "no code fences, no explanation."
 )
 
-_USER_TEMPLATE_REWRITE = """Rewrite the SOURCE TRANSCRIPT below into a TTS-ready voice-over script.
+_USER_TEMPLATE_REWRITE = """Rewrite the SOURCE TRANSCRIPT below into a TIMED NARRATION script.
 
 ═══ TARGET OUTPUT ═══
 LANGUAGE:        {target_lang_name} ({target_language}) — write in {target_lang_native}
-DURATION:        {target_duration_sec:.1f} seconds when read aloud by a natural narrator
-WORD COUNT:      about {word_budget} words (at {wpm} words/minute — DO NOT exceed {hard_cap_words} words)
+CLIP DURATION:   {clip_duration_sec:.1f} seconds (TOTAL narration must fit within this)
+WORD BUDGET:     about {word_budget} total words (at {wpm} words/minute for {target_lang_name})
 TONE:            {tone_clause}
 LANGUAGE STYLE:  {style_note}
 
@@ -104,56 +131,79 @@ STEP 2 — Decide your task:
         words except proper nouns (names of people, places, brands).
         The output MUST be entirely in {target_lang_name}.
 
-STEP 3 — Apply the TONE "{tone_clause}" to your wording choices throughout.
+STEP 3 — Read the timestamps `[start - end]` carefully. Each timestamp shows WHEN
+the speaker speaks in the clip. Gaps between timestamps are SILENT pauses.
 
-STEP 4 — Compress or expand so the spoken duration matches {target_duration_sec:.1f}s
-        (about {word_budget} words at the {target_lang_name} narrator pace).
+STEP 4 — Emit a JSON array of narration segments, one per spoken utterance:
+  - Each segment covers ONE [start - end] window from the source (or a merged
+    pair if two utterances are close together, e.g. < 0.5s apart).
+  - Each segment.start / segment.end uses the SAME numbers as the source [start - end].
+  - segment.text is your rewritten narration for that utterance.
+  - Length of segment.text MUST fit (end - start) seconds at the {target_lang_name}
+    narrator pace ({wpm} wpm). Compress or expand wording so it fits naturally.
+  - Apply the TONE "{tone_clause}" to your wording throughout.
+
+═══ OUTPUT FORMAT (STRICT — return ONLY this JSON, nothing else) ═══
+
+{{
+  "segments": [
+    {{ "start": <float>, "end": <float>, "text": "<rewritten narration for this slot>" }},
+    {{ "start": <float>, "end": <float>, "text": "..." }}
+  ]
+}}
 
 ═══ HARD RULES ═══
 
-1. Output is ONE block of plain text. No bullets, no numbering, no headings.
-2. No JSON, no markdown, no code fences, no <tags>, no quotation marks wrapping the whole output.
-3. Preserve every key fact, every name, every number from the source.
-4. Output MUST be 100% in {target_lang_name}. No mixed languages.
-5. Speakable structure: complete sentences, natural pauses, punctuation a narrator can follow.
-6. Avoid symbols a TTS engine mispronounces: no &, no #, no %, no abbreviations
+1. Output is ONE JSON object. No bullets, no markdown, no prose wrapper, no code fences.
+2. `segments` MUST be a non-empty array. Segments MUST NOT overlap and MUST be sorted by start.
+3. Every segment.start >= 0 and segment.end <= {clip_duration_sec:.1f}.
+4. Output MUST be 100% in {target_lang_name}. No mixed languages inside a segment.
+5. Avoid TTS-unfriendly symbols inside segment.text: no &, no #, no %, no abbreviations
    like "Mr." / "U.S." — spell them out the way they should be SPOKEN.
-7. NEVER exceed {hard_cap_words} words. Cut filler first, then merge sentences.
+6. Preserve every key fact, every name, every number from the source.
 
-═══ SOURCE TRANSCRIPT ═══
-{text}
+═══ SOURCE TRANSCRIPT (timestamps in seconds, relative to clip start) ═══
+{srt_segmented}
 
-═══ OUTPUT ═══
-(Write the rewritten narration in {target_lang_native}, nothing else):"""
+═══ OUTPUT JSON ═══
+"""
 
 
 def build_rewrite_prompt(
-    text: str,
-    target_duration_sec: float,
+    srt_segmented: str,
+    clip_duration_sec: float,
     target_language: str,
     tone: str = "",
+    # Back-compat alias for v1 callers passing `text` instead of `srt_segmented`.
+    text: Optional[str] = None,
+    target_duration_sec: Optional[float] = None,
 ) -> tuple[str, str]:
-    """Return (system_prompt, user_prompt) for the rewrite LLM call.
+    """Return (system_prompt, user_prompt) for the segmented rewrite LLM call.
 
-    Inputs are truncated to MAX_REWRITE_INPUT_CHARS so a pathological
-    long input doesn't blow the prompt budget. ``tone`` is a free-form
-    creator hint ("playful", "dramatic", "informative") rendered into
-    the TONE line — empty string defaults to "natural / informative".
+    Inputs:
+      srt_segmented: SRT formatted as one line per utterance:
+        `[start_sec - end_sec] text`. Produced by format_segments_for_prompt().
+      clip_duration_sec: total clip duration in seconds.
+      target_language: ISO-locale ("vi-VN", "en-US", ...).
+      tone: optional creator hint forwarded to the prompt's TONE line.
 
-    Format safety: the template uses {} placeholders exclusively
-    (no literal braces inside the body), so .format() substitution is
-    direct — no brace-doubling needed. Tests pin that the format call
-    accepts the exact placeholder set without KeyError.
+    Back-compat: v1 callers pass `text` + `target_duration_sec`. When that
+    form is used the source is treated as a SINGLE utterance covering the
+    full clip duration.
     """
-    cleaned = (text or "").strip()
+    if text is not None and not srt_segmented:
+        srt_segmented = f"[0.0 - {float(target_duration_sec or 0.0):.1f}] {text}"
+        clip_duration_sec = float(target_duration_sec or clip_duration_sec)
+
+    cleaned = (srt_segmented or "").strip()
     if len(cleaned) > MAX_REWRITE_INPUT_CHARS:
         cleaned = cleaned[:MAX_REWRITE_INPUT_CHARS] + " [truncated]"
-    word_budget = _compute_word_budget(target_duration_sec, target_language)
+    word_budget = _compute_word_budget(clip_duration_sec, target_language)
     wpm = _WPM_BY_LANG.get(target_language, _DEFAULT_WPM)
     tone_clause = (tone or "").strip() or "natural / informative"
     lang_info = _LANG_INFO.get(target_language, _DEFAULT_LANG_INFO)
     user = _USER_TEMPLATE_REWRITE.format(
-        target_duration_sec=float(target_duration_sec),
+        clip_duration_sec=float(clip_duration_sec),
         target_language=target_language,
         target_lang_name=lang_info["name"],
         target_lang_native=lang_info["native"] or lang_info["name"],
@@ -161,7 +211,6 @@ def build_rewrite_prompt(
         word_budget=word_budget,
         wpm=wpm,
         tone_clause=tone_clause,
-        hard_cap_words=word_budget * 2,
-        text=cleaned,
+        srt_segmented=cleaned,
     )
     return _SYSTEM_REWRITE, user
