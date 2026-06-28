@@ -190,6 +190,28 @@ if _AVAILABLE:
         registry=REGISTRY,
     )
 
+    # ADR-007 (2026-06-27): observability for the cancel/Whisper-hang fix.
+    # WHISPER_HANGS_TOTAL — incremented when run_with_hard_timeout fires
+    # the TimeoutError path. Label `model` is the Whisper model name.
+    WHISPER_HANGS_TOTAL = Counter(
+        "whisper_hangs_total",
+        "Whisper transcribe calls killed by the hard-timeout safety net",
+        ["model"],
+        registry=REGISTRY,
+    )
+    # CANCEL_SUBPROCESS_KILL_LATENCY — wall-clock from cancel_event.set()
+    # to the moment process_render actually exits its run_render_pipeline
+    # call. Measures effective cancel responsiveness. The job-level
+    # Whisper wrap (run_with_hard_timeout) polls every 1s, so cancel
+    # latency should land in [0.5, 2.5] under load. Outliers indicate
+    # subprocess kill is not propagating.
+    CANCEL_SUBPROCESS_KILL_LATENCY = Histogram(
+        "cancel_subprocess_kill_latency_seconds",
+        "Wall-clock delay between cancel signal and worker exit",
+        buckets=(0.5, 1, 2, 5, 10, 30, 60, 120),
+        registry=REGISTRY,
+    )
+
     # Phase A — AI/Render boundary visibility.
     # Tracks how often the render engine overrides an empty or invalid AI
     # field with its own editorial fallback.  field label: the RenderPlan
@@ -265,6 +287,8 @@ else:
     LLM_REWRITE_CALLS = _NoOpMetric()         # type: ignore[assignment]
     LLM_REWRITE_LATENCY = _NoOpMetric()       # type: ignore[assignment]
     LLM_REWRITE_CHAR_DELTA = _NoOpMetric()    # type: ignore[assignment]
+    WHISPER_HANGS_TOTAL = _NoOpMetric()       # type: ignore[assignment]
+    CANCEL_SUBPROCESS_KILL_LATENCY = _NoOpMetric()  # type: ignore[assignment]
     RENDER_ENGINE_EDITORIAL_OVERRIDES = _NoOpMetric()  # type: ignore[assignment]
     RENDER_STAGE_DURATION = _NoOpMetric()      # type: ignore[assignment]
     CACHE_LOOKUPS_TOTAL = _NoOpMetric()        # type: ignore[assignment]

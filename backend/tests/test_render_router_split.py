@@ -39,6 +39,9 @@ _EXPECTED_ENDPOINTS: set[tuple[str, str]] = {
     ("POST",   "/api/render/resume/{job_id}"),
     ("POST",   "/api/render/retry/{job_id}"),
     ("POST",   "/api/render/{job_id}/cancel"),
+    # ADR-007 (2026-06-27): cancel-status added so FE can poll subprocess
+    # teardown before re-enabling the Start-Render button.
+    ("GET",    "/api/render/{job_id}/cancel-status"),
 
     # GET /api/render/jobs/{job_id} was removed in audit API03 closure
     # (2026-06-06). It was a byte-for-byte duplicate of GET /api/jobs/{id}
@@ -91,10 +94,12 @@ def test_combined_router_does_not_add_unexpected_endpoints():
     assert not extra, f"unexpected endpoint(s) appeared after split: {sorted(extra)}"
 
 
-def test_combined_router_route_count_is_18():
-    # Was 19 pre-audit; the API03 duplicate /api/render/jobs/{id} was deleted.
+def test_combined_router_route_count_is_19():
+    # 18 → 19 after ADR-007 added GET /{job_id}/cancel-status (2026-06-27).
+    # Was 19 pre-audit; the API03 duplicate /api/render/jobs/{id} was deleted →
+    # back to 18; now 19 again with cancel-status.
     actual = _collect_routes(combined_router)
-    assert len(actual) == 18, f"expected 18 routes, got {len(actual)}: {sorted(actual)}"
+    assert len(actual) == 19, f"expected 19 routes, got {len(actual)}: {sorted(actual)}"
 
 
 # ---------------------------------------------------------------------------

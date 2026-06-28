@@ -599,6 +599,63 @@ def retry_failed_parts(job_id: str):
     return {"job_id": job_id, "status": "queued", "failed_parts_count": len(failed)}
 
 
+@router.get("/{job_id}/cancel-status")
+def get_cancel_status(job_id: str) -> dict:
+    """Return cleanup progress for FE polling after issuing /cancel.
+
+    ADR-007 (2026-06-27): the cancel handler returns immediately with
+    status='cancelling' while the worker thread tears down its Whisper
+    subprocess. The FE polls this endpoint every ~1s to know when it
+    can safely re-enable the Start-Render button — specifically when:
+      * job's DB status is terminal (cancelled / failed / done), AND
+      * the recently-cancelled dedup window has expired (or has not
+        been recorded — i.e. the cancel happened without a source).
+
+    Response shape (additive; safe to extend later):
+        {
+            "job_id": str,
+            "db_status": str,
+            "cancel_signal_set": bool,
+            "subprocess_alive": bool,
+            "can_resubmit": bool,
+        }
+    """
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    db_status = (row.get("status") or "").lower()
+    from app.jobs import cancel as cancel_registry
+    # subprocess_alive ≈ "cancel_event still registered". process_render
+    # calls cancel_registry.unregister(job_id) in its finally block, so a
+    # registered event means the worker thread is still active.
+    _ev = cancel_registry.get_event(job_id)
+    cancel_signal_set = bool(_ev and _ev.is_set())
+    subprocess_alive = _ev is not None
+    # Resubmit-safe when: DB reached terminal AND the dedup grace window
+    # for this (source, channel) has cleared. If we can't read source
+    # from the row, we still allow resubmit once status is terminal.
+    can_resubmit = db_status in ("cancelled", "failed", "done") and not subprocess_alive
+    if can_resubmit:
+        try:
+            import json as _json
+            _stored = _json.loads(row.get("payload_json") or "{}")
+            _src = (_stored.get("source_video_path") or "").strip()
+            _ch = (row.get("channel_code") or "").strip()
+            if _src and cancel_registry.is_cancelling_recently(_src, _ch):
+                # Recently-cancelled ledger still blocking — tell FE to wait.
+                can_resubmit = False
+        except Exception:
+            # Couldn't introspect — be conservative and allow resubmit.
+            pass
+    return {
+        "job_id": job_id,
+        "db_status": db_status,
+        "cancel_signal_set": cancel_signal_set,
+        "subprocess_alive": subprocess_alive,
+        "can_resubmit": can_resubmit,
+    }
+
+
 @router.post("/{job_id}/cancel")
 def cancel_render_job(job_id: str):
     """Signal a running or queued render job to stop.
@@ -616,6 +673,23 @@ def cancel_render_job(job_id: str):
     update_job_progress(job_id, "cancelling", 0, "Cancelling…", status="cancelling")
     from app.jobs import cancel as cancel_registry
     cancel_registry.request_cancel(job_id)
+    # ADR-007 (2026-06-27): record this cancel in the recent-cancels ledger
+    # so a fresh POST /process for the same (source, channel) within 30s is
+    # rejected with 409 by _find_active_duplicate_source. Without this, the
+    # user can resubmit while the previous job's Whisper subprocess is
+    # still running → 2 parallel Whispers on same source → saturated CPU
+    # and the new job appearing to "hang".
+    try:
+        import json as _json
+        _stored = _json.loads(row.get("payload_json") or "{}")
+        _src = (_stored.get("source_video_path") or "").strip()
+        _ch = (row.get("channel_code") or "").strip()
+        if _src:
+            cancel_registry.note_cancel(_src, _ch, job_id)
+    except Exception:
+        # Note-cancel is observability only; never block the cancel path
+        # on it. Worst case = dedup grace window doesn't fire.
+        pass
     # Pha 3.3b — a paused (held) job is OUT of the dispatch heap, so it would
     # never reach process_render to observe the cancel signal (stuck at
     # 'cancelling'). Resume it AFTER request_cancel: it's pushed back to the

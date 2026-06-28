@@ -32,6 +32,7 @@ from app.features.render.engine.pipeline.render_events import _emit_render_event
 from app.db.jobs_repo import update_job_progress
 from app.features.render.engine.subtitle.transcription.whisper import has_audio_stream
 from app.features.render.engine.subtitle.transcription.adapters import transcribe_with_adapter
+from app.jobs.whisper_timeout import run_with_hard_timeout
 from app.services.metrics import WHISPER_TRANSCRIBE_DURATION
 
 logger = logging.getLogger("app.render.llm_pipeline")
@@ -252,17 +253,42 @@ def run_llm_pre_render(
             )
             _hb.start()
             try:
-                transcribe_with_adapter(
-                    str(source_path), str(full_srt),
-                    engine=_engine,
-                    model_name=_model,
-                    retry_count=retry_count,
-                    highlight_per_word=getattr(payload, "highlight_per_word", False),
-                    language=_language,
-                    beam_size=1,
-                    vad_filter=True,
-                    condition_on_previous_text=False,
-                    logger=logger,
+                # ADR-007 (2026-06-27): wrap Whisper in a hard-timeout +
+                # cancel-aware daemon thread. The wrapper rebinds the
+                # cancel_event into the daemon's TLS so ffmpeg subprocess
+                # (audio extract) inside transcribe_with_adapter can see
+                # it via ffmpeg_helpers.set_thread_cancel_event. Without
+                # this, the previous code left the cancel signal silently
+                # dropped at job-level (only per-part Whisper saw it).
+                #
+                # Timeout: max(120s floor, 8× realtime). 8× covers slow
+                # CPU + heavy model (large-v3) without false positives on
+                # healthy machines. Override via env LLM_WHISPER_TIMEOUT_MULT.
+                from app.jobs import cancel as _cancel_reg
+                _cancel_ev = _cancel_reg.get_event(job_id)
+                _timeout_mult = max(2.0, float(_os.getenv("LLM_WHISPER_TIMEOUT_MULT", "8")))
+                _wh_timeout = max(120.0, _video_dur * _timeout_mult)
+
+                def _do_transcribe():
+                    transcribe_with_adapter(
+                        str(source_path), str(full_srt),
+                        engine=_engine,
+                        model_name=_model,
+                        retry_count=retry_count,
+                        highlight_per_word=getattr(payload, "highlight_per_word", False),
+                        language=_language,
+                        beam_size=1,
+                        vad_filter=True,
+                        condition_on_previous_text=False,
+                        logger=logger,
+                    )
+
+                run_with_hard_timeout(
+                    _do_transcribe,
+                    timeout_sec=_wh_timeout,
+                    cancel_event=_cancel_ev,
+                    name=f"whisper_job_{job_id[:8]}",
+                    bind_tls=True,
                 )
                 _ms = int((time.perf_counter() - _t0) * 1000)
                 if full_srt.exists() and full_srt.stat().st_size > 0:
@@ -287,7 +313,34 @@ def run_llm_pre_render(
                         "realtime_speed": round(_rt_speed, 2),
                     },
                 )
+            except TimeoutError as _exc:
+                # ADR-007: hard-timeout from run_with_hard_timeout. Mark
+                # in metrics so ops can spot recurring hangs, then bubble
+                # up as a normal LLMPipelineError so the render fails
+                # cleanly (rather than the previous behaviour of looping
+                # forever in faster-whisper).
+                _hb_stop.set()  # stop heartbeat early so logs don't spam
+                _safe_unlink(full_srt)
+                try:
+                    from app.services.metrics import WHISPER_HANGS_TOTAL
+                    WHISPER_HANGS_TOTAL.labels(model=_model).inc()
+                except Exception:
+                    pass
+                _job_log(
+                    effective_channel, job_id,
+                    f"llm_pipeline.transcription_timeout: {_exc}",
+                    kind="error",
+                )
+                raise LLMPipelineError(
+                    f"LLM pipeline: Whisper hard-timeout exceeded: {_exc}"
+                ) from _exc
             except Exception as _exc:
+                # Includes JobCancelledError raised from run_with_hard_timeout
+                # when cancel_event fires. Propagating as LLMPipelineError
+                # is the existing convention so the orchestrator surfaces
+                # it via the standard FAILED stage; the cancel signal is
+                # also visible in DB (request_cancel already wrote it).
+                _hb_stop.set()  # stop heartbeat early on cancel/error
                 _safe_unlink(full_srt)
                 _job_log(
                     effective_channel, job_id,

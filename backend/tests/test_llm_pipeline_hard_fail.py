@@ -109,6 +109,19 @@ def baseline(monkeypatch, tmp_path):
     # _hb_fn waits on a threading.Event, so the test path returns quickly.
     monkeypatch.setattr(lp.threading, "Thread", _NoopThread)
 
+    # ADR-007 (2026-06-27): run_llm_pre_render now wraps transcribe_with_adapter
+    # in run_with_hard_timeout. That helper uses ThreadPoolExecutor internally,
+    # which itself spawns threads via threading.Thread — and the above patch
+    # turns ALL Thread() calls into no-ops, deadlocking the helper's future.
+    # In tests, bypass the helper entirely: call fn() synchronously in the
+    # caller's thread (no executor, no daemon). Faithfully exercises the
+    # transcribe mock + the exception paths around it; the daemon/timeout
+    # behaviour is covered by tests/test_whisper_timeout.py instead.
+    def _sync_run(fn, **kwargs):
+        return fn()
+
+    monkeypatch.setattr(lp, "run_with_hard_timeout", _sync_run)
+
     # Provide an API key in the env-side config so the no-key check passes
     # for the default-success test. Individual tests override.
     from app.core import config as _cfg

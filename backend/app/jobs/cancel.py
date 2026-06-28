@@ -1,8 +1,25 @@
 ﻿import threading
+import time
+from collections import deque
+from typing import Optional
 
 _EVENTS: dict[str, threading.Event] = {}
 _PENDING: set[str] = set()
 _LOCK = threading.Lock()
+
+# Recently-cancelled jobs ledger — used by _find_active_duplicate_source to
+# block fresh submits within a grace window after cancel. Bounded deque so
+# memory stays flat under sustained cancel rate. Each entry is a tuple of
+# (source_path, channel_code, job_id, timestamp_sec).
+#
+# ADR-007 (2026-06-27): when a user cancels a Whisper-heavy job and
+# immediately resubmits the same source, the cancelled job's subprocess
+# may still be running for several seconds while the new job tries to
+# start. Both Whispers running on the same source saturates CPU/RAM.
+# The grace window blocks the resubmit so the user re-tries after the
+# original is fully gone (FE polls /cancel-status to know when).
+_RECENT_CANCELS: "deque[tuple[str, str, str, float]]" = deque(maxlen=200)
+_RECENT_CANCELS_WINDOW_SEC = 30.0
 
 
 class JobCancelledError(RuntimeError):
@@ -36,6 +53,62 @@ def request_cancel(job_id: str) -> bool:
         # Job not yet in process_render — queue the cancel so register() picks it up
         _PENDING.add(job_id)
         return False
+
+
+def note_cancel(source_path: str, channel_code: str, job_id: str) -> None:
+    """Record that a job has just been cancelled, for the recently-cancelled ledger.
+
+    Called from the cancel HTTP handler right after ``request_cancel``.
+    ``_find_active_duplicate_source`` consults this ledger so a fresh
+    submit for the same (source, channel) within the grace window is
+    rejected with 409 (giving the previous job's subprocess time to
+    fully exit).
+
+    No-op if source_path is empty — only "real" sources need dedup
+    protection. Resume/retry paths use the same job_id (no resubmit
+    race possible).
+    """
+    src = (source_path or "").strip()
+    if not src:
+        return
+    ts = time.time()
+    with _LOCK:
+        _RECENT_CANCELS.append((src, channel_code, job_id, ts))
+
+
+def is_cancelling_recently(
+    source_path: str,
+    channel_code: str,
+    *,
+    window_sec: Optional[float] = None,
+) -> Optional[str]:
+    """Return job_id of a job for (source_path, channel) that was cancelled within
+    ``window_sec`` (default :data:`_RECENT_CANCELS_WINDOW_SEC`), or None.
+
+    Used by ``_find_active_duplicate_source`` to extend dedup beyond just
+    'running'/'queued' jobs into the cancel-cleanup grace window.
+    """
+    src = (source_path or "").strip()
+    if not src:
+        return None
+    win = float(window_sec) if window_sec is not None else _RECENT_CANCELS_WINDOW_SEC
+    now = time.time()
+    with _LOCK:
+        # Walk newest-first so we surface the most recent matching cancel.
+        for entry_src, entry_ch, entry_job, entry_ts in reversed(_RECENT_CANCELS):
+            if (now - entry_ts) > win:
+                # Entries are appended in time order — once we're past the
+                # window we can stop scanning.
+                break
+            if entry_src == src and entry_ch == channel_code:
+                return entry_job
+    return None
+
+
+def _reset_recent_cancels_for_tests() -> None:
+    """Test-only helper to clear the recent-cancels ledger between cases."""
+    with _LOCK:
+        _RECENT_CANCELS.clear()
 
 
 def is_cancelled(job_id: str) -> bool:

@@ -297,24 +297,32 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
 
 
 def _find_active_duplicate_source(channel_code: str, source_path: str) -> str | None:
-    """Return job_id of an active (running/queued) job with the same source, or None.
+    """Return job_id of an active (running/queued/cancelling/recently-cancelled)
+    job with the same source, or None.
 
-    Defense against accidental double-submit from the UI: each POST /process
-    generates a fresh UUID, so the queue's job_id dedup doesn't catch two
-    rapid clicks on the same source. This walks the recent jobs and rejects
-    a new submit when an identical source is already in flight on the same
-    channel. Resume/retry paths bypass this (they reuse an existing job_id
-    and shouldn't be dedup'd against themselves).
+    Defense against accidental double-submit + cancel-resubmit race:
+      * Layer A — DB scan for jobs whose status is still 'running',
+        'queued', or 'cancelling' (the cancelling state didn't block
+        resubmit before ADR-007 — root cause of the duplicate-Whisper
+        bug reported 2026-06-27).
+      * Layer B — in-memory ledger of jobs cancelled within the last
+        30 s, populated by cancel.note_cancel(). Gives the previous
+        job's subprocess time to fully exit before letting the same
+        source re-enter the pipeline.
+
+    Resume/retry paths bypass this (they reuse an existing job_id and
+    shouldn't be dedup'd against themselves) — see _queue_render_job's
+    `resume_mode` guard.
     """
     src = (source_path or "").strip()
     if not src:
         return None
     from app.db.jobs_repo import list_jobs_page
-    # Scan the most recent 30 jobs — active queue is bounded by
-    # MAX_CONCURRENT_JOBS (default cpu//2) so duplicates can only live
-    # in a short tail.
+    # Layer A: DB scan. 30 most recent jobs covers the active queue
+    # (bounded by MAX_CONCURRENT_JOBS) + any in-flight cancelling.
+    _BLOCK_STATUSES = ("running", "queued", "cancelling")
     for j in list_jobs_page(30, 0):
-        if (j.get("status") or "") not in ("running", "queued"):
+        if (j.get("status") or "") not in _BLOCK_STATUSES:
             continue
         if (j.get("channel_code") or "") != channel_code:
             continue
@@ -324,6 +332,11 @@ def _find_active_duplicate_source(channel_code: str, source_path: str) -> str | 
             continue
         if (stored.get("source_video_path") or "").strip() == src:
             return j.get("job_id")
+    # Layer B: recently-cancelled ledger (ADR-007 grace window).
+    from app.jobs import cancel as cancel_registry
+    recent = cancel_registry.is_cancelling_recently(src, channel_code)
+    if recent:
+        return recent
     return None
 
 
