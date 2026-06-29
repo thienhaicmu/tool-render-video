@@ -210,3 +210,39 @@ def test_recap_plan_column_exists_after_migration(_isolated_db):
     finally:
         conn.close()
     assert "recap_plan_json" in cols
+
+
+# ── N5: recap continuity + coverage ──────────────────────────────────────────
+
+def test_recap_continuity_carries_previous_intent():
+    from app.features.render.engine.pipeline.recap_pipeline import _scored_from_recap_plan
+    plan = RecapPlan.from_json(json.dumps({"acts": [{"title": "A", "beat": "setup", "scenes": [
+        {"start": 10, "end": 40, "narration_intent": "hero introduced"},
+        {"start": 60, "end": 90, "narration_intent": "first conflict"},
+    ]}]}))
+    s = _scored_from_recap_plan(plan)
+    assert "Previously: hero introduced" in s[1]["editorial_hint"]
+    assert "Now: first conflict" in s[1]["editorial_hint"]
+    # first scene has no "Previously"
+    assert "Previously:" not in s[0]["editorial_hint"]
+
+
+def test_recap_coverage_flags_clustered_plan():
+    from app.features.render.engine.pipeline.recap_pipeline import _check_recap_coverage
+    # all scenes in the first ~3% of a 3600s film → weak
+    plan = RecapPlan.from_json(json.dumps({"acts": [{"scenes": [
+        {"start": 5, "end": 35}, {"start": 40, "end": 70}, {"start": 75, "end": 100},
+    ]}]}))
+    cov = _check_recap_coverage(plan, 3600.0)
+    assert cov["weak"] is True and cov["span_pct"] < 50.0
+
+
+def test_recap_coverage_ok_when_well_spread():
+    from app.features.render.engine.pipeline.recap_pipeline import _check_recap_coverage
+    # scenes spread across a 300s film with small gaps → not weak
+    plan = RecapPlan.from_json(json.dumps({"acts": [{"scenes": [
+        {"start": 10, "end": 50}, {"start": 70, "end": 120}, {"start": 140, "end": 190},
+        {"start": 210, "end": 260}, {"start": 270, "end": 295},
+    ]}]}))
+    cov = _check_recap_coverage(plan, 300.0)
+    assert cov["weak"] is False

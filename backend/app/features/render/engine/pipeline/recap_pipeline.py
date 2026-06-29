@@ -73,22 +73,31 @@ def _scored_from_recap_plan(recap_plan) -> list[dict]:
     step can group scenes back into acts for title cards."""
     out: list[dict] = []
     n_acts = len(recap_plan.acts)
+    _prev_intent = ""   # N5: carry the previous scene's intent for continuity
     for act_i, act in enumerate(recap_plan.acts):
         for scene in act.scenes:
             start = float(scene.start)
             end = float(scene.end)
             if end <= start:
                 continue
-            # R3: compose the per-scene DIRECTOR'S INTENT — act position + the
-            # plan's narration_intent — so the narrator tells one continuous
-            # story across scenes (not isolated per-clip blurbs).
+            # R3 + N5: compose the per-scene DIRECTOR'S INTENT — act position +
+            # the PREVIOUS scene's intent + this scene's intent — so the narrator
+            # tells ONE continuous story that flows scene→scene (not isolated
+            # per-clip blurbs).
             _intent = (scene.narration_intent or "").strip()
             _act_tag = f"Act {act_i + 1}/{n_acts}"
             if act.title:
                 _act_tag += f" — {act.title}"
             if act.beat:
                 _act_tag += f" ({act.beat})"
-            _editorial = f"[Recap {_act_tag}] {_intent}".strip() if (_intent or act.title) else ""
+            _hint_parts = [f"[Recap {_act_tag}]"]
+            if _prev_intent:
+                _hint_parts.append(f"Previously: {_prev_intent}.")
+            if _intent:
+                _hint_parts.append(f"Now: {_intent}")
+            _editorial = " ".join(_hint_parts).strip() if (_intent or act.title or _prev_intent) else ""
+            if _intent:
+                _prev_intent = _intent
             out.append({
                 "start": start,
                 "end": end,
@@ -112,6 +121,34 @@ def _scored_from_recap_plan(recap_plan) -> list[dict]:
                 "act_beat": act.beat or "",
             })
     return out
+
+
+def _check_recap_coverage(recap_plan, video_duration: float) -> dict:
+    """N5 — measure how well the selected scenes span the film. Returns metrics
+    + a `weak` flag (scenes clustered into a small span, or a large uncovered
+    gap between consecutive scenes). Never raises."""
+    dur = float(video_duration) if video_duration and video_duration > 0 else 0.0
+    scenes = sorted(recap_plan.scenes(), key=lambda s: float(s.start))
+    if not scenes or dur <= 0:
+        return {"weak": False, "span_pct": 0.0, "max_gap_pct": 0.0, "scenes": len(scenes)}
+    first = float(scenes[0].start)
+    last = float(scenes[-1].end)
+    span_pct = max(0.0, min(100.0, (last - first) / dur * 100.0))
+    # Largest uncovered gap between consecutive selected scenes.
+    max_gap = 0.0
+    for a, b in zip(scenes, scenes[1:]):
+        max_gap = max(max_gap, float(b.start) - float(a.end))
+    max_gap_pct = max(0.0, min(100.0, max_gap / dur * 100.0))
+    # Weak when the plan covers < 50% of the runtime OR leaves a > 40% hole.
+    weak = span_pct < 50.0 or max_gap_pct > 40.0
+    return {
+        "weak": bool(weak),
+        "span_pct": round(span_pct, 1),
+        "max_gap_pct": round(max_gap_pct, 1),
+        "scenes": len(scenes),
+        "first_scene_sec": round(first, 1),
+        "last_scene_sec": round(last, 1),
+    }
 
 
 def run_recap(
@@ -210,6 +247,31 @@ def run_recap(
                 "total_target_sec": recap_plan.total_target_sec,
             },
         )
+
+        # N5 — coverage check: does the plan span the whole film, or did the AI
+        # cluster scenes in one part / leave a huge gap? Diagnostic only (emit
+        # event + log) so the operator can see a weak plan; never blocks render.
+        try:
+            _cov = _check_recap_coverage(recap_plan, video_duration)
+            _emit_render_event(
+                channel_code=effective_channel, job_id=job_id, event="recap.coverage",
+                level=("WARNING" if _cov["weak"] else "INFO"),
+                message=(
+                    f"Recap coverage: span={_cov['span_pct']:.0f}% of film, "
+                    f"largest gap={_cov['max_gap_pct']:.0f}%"
+                    + (" — weak (scenes clustered / big gap)" if _cov["weak"] else "")
+                ),
+                step="render.recap", context=_cov,
+            )
+            if _cov["weak"]:
+                _job_log(
+                    effective_channel, job_id,
+                    f"recap_coverage_warning span={_cov['span_pct']:.0f}% max_gap={_cov['max_gap_pct']:.0f}% "
+                    f"— AI plan may not cover the whole film",
+                    kind="warning",
+                )
+        except Exception:
+            pass
 
         scored = _scored_from_recap_plan(recap_plan)
         if not scored:
