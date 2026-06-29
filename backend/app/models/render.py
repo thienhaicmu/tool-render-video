@@ -216,6 +216,11 @@ class RenderRequest(BaseModel):
     # commentary with the source content. Sacred Contract #2: default "" so
     # stored historical payloads replay with no behavioural change.
     narration_mode: str = ""
+    # Reaction density (narration_mode="reaction"): "" (default = balanced) |
+    # "low" (sparse — few interjections, let the original carry more) | "medium"
+    # | "high" (chatty — more reactions + freezes). Sacred Contract #2: default
+    # "" so stored payloads replay unchanged.
+    reaction_intensity: str = ""
     subtitle_translate_enabled: bool = False
     subtitle_target_language: str = "en"
     market_viral: Optional[dict] = None
@@ -547,6 +552,8 @@ class RenderRequest(BaseModel):
             raise ValueError("voice_mix_mode must be 'replace_original' or 'keep_original_low'")
         if self.narration_mode not in {"", "reaction"}:
             raise ValueError("narration_mode must be '' or 'reaction'")
+        if self.reaction_intensity not in {"", "low", "medium", "high"}:
+            raise ValueError("reaction_intensity must be '', 'low', 'medium', or 'high'")
         if self.narration_mode == "reaction" and self.voice_source != "ai_rewrite":
             raise ValueError("narration_mode='reaction' requires voice_source='ai_rewrite'")
         return self

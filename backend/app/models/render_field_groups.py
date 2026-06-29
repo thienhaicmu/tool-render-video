@@ -75,7 +75,7 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
     "voice": frozenset({
         "voice_enabled", "voice_language", "voice_gender", "voice_rate",
         "voice_mix_mode", "voice_text", "voice_source", "voice_id",
-        "narration_style", "rewrite_tone", "narration_mode",
+        "narration_style", "rewrite_tone", "narration_mode", "reaction_intensity",
     }),
     "reup": frozenset({
         "reup_mode", "reup_overlay_enable", "reup_overlay_opacity",

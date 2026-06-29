@@ -105,8 +105,9 @@ def test_render_request_field_count_unchanged():
     # Sacred Contract #2 verified: narration_mode defaults to "" (non-active).
     # 2026-06-29 recap R1: +1 (render_format, default "clips") → 155.
     # Sacred Contract #2 verified: render_format defaults to "clips" (current behaviour).
-    assert field_count == 155, (
-        f"RenderRequest now has {field_count} fields (expected 155 post-recap-R1). "
+    # 2026-07 N4: +1 (reaction_intensity, default "") → 156.
+    assert field_count == 156, (
+        f"RenderRequest now has {field_count} fields (expected 156 post-N4). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

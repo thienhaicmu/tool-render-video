@@ -144,6 +144,7 @@ export interface RenderRequest {
   voice_mix_mode?: 'replace_original' | 'keep_original_low'
   rewrite_tone?: string
   narration_mode?: '' | 'reaction'
+  reaction_intensity?: '' | 'low' | 'medium' | 'high'
   hook_apply_enabled?: boolean
   hook_overlay_enabled?: boolean
 

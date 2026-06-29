@@ -53,6 +53,7 @@ def select_render_plan(
     model: Optional[str] = None,
     language: str = "auto",
     editorial_hint: str = "",
+    reaction_intensity: str = "",
     target_duration: int = 0,
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
@@ -87,6 +88,7 @@ def select_render_plan(
             model=model,
             language=language,
             editorial_hint=editorial_hint,
+            reaction_intensity=reaction_intensity,
             target_duration=target_duration,
             clip_lock=clip_lock,
             clip_exclude=clip_exclude,
@@ -143,6 +145,7 @@ def _run_render_plan(
         language=language,
         max_srt_chars=_MAX_SRT_CHARS,
         editorial_hint=editorial_hint,
+        reaction_intensity=reaction_intensity,
         target_duration=target_duration,
         clip_lock=clip_lock,
         clip_exclude=clip_exclude,
@@ -240,6 +243,7 @@ def rewrite_subtitle(
     total_parts: int = 0,
     narration_mode: str = "",
     editorial_hint: str = "",
+    reaction_intensity: str = "",
 ) -> Optional[list[dict]]:
     """Rewrite per-part transcript into timed TTS narration segments.
 
@@ -262,6 +266,7 @@ def rewrite_subtitle(
             total_parts=total_parts,
             narration_mode=narration_mode,
             editorial_hint=editorial_hint,
+            reaction_intensity=reaction_intensity,
         )
     except Exception as exc:
         logger.warning("openai_client: rewrite_subtitle unexpected error %s", exc, exc_info=True)
@@ -283,6 +288,7 @@ def _run_rewrite(
     total_parts: int = 0,
     narration_mode: str = "",
     editorial_hint: str = "",
+    reaction_intensity: str = "",
 ) -> Optional[list[dict]]:
     if not _OPENAI_SDK:
         logger.warning("openai_client: openai SDK not installed (rewrite path)")
@@ -306,6 +312,7 @@ def _run_rewrite(
         total_parts=total_parts,
         narration_mode=narration_mode,
         editorial_hint=editorial_hint,
+        reaction_intensity=reaction_intensity,
     )
     resolved_model = model or _DEFAULT_MODEL
     word_budget = _compute_word_budget(clip_duration_sec, target_language)

@@ -616,6 +616,8 @@ def run_part_voice_mix(
                     # plan's narration_intent + act context here so the narrator
                     # tells the story across scenes. Empty for clips (no change).
                     editorial_hint=str(seg.get("editorial_hint", "") or ""),
+                    # N4: reaction density (low/medium/high) steers the prompt.
+                    reaction_intensity=str(getattr(ctx.payload, "reaction_intensity", "") or ""),
                 )
                 _used_fallback = False
                 if not _segments:
@@ -721,6 +723,38 @@ def run_part_voice_mix(
                         step="voice.tts",
                         context={"part_no": idx, "lang_repaired": _lang_fixed, "voice_language": _voice_lang},
                     )
+                # N4 — verify the reaction actually interleaved (reactor leads,
+                # then goes silent so the ORIGINAL audio carries the climax). If
+                # voice covers nearly the whole clip with no 'original' window /
+                # gap, the LLM produced a faithful-style read, not a reaction.
+                # Diagnostic only (emit event) — don't destroy narration content.
+                if str(getattr(ctx.payload, "narration_mode", "") or "").strip().lower() == "reaction" and _segments:
+                    try:
+                        _voice_dur = sum(
+                            max(0.0, float(s.get("end", 0)) - float(s.get("start", 0)))
+                            for s in _segments
+                            if str(s.get("kind", "voice") or "voice").lower() == "voice"
+                        )
+                        _has_original = any(str(s.get("kind", "") or "").lower() == "original" for s in _segments)
+                        _coverage = (_voice_dur / _clip_dur) if _clip_dur > 0 else 0.0
+                        if _coverage > 0.85 and not _has_original:
+                            _job_log(
+                                ctx.effective_channel, ctx.job_id,
+                                f"reaction_no_interleave part_no={idx}: voice covers {_coverage*100:.0f}% with no original window "
+                                f"(LLM ignored interleave). Try reaction_intensity=low or a different provider.",
+                                kind="warning",
+                            )
+                            _emit_render_event(
+                                channel_code=ctx.effective_channel,
+                                job_id=ctx.job_id,
+                                event="reaction_no_interleave",
+                                level="WARNING",
+                                message=f"Reaction did not interleave (voice covers {_coverage*100:.0f}%, part {idx})",
+                                step="voice.tts",
+                                context={"part_no": idx, "voice_coverage": round(_coverage, 3)},
+                            )
+                    except Exception:
+                        pass
                 ctx.voice_part_tts_attempts.append(idx)
                 if ctx.cancel_registry.is_cancelled(ctx.job_id):
                     raise ctx.cancel_registry.JobCancelledError()

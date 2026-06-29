@@ -96,6 +96,8 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     "rewrite_tone",
     # Narration persona ("" | "reaction") for the ai_rewrite voice path.
     "narration_mode",
+    # Reaction density ("" | low | medium | high).
+    "reaction_intensity",
     # Hook
     "hook_apply_enabled", "hook_overlay_enabled",
     # T1.4 — Audit 2026-06-08 closure (Batch A V8-B5 + UP26 + UP27 + v2).

@@ -324,6 +324,20 @@ REACTION OUTPUT EXAMPLE (shape only — your timestamps come from the source):
   ] }"""
 
 
+# Reaction density steer (payload.reaction_intensity). Empty = balanced (the
+# base _REACTION_SECTION already describes a sensible default).
+_REACTION_INTENSITY_GUIDANCE: dict[str, str] = {
+    "low": "Be SPARSE — at most 1–2 short reactions at the single biggest "
+           "moment(s); let the ORIGINAL audio carry most of the clip. Prefer "
+           "more/longer 'original' windows. Use freeze at most once.",
+    "medium": "Balanced — react at the clear beats, leave clear gaps for the "
+              "original between them.",
+    "high": "Be CHATTY and energetic — react often (every few seconds) with "
+            "short punchy lines, more freeze beats before payoffs; still leave "
+            "the climax 'original' windows for the source audio to land.",
+}
+
+
 def _build_clip_context_section(
     *,
     content_type: str,
@@ -398,6 +412,7 @@ def build_rewrite_prompt(
     total_parts: int = 0,
     narration_mode: str = "",
     editorial_hint: str = "",
+    reaction_intensity: str = "",
     # Back-compat alias for v1 callers passing `text` instead of `srt_segmented`.
     text: Optional[str] = None,
     target_duration_sec: Optional[float] = None,
@@ -441,6 +456,11 @@ def build_rewrite_prompt(
     _is_reaction = (narration_mode or "").strip().lower() == "reaction"
     system_prompt = _SYSTEM_REWRITE_REACTION if _is_reaction else _SYSTEM_REWRITE
     reaction_section = _REACTION_SECTION if _is_reaction else ""
+    if _is_reaction:
+        _intensity = (reaction_intensity or "").strip().lower()
+        _intensity_line = _REACTION_INTENSITY_GUIDANCE.get(_intensity, "")
+        if _intensity_line:
+            reaction_section += f"\n\nINTENSITY ({_intensity}): {_intensity_line}"
     user = _USER_TEMPLATE_REWRITE.format(
         clip_duration_sec=float(clip_duration_sec),
         target_language=target_language,

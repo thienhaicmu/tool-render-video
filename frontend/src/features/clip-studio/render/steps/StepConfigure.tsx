@@ -939,6 +939,25 @@ function StepConfigureBase({
                   <div style={{ fontSize: '9px', color: 'var(--text-3)', marginTop: '2px', fontFamily: 'var(--fb)', lineHeight: 1.4 }}>
                     {t.cfgReactionModeHint}
                   </div>
+                  {cfg.narrationMode === 'reaction' && (
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-3)', marginBottom: '4px', fontFamily: 'var(--fb)' }}>
+                        {t.cfgReactionIntensity}
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {(['low', 'medium', 'high'] as const).map((lvl) => (
+                          <div
+                            key={lvl}
+                            className={`seg-b${(cfg.reactionIntensity || 'medium') === lvl ? ' on' : ''}`}
+                            style={{ flex: 1, textAlign: 'center', textTransform: 'capitalize' }}
+                            onClick={() => setCfgKey('reactionIntensity', lvl)}
+                          >
+                            {lvl}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

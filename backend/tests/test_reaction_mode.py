@@ -104,3 +104,19 @@ def test_plan_skips_original_segments_and_zero_freeze():
 
 def test_plan_empty_when_no_segments():
     assert plan_freeze_points([], render_speed=1.0, clip_final_duration=10.0) == []
+
+
+# ── N4: reaction intensity ───────────────────────────────────────────────────
+
+def test_reaction_intensity_steers_prompt():
+    from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt
+    _, low = build_rewrite_prompt("[0-5] a", 5.0, "vi-VN", narration_mode="reaction", reaction_intensity="low")
+    assert "INTENSITY (low)" in low and "SPARSE" in low
+    _, high = build_rewrite_prompt("[0-5] a", 5.0, "vi-VN", narration_mode="reaction", reaction_intensity="high")
+    assert "INTENSITY (high)" in high and "CHATTY" in high
+    # default (no intensity) → no intensity line
+    _, base = build_rewrite_prompt("[0-5] a", 5.0, "vi-VN", narration_mode="reaction")
+    assert "INTENSITY (" not in base
+    # intensity ignored when not reaction
+    _, faithful = build_rewrite_prompt("[0-5] a", 5.0, "vi-VN", reaction_intensity="high")
+    assert "INTENSITY (" not in faithful

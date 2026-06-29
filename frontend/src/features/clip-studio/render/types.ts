@@ -41,6 +41,8 @@ export interface ConfigState {
   // Reaction persona for ai_rewrite: '' = faithful rewrite, 'reaction' =
   // faceless reaction/storyteller (lead-in → freeze → original payoff).
   narrationMode: '' | 'reaction'
+  // Reaction density ('' = balanced | low | medium | high).
+  reactionIntensity: '' | 'low' | 'medium' | 'high'
   voiceMixMode:  'replace_original' | 'keep_original_low'
   outputDir:     string
   renderProfile: 'fast' | 'balanced' | 'quality' | 'best'
