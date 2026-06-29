@@ -284,3 +284,29 @@ def test_group_voice_segments_skips_original_and_respects_disable():
         {"kind": "voice", "start": 3.1, "end": 6, "text": "b"},
     ]
     assert len(g(close, 0.0)) == 2
+
+
+# ── Recap scene quality: min duration + whole-film coverage ──────────────────
+
+def test_recap_parser_merges_tiny_scenes():
+    """2–5s subtitle-line fragments must be merged into >=6s coherent scenes."""
+    raw = json.dumps({"acts": [{"title": "A", "scenes": [
+        {"start": 0, "end": 3}, {"start": 3, "end": 6}, {"start": 6, "end": 9},
+        {"start": 20, "end": 24}, {"start": 24, "end": 28},
+    ]}]})
+    plan = parse_recap_response(raw, 300.0)
+    assert plan is not None
+    assert all((s.end - s.start) >= 6.0 for s in plan.scenes()), \
+        f"tiny scenes survived: {[(s.start, s.end) for s in plan.scenes()]}"
+
+
+def test_recap_transcript_downsampled_spans_whole_film():
+    """A long transcript is downsampled (not head-truncated) so the AI sees the
+    whole runtime — fixes the 'recap covers only the opening 6%' bug."""
+    from app.features.render.ai.llm.recap_prompts import _fit_transcript
+    big = "\n".join(f"[{i}.0 - {i+1}.0] line {i}" for i in range(20000))
+    fit = _fit_transcript(big, 5000)
+    assert len(fit) <= 5200
+    # contains an early AND a late line (spans the film, not just the head)
+    assert "line 0" in fit
+    assert any(f"line {i}" in fit for i in range(19000, 20000))

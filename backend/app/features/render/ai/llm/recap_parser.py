@@ -16,6 +16,41 @@ from app.domain.recap_plan import RecapPlan
 
 logger = logging.getLogger("app.render.llm_recap_parser")
 
+# Minimum recap scene length — safety net against the AI emitting subtitle-line
+# fragments (2–5s) that make a choppy montage. Short scenes are MERGED into a
+# neighbour. Override via RECAP_MIN_SCENE_SEC.
+import os as _os
+_RECAP_MIN_SCENE_SEC: float = max(0.0, float(_os.getenv("RECAP_MIN_SCENE_SEC", "6") or 6))
+
+
+def _merge_short_scenes(scenes: list[dict], min_sec: float) -> list[dict]:
+    """Merge consecutive scenes shorter than min_sec into a neighbour so no
+    2–5s fragments survive. Combines is_climax + keeps the first non-empty
+    narration_intent. Never raises."""
+    if not scenes or min_sec <= 0:
+        return scenes
+    try:
+        out: list[dict] = [dict(scenes[0])]
+        for s in scenes[1:]:
+            prev = out[-1]
+            if (prev["end"] - prev["start"]) < min_sec:
+                prev["end"] = s["end"]
+                prev["is_climax"] = bool(prev.get("is_climax")) or bool(s.get("is_climax"))
+                if not prev.get("narration_intent") and s.get("narration_intent"):
+                    prev["narration_intent"] = s["narration_intent"]
+                if not prev.get("title") and s.get("title"):
+                    prev["title"] = s["title"]
+            else:
+                out.append(dict(s))
+        # If the final scene is still too short, fold it back into its neighbour.
+        if len(out) >= 2 and (out[-1]["end"] - out[-1]["start"]) < min_sec:
+            last = out.pop()
+            out[-1]["end"] = last["end"]
+            out[-1]["is_climax"] = bool(out[-1].get("is_climax")) or bool(last.get("is_climax"))
+        return out
+    except Exception:
+        return scenes
+
 _FENCE_RE = re.compile(r"^\s*```(?:[a-z]+)?\s*\n?|\n?\s*```\s*$", re.IGNORECASE)
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -74,6 +109,7 @@ def _clean(data: dict, video_duration: float) -> Optional[RecapPlan]:
         if not scenes_out:
             continue
         scenes_out.sort(key=lambda x: x["start"])
+        scenes_out = _merge_short_scenes(scenes_out, _RECAP_MIN_SCENE_SEC)
         acts_out.append({
             "title": str(act.get("title", "") or "").strip(),
             "beat": str(act.get("beat", "") or "").strip().lower(),
