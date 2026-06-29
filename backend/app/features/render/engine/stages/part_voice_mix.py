@@ -761,6 +761,38 @@ def run_part_voice_mix(
                 traceback_text=traceback.format_exc(),
             )
 
+    # ── R3b: burn the spoken narration as captions (recap only) ─────────────
+    # Recap shows the narrator's words on-screen. Burns AFTER the voice mix and
+    # BEFORE the BGM/freeze passes so the freeze re-times the captions with the
+    # video. Gated on render_format=="recap" (no new payload field; clips path
+    # unaffected). Sacred Contract #3 spirit: failure leaves the clip uncaptioned.
+    if (
+        str(getattr(ctx.payload, "render_format", "clips") or "clips").strip().lower() == "recap"
+        and _reaction_segments
+        and final_part.exists()
+    ):
+        try:
+            from app.features.render.engine.stages.recap_narration_subtitle import burn_narration_subtitle
+            _sub_tmp = final_part.with_name(final_part.stem + ".narrsub_tmp.mp4")
+            _speed = _get_effective_playback_speed(ctx.payload, ctx.target_platform)
+            if burn_narration_subtitle(
+                video_path=str(final_part),
+                segments=_reaction_segments,
+                out_path=str(_sub_tmp),
+                speed=_speed,
+                video_crf=int(getattr(ctx.payload, "video_crf", None) or 18),
+            ):
+                os.replace(str(_sub_tmp), str(final_part))
+                _job_log(ctx.effective_channel, ctx.job_id, f"recap_narration_subtitle_burned part_no={idx}")
+            else:
+                _safe_unlink(_sub_tmp)
+        except Exception as _nsub_exc:
+            _job_log(
+                ctx.effective_channel, ctx.job_id,
+                f"recap_narration_subtitle_failed part_no={idx}: {_nsub_exc}; continuing without narration captions",
+                kind="warning",
+            )
+
     # Sprint 6 P0-3 (audit 2026-06-04 O-13): the raw per-part TTS MP3
     # (and any *.cleaned.mp3 variant emitted by _maybe_cleanup_narration_
     # audio) sit in TEMP_DIR/{job_id}/voice/ until the per-job prune.

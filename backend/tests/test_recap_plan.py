@@ -174,6 +174,35 @@ def test_editorial_hint_in_rewrite_prompt():
     assert "DIRECTOR'S INTENT" not in u2
 
 
+def test_narration_srt_voice_only_and_speed_mapped(tmp_path):
+    """R3b — narration SRT: voice segments only (skip 'original'), timestamps
+    mapped to the final timeline (source/speed)."""
+    from app.features.render.engine.stages.recap_narration_subtitle import build_narration_srt
+    segs = [
+        {"kind": "voice", "start": 0, "end": 4, "text": "opening"},
+        {"kind": "original", "start": 4, "end": 7},          # skipped (no caption)
+        {"kind": "voice", "start": 6, "end": 9, "text": "climax"},
+    ]
+    out = tmp_path / "n.srt"
+    assert build_narration_srt(segs, speed=2.0, out_path=str(out)) is True
+    body = out.read_text(encoding="utf-8")
+    assert "opening" in body and "climax" in body
+    # speed=2 → source 0-4s maps to final 0-2s
+    assert "00:00:00,000 --> 00:00:02,000" in body
+    # 'original' window produced no caption → only 2 cue indices
+    assert body.count(" --> ") == 2
+
+
+def test_narration_srt_empty_when_no_voice():
+    from app.features.render.engine.stages.recap_narration_subtitle import build_narration_srt
+    import tempfile, os
+    fd, p = tempfile.mkstemp(suffix=".srt"); os.close(fd)
+    try:
+        assert build_narration_srt([{"kind": "original", "start": 0, "end": 5}], 1.0, p) is False
+    finally:
+        os.unlink(p)
+
+
 def test_recap_plan_column_exists_after_migration(_isolated_db):
     conn = sqlite3.connect(str(_isolated_db))
     try:
