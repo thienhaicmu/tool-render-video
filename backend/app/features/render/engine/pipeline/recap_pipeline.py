@@ -113,6 +113,10 @@ def _scored_from_recap_plan(recap_plan) -> list[dict]:
                 "ai_reason": scene.narration_intent or "",
                 "narration_intent": _intent,
                 "editorial_hint": _editorial,
+                # AI-authored recap narration (content-strategy: AI writes it,
+                # engine just speaks it). When present, part_voice_mix TTS's this
+                # directly and SKIPS the per-scene rewrite LLM call.
+                "narration_text": (scene.narration or "").strip(),
                 "source": "recap",
                 "content_type_hint": "",
                 "is_climax": bool(scene.is_climax),

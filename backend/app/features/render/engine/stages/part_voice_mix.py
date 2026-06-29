@@ -296,7 +296,75 @@ def run_part_voice_mix(
         f"voice_mix.bgm_enabled={_effective_bgm_enabled} mood={_bgm_mood or 'none'} vol_offset={_bgm_volume_offset:+.1f}dB part_no={idx}",
         kind="debug",
     )
+    # ── Pre-authored narration (content-strategy: AI WROTE the narration) ────
+    # Recap (and future Rewrite/Reaction holistic plans) hand the engine the
+    # ACTUAL narration text per scene via seg["narration_text"]. The engine just
+    # TTS's it — NO source-SRT parsing, NO per-scene rewrite LLM call. This is
+    # the "AI Director decides content, engine executes" path.
     if (
+        _effective_voice_enabled
+        and ctx.voice_audio_path is None
+        and str(seg.get("narration_text", "") or "").strip()
+    ):
+        _clip_dur = max(1.0, float(seg["end"]) - float(seg["start"]))
+        _segments = [{"start": 0.0, "end": _clip_dur, "text": str(seg.get("narration_text")).strip()}]
+        _reaction_segments = _segments   # feeds R3b narration-subtitle burn
+        ctx.voice_part_tts_attempts.append(idx)
+        if ctx.cancel_registry.is_cancelled(ctx.job_id):
+            raise ctx.cancel_registry.JobCancelledError()
+        try:
+            _job_log(
+                ctx.effective_channel, ctx.job_id,
+                f"voice.preauthored part_no={idx}: speaking AI-authored narration (skip rewrite)",
+                kind="debug",
+            )
+            _emit_render_event(
+                channel_code=ctx.effective_channel, job_id=ctx.job_id,
+                event="voice_tts_started", level="INFO",
+                message=f"Generating AI voice from authored narration (part {idx})",
+                step="voice.tts",
+                context={"part_no": idx, "language": ctx.payload.voice_language, "source": "authored"},
+            )
+            _part_subtitle_voice_path = synthesize_timed_narration(
+                segments=_segments,
+                clip_duration_sec=_clip_dur,
+                voice_language=ctx.payload.voice_language,
+                voice_gender=ctx.payload.voice_gender,
+                voice_rate=ctx.payload.voice_rate,
+                voice_id=getattr(ctx.payload, "voice_id", None),
+                content_type=str(seg.get("content_type_hint") or "vlog"),
+                tts_engine=_resolve_voice_provider_from_plan(
+                    ctx, getattr(ctx.payload, "tts_engine", "edge")
+                ),
+                job_id=ctx.job_id,
+                part_idx=idx,
+            )
+            if not _part_subtitle_voice_path:
+                raise RuntimeError("synthesize_timed_narration returned None")
+            _emit_render_event(
+                channel_code=ctx.effective_channel, job_id=ctx.job_id,
+                event="voice_tts_completed", level="INFO",
+                message=f"AI authored narration voiced (part {idx})",
+                step="voice.tts",
+                context={"part_no": idx, "audio_path": _part_subtitle_voice_path},
+            )
+            _part_subtitle_voice_path = _maybe_cleanup_narration_audio(
+                str(_part_subtitle_voice_path), ctx.payload,
+                effective_channel=ctx.effective_channel, job_id=ctx.job_id,
+                part_no=idx, source="authored",
+            )
+        except Exception as _auth_exc:
+            _part_subtitle_voice_path = None
+            _job_log(ctx.effective_channel, ctx.job_id, f"voice_authored_failed part_no={idx}: {_auth_exc}", kind="error")
+            _emit_render_event(
+                channel_code=ctx.effective_channel, job_id=ctx.job_id,
+                event="voice_failed", level="ERROR",
+                message=f"AI authored narration failed (part {idx}): {_auth_exc}",
+                step="voice.tts", exception=_auth_exc,
+                traceback_text=traceback.format_exc(),
+                context={"part_no": idx, "error_code": "VOICE001"},
+            )
+    elif (
         _effective_voice_enabled
         and getattr(ctx.payload, "voice_source", "manual") == "subtitle"
         and ctx.voice_audio_path is None

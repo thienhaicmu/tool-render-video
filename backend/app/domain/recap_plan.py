@@ -42,7 +42,11 @@ class RecapScene:
     start: float = 0.0
     end: float = 0.0
     title: str = ""
-    narration_intent: str = ""
+    # AI-authored recap narration spoken over this scene (the actual text, not
+    # just an intent). Written with whole-film understanding so the recap is
+    # cohesive end-to-end. The engine TTS's this directly — no per-scene rewrite.
+    narration: str = ""
+    narration_intent: str = ""   # legacy/fallback hint when `narration` is empty
     is_climax: bool = False
 
 
@@ -144,6 +148,7 @@ def _scene_from_dict(d: dict[str, Any]) -> RecapScene:
         start=_coerce_float(d.get("start"), 0.0),
         end=_coerce_float(d.get("end"), 0.0),
         title=str(d.get("title", "") or ""),
+        narration=str(d.get("narration", "") or ""),
         narration_intent=str(d.get("narration_intent", "") or ""),
         is_climax=_coerce_bool(d.get("is_climax"), False),
     )

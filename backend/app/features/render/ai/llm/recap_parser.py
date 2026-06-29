@@ -36,6 +36,10 @@ def _merge_short_scenes(scenes: list[dict], min_sec: float) -> list[dict]:
             if (prev["end"] - prev["start"]) < min_sec:
                 prev["end"] = s["end"]
                 prev["is_climax"] = bool(prev.get("is_climax")) or bool(s.get("is_climax"))
+                # Concatenate the AI-authored narration so the merged scene keeps
+                # both lines (the engine speaks the combined text).
+                if s.get("narration"):
+                    prev["narration"] = (str(prev.get("narration", "")).strip() + " " + s["narration"]).strip()
                 if not prev.get("narration_intent") and s.get("narration_intent"):
                     prev["narration_intent"] = s["narration_intent"]
                 if not prev.get("title") and s.get("title"):
@@ -103,6 +107,7 @@ def _clean(data: dict, video_duration: float) -> Optional[RecapPlan]:
             scenes_out.append({
                 "start": round(st, 3), "end": round(en, 3),
                 "title": str(s.get("title", "") or "").strip(),
+                "narration": str(s.get("narration", "") or "").strip(),
                 "narration_intent": str(s.get("narration_intent", "") or "").strip(),
                 "is_climax": bool(s.get("is_climax", False)),
             })

@@ -338,3 +338,19 @@ def test_qa_repair_noop_when_language_correct(monkeypatch):
         [{"kind": "voice", "start": 0, "end": 4, "text": "Anh ấy rất sốc khi nghe"}], "vi-VN"
     )
     assert n == 0 and called["n"] == 0   # correct language → never calls translate
+
+
+# ── Pre-authored narration (content-strategy: AI wrote it, engine TTS's it) ───
+
+def test_preauthored_narration_tts_direct_skips_rewrite(_branch_test_env, tmp_path):
+    captured, events, srt_part = _branch_test_env
+    ctx = _make_ctx(tmp_path, _make_payload())
+    # seg carries AI-authored narration → engine must TTS it directly, no rewrite.
+    seg = {"start": 0.0, "end": 8.0, "content_type_hint": "vlog",
+           "narration_text": "Đây là lời thuyết minh AI viết sẵn."}
+    _invoke_branch(ctx, srt_part, seg, idx=1)
+    assert captured["synth_kwargs"]["segments"] == [
+        {"start": 0.0, "end": 8.0, "text": "Đây là lời thuyết minh AI viết sẵn."}
+    ]
+    assert "rewrite_kwargs" not in captured     # rewrite LLM was NOT called
+    assert "voice_tts_started" in events and "voice_tts_completed" in events

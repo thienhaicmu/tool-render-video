@@ -310,3 +310,23 @@ def test_recap_transcript_downsampled_spans_whole_film():
     # contains an early AND a late line (spans the film, not just the head)
     assert "line 0" in fit
     assert any(f"line {i}" in fit for i in range(19000, 20000))
+
+
+# ── Content-strategy: AI-authored recap narration ────────────────────────────
+
+def test_recap_scene_narration_roundtrips_and_flows_to_scored():
+    from app.features.render.engine.pipeline.recap_pipeline import _scored_from_recap_plan
+    plan = RecapPlan.from_json(json.dumps({"acts": [{"title": "A", "scenes": [
+        {"start": 10, "end": 40, "narration": "Mở đầu: nhân vật chính xuất hiện."},
+    ]}]}))
+    assert plan.scenes()[0].narration.startswith("Mở đầu")
+    assert RecapPlan.from_json(plan.to_json()).scenes()[0].narration == plan.scenes()[0].narration
+    scored = _scored_from_recap_plan(plan)
+    assert scored[0]["narration_text"] == "Mở đầu: nhân vật chính xuất hiện."
+
+
+def test_recap_prompt_requests_authored_narration_and_full_transcript():
+    from app.features.render.ai.llm.recap_prompts import build_recap_prompt, MAX_RECAP_SRT_CHARS
+    _, u = build_recap_prompt("[0-30] x", 1800.0, "vi-VN")
+    assert '"narration"' in u                 # schema asks for actual narration text
+    assert MAX_RECAP_SRT_CHARS >= 500000       # whole-film transcript (no head-truncate)
