@@ -235,13 +235,26 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         # A cancel requested while the job was still queued pre-sets the event.
         if ev.is_set():
             raise cancel_registry.JobCancelledError()
-        run_render_pipeline(
-            job_id=job_id,
-            payload=payload,
-            resume_mode=resume_mode,
-            load_session_fn=_load_session,
-            cleanup_session_fn=_cleanup_preview_session,
-        )
+        # render_format="recap" routes to a FULLY SEPARATE orchestrator so the
+        # clips path (run_render_pipeline) is never touched. Both share this
+        # wrapper's cancel / failure / metrics / close_thread_conn housekeeping.
+        if str(getattr(payload, "render_format", "clips") or "clips").strip().lower() == "recap":
+            from app.features.render.engine.pipeline.recap_pipeline import run_recap
+            run_recap(
+                job_id=job_id,
+                payload=payload,
+                resume_mode=resume_mode,
+                load_session_fn=_load_session,
+                cleanup_session_fn=_cleanup_preview_session,
+            )
+        else:
+            run_render_pipeline(
+                job_id=job_id,
+                payload=payload,
+                resume_mode=resume_mode,
+                load_session_fn=_load_session,
+                cleanup_session_fn=_cleanup_preview_session,
+            )
     except cancel_registry.JobCancelledError:
         # P3-B1: use the JobStage enum constant instead of the raw string so a
         # future enum-only validation refactor doesn't silently break cancellation.

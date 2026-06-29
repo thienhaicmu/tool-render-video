@@ -128,6 +128,28 @@ def test_recap_plan_persistence_roundtrip(_isolated_db):
     assert get_recap_plan("missing_job") is None      # defensive
 
 
+def test_scored_from_recap_plan_shape():
+    from app.features.render.engine.pipeline.recap_pipeline import _scored_from_recap_plan
+    plan = RecapPlan.from_json(json.dumps({
+        "acts": [
+            {"title": "A", "beat": "setup", "scenes": [
+                {"start": 0, "end": 30}, {"start": 40, "end": 70, "is_climax": True},
+            ]},
+            {"title": "B", "beat": "climax", "scenes": [{"start": 100, "end": 130}]},
+        ],
+    }))
+    scored = _scored_from_recap_plan(plan)
+    assert len(scored) == 3
+    # chronological + act grouping preserved
+    assert [s["start"] for s in scored] == [0.0, 40.0, 100.0]
+    assert scored[0]["act_index"] == 0 and scored[2]["act_index"] == 1
+    assert scored[1]["is_climax"] is True
+    # every entry has the keys the render loop / part_renderer reads
+    for s in scored:
+        assert {"start", "end", "duration", "viral_score", "clip_name", "source"} <= set(s)
+        assert s["source"] == "recap"
+
+
 def test_recap_plan_column_exists_after_migration(_isolated_db):
     conn = sqlite3.connect(str(_isolated_db))
     try:
