@@ -76,6 +76,15 @@ Xem bảng đầy đủ trong [AI_INTEGRATION.md](AI_INTEGRATION.md). Chính:
 `GEMINI_DEFAULT_MODEL`/`GEMINI_THINKING_BUDGET`/`GEMINI_REQUEST_TIMEOUT`,
 `*_MAX_SRT_CHARS`, `REWRITE_MAX_INPUT_CHARS`, `PROMPTS_MAX_SRT_CHARS`.
 
+Narration rewrite rate-limit protection (per-part calls run in parallel → can
+burst a free-tier RPM limit and fail → narration falls back / loses reaction):
+
+| Env | Mặc định | Ý nghĩa |
+|-----|----------|---------|
+| `LLM_REWRITE_MAX_CONCURRENCY` | `1` | Số lời gọi rewrite LLM đồng thời (1 = tuần tự, tránh burst 429). Tăng khi dùng tier trả phí |
+| `LLM_REWRITE_MIN_INTERVAL_SEC` | `0` | Khoảng cách tối thiểu giữa 2 lời gọi rewrite (giây). Vd `4.0` cho ~15 RPM free tier |
+| `*_REWRITE_TEMPERATURE` | `0.85` | Nhiệt độ rewrite (gemini/openai/claude) |
+
 ## 7. Download (yt-dlp)
 
 | Biến | Ý nghĩa |

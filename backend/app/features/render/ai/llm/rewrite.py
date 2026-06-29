@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time as _time
 from typing import Optional
 
@@ -21,6 +22,33 @@ logger = logging.getLogger("app.render.llm.rewrite")
 SUPPORTED_PROVIDERS = ("gemini", "openai", "claude")
 DEFAULT_PROVIDER = "gemini"
 _LLM_FALLBACK_ENABLED: bool = os.getenv("LLM_FALLBACK_ENABLED", "1") == "1"
+
+# Rate-limit protection (2026-07): per-part rewrite calls fire CONCURRENTLY
+# (parts render in parallel), so on free tiers (e.g. Gemini 15 RPM) they burst
+# and hit 429 → the part falls back (translated/plain) and loses its reaction
+# structure. Serialise the LLM rewrite calls with a small semaphore so they
+# don't burst; the per-provider call_with_retry then mops up residual 429s.
+# Default 1 (fully serial). Raise on paid tiers via LLM_REWRITE_MAX_CONCURRENCY.
+_REWRITE_MAX_CONCURRENCY: int = max(1, int(os.getenv("LLM_REWRITE_MAX_CONCURRENCY", "1")))
+_REWRITE_SEMAPHORE = threading.Semaphore(_REWRITE_MAX_CONCURRENCY)
+# Optional minimum gap between rewrite calls (seconds) to pace RPM. 0 = off.
+# e.g. 15 RPM → set 4.0 to guarantee ≤15 calls/min even with fast responses.
+_REWRITE_MIN_INTERVAL_SEC: float = max(0.0, float(os.getenv("LLM_REWRITE_MIN_INTERVAL_SEC", "0") or 0))
+_REWRITE_PACE_LOCK = threading.Lock()
+_REWRITE_LAST_CALL: list = [0.0]   # mutable; guarded by _REWRITE_PACE_LOCK
+
+
+def _rewrite_pace_wait() -> None:
+    """Block until at least _REWRITE_MIN_INTERVAL_SEC has elapsed since the
+    previous rewrite call (no-op when the interval is 0)."""
+    if _REWRITE_MIN_INTERVAL_SEC <= 0:
+        return
+    with _REWRITE_PACE_LOCK:
+        _now = _time.monotonic()
+        _wait = (_REWRITE_LAST_CALL[0] + _REWRITE_MIN_INTERVAL_SEC) - _now
+        if _wait > 0:
+            _time.sleep(_wait)
+        _REWRITE_LAST_CALL[0] = _time.monotonic()
 
 
 def _get_provider_rewrite_impl(provider_name: str):
@@ -99,7 +127,12 @@ def rewrite_subtitle(
     for _p in chain:
         _impl = _get_provider_rewrite_impl(_p)
         _t0 = _time.perf_counter()
-        result = _impl(**kwargs)
+        # Serialise + pace the LLM call so parallel parts don't burst the
+        # provider's RPM limit (the main cause of None → fallback → lost
+        # reaction). call_with_retry inside the provider handles residual 429s.
+        with _REWRITE_SEMAPHORE:
+            _rewrite_pace_wait()
+            result = _impl(**kwargs)
         _status = "success" if result else "empty"
         try:
             from app.services.metrics import (
