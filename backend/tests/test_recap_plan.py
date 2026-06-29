@@ -246,3 +246,41 @@ def test_recap_coverage_ok_when_well_spread():
     ]}]}))
     cov = _check_recap_coverage(plan, 300.0)
     assert cov["weak"] is False
+
+
+# ── N3: prosody grouping ─────────────────────────────────────────────────────
+
+def test_group_voice_segments_merges_adjacent():
+    from app.features.render.engine.audio.timed_narration import _group_voice_segments as g
+    segs = [
+        {"kind": "voice", "start": 0, "end": 3, "text": "a"},
+        {"kind": "voice", "start": 3.3, "end": 6, "text": "b"},
+        {"kind": "voice", "start": 6.2, "end": 9, "text": "c"},
+    ]
+    r = g(segs, 0.6)
+    assert len(r) == 1 and r[0]["text"] == "a b c" and r[0]["start"] == 0.0 and r[0]["end"] == 9.0
+
+
+def test_group_voice_segments_keeps_large_gaps_separate():
+    from app.features.render.engine.audio.timed_narration import _group_voice_segments as g
+    segs = [
+        {"kind": "voice", "start": 0, "end": 3, "text": "a"},
+        {"kind": "voice", "start": 8, "end": 10, "text": "b"},
+    ]
+    assert len(g(segs, 0.6)) == 2
+
+
+def test_group_voice_segments_skips_original_and_respects_disable():
+    from app.features.render.engine.audio.timed_narration import _group_voice_segments as g
+    segs = [
+        {"kind": "voice", "start": 0, "end": 3, "text": "a"},
+        {"kind": "original", "start": 3, "end": 7},
+        {"kind": "voice", "start": 7, "end": 9, "text": "b"},
+    ]
+    assert len(g(segs, 0.6)) == 2          # original window splits the groups
+    # max_gap=0 → no merging
+    close = [
+        {"kind": "voice", "start": 0, "end": 3, "text": "a"},
+        {"kind": "voice", "start": 3.1, "end": 6, "text": "b"},
+    ]
+    assert len(g(close, 0.0)) == 2

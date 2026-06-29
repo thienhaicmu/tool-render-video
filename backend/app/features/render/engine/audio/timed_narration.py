@@ -45,6 +45,46 @@ _ATEMPO_MAX: float = 1.25       # cap speed-up so voice doesn't sound chipmunk
 # is running fully offline (Piper/XTTS). Cap at 8 to avoid disk/thread storms.
 _TTS_CONCURRENCY: int = max(1, min(8, int(os.getenv("TIMED_NARRATION_TTS_CONCURRENCY", "3"))))
 
+# N3 (2026-07) — prosody continuity. The old path synthesised every utterance as
+# a SEPARATE TTS call; the engine resets intonation at each boundary → choppy,
+# slightly robotic delivery on fragmented transcripts. Merge consecutive voice
+# segments whose gap is below this threshold into ONE synthesis unit so the
+# voice flows naturally across them; larger gaps (intentional pauses / reaction
+# 'original' windows) stay separate. 0 = disable grouping (legacy per-segment).
+_MERGE_GAP_SEC: float = max(0.0, float(os.getenv("NARRATION_MERGE_GAP_SEC", "0.6")))
+
+
+def _group_voice_segments(segments: list[dict], max_gap: float) -> list[dict]:
+    """Merge consecutive voice segments separated by < max_gap into single
+    units (text joined, span = first.start..last.end). Skips 'original'
+    (reaction) windows. Returns the synthesis units sorted by start.
+    max_gap <= 0 → no merging (each voice segment stays its own unit)."""
+    voice: list[dict] = []
+    for s in (segments or []):
+        try:
+            if str(s.get("kind", "voice") or "voice").strip().lower() == "original":
+                continue
+            st = float(s.get("start", 0.0))
+            en = float(s.get("end", 0.0))
+            txt = str(s.get("text", "") or "").strip()
+        except (TypeError, ValueError):
+            continue
+        if not txt or en <= st:
+            continue
+        voice.append({"start": st, "end": en, "text": txt})
+    voice.sort(key=lambda x: x["start"])
+    if not voice or max_gap <= 0:
+        return voice
+    groups: list[dict] = [dict(voice[0])]
+    for s in voice[1:]:
+        g = groups[-1]
+        if (s["start"] - g["end"]) <= max_gap:
+            g["end"] = s["end"]
+            g["text"] = (g["text"] + " " + s["text"]).strip()
+        else:
+            groups.append(dict(s))
+    return groups
+
 
 def _probe_duration_s(path: str) -> float:
     """Return audio duration in seconds. 0.0 on failure."""
@@ -187,6 +227,18 @@ def synthesize_timed_narration(
     if not segments:
         logger.warning("timed_narration: empty segments")
         return None
+
+    # N3 — merge adjacent voice segments for smoother prosody (see helper).
+    _orig_n = len(segments)
+    segments = _group_voice_segments(segments, _MERGE_GAP_SEC)
+    if not segments:
+        logger.warning("timed_narration: no voice segments after grouping")
+        return None
+    if len(segments) != _orig_n:
+        logger.info(
+            "timed_narration: grouped %d segment(s) → %d unit(s) for smoother prosody",
+            _orig_n, len(segments),
+        )
 
     work_dir = TEMP_DIR / job_id / "voice" / f"part_{part_idx:03d}_segs"
     try:
