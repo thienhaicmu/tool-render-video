@@ -25,6 +25,8 @@ from app.features.render.ai.llm.prompts import build_render_plan_prompt
 from app.features.render.ai.llm.retry import call_with_retry
 from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
+from app.features.render.ai.llm.recap_prompts import build_recap_prompt
+from app.features.render.ai.llm.recap_parser import parse_recap_response
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.claude_client")
@@ -362,3 +364,67 @@ def _call_claude_rewrite(api_key: str, model: str, system_prompt: str, user_prom
         llm_cache_put("claude-rewrite", model, system_prompt, user_prompt, result)
     return result
 
+
+
+# ── Recap/Review Film selection (render_format="recap") ──────────────────────
+_RECAP_MAX_TOKENS = int(os.getenv("CLAUDE_RECAP_MAX_TOKENS", "8192"))
+_RECAP_TEMPERATURE = float(os.getenv("CLAUDE_RECAP_TEMPERATURE", "0.4"))
+
+
+def select_recap_plan(
+    srt_content: str,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["RecapPlan"]:
+    """Select scenes + act structure for a recap. None on any failure (Sacred #3)."""
+    try:
+        if not _ANTHROPIC_SDK:
+            logger.warning("claude_client: anthropic SDK not installed (recap path)")
+            return None
+        if not api_key or not srt_content or not srt_content.strip():
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        system_prompt, user_prompt = build_recap_prompt(srt_content, video_duration, target_language, tone)
+        logger.info("claude_client: calling recap model=%s film_dur=%.0fs", resolved_model, video_duration)
+        raw = _call_claude_recap(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            return None
+        plan = parse_recap_response(raw, video_duration)
+        if plan is not None:
+            logger.info("claude_client: recap OK acts=%d scenes=%d", len(plan.acts), plan.scene_count())
+        return plan
+    except Exception as exc:
+        logger.warning("claude_client: select_recap_plan unexpected error %s", exc, exc_info=True)
+        return None
+
+
+def _call_claude_recap_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _AnthClient(api_key=api_key, timeout=60)
+    resp = client.messages.create(
+        model=model,
+        max_tokens=_RECAP_MAX_TOKENS,
+        temperature=_RECAP_TEMPERATURE,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    if not resp.content:
+        return None
+    parts = [block.text for block in resp.content if getattr(block, "type", "") == "text"]
+    return "\n".join(parts) if parts else None
+
+
+def _call_claude_recap(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    cached = llm_cache_get("claude-recap", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("claude_client: recap cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
+        lambda: _call_claude_recap_once(api_key, model, system_prompt, user_prompt),
+        label="claude-recap",
+    )
+    if result is not None:
+        llm_cache_put("claude-recap", model, system_prompt, user_prompt, result)
+    return result

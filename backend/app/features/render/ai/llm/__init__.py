@@ -46,6 +46,62 @@ def _get_provider_impl(provider_name: str):
     return _impl
 
 
+def _get_recap_impl(provider_name: str):
+    """Return the select_recap_plan callable for the named provider."""
+    if provider_name == "openai":
+        from app.features.render.ai.llm.providers.openai import select_recap_plan as _impl
+    elif provider_name == "claude":
+        from app.features.render.ai.llm.providers.claude import select_recap_plan as _impl
+    else:
+        from app.features.render.ai.llm.providers.gemini import select_recap_plan as _impl
+    return _impl
+
+
+def select_recap_plan(
+    *,
+    provider: str = DEFAULT_PROVIDER,
+    srt_content: str,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["RecapPlan"]:
+    """Dispatch recap scene-selection (render_format="recap") to a provider.
+
+    The provider selects chronological, act-structured scenes covering the
+    whole film. Returns a RecapPlan or None (Sacred Contract #3). When
+    LLM_FALLBACK_ENABLED=1 and the primary returns None, the remaining
+    providers are tried in order.
+    """
+    primary = (provider or DEFAULT_PROVIDER).strip().lower()
+    if primary not in SUPPORTED_PROVIDERS:
+        primary = "gemini"
+    chain = [primary]
+    if _LLM_FALLBACK_ENABLED:
+        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    kwargs = dict(
+        srt_content=srt_content,
+        video_duration=video_duration,
+        target_language=target_language,
+        tone=tone,
+        api_key=api_key,
+        model=model,
+    )
+    for _p in chain:
+        try:
+            result = _get_recap_impl(_p)(**kwargs)
+        except Exception as exc:  # defensive — provider modules already never raise
+            logger.warning("llm: select_recap_plan provider=%s raised %s", _p, exc)
+            result = None
+        if result is not None:
+            if _p != primary:
+                logger.info("llm: recap fallback succeeded provider=%s (primary=%s None)", _p, primary)
+            return result
+        logger.warning("llm: recap provider=%s returned None", _p)
+    return None
+
+
 def select_render_plan(
     *,
     provider: str = DEFAULT_PROVIDER,

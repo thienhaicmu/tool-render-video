@@ -341,6 +341,11 @@ class RenderRequest(BaseModel):
 
     # ── New vision fields (v2) ────────────────────────────────────────────────
     # Output Goals
+    # Render format: "clips" (default — N short clips, current behaviour) |
+    # "recap" (one long, act-structured recap/review video — see
+    # docs/RECAP_REVIEW_SPEC.md). Sacred Contract #2: default "clips" so stored
+    # historical payloads replay unchanged.
+    render_format: str = "clips"
     target_duration: int = 90
     output_count: int = 1
     video_type: str = "auto"          # auto|viral|storytelling|educational|emotional|high_retention
@@ -433,6 +438,12 @@ class RenderRequest(BaseModel):
     @classmethod
     def _validate_output_count(cls, v: int) -> int:
         return max(1, min(20, int(v)))
+
+    @field_validator("render_format")
+    @classmethod
+    def _validate_render_format(cls, v: str) -> str:
+        v = str(v or "clips").strip().lower()
+        return v if v in {"clips", "recap"} else "clips"
 
     @field_validator("ai_clip_min_duration_sec")
     @classmethod

@@ -34,6 +34,7 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
     "output": frozenset({
         "output_dir", "render_output_subdir", "keep_source_copy",
         "cleanup_temp_files", "output_count", "output_language",
+        "render_format",
     }),
     "lifecycle": frozenset({
         "resume_job_id", "resume_from_last", "render_profile", "render_preset",

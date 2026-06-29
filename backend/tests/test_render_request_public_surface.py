@@ -129,9 +129,11 @@ def test_public_field_count_pinned():
     # FE 72→73, BE-only 80→80 (new field is FE-facing), total 152→153.
     # Reaction (2026-06-29): narration_mode added (FE-facing, UI binds it).
     # FE 73→74, BE-only 80→80 (new field is FE-facing), total 153→154.
-    assert len(FE_FACING_FIELDS) == 74, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    # Recap R1 (2026-06-29): render_format added (FE-facing).
+    # FE 74→75, BE-only 80→80, total 154→155.
+    assert len(FE_FACING_FIELDS) == 75, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
     assert len(BE_ONLY_FIELDS)   == 80, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
-    assert len(RenderRequest.model_fields) == 154, (
+    assert len(RenderRequest.model_fields) == 155, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
     )

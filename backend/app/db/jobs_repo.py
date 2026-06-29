@@ -195,6 +195,40 @@ def get_render_plan(job_id: str) -> str | None:
         return None
 
 
+def update_recap_plan(job_id: str, plan_json: str | None) -> None:
+    """Persist the RecapPlan JSON blob for a job (recap mode). None clears it.
+    Never raises — logs and returns on DB error so a failure to persist does
+    not crash a live render."""
+    try:
+        with db_conn() as conn:
+            conn.execute(
+                "UPDATE jobs SET recap_plan_json = ?, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?",
+                (plan_json, job_id),
+            )
+            conn.commit()
+        _count_write("update_recap_plan")
+    except Exception as exc:
+        logger.warning("update_recap_plan failed for job_id=%s: %s", job_id, exc)
+
+
+def get_recap_plan(job_id: str) -> str | None:
+    """Return the raw RecapPlan JSON blob for a job, or None. Feed the result
+    to RecapPlan.from_json() (itself defensive). Never raises."""
+    try:
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT recap_plan_json FROM jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            value = row[0] if isinstance(row, tuple) else row["recap_plan_json"]
+            return value if isinstance(value, str) and value else None
+    except Exception as exc:
+        logger.warning("get_recap_plan failed for job_id=%s: %s", job_id, exc)
+        return None
+
+
 def delete_job(job_id: str) -> None:
     """Permanently delete a job and all its parts from the database."""
     with db_conn() as conn:

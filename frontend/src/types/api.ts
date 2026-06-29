@@ -194,6 +194,7 @@ export interface RenderRequest {
   // Vision v2 — surviving wired fields
   target_duration?: number
   output_count?: number
+  render_format?: 'clips' | 'recap'
   video_type?: string
   hook_strength?: string
 }

@@ -148,6 +148,8 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # New vision (v2)
     "target_duration", "output_count", "video_type",
     "hook_strength",
+    # Recap/Review mode ("clips" | "recap")
+    "render_format",
 })
 
 

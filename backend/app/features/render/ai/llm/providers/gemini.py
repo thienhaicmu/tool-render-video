@@ -18,6 +18,8 @@ from app.features.render.ai.llm.prompts import build_render_plan_prompt
 from app.features.render.ai.llm.retry import call_with_retry
 from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
+from app.features.render.ai.llm.recap_prompts import build_recap_prompt
+from app.features.render.ai.llm.recap_parser import parse_recap_response
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.gemini_client")
@@ -402,3 +404,84 @@ def _call_gemini_rewrite(api_key: str, model: str, system_prompt: str, user_prom
         llm_cache_put("gemini-rewrite", model, system_prompt, user_prompt, result)
     return result
 
+
+
+# ── Recap/Review Film selection (render_format="recap") ──────────────────────
+# Larger output budget (a long film yields many scenes) + lower temperature
+# (scene selection should be deterministic, not creative). Narration is authored
+# later by the rewrite/reaction path. Override via GEMINI_RECAP_* env vars.
+_RECAP_MAX_TOKENS = int(os.getenv("GEMINI_RECAP_MAX_TOKENS", "16384"))
+_RECAP_TEMPERATURE = float(os.getenv("GEMINI_RECAP_TEMPERATURE", "0.4"))
+
+
+def select_recap_plan(
+    srt_content: str,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["RecapPlan"]:
+    """Select scenes + act structure for a recap. Returns RecapPlan or None
+    (Sacred Contract #3 — never raises)."""
+    try:
+        if not _GENAI_SDK:
+            logger.warning("gemini_client: google-genai SDK not installed (recap path)")
+            return None
+        if not api_key:
+            logger.warning("gemini_client: no api_key supplied (recap path)")
+            return None
+        if not srt_content or not srt_content.strip():
+            logger.warning("gemini_client: empty srt_content (recap path)")
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        system_prompt, user_prompt = build_recap_prompt(srt_content, video_duration, target_language, tone)
+        logger.info(
+            "gemini_client: calling recap model=%s film_dur=%.0fs lang=%s in_chars=%d",
+            resolved_model, video_duration, target_language, len(srt_content),
+        )
+        raw = _call_gemini_recap(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            logger.warning("gemini_client: empty recap response (model=%s)", resolved_model)
+            return None
+        plan = parse_recap_response(raw, video_duration)
+        if plan is not None:
+            logger.info(
+                "gemini_client: recap OK model=%s acts=%d scenes=%d total=%.0fs",
+                resolved_model, len(plan.acts), plan.scene_count(), plan.total_target_sec,
+            )
+        return plan
+    except Exception as exc:
+        logger.warning("gemini_client: select_recap_plan unexpected error %s", exc, exc_info=True)
+        return None
+
+
+def _call_gemini_recap_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _genai.Client(api_key=api_key, http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000})
+    resp = client.models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "response_mime_type": "application/json",
+            "temperature": _RECAP_TEMPERATURE,
+            "max_output_tokens": _RECAP_MAX_TOKENS,
+            "thinking_config": {"thinking_budget": _THINKING_BUDGET},
+        },
+    )
+    return resp.text
+
+
+def _call_gemini_recap(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Recap call with cache + retry. Cache namespaced 'gemini-recap'."""
+    cached = llm_cache_get("gemini-recap", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("gemini_client: recap cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
+        lambda: _call_gemini_recap_once(api_key, model, system_prompt, user_prompt),
+        label="gemini-recap",
+    )
+    if result is not None:
+        llm_cache_put("gemini-recap", model, system_prompt, user_prompt, result)
+    return result
