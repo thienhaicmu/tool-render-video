@@ -119,11 +119,25 @@ def _concat_with_pads(
         for _, p in segment_mp3s:
             inputs.extend(["-i", str(p)])
         filter_parts: list[str] = []
+        _starts = [s for s, _ in segment_mp3s]
+        _n = len(segment_mp3s)
         for idx, (start_sec, _) in enumerate(segment_mp3s):
             delay_ms = max(0, int(round(start_sec * 1000)))
-            # adelay needs per-channel delays; "all=1" applies the same to every channel.
+            # N2 (2026-07) — no-overlap guarantee. Each segment may only occupy
+            # its own slot [start_i, start_{i+1}) (last → clip end). The old
+            # graph let an over-long segment (TTS text > slot, even after the
+            # 1.25× atempo cap) bleed PAST the next segment's start → amix
+            # summed two voices → the muddy "nhè nhè" garble. atrim caps each
+            # segment to its slot (+ a short fade-out to avoid a click); N1's
+            # text-fit keeps these hard cuts rare. Shorter segments are
+            # untouched (natural pause fills the rest of the slot).
+            _slot = (_starts[idx + 1] - start_sec) if (idx + 1) < _n else (clip_duration_sec - start_sec)
+            _slot = max(0.10, float(_slot))
+            _fade = min(0.05, _slot * 0.2)
             filter_parts.append(
-                f"[{idx}:a]adelay={delay_ms}|{delay_ms},apad[d{idx}]"
+                f"[{idx}:a]atrim=0:{_slot:.3f},asetpts=PTS-STARTPTS,"
+                f"afade=t=out:st={max(0.0, _slot - _fade):.3f}:d={_fade:.3f},"
+                f"adelay={delay_ms}|{delay_ms}[d{idx}]"
             )
         mix_inputs = "".join(f"[d{i}]" for i in range(len(segment_mp3s)))
         filter_parts.append(

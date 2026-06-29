@@ -301,3 +301,40 @@ def test_ai_rewrite_skipped_when_voice_source_is_manual(_branch_test_env, tmp_pa
     )
     _invoke_branch(ctx, srt_part, {"start": 0.0, "end": 8.0, "content_type_hint": "vlog"}, idx=1)
     assert "rewrite_kwargs" not in captured
+
+
+# ── N1: narration language QA / repair ───────────────────────────────────────
+
+def test_qa_detects_wrong_language():
+    from app.features.render.engine.stages.part_voice_mix import _looks_wrong_language as w
+    assert w("He was shocked by what the police said", "vi") is True
+    assert w("Anh ấy rất sốc khi nghe cảnh sát nói", "vi") is False
+    assert w("He was shocked", "ja") is True
+    assert w("彼は本当に驚いた", "ja") is False
+    assert w("그는 정말 놀랐다", "ko") is False
+    assert w("He was shocked", "en") is False
+
+
+def test_qa_repair_translates_wrong_language(monkeypatch):
+    import app.features.render.engine.subtitle.translation_service as _TR
+    monkeypatch.setattr(_TR, "translate_text", lambda text, **kw: "Anh ấy sốc")
+    from app.features.render.engine.stages import part_voice_mix as PVM
+    out, n = PVM._qa_repair_segments(
+        [{"kind": "voice", "start": 0, "end": 4, "text": "He was shocked"}], "vi-VN"
+    )
+    assert n == 1 and out[0]["text"] == "Anh ấy sốc"
+
+
+def test_qa_repair_noop_when_language_correct(monkeypatch):
+    called = {"n": 0}
+    import app.features.render.engine.subtitle.translation_service as _TR
+
+    def _spy(text, **kw):
+        called["n"] += 1
+        return text
+    monkeypatch.setattr(_TR, "translate_text", _spy)
+    from app.features.render.engine.stages import part_voice_mix as PVM
+    out, n = PVM._qa_repair_segments(
+        [{"kind": "voice", "start": 0, "end": 4, "text": "Anh ấy rất sốc khi nghe"}], "vi-VN"
+    )
+    assert n == 0 and called["n"] == 0   # correct language → never calls translate

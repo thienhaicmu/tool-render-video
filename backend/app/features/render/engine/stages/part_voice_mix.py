@@ -102,6 +102,67 @@ from app.features.render.engine.pipeline.llm_stage import _resolve_api_key as _r
 # Preserve original logger name (same pattern as 6.D-2.1 through 2.5d).
 logger = logging.getLogger("app.render")
 
+# N1 (2026-07) — narration language QA. A rewrite that "succeeds" but returns
+# the WRONG language (e.g. English text when the voice is Vietnamese) is spoken
+# verbatim → gibberish. These light heuristics flag that case so the caller can
+# translate to the voice language before TTS. No new dependency.
+import re as _re
+
+_VI_DIACRITICS = _re.compile(
+    r"[ăâđêôơưàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]",
+    _re.IGNORECASE,
+)
+_CJK_KANA = _re.compile(r"[぀-ヿ一-鿿]")   # hiragana/katakana/kanji
+_HANGUL = _re.compile(r"[가-힣]")
+
+
+def _looks_wrong_language(text: str, voice_prefix: str) -> bool:
+    """Heuristic: does `text` look like it is NOT in the voice language?
+    Conservative — only flags clear mismatches. Never raises."""
+    try:
+        t = str(text or "")
+        if not t.strip():
+            return False
+        if voice_prefix == "vi":
+            # Real Vietnamese narration is full of diacritics; none + plenty of
+            # ASCII letters ⇒ almost certainly English left un-translated.
+            if _VI_DIACRITICS.search(t):
+                return False
+            ascii_letters = sum(1 for c in t if c.isascii() and c.isalpha())
+            return ascii_letters >= 12
+        if voice_prefix == "ja":
+            return _CJK_KANA.search(t) is None
+        if voice_prefix == "ko":
+            return _HANGUL.search(t) is None
+        if voice_prefix in ("en",):
+            return bool(_CJK_KANA.search(t) or _HANGUL.search(t))
+    except Exception:
+        return False
+    return False
+
+
+def _qa_repair_segments(segments: list, voice_language: str) -> tuple[list, int]:
+    """N1 — ensure each voice segment is in the voice language; translate wrong-
+    language text via Google Translate (no API key). Returns (segments, n_fixed).
+    Never raises — on any failure the original segment is kept."""
+    prefix = (str(voice_language or "en").split("-")[0] or "en").lower()
+    out: list = []
+    n_fixed = 0
+    for seg in (segments or []):
+        try:
+            if str(seg.get("kind", "voice") or "voice").strip().lower() == "voice":
+                _txt = str(seg.get("text", "") or "")
+                if _txt.strip() and _looks_wrong_language(_txt, prefix):
+                    from app.features.render.engine.subtitle.translation_service import translate_text
+                    _tr = translate_text(_txt, target_language=prefix)
+                    if _tr and _tr.strip() and _tr.strip() != _txt.strip():
+                        seg = {**seg, "text": _tr.strip()}
+                        n_fixed += 1
+        except Exception as _qa_exc:
+            logger.debug("narration_qa: repair skipped: %s", _qa_exc)
+        out.append(seg)
+    return out, n_fixed
+
 
 # ── Sprint AI-WF: RenderPlan.audio_plan.voice_provider consume helper ────────
 #
@@ -640,6 +701,25 @@ def run_part_voice_mix(
                             "total_chars": sum(len(s["text"]) for s in _segments),
                             "first_segment_preview": _first_seg_preview,
                         },
+                    )
+                # N1 (2026-07) — language QA: translate any wrong-language
+                # segment to the voice language before TTS (guards the case
+                # where rewrite "succeeds" but emits the source language).
+                _segments, _lang_fixed = _qa_repair_segments(_segments, _voice_lang)
+                if _lang_fixed:
+                    _job_log(
+                        ctx.effective_channel, ctx.job_id,
+                        f"narration_qa part_no={idx}: repaired {_lang_fixed} wrong-language segment(s) → {_voice_lang}",
+                        kind="warning",
+                    )
+                    _emit_render_event(
+                        channel_code=ctx.effective_channel,
+                        job_id=ctx.job_id,
+                        event="narration_qa",
+                        level="WARNING",
+                        message=f"Narration language repaired ({_lang_fixed} seg → {_voice_lang})",
+                        step="voice.tts",
+                        context={"part_no": idx, "lang_repaired": _lang_fixed, "voice_language": _voice_lang},
                     )
                 ctx.voice_part_tts_attempts.append(idx)
                 if ctx.cancel_registry.is_cancelled(ctx.job_id):
