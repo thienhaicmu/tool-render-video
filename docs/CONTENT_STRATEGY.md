@@ -40,14 +40,28 @@ hiệu ứng đề xuất · mức nhấn cảm xúc. Render Engine dựng đún
 
 ---
 
-## Trạng thái triển khai vs spec (gap analysis 2026-07)
+## ⚙️ KIẾN TRÚC THỰC THI (chốt 2026-07 — đọc kỹ)
+Ba chiến lược chạy theo **2 cơ chế khác nhau**:
 
-| Chiến lược | Hiện tại | Khoảng cách tới spec |
-|-----------|----------|----------------------|
-| **Recap** | `select_recap_plan` chọn scene + 1 câu intent; **rewrite RIÊNG từng scene** (chỉ thấy mảnh) → rời rạc; transcript bị cắt cụt | AI phải **đọc trọn phim** + **tự viết lời tóm tắt** (toàn cục) → engine TTS thẳng. *Đang làm: Phase 1.* |
-| **Reaction** | per-clip: dẫn → tiếng gốc; AI không soạn timeline bình luận tổng | AI soạn **script bình luận** + **điểm chèn clip** + timeline; clip minh hoạ. *Phase 2.* |
-| **Rewrite** | per-PART: viết lại transcript của từng clip (giữ thứ tự) | AI viết **kịch bản mới** + **chọn lại + sắp xếp lại clip** toàn video. *Phase 3.* |
-| Hạ tầng | RenderPlan domain (clips/subtitle/camera/audio/overlays) + recap_pipeline (cắt→concat→TTS→qa) | Tái dùng recap_pipeline làm **executor chung** cho cả 3 (timeline AI → dựng). |
+- **AI rewrite + Reaction → MODE CLIP** (`render_format="clips"`, mặc định).
+  AI cắt clip theo nội dung (select_render_plan) rồi **LÀM LẠI VOICE** trên từng
+  clip đã cắt (rewrite = viết lại lời; reaction = lời bình luận + chèn tiếng gốc).
+  KHÔNG có pipeline riêng, KHÔNG reorder toàn video. Việc của AI ở đây =
+  **prompt tạo voice output đúng cho từng clip**.
+- **Recap → MODE RIÊNG** (`render_format="recap"`, recap_pipeline). Workflow
+  khác hẳn: AI đọc trọn phim → chọn cảnh theo trình tự → tự viết lời tóm tắt →
+  ghép 1 video dài. (Phase 1 đã xong.)
+
+> Trọng tâm chung: **AI làm thật kỹ ở phần prompt để ra output đúng mong muốn.**
+> Render Engine chỉ thực thi.
+
+## Trạng thái triển khai (2026-07)
+
+| Chiến lược | Cơ chế | Trạng thái |
+|-----------|--------|-----------|
+| **Recap** | MODE RIÊNG (recap_pipeline) | ✅ Phase 1: AI đọc trọn phim + tự viết lời tóm tắt + engine TTS thẳng. |
+| **AI rewrite** | MODE CLIP — làm lại voice/clip | Hoạt động; việc còn lại = **tinh prompt** cho lời dịch/viết lại tự nhiên, đúng nội dung clip. |
+| **Reaction** | MODE CLIP — voice bình luận/clip | Hoạt động; việc còn lại = **tinh prompt** cho bình luận tự nhiên (đỡ cứng), nhịp dẫn→tiếng gốc hợp lý. |
 
 ### Nguyên tắc khi sửa
 - Bỏ mọi cơ chế tool "tự quyết nội dung" (cắt cụt transcript, ép merge/độ dài, ép interleave) — đó là việc AI.
@@ -55,6 +69,9 @@ hiệu ứng đề xuất · mức nhấn cảm xúc. Render Engine dựng đún
 - AI đọc **trọn transcript** (model context lớn — Gemini 2.5 Flash ~1M token đủ cho phim 2-3h).
 
 ### Lộ trình
-- **Phase 1 — Recap:** full transcript + AI tự viết narration per scene + engine TTS thẳng (bỏ rewrite per-scene). Giữ trình tự (recap).
-- **Phase 2 — Reaction:** AI soạn timeline bình luận (script + điểm chèn clip) → executor chung.
-- **Phase 3 — Rewrite:** AI soạn kịch bản mới + reorder clip → executor chung.
+- **Phase 1 — Recap (xong):** mode riêng; AI đọc trọn phim + tự viết lời tóm tắt; engine TTS thẳng.
+- **Tiếp theo — tinh PROMPT (mode clip):** KHÔNG làm pipeline holistic cho rewrite/reaction.
+  Chúng giữ mode clip (làm lại voice trên clip AI đã cắt). Việc còn lại là **làm prompt
+  thật kỹ** để output voice đúng mong muốn:
+  - rewrite: lời dịch/viết lại tự nhiên, bám đúng nội dung clip, fit thời lượng.
+  - reaction: bình luận tự nhiên (đỡ cứng), AI tự quyết nhịp dẫn → chừa tiếng gốc cao trào.
