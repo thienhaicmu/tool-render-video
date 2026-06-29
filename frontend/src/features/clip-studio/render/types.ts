@@ -38,6 +38,9 @@ export interface ConfigState {
   voiceSource:   'subtitle' | 'translated_subtitle' | 'manual' | 'ai_rewrite'
   voiceText:     string
   rewriteTone:   string
+  // Reaction persona for ai_rewrite: '' = faithful rewrite, 'reaction' =
+  // faceless reaction/storyteller (lead-in → freeze → original payoff).
+  narrationMode: '' | 'reaction'
   voiceMixMode:  'replace_original' | 'keep_original_low'
   outputDir:     string
   renderProfile: 'fast' | 'balanced' | 'quality' | 'best'

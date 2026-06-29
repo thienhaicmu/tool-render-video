@@ -324,10 +324,15 @@ def run_part_finalize(
         effective_channel=ctx.effective_channel, job_id=ctx.job_id, part_no=idx)
     _maybe_apply_asset_logo(final_part, ctx.payload,
         effective_channel=ctx.effective_channel, job_id=ctx.job_id, part_no=idx)
+    # Reaction freeze-frames (narration_mode="reaction") extend the clip by a
+    # known number of seconds, stashed on seg by run_part_voice_mix. Add it so
+    # the qa duration window matches the delivered output (Sacred Contract #8).
+    _reaction_freeze_added = float(seg.get("reaction_freeze_added_sec", 0.0) or 0.0)
     _expected_final_duration = max(
         0.0,
         (_effective_duration / _render_speed) - _micro_pacing_trim_sec
-        + _remotion_intro_sec + _asset_intro_sec + _asset_outro_sec,
+        + _remotion_intro_sec + _asset_intro_sec + _asset_outro_sec
+        + _reaction_freeze_added,
     )
     _speed_ratio = round(_expected_final_duration * 1000 / max(_encode_ms, 1), 2)
     _job_log(

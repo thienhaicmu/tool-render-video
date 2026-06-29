@@ -101,8 +101,10 @@ def test_render_request_field_count_unchanged():
     # always "manual", all callers cleaned up). Previously 152 at MT-2 close.
     # 2026-06-27 ai_rewrite feature: +1 (rewrite_tone, default "") → 153.
     # Sacred Contract #2 verified: rewrite_tone defaults to "" (non-active).
-    assert field_count == 153, (
-        f"RenderRequest now has {field_count} fields (expected 153 post-ai_rewrite). "
+    # 2026-06-29 reaction feature: +1 (narration_mode, default "") → 154.
+    # Sacred Contract #2 verified: narration_mode defaults to "" (non-active).
+    assert field_count == 154, (
+        f"RenderRequest now has {field_count} fields (expected 154 post-reaction). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

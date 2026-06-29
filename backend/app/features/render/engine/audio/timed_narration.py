@@ -191,6 +191,11 @@ def synthesize_timed_narration(
         """Synthesise segment i in isolation. Returns (start_sec, mp3_path)
         on success, None on failure / skip. Never raises."""
         try:
+            # Reaction mode: "original" segments mean the reactor stays SILENT
+            # and the source audio plays — no TTS for them. (They also carry no
+            # text, so the guard below would skip them anyway; this is explicit.)
+            if str(seg.get("kind", "voice") or "voice").strip().lower() == "original":
+                return None
             try:
                 start = float(seg.get("start", 0.0))
                 end = float(seg.get("end", 0.0))

@@ -135,6 +135,13 @@ def mix_narration_audio(
             # audible, then recover to 100% during pauses.
             # Override per-deployment via NARRATION_DUCK_PARAMS env var
             # (raw ffmpeg sidechaincompress argument string).
+            #
+            # 2026-06-29 — amix normalize=0: default amix divides the output by
+            # the input count (2) → the original sat at ~50% even when the
+            # narration was silent. For reaction/interleave mode the original
+            # MUST return to full volume in the gaps between reactor lines, so
+            # normalize=0 keeps each input at unity gain (the sidechain still
+            # ducks the original only while the reactor actually speaks).
             _DUCK = os.getenv(
                 "NARRATION_DUCK_PARAMS",
                 "sidechaincompress=threshold=0.06:ratio=2.5:attack=25:release=500",
@@ -142,7 +149,7 @@ def mix_narration_audio(
             if apply_atempo:
                 cmd += [
                     "-filter_complex",
-                    f"[1:a]atempo={speed:.4f},apad{_ln},volume=1.0,asplit=2[narr][key];[0:a][key]{_DUCK}[duck];[duck][narr]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    f"[1:a]atempo={speed:.4f},apad{_ln},volume=1.0,asplit=2[narr][key];[0:a][key]{_DUCK}[duck];[duck][narr]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]",
                     "-map", "0:v:0",
                     "-map", "[aout]",
                     "-c:v", "copy",
@@ -153,7 +160,7 @@ def mix_narration_audio(
             else:
                 cmd += [
                     "-filter_complex",
-                    f"[1:a]apad{_ln},volume=1.0,asplit=2[narr][key];[0:a][key]{_DUCK}[duck];[duck][narr]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    f"[1:a]apad{_ln},volume=1.0,asplit=2[narr][key];[0:a][key]{_DUCK}[duck];[duck][narr]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]",
                     "-map", "0:v:0",
                     "-map", "[aout]",
                     "-c:v", "copy",

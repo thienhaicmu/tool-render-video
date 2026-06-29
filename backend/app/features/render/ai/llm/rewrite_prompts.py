@@ -225,7 +225,7 @@ LANGUAGE follows the target voice language ({target_language}).
 The creator's tone is "{tone_clause}". If it matches ANY column (English, Vietnamese,
 Japanese, Korean) of one row, apply that row's pattern. If it matches NO row, invent
 a sensible pattern that captures the creator's intent. Apply the chosen pattern
-CONSISTENTLY across EVERY segment.
+CONSISTENTLY across EVERY segment.{reaction_section}
 
 ═══ OUTPUT FORMAT (STRICT — return ONLY this JSON, nothing else) ═══
 
@@ -251,6 +251,77 @@ CONSISTENTLY across EVERY segment.
 
 ═══ OUTPUT JSON ═══
 """
+
+
+# ── Reaction / storyteller persona (narration_mode="reaction") ───────────────
+# Faceless reaction mode: the narrator REACTS to and dramatises the clip rather
+# than relaying the transcript. System prompt swaps in a commentator voice;
+# _REACTION_SECTION is injected into the user prompt (otherwise empty string,
+# so default rewrite output is byte-identical — Sacred Contract #2 spirit).
+_SYSTEM_REWRITE_REACTION = (
+    "You are a charismatic FACELESS REACTION narrator and storyteller. You do not "
+    "merely relay the transcript — you REACT to it and lead the viewer through the "
+    "moment like a commentator: building curiosity, voicing genuine surprise and "
+    "opinion, teasing what's coming, and landing the payoff. You ADAPTIVELY blend "
+    "two registers depending on the content: add reaction commentary, emotional "
+    "beats, and rhetorical questions where they heighten engagement; stay close to "
+    "the source where the content already speaks for itself. You write the way a "
+    "real person SPEAKS while reacting — rhythm, emphasis, rhetorical pauses, "
+    "natural emotion — never like an essay read aloud. Produce a TIMED narration "
+    "that fits the same pacing as the source. When the source language differs "
+    "from the target language, TRANSLATE while rewriting into natural, native "
+    "output. Preserve every key fact, name, and number — your commentary adds "
+    "reaction and framing, it NEVER invents events that did not happen. "
+    "Output ONLY valid JSON in the exact shape requested — no prose, no markdown, "
+    "no code fences."
+)
+
+_REACTION_SECTION = """
+
+═══ REACTION MODE (narration_mode = reaction) — OVERRIDES THE RULES ABOVE ═══
+
+This is a FACELESS REACTION edit. The viewer must still hear the ORIGINAL video.
+You do NOT narrate over the whole clip. Instead you INTERLEAVE: the reactor SETS
+UP a moment, then goes SILENT and lets the original audio deliver the payoff.
+
+CORE RHYTHM (lead-in → freeze → original payoff):
+  1. Find the clip's CLIMAX(es) — the most surprising / emotional / punchy moment.
+  2. Just BEFORE a climax, add a short "voice" segment where the reactor LEADS IN
+     and builds anticipation (e.g. "Watch what he says about the car…").
+  3. Optionally hold a FREEZE-FRAME right after that lead-in (freeze_after) to
+     create a 1–2 second suspense beat with a caption (freeze_text).
+  4. At the climax itself, emit an "original" segment (NO text): the reactor is
+     SILENT and the source audio/voice plays at full volume — this is the payoff.
+  5. Between beats, simply leave GAPS (no segment) — the original audio plays.
+
+BE SPARSE AND CONTENT-DRIVEN: only react where it adds value. A 60s clip might
+have just 2–4 lead-in beats. Do NOT cover every utterance. Silence is a tool.
+
+SEGMENT SCHEMA FOR REACTION (extend the output objects with these fields):
+  • "kind": "voice"     → reactor speaks (TTS). Requires "text".
+        - "freeze_after": <float seconds, 0–2> → hold a freeze-frame AFTER this
+          line for suspense (omit or 0 = no freeze). Use on the lead-in before a
+          big payoff.
+        - "freeze_text": "<short caption shown during the freeze>" → keep it
+          punchy (a few words), in {target_lang_name}. Defaults to the line.
+  • "kind": "original"  → reactor SILENT, source audio plays. NO "text" field.
+        Place this exactly over the climax window from the source timestamps.
+
+RULES:
+  • Lead-in commentary = reaction, opinion, anticipation, framing. NEVER fabricate
+    events, quotes, names, or numbers not in the source.
+  • Keep each "voice" line tight and inside the WORD BUDGET — reaction is energy,
+    not length. Place voice lines in natural pauses where possible.
+  • Use freeze_after sparingly (1–2 per clip) and only before the strongest payoff.
+  • Keep the creator's TONE; reaction amplifies it.
+
+REACTION OUTPUT EXAMPLE (shape only — your timestamps come from the source):
+  { "segments": [
+    { "kind": "voice", "start": 3.0, "end": 6.0,
+      "text": "He looks calm… until the officer mentions the car.",
+      "freeze_after": 1.5, "freeze_text": "Wait for it…" },
+    { "kind": "original", "start": 7.5, "end": 12.0 }
+  ] }"""
 
 
 def _build_clip_context_section(
@@ -317,6 +388,7 @@ def build_rewrite_prompt(
     target_platform: str = "",
     part_idx: int = 0,
     total_parts: int = 0,
+    narration_mode: str = "",
     # Back-compat alias for v1 callers passing `text` instead of `srt_segmented`.
     text: Optional[str] = None,
     target_duration_sec: Optional[float] = None,
@@ -353,6 +425,12 @@ def build_rewrite_prompt(
         part_idx=part_idx,
         total_parts=total_parts,
     )
+    # Reaction persona: swap system prompt + inject the reaction directive.
+    # Any other value (incl. "") keeps the default faithful-rewrite prompt
+    # byte-identical — Sacred Contract #2 spirit.
+    _is_reaction = (narration_mode or "").strip().lower() == "reaction"
+    system_prompt = _SYSTEM_REWRITE_REACTION if _is_reaction else _SYSTEM_REWRITE
+    reaction_section = _REACTION_SECTION if _is_reaction else ""
     user = _USER_TEMPLATE_REWRITE.format(
         clip_duration_sec=float(clip_duration_sec),
         target_language=target_language,
@@ -364,5 +442,6 @@ def build_rewrite_prompt(
         tone_clause=tone_clause,
         srt_segmented=cleaned,
         clip_context_section=clip_context_section,
+        reaction_section=reaction_section,
     )
-    return _SYSTEM_REWRITE, user
+    return system_prompt, user

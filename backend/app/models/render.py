@@ -209,6 +209,13 @@ class RenderRequest(BaseModel):
     # Sacred Contract #2: default "" so stored historical payloads that
     # never set this field replay with no behavioural change.
     rewrite_tone: str = ""
+    # Narration persona for the ai_rewrite voice path. "" (default) = faithful
+    # rewrite of the transcript for TTS. "reaction" = faceless reaction /
+    # storyteller persona: the AI writes first-person reaction commentary that
+    # dramatises and leads the story over the clip, adaptively blending added
+    # commentary with the source content. Sacred Contract #2: default "" so
+    # stored historical payloads replay with no behavioural change.
+    narration_mode: str = ""
     subtitle_translate_enabled: bool = False
     subtitle_target_language: str = "en"
     market_viral: Optional[dict] = None
@@ -527,6 +534,10 @@ class RenderRequest(BaseModel):
             raise ValueError("voice_gender must be 'female' or 'male'")
         if self.voice_mix_mode not in {"replace_original", "keep_original_low"}:
             raise ValueError("voice_mix_mode must be 'replace_original' or 'keep_original_low'")
+        if self.narration_mode not in {"", "reaction"}:
+            raise ValueError("narration_mode must be '' or 'reaction'")
+        if self.narration_mode == "reaction" and self.voice_source != "ai_rewrite":
+            raise ValueError("narration_mode='reaction' requires voice_source='ai_rewrite'")
         return self
 
     # Sprint 7.5 (2026-06-05): _coerce_groq_to_llm validator deleted.

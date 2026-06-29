@@ -53,22 +53,44 @@ def _extract_json_object(raw: str) -> Optional[dict]:
         return None
 
 
+# Hard ceiling on a single freeze-frame hold (seconds). The freeze stage
+# enforces the configurable per-point + per-clip caps; this just rejects
+# absurd LLM values defensively.
+_FREEZE_MAX_PER_POINT_SEC = 3.0
+
+
 def _coerce_segments(
     raw_segments: list,
     clip_duration_sec: float,
 ) -> list[dict]:
-    """Validate + clamp segments. Drops invalid ones. Returns sorted list."""
+    """Validate + clamp segments. Drops invalid ones. Returns sorted list.
+
+    Reaction schema (additive, back-compat): each segment may carry
+    ``kind`` ("voice" | "original"), and a voice segment may carry
+    ``freeze_after`` (seconds to hold a freeze-frame after the reactor's
+    line) + ``freeze_text`` (caption shown during that freeze). Segments
+    with no ``kind`` default to "voice" — so the faithful-rewrite path is
+    byte-identical apart from the added default keys (which downstream
+    consumers ignore). "original" segments carry no text (reactor stays
+    silent, the source audio plays) and are kept so the freeze stage and
+    future logic can see the payoff windows.
+    """
     out: list[dict] = []
     for entry in raw_segments:
         if not isinstance(entry, dict):
             continue
+        kind = str(entry.get("kind", "voice") or "voice").strip().lower()
+        if kind not in ("voice", "original"):
+            kind = "voice"
         try:
             s = float(entry.get("start"))
             e = float(entry.get("end"))
         except (TypeError, ValueError):
             continue
         t = str(entry.get("text", "")).strip()
-        if not t:
+        # A voice segment with no text is meaningless; an original segment is
+        # SUPPOSED to have no text (the source audio carries it).
+        if kind == "voice" and not t:
             continue
         # Clamp to clip duration. Allow a small overrun (+0.5s) since LLMs
         # sometimes round up. Reject anything wildly out of bounds.
@@ -78,11 +100,23 @@ def _coerce_segments(
             e = clip_duration_sec
         if e <= s:
             continue
-        if (e - s) < 0.3:  # too short to be a meaningful TTS segment
+        if (e - s) < 0.3:  # too short to be a meaningful segment
             continue
         # Collapse internal whitespace inside the segment text.
         t = re.sub(r"\s+", " ", t).strip()
-        out.append({"start": round(s, 3), "end": round(e, 3), "text": t})
+        # Freeze fields only apply to voice segments (hold AFTER the line).
+        freeze_after = 0.0
+        freeze_text = ""
+        if kind == "voice":
+            try:
+                freeze_after = max(0.0, min(_FREEZE_MAX_PER_POINT_SEC, float(entry.get("freeze_after", 0) or 0)))
+            except (TypeError, ValueError):
+                freeze_after = 0.0
+            freeze_text = re.sub(r"\s+", " ", str(entry.get("freeze_text", "") or "").strip()).strip()
+        out.append({
+            "start": round(s, 3), "end": round(e, 3), "text": t,
+            "kind": kind, "freeze_after": round(freeze_after, 3), "freeze_text": freeze_text,
+        })
 
     # Sort by start time; drop later segment if it overlaps an earlier one.
     out.sort(key=lambda x: x["start"])

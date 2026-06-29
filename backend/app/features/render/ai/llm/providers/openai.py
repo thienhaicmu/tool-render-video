@@ -236,6 +236,7 @@ def rewrite_subtitle(
     target_platform: str = "",
     part_idx: int = 0,
     total_parts: int = 0,
+    narration_mode: str = "",
 ) -> Optional[list[dict]]:
     """Rewrite per-part transcript into timed TTS narration segments.
 
@@ -256,6 +257,7 @@ def rewrite_subtitle(
             target_platform=target_platform,
             part_idx=part_idx,
             total_parts=total_parts,
+            narration_mode=narration_mode,
         )
     except Exception as exc:
         logger.warning("openai_client: rewrite_subtitle unexpected error %s", exc, exc_info=True)
@@ -275,6 +277,7 @@ def _run_rewrite(
     target_platform: str = "",
     part_idx: int = 0,
     total_parts: int = 0,
+    narration_mode: str = "",
 ) -> Optional[list[dict]]:
     if not _OPENAI_SDK:
         logger.warning("openai_client: openai SDK not installed (rewrite path)")
@@ -296,6 +299,7 @@ def _run_rewrite(
         target_platform=target_platform,
         part_idx=part_idx,
         total_parts=total_parts,
+        narration_mode=narration_mode,
     )
     resolved_model = model or _DEFAULT_MODEL
     word_budget = _compute_word_budget(clip_duration_sec, target_language)

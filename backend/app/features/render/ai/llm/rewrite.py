@@ -55,6 +55,7 @@ def rewrite_subtitle(
     target_platform: str = "",
     part_idx: int = 0,
     total_parts: int = 0,
+    narration_mode: str = "",
 ) -> Optional[list[dict]]:
     """Dispatch segmented subtitle-rewrite to the named LLM provider.
 
@@ -91,6 +92,7 @@ def rewrite_subtitle(
         target_platform=target_platform,
         part_idx=part_idx,
         total_parts=total_parts,
+        narration_mode=narration_mode,
     )
     for _p in chain:
         _impl = _get_provider_rewrite_impl(_p)

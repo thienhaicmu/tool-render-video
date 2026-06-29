@@ -894,6 +894,16 @@ function StepConfigureBase({
                     onChange={(e) => setCfgKey('rewriteTone', e.target.value)}
                     style={{ width: '100%', fontFamily: 'var(--fb)', fontSize: '12px' }}
                   />
+                  <div className="tog-row" style={{ marginTop: '10px' }}>
+                    <span className="tog-lbl">{t.cfgReactionMode}</span>
+                    <Tog
+                      checked={cfg.narrationMode === 'reaction'}
+                      onChange={(v) => setCfgKey('narrationMode', v ? 'reaction' : '')}
+                    />
+                  </div>
+                  <div style={{ fontSize: '9px', color: 'var(--text-3)', marginTop: '2px', fontFamily: 'var(--fb)', lineHeight: 1.4 }}>
+                    {t.cfgReactionModeHint}
+                  </div>
                 </div>
               )}
             </div>

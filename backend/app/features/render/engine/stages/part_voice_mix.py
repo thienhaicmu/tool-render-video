@@ -90,6 +90,11 @@ from app.features.render.engine.stages.manifest_writer import write_manifest
 from app.features.render.engine.subtitle.generator.srt import slice_srt_to_text, parse_srt_blocks
 from app.features.render.engine.audio.tts import generate_narration_audio, clean_spoken_text
 from app.features.render.engine.audio.timed_narration import synthesize_timed_narration
+from app.features.render.engine.stages.part_reaction_freeze import (
+    apply_reaction_freezes,
+    plan_freeze_points,
+    _probe_duration_s as _probe_part_duration,
+)
 from app.features.render.ai.llm.rewrite import rewrite_subtitle as _llm_rewrite_subtitle
 from app.features.render.ai.llm.rewrite_prompts import format_segments_for_prompt
 from app.features.render.engine.pipeline.llm_stage import _resolve_api_key as _resolve_llm_api_key
@@ -213,6 +218,9 @@ def run_part_voice_mix(
     _part_manifest = part_manifest
 
     _part_subtitle_voice_path = None
+    # Reaction freeze-frame (Phase B): captured from the ai_rewrite segments so
+    # the freeze post-pass at the end of this function can apply suspense holds.
+    _reaction_segments: "list[dict] | None" = None
     _effective_voice_enabled = _resolve_voice_enabled_from_plan(
         ctx, getattr(ctx.payload, "voice_enabled", False)
     )
@@ -539,6 +547,10 @@ def run_part_voice_mix(
                     target_platform=str(getattr(ctx.payload, "target_platform", "") or ""),
                     part_idx=idx,
                     total_parts=int(ctx.total_parts or 0),
+                    # Reaction persona ("" = faithful rewrite | "reaction" =
+                    # faceless reaction/storyteller). Default "" keeps prior
+                    # behaviour byte-identical (Sacred Contract #2).
+                    narration_mode=str(getattr(ctx.payload, "narration_mode", "") or ""),
                 )
                 _used_fallback = False
                 if not _segments:
@@ -610,6 +622,8 @@ def run_part_voice_mix(
                             "fallback": _used_fallback,
                         },
                     )
+                    # Capture for the freeze-frame post-pass (reaction mode).
+                    _reaction_segments = _segments
                     _part_subtitle_voice_path = synthesize_timed_narration(
                         segments=_segments,
                         clip_duration_sec=_clip_dur,
@@ -691,6 +705,13 @@ def run_part_voice_mix(
         _part_manifest.narration_path = str(_final_voice_path)
         write_manifest(ctx.work_dir, _part_manifest)
         mixed_part = final_part.with_name(final_part.stem + ".voice_tmp.mp4")
+        # Reaction narration is a commentary OVER the clip — the source must
+        # stay audible underneath, ducked while the reactor speaks. So a
+        # reaction job mixes with keep_original_low regardless of the payload's
+        # voice_mix_mode default (replace_original would silence the source).
+        _effective_mix_mode = ctx.payload.voice_mix_mode
+        if str(getattr(ctx.payload, "narration_mode", "") or "").strip().lower() == "reaction":
+            _effective_mix_mode = "keep_original_low"
         try:
             _job_log(ctx.effective_channel, ctx.job_id, f"Mixing AI narration into part {idx}/{ctx.total_parts}", kind="debug")
             _emit_render_event(
@@ -700,12 +721,12 @@ def run_part_voice_mix(
                 level="INFO",
                 message="Mixing narration audio",
                 step="voice.mix",
-                context={"part_no": idx, "mix_mode": ctx.payload.voice_mix_mode},
+                context={"part_no": idx, "mix_mode": _effective_mix_mode},
             )
             mix_narration_audio(
                 video_path=str(final_part),
                 narration_audio_path=str(_final_voice_path),
-                mix_mode=ctx.payload.voice_mix_mode,
+                mix_mode=_effective_mix_mode,
                 output_path=str(mixed_part),
                 playback_speed=_get_effective_playback_speed(ctx.payload, ctx.target_platform),
             )
@@ -787,5 +808,58 @@ def run_part_voice_mix(
                 ctx.effective_channel, ctx.job_id,
                 f"bgm_no_file part_no={idx} mood={_bgm_mood} — no audio files in BGM_DIR/{_bgm_mood}/; skipping BGM",
                 kind="debug",
+            )
+
+    # ── Reaction freeze-frame post-pass (narration_mode="reaction", Phase B) ──
+    # After the voice (+BGM) mix, insert the AI-marked suspense freeze-frames
+    # (freeze_after) into the final clip. Re-times video + mixed audio together;
+    # the added seconds are stashed on ``seg`` so the finalize/qa stage widens
+    # its expected-duration window (Sacred Contract #8 stays valid — qa still
+    # validates the delivered, extended output). Sacred Contract #3 spirit: any
+    # failure leaves the clip untouched and the render continues.
+    if (
+        str(getattr(ctx.payload, "narration_mode", "") or "").strip().lower() == "reaction"
+        and _reaction_segments
+        and final_part.exists()
+    ):
+        try:
+            _speed = _get_effective_playback_speed(ctx.payload, ctx.target_platform)
+            _final_dur = _probe_part_duration(str(final_part))
+            _freeze_pts = plan_freeze_points(
+                _reaction_segments,
+                render_speed=_speed,
+                clip_final_duration=_final_dur,
+            )
+            if _freeze_pts:
+                _freeze_tmp = final_part.with_name(final_part.stem + ".freeze_tmp.mp4")
+                _fr = apply_reaction_freezes(
+                    video_path=str(final_part),
+                    output_path=str(_freeze_tmp),
+                    freeze_points=_freeze_pts,
+                    video_crf=int(getattr(ctx.payload, "video_crf", None) or 18),
+                )
+                if _fr.get("applied"):
+                    os.replace(str(_freeze_tmp), str(final_part))
+                    seg["reaction_freeze_added_sec"] = float(_fr.get("added_sec", 0.0))
+                    _job_log(
+                        ctx.effective_channel, ctx.job_id,
+                        f"reaction_freeze_applied part_no={idx} points={_fr.get('points')} added={_fr.get('added_sec'):.2f}s",
+                    )
+                    _emit_render_event(
+                        channel_code=ctx.effective_channel,
+                        job_id=ctx.job_id,
+                        event="reaction_freeze_applied",
+                        level="INFO",
+                        message=f"Reaction freeze-frames applied (part {idx}, +{_fr.get('added_sec'):.1f}s)",
+                        step="voice.reaction_freeze",
+                        context={"part_no": idx, "points": _fr.get("points"), "added_sec": _fr.get("added_sec")},
+                    )
+                else:
+                    _safe_unlink(_freeze_tmp)
+        except Exception as _frz_exc:
+            _job_log(
+                ctx.effective_channel, ctx.job_id,
+                f"reaction_freeze_failed part_no={idx}: {_frz_exc}; continuing without freeze",
+                kind="warning",
             )
 
