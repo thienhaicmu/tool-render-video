@@ -1,223 +1,147 @@
-# System Architecture
+# Architecture — AI Video Render Studio
 
-## Overview
+> Cập nhật 2026-06-29 từ source thực tế. Tin code khi có mâu thuẫn.
 
-AI video render studio — offline-first desktop application.
+## 1. Tầm nhìn hệ thống
 
-- **Shell:** Electron (`desktop-shell/`)
-- **Backend:** FastAPI + Uvicorn (`backend/`)
-- **Frontend:** React 18 + TypeScript + Vite (`frontend/`)
-- **Database:** SQLite WAL (`data/app.db`)
-- **Render Engine:** FFmpeg subprocess
-- **AI:** Google Gemini / OpenAI / Anthropic Claude (provider-selectable)
-- **Transcription:** OpenAI Whisper (local, offline)
-- **Tracking:** OpenCV (`features/render/engine/motion/crop.py`)
-
-No cloud dependency for core rendering. AI calls are optional — all providers gracefully return `None` on failure and the pipeline falls back to heuristic scoring.
-
----
-
-## Top-Level Directory Layout
+Ứng dụng desktop **offline-first**: chạy hoàn toàn trên máy người dùng, không
+bắt buộc cloud. Một backend FastAPI cục bộ phục vụ cả API lẫn UI tĩnh; vỏ
+Electron mở cửa sổ trỏ vào backend đó.
 
 ```
-D:\tool-render-video\
-├── backend/                  FastAPI server + render engine
-│   ├── app/                  Application package
-│   │   ├── main.py           Entry point — router mounts + startup hooks
-│   │   ├── models/           Pydantic schemas — post-MT-2 split (Batch 10I):
-│   │   │                     schemas.py is a re-export shim;
-│   │   │                     render.py + render_public.py + jobs.py own the actual definitions
-│   │   ├── routes/           Non-render HTTP handlers (jobs, voice, files, feedback, settings, devtools)
-│   │   │                     Batch 10H deleted routes/channels.py (audit FINDING-API05)
-│   │   ├── features/         All feature modules — canonical code location
-│   │   │   ├── render/       Render feature (router, editing, engine/)
-│   │   │   │   ├── router.py         POST /api/render/process + preview
-│   │   │   │   ├── editing/          Editing API + service
-│   │   │   │   ├── engine/           Render engine — all rendering logic
-│   │   │   │   │   ├── pipeline/     Orchestration stages (render_pipeline, llm_*, pipeline_*)
-│   │   │   │   │   ├── stages/       Per-part workers (part_renderer, part_render_*)
-│   │   │   │   │   ├── encoder/      FFmpeg helpers, clip_ops, NVENC semaphore
-│   │   │   │   │   ├── audio/        TTS, mixer, cleanup adapters
-│   │   │   │   │   ├── subtitle/     Generator, processing, transcription
-│   │   │   │   │   ├── overlay/      Text overlay (drawtext)
-│   │   │   │   │   ├── motion/       OpenCV subject tracking
-│   │   │   │   │   ├── thumbnail/    Thumbnail quality selection
-│   │   │   │   │   ├── quality/      Output QA assessment
-│   │   │   │   │   └── preview/      FFmpeg probers, session service
-│   │   │   │   └── ai/               AI modules — LLM providers, parser, prompts, visibility
-│   │   │   └── download/     Download feature (router, engine/)
-│   │   ├── core/             Config, stage enums, logging, UI gate
-│   │   ├── db/               SQLite connection + migrations + repos. migration_steps/ now ships
-│   │   │                     0001 render_plan_json, 0002 groq→llm rewrite, 0003 FK+cascade on
-│   │   │                     job_parts + clip_feedback (Batch 10L MT-6)
-│   │   ├── domain/           Pure dataclasses (RenderPlan, CreatorContext)
-│   │   ├── jobs/             Job queue (manager.py) + cancel registry (cancel.py)
-│   │   └── services/         Shared utilities (channel_service, maintenance, warmup).
-│   │                         Batch 9 deleted services/db.py — use app/db/connection directly.
-│   │                         dev/ sub-package (Batch 10J MT-1) is the decomp of the
-│   │                         former dev_commands.py monolith — 6 sub-modules behind a shim.
-│   ├── static/               Legacy UI build output (served when STATIC_UI_VERSION=legacy)
-│   └── static-v2/            v2 UI build output (served when STATIC_UI_VERSION=v2)
-├── frontend/                 React + TypeScript UI (Vite)
-│   └── src/
-│       ├── features/         Screens (clip-studio, editor, jobs, downloader)
-│       ├── api/              HTTP + WebSocket clients
-│       └── stores/           Zustand state stores
-├── desktop-shell/            Electron host
-├── channels/                 Per-channel output storage roots
-├── data/                     Runtime: app.db, cache, temp, logs
-├── scripts/                  Utility scripts
-└── tests/                    Integration test suite
+┌──────────────────────────────────────────────────────────────────┐
+│ Electron shell (desktop-shell/main.js)                             │
+│   • spawn backend (uvicorn) như tiến trình con                     │
+│   • mở BrowserWindow → http://127.0.0.1:8000                       │
+└───────────────────────────────┬──────────────────────────────────┘
+                                 │ HTTP / WebSocket (loopback)
+┌───────────────────────────────▼──────────────────────────────────┐
+│ FastAPI app  (backend/app/main.py)                                 │
+│   • REST routers (render, jobs, download, settings, …)             │
+│   • WebSocket tiến trình job                                        │
+│   • phục vụ UI tĩnh React đã build (backend/static-v2/)            │
+│   • ThreadPoolExecutor scheduler cho hàng đợi job                   │
+└───────┬───────────────────────────────┬───────────────────────────┘
+        │                               │
+        ▼                               ▼
+┌───────────────┐              ┌────────────────────────────────────┐
+│ SQLite (WAL)  │              │ Worker threads                      │
+│ data/app.db   │◀────────────▶│  • render pipeline (FFmpeg/Whisper) │
+│ nguồn chân lý │              │  • download pipeline (yt-dlp)       │
+└───────────────┘              └─────────────┬──────────────────────┘
+                                             │ subprocess
+                          ┌──────────────────┼──────────────────┐
+                          ▼                  ▼                  ▼
+                       FFmpeg            Whisper            yt-dlp
+                     (NVENC/x264)     (faster-whisper)   (download)
+                                             │
+                                             ▼
+                                   LLM cloud (tuỳ chọn)
+                              Gemini / OpenAI / Claude
 ```
 
----
+## 2. Triết lý kiến trúc
 
-## Input Sources
+- **Modular monolith** với worker tách biệt theo tiến trình con (FFmpeg, yt-dlp,
+  Whisper). Không Redis, không message queue ngoài, không service cloud bắt buộc.
+- **SQLite là state store duy nhất** (`data/app.db`, WAL mode). Không có cache
+  trạng thái nào sống sót qua restart ngoài DB này.
+- **Hàng đợi job in-process**: một min-heap ưu tiên + `ThreadPoolExecutor`
+  (`backend/app/jobs/manager.py`). Job được re-queue từ DB khi khởi động lại.
+- **Render bằng subprocess FFmpeg**: pipeline Python điều phối, FFmpeg thực thi.
+- **AI là tuỳ chọn và phải an toàn**: một exception chưa bắt trong module AI sẽ
+  giết cả job render → mọi module AI bắt buộc `return None` khi lỗi.
 
-**Only two valid inputs to the render pipeline:**
+## 3. Bố cục backend (`backend/app/`)
 
-### 1. Local File
-- `RenderRequest.source_mode = "local"` (default)
-- `RenderRequest.source_video_path` — absolute path to video file on disk
-- Validated in `features/render/router.py` before job creation
-- Enforcement in `pipeline_source_prep.py:153`: any non-`"local"` source_mode raises `RuntimeError`
+| Thư mục | Vai trò |
+|---------|---------|
+| `main.py` | Khởi tạo FastAPI, mount toàn bộ router, hook startup/shutdown, vòng cleanup định kỳ, bind-safety guard |
+| `core/` | Hạ tầng nền: `config.py` (env + path), `stage.py` (enum JobStage/JobPartStage), `ui_gate.py`, `logging_setup.py`, `devtools_safety.py`, `contracts.py`, `tracing.py`, `naming.py`, `error_sink.py` |
+| `db/` | Truy cập SQLite: `connection.py` (WAL + thread-local), `migrations.py` (runner) + `migration_steps/`, và các repo (`jobs_repo`, `creator_repo`, `feedback_repo`, `download_repo`, `assets_repo`, `presets_repo`, `history_repo`, `ab_scores_repo`, `platform_metrics_repo`) |
+| `domain/` | Dataclass thuần (không I/O): `render_plan.py` (RenderPlan), `creator_context.py`, `asset.py`, `render_preset.py`, `timeline.py`, `manifests.py` |
+| `models/` | Pydantic: `render.py` (RenderRequest nội bộ), `render_public.py` (wire surface FE), `jobs.py`, `render_field_groups.py`, `schemas.py` (shim re-export) |
+| `routes/` | REST router không thuộc feature render (jobs, settings, assets, presets, analytics, feedback, voice, …) |
+| `jobs/` | Hàng đợi: `manager.py` (scheduler + executor), `cancel.py` (registry huỷ), `whisper_timeout.py` |
+| `services/` | Dịch vụ ngang: `channel_service`, `maintenance` (prune), `metrics` (Prometheus), `warmup`, `preset_seeder`, `bin_paths`, `qa_runner`, `dev/` |
+| `features/` | Các feature lớn: `render/`, `download/`, `data/` (dữ liệu runtime) |
+| `knowledge/` | Tài liệu domain dạng dữ liệu (chỉ thêm, không xoá) |
 
-### 2. Editor Session
-- `RenderRequest.edit_session_id` — non-empty session ID
-- Session created by `POST /api/editing/sessions` with a source file
-- Session stores: `video_path`, `preview_path`, `duration`, `title`, `work_dir`
-- Trim (`edit_trim_in`, `edit_trim_out`) applied via FFmpeg before render
-- Session cleanup runs in `finally` block of render pipeline
-
-**Rejected inputs:**
-- `source_mode="youtube"` → HTTP 400 "Use standalone Downloader"
-- `source_mode="remote"` → HTTP 400 same reason
-- `youtube_url` / `youtube_urls` fields exist in schema for backward compat but are ignored by pipeline
-
-The **Download feature** (`features/download/`) is a separate system mounted at `/api/download/`. It downloads video files to disk. Those files are then rendered via the Local File path — it is NOT part of the render pipeline itself.
-
----
-
-## Router Mounts (main.py)
-
-| Prefix | Module | Source |
-|--------|--------|--------|
-| `/api/render` | render_router | `features/render/router.py` (POST /process now accepts `RenderRequestPublic` — Batch 10O) |
-| `/api/jobs` | jobs_router | `routes/jobs.py` |
-| `/api/voice` | voice_router | `routes/voice.py` |
-| `/api/files` | files_router | `routes/files.py` |
-| `/api/editing` | editing_router | `features/render/editing/router.py` |
-| `/api/download` | platform_downloader_router | `features/download/router.py` |
-| `/api/feedback` | feedback_router | `routes/feedback.py` |
-| `/metrics` | metrics_router | `routes/metrics.py` (Prometheus — includes `db_conn_acquire_seconds` since Batch 10A ST-15) |
-| `/api/settings` | settings_router | `routes/settings.py` — `/creator-context` (Sprint 3) + `/data-retention` (Batch 10R MT-7-UI) |
-| `/api/dev/command` | devtools_router | `routes/devtools.py` (ENABLE_DEVTOOLS=1 only) |
-
-> Removed in Batch 10H (audit FINDING-API05): `/api/channels/*`
-> (6 endpoints) — see `tests/test_channels_surface_gone.py` for the
-> regression guard. The render pipeline still uses `channel_code` as
-> an internal field; `ensure_channel()` survives in
-> `services/channel_service.py`.
-
-**Static file mounts:**
-- Legacy UI: `/static` → `backend/static/`
-- v2 UI: `/assets` → `backend/static-v2/assets/` (when `STATIC_UI_VERSION=v2`)
-
-**v2 API routes** (`ENABLE_V2=1`, default ON): Import attempted from `v2.api.routes.*` — directory does not exist in current codebase, import silently fails. (Per audit-2026-06-06 [LT-2 roadmap](audit-2026-06-06/27_future_roadmap.md), either commit to V2 and migrate or delete the conditional. Open long-term item.)
-
----
-
-## Key Subsystem Connections
+### Feature `render/` (trái tim hệ thống)
 
 ```
-User (Electron / Browser)
-        │
-        ▼
-   Electron shell (desktop-shell/)
-        │  IPC / HTTP to localhost:8000
-        ▼
-   FastAPI (backend/app/main.py)
-        │
-        ├── features/render/router.py → POST /api/render/process
-        │       └── jobs/manager.py → ThreadPoolExecutor
-        │               └── features/render/engine/pipeline/render_pipeline.py
-        │                       ├── pipeline_source_prep.py   (source validation)
-        │                       ├── llm_pipeline.py           (Whisper + LLM Call 1)
-        │                       ├── render_pipeline.py        (LLM Call 2 → RenderPlan)
-        │                       ├── pipeline_render_loop.py   (parallel part dispatch)
-        │                       │       └── stages/part_renderer.py (per-part worker)
-        │                       │               ├── part_cut.py
-        │                       │               ├── part_render_setup.py
-        │                       │               ├── part_render_encode.py  (FFmpeg)
-        │                       │               ├── part_voice_mix.py
-        │                       │               └── part_done.py
-        │                       │               ├── (path derivation via segment_metadata.build_part_paths — Batch 10P)
-        │                       │               └── (WAITING/RENDERING/skipped-DONE via part_db facade — Batch 10Q)
-        │                       └── pipeline_finalize.py      (result_json assembly)
-        │
-        ├── routes/jobs.py → GET /api/jobs/{id}/ws (WebSocket)
-        │       └── Streams render_events.py events to UI
-        │
-        └── features/download/router.py → POST /api/download/batch
-                └── features/download/service.py
-                        └── adapters/ (youtube, tiktok, instagram, ...)
+features/render/
+├── router.py            # facade re-export router gộp (mounted /api/render)
+├── routers/             # tách REST theo trách nhiệm
+│   ├── lifecycle.py     # process / upload / quick / resume / retry / cancel
+│   ├── prepare.py       # preview nguồn + phiên preview
+│   ├── read.py          # đọc media/thumbnail/subtitle theo part
+│   ├── utility.py       # queue-status / system-info / cache / ai-diagnostics
+│   └── _common.py       # validator + process_render + helper hàng đợi
+├── editing/             # API chỉnh sửa sau render (trim / rerender / export)
+├── ai/                  # tích hợp LLM (xem AI_INTEGRATION.md)
+│   ├── llm/             # dispatcher + providers + parser + prompts + rewrite
+│   ├── context/         # builder creator-context cho prompt
+│   ├── feedback/        # signal từ rating người dùng
+│   └── visibility/      # tóm tắt khả năng quan sát AI
+└── engine/              # bộ máy render
+    ├── pipeline/        # orchestrator + các stage cấp job
+    ├── stages/          # render từng part (per-part state machine)
+    ├── encoder/         # FFmpeg helpers + NVENC semaphore + clip ops
+    ├── motion/          # OpenCV subject tracking + crop
+    ├── subtitle/        # transcription (Whisper) + render phụ đề
+    ├── audio/           # TTS, mixer, narration
+    ├── overlay/         # text overlay
+    ├── preview/         # phiên preview nguồn
+    ├── quality/         # chấm điểm chất lượng
+    ├── thumbnail/       # sinh thumbnail
+    └── remotion_adapter # hook intro (tuỳ chọn)
 ```
 
----
+## 4. Vòng đời job render (mức cao)
 
-## AI Module Architecture
+1. FE gọi `POST /api/render/process` với `RenderRequestPublic`.
+2. Handler (`routers/lifecycle.py` → `_common.process_render`) validate, mở rộng
+   thành `RenderRequest` nội bộ, ghi job `queued` vào DB, đẩy vào scheduler.
+3. `jobs/manager.py` dispatch job tới `ThreadPoolExecutor` khi có slot
+   (`MAX_CONCURRENT_JOBS`).
+4. Worker chạy `run_render_pipeline()`
+   (`features/render/engine/pipeline/render_pipeline.py`):
+   - `setup` → `source_prep` → (voice TTS) → `llm_pre_render` (Whisper +
+     chọn segment) → lấy `RenderPlan` từ AI → render từng part song song →
+     `finalize` (xếp hạng + report) → `DONE`.
+5. Mỗi chuyển stage gọi `_emit_render_event()` → broadcast qua WebSocket
+   `GET /api/jobs/{id}/ws`. FE cũng có thể poll `GET /api/jobs/{id}`.
+6. `qa_pipeline.py` validate output trước khi đánh dấu thành công.
 
-### Canonical Location
-`backend/app/features/render/ai/llm/` — all LLM logic lives here. There is no shim layer — all imports must reference this path directly.
+Chi tiết từng stage: [RENDER_PIPELINE.md](RENDER_PIPELINE.md).
 
-### Providers
-Three interchangeable providers — same interface, same Sacred Contract #3 (never raise):
+## 5. Mô hình tiến trình & luồng
 
-| Provider | Default Model | Max SRT | Env Key |
-|----------|--------------|---------|---------|
-| Gemini | gemini-2.5-flash | 60,000 chars | `GEMINI_API_KEY` |
-| OpenAI | gpt-4o-mini | 30,000 chars | `OPENAI_API_KEY` |
-| Claude | claude-3-5-sonnet-20241022 | 50,000 chars | `CLAUDE_API_KEY` |
+- **1 tiến trình** FastAPI/uvicorn (desktop). API **không có xác thực** — vì
+  vậy `main.py` từ chối khởi động nếu bind vào host non-loopback mà không có
+  `ALLOW_REMOTE=1` (xem [CONFIGURATION.md](CONFIGURATION.md)).
+- **Scheduler thread** (daemon) trong `jobs/manager.py` rút job từ min-heap.
+- **Worker threads** trong `ThreadPoolExecutor` chạy pipeline; mỗi job dùng
+  thread-local DB connection (`_thread_conn`) cho hot path progress.
+- **Background daemons** lúc startup: warmup Whisper, trích cookie Chrome,
+  auto-update yt-dlp, vòng cleanup định kỳ (mặc định mỗi 30 phút).
+- **Giới hạn phần cứng**:
+  - `MAX_CONCURRENT_JOBS` (mặc định `cpu//2`) — số job chạy song song.
+  - `JOB_SEMAPHORE` / `MAX_RENDER_JOBS` — số pipeline vào vùng encode cùng lúc.
+  - `NVENC_SEMAPHORE` / `NVENC_MAX_SESSIONS` (mặc định 3) — số phiên NVENC GPU.
 
-Selected via `RenderRequest.ai_provider` or `AI_PROVIDER_DEFAULT` env var.
+## 6. Phục vụ UI
 
----
+`core/ui_gate.py` chọn thư mục tĩnh theo `STATIC_UI_VERSION`:
+`v2` → `backend/static-v2/` (UI React hiện tại), mặc định/`legacy` →
+`backend/static/`. Frontend build bằng Vite ra thẳng `backend/static-v2/`
+(`vite.config.ts: outDir`). Xem [FRONTEND.md](FRONTEND.md).
 
-## Concurrency Model
+## 7. Khả năng quan sát
 
-- **Job queue:** `jobs/manager.py` — `ThreadPoolExecutor` with `MAX_CONCURRENT_JOBS` workers
-- **Part-level parallelism:** `pipeline_render_loop.py` — inner `ThreadPoolExecutor` with `MAX_RENDER_JOBS` workers per job
-- **GPU encoding:** `NVENC_SEMAPHORE` (max 3 sessions, in `features/render/engine/encoder/ffmpeg_helpers.py`)
-- **DB writes on render thread:** `_thread_conn()` — cached thread-local SQLite connection, released in `finally` block
-- **DB writes on HTTP thread:** `db_conn()` context manager — new connection per request, auto-commit
-
----
-
-## Startup Sequence (main.py)
-
-1. Configure file-based logging (`core/logging_setup.py`)
-2. Mount all routers
-3. `@app.on_event("startup")`:
-   - `init_db()` — create tables + run migrations
-   - `_check_db_fallback_at_startup()` — detect split-DB condition
-   - `ensure_channel("k1")` — create default channel
-   - Prune stale preview dirs, render temp dirs, render cache (72h TTL), XTTS cache (30d), text overlay (7d)
-   - `recover_pending_render_jobs()` — re-queue interrupted jobs
-   - `start_warmup()` — pre-download Whisper models
-   - `_whisper_model_warmup()` thread — load Whisper into RAM
-   - `_run_periodic_cleanup()` thread — 30-min cleanup loop
-   - `_cookie_warmup()` thread — extract Chrome cookies for yt-dlp
-
----
-
-## Frontend Screens
-
-| Route | Component | Purpose |
-|-------|-----------|---------|
-| `/` | App.tsx | Root |
-| `/editor` | EditorScreen.tsx | Trim + preview + text overlay |
-| `/render` | RenderWorkflow.tsx | Configure + monitor + results |
-| `/history` | HistoryScreen.tsx | Job list + filtering |
-| `/downloader` | DownloaderScreen.tsx | Multi-URL batch download |
-| `/quality` | QualityPanel.tsx | Output quality report |
-| `/settings` | SettingsScreen.tsx | User preferences |
+- Log file qua `core/logging_setup.py` ghi vào `APP_DATA_DIR/logs/`.
+- Log theo job ghi vào thư mục channel.
+- Prometheus `GET /metrics` (`services/metrics.py`): thời lượng stage render,
+  thời gian acquire DB connection, …
+- `GET /health` báo trạng thái + đường dẫn DB đang dùng + cờ fallback DB.

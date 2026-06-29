@@ -1,119 +1,117 @@
-# Configuration — Environment Variables & Feature Flags
+# Configuration — AI Video Render Studio
 
-## Core Paths
+> Cập nhật 2026-06-29 từ source (grep `os.getenv` toàn `backend/app`). Biến đọc từ
+> môi trường thực hoặc file `.env` ở gốc repo (`core/config.py` load qua
+> python-dotenv, `override=False` → env thực luôn thắng).
 
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `APP_DATA_DIR` | Platform-dependent | Root for all runtime data |
-| `DATABASE_PATH` | `APP_DATA_DIR/app.db` | SQLite database path |
-| `CHANNELS_DIR` | Required, no default | Channel output root |
-| `TEMP_DIR` | `APP_DATA_DIR/temp` | Temporary render files |
-| `CACHE_DIR` | `APP_DATA_DIR/cache` | Scene detection, transcription cache |
-| `LOGS_DIR` | `APP_DATA_DIR/logs` | Log files |
-| `COOKIES_DIR` | `APP_DATA_DIR/cookies` | yt-dlp cookie files |
+## 1. Đường dẫn dữ liệu (`core/config.py`)
 
-## Server
+Gốc dữ liệu `APP_DATA_DIR`:
+- Dev: `<repo>/data`.
+- Packaged (PyInstaller): `%APPDATA%/RenderVideoTool/data`.
 
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `STATIC_UI_VERSION` | `"legacy"` | `"v2"` to serve `static-v2/`, else `static/` |
-| `ENABLE_DEVTOOLS` | `"0"` | `"1"` enables `POST /api/dev/command` (loopback only) |
-| `ENABLE_V2` | `"1"` | `"0"` to skip v2 route import attempt |
-| `CLEANUP_INTERVAL_SEC` | `"1800"` | Seconds between periodic cleanup runs |
-| `SHUTDOWN_TIMEOUT_SEC` | `"30"` | Graceful shutdown budget (seconds) |
-| `LOG_LEVEL` | `"INFO"` | Root log level |
-| `LOG_KEEP_LAST` | `"30"` | Job logs to retain per channel |
-| `LOG_KEEP_DAYS` | `"10"` | Max age (days) for job logs |
-| `WARMUP_WHISPER_MODEL` | `"small"` | Whisper model to pre-load at startup |
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `APP_DATA_DIR` | (xem trên) | Gốc mọi dữ liệu runtime |
+| `DATABASE_PATH` | `APP_DATA_DIR/app.db` | SQLite — nguồn chân lý job |
+| `REPORTS_DIR` | `APP_DATA_DIR/reports` | Report render |
+| `CHANNELS_DIR` | `<repo>/channels` hoặc `APP_DATA_DIR/channels` | Output + log theo channel |
+| `TEMP_DIR` | `APP_DATA_DIR/temp` | Thư mục làm việc tạm |
 
-## AI Providers
+Dẫn xuất (không phải env): `LOGS_DIR`, `COOKIES_DIR`, `CACHE_DIR`, `BGM_DIR`.
+Tất cả được `mkdir` lúc import. BGM người dùng đặt tại `{BGM_DIR}/{mood}/*.mp3`.
 
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `AI_CLOUD_ENABLED` | `"0"` | Enable AI cloud calls |
-| `AI_CLOUD_PROVIDER` | `"gemini"` | Default provider (`gemini`/`openai`/`claude`) |
-| `AI_PROVIDER_DEFAULT` | `"gemini"` | Fallback when `payload.ai_provider` not set |
-| `AI_CLOUD_MODEL` | provider default | Override model name for any provider |
-| `GEMINI_API_KEY` | `""` | Google Gemini API key |
-| `OPENAI_API_KEY` | `""` | OpenAI API key |
-| `CLAUDE_API_KEY` | `""` | Anthropic Claude API key |
-| `GEMINI_MAX_SRT_CHARS` | `"60000"` | Max SRT chars sent to Gemini |
-| `OPENAI_MAX_SRT_CHARS` | `"30000"` | Max SRT chars sent to OpenAI |
-| `CLAUDE_MAX_SRT_CHARS` | `"50000"` | Max SRT chars sent to Claude |
-| `GEMINI_REQUEST_TIMEOUT` | `"120"` | Gemini HTTP timeout (seconds) |
-| `LLM_MAX_SRT_CHARS` | `"6000"` | Shared cap used in prompts.py |
-| `LLM_WHISPER_MODEL` | `"base"` | Whisper model used during LLM pre-render |
+Cache dir cũng nhận: `XDG_CACHE_HOME`, `TORCH_HOME`, `HF_HOME`,
+`TRANSFORMERS_CACHE`, `OLLAMA_MODELS`, `TEMP`/`TMP`, `FONTCONFIG_FILE` —
+`main.py` đặt `setdefault` để chuyển model/cache về thư mục ổn định.
 
-## Render Pipeline — Feature Flags
+## 2. Mạng & bảo mật
 
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `LLM_EMIT_RENDER_PLAN` | `"1"` | Enable Call 2 / RenderPlan path (flipped ON at Sprint 7.6a) |
-| `FEATURE_RAW_PART_SKIP` | `"0"` | Fuse cut+render — skip writing `raw_part.mp4` |
-| `FEATURE_RAW_PART_SKIP_MOTION_AWARE` | `"0"` | Extend fuse to motion-aware case |
-| `FEATURE_BASE_CLIP_FIRST` | `"0"` | Render base clip without overlays first |
-| `FEATURE_OVERLAY_AFTER_BASE_CLIP` | `"0"` | Composite overlays onto base clip |
-| `RENDER_DEBUG_LOG` | `"0"` | Enable verbose render debug logging |
-| `S4_THUMBNAIL_QUALITY_ENABLED` | `"0"` | Generate thumbnail quality metadata |
-| `S4_CANDIDATE_INTELLIGENCE_ENABLED` | `"0"` | Cache AI candidate scoring |
-| `S4_SPEAKER_AWARE_CUTS_ENABLED` | `"0"` | Speaker-aware cut boundaries |
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `ALLOW_REMOTE` | `0` | API **không có auth**. `main.py` từ chối khởi động nếu bind non-loopback mà không đặt `1`. Docker image đặt `1` |
+| `ENABLE_DEVTOOLS` | `0` (off) | Mount `POST /api/dev/command` (chạy shell, không auth). Chỉ mount khi `1` **và** bind loopback (fail-closed). Không bao giờ bật ở production |
+| `ENABLE_V2` | `1` | Thử mount router `v2.*` (module v2 hiện không có trong source → import fail êm, log warning) |
 
-## Encoding & Performance
+## 3. Hàng đợi job & tài nguyên
 
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `MAX_CONCURRENT_JOBS` | `cpu_count()` | Max parallel render jobs in queue |
-| `MAX_RENDER_JOBS` | `MAX_CONCURRENT_JOBS` | Max parallel parts per job |
-| `NVENC_MAX_SESSIONS` | `"3"` | Max simultaneous NVENC GPU encode sessions |
-| `FFMPEG_TIMEOUT_SECONDS` | `"3600"` | FFmpeg subprocess timeout |
-| `PREVIEW_SESSION_TTL_HOURS` | `"6"` | Editor session expiry |
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `MAX_CONCURRENT_JOBS` | `cpu//2` | Số job chạy song song (scheduler) |
+| `MAX_RENDER_JOBS` | `= MAX_CONCURRENT_JOBS` | Số pipeline vào vùng encode cùng lúc (`JOB_SEMAPHORE`) |
+| `MAX_JOB_AGE_SECONDS` | `7200` | Watchdog huỷ job chạy quá lâu. `0` = tắt |
+| `NVENC_MAX_SESSIONS` | `3` | Số phiên NVENC GPU (`NVENC_SEMAPHORE`). **Không tăng quá giới hạn phần cứng** |
+| `SHUTDOWN_TIMEOUT_SEC` | `30` | Thời gian graceful shutdown |
 
-## Download
+## 4. FFmpeg & render
 
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `YTDLP_WALLCLOCK_TIMEOUT` | `"300"` | yt-dlp download timeout (seconds) |
-| `YTDLP_COOKIEFILE` | `""` | Path to Netscape cookie file |
-| `YTDLP_COOKIES_FROM_BROWSER` | `""` | Browser name for cookie extraction |
-| `YTDLP_PROXY` | `""` | Proxy URL for yt-dlp |
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `FFMPEG_TIMEOUT_SECONDS` | — | Timeout mỗi lệnh FFmpeg |
+| `RENDER_MIN_FREE_DISK_MB` / `RENDER_WARN_FREE_DISK_MB` | — | Gate/ cảnh báo dung lượng trống trước render |
+| `RENDER_FUSE_CUT` | — | Bật cắt fuse trong `part_cut` |
+| `MICRO_PACING_MIN_TRIM_MS` | — | Ngưỡng micro-pacing trim |
+| `SUBTITLE_CAPCUT` | — | Style phụ đề kiểu CapCut |
+| `S4_THUMBNAIL_QUALITY_ENABLED` | — | Bật chấm chất lượng thumbnail |
+| `PREVIEW_SESSION_TTL_HOURS` | — | TTL phiên preview nguồn |
+| `RENDER_DEBUG_LOG` | `0` | Ghi artifact debug (timeline JSON, scene) |
 
-## Database & Backup
+## 5. Whisper / transcription
 
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `DB_BACKUP_DIR` | `APP_DATA_DIR/backups` | Backup destination |
-| `DB_BACKUP_KEEP_LAST` | `"10"` | Number of backups to retain |
-| `DB_BACKUP_EVERY_N_JOBS` | `"5"` | Trigger backup every N completed jobs |
-| `DB_BACKUP_MIN_INTERVAL_SEC` | `"3600"` | Minimum seconds between backups |
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `WARMUP_WHISPER_MODEL` | `small` | Model nạp sẵn lúc startup |
+| `WHISPER_MODEL_CACHE_MAX` | `2` | LRU model OpenAI-whisper |
+| `FW_MODEL_CACHE_MAX` | `2` | LRU model faster-whisper |
+| `WHISPER_BATCH_SIZE` | 8 (CUDA)/4 (CPU) | batch_size |
+| `WHISPER_CONTENT_HASH_CACHE` | off | Cache transcription theo sha256 nội dung |
+| `LLM_WHISPER_MODEL` / `LLM_WHISPER_AUTO_SELECT` / `LLM_WHISPER_TIMEOUT_MULT` | — | Whisper trong nhánh LLM |
+| `TIMED_NARRATION_TTS_CONCURRENCY` | — | Số luồng TTS narration |
 
-## Cache (set by main.py at startup)
+## 6. AI / LLM
 
-These redirect model caches to `APP_DATA_DIR` to avoid polluting system directories:
+Xem bảng đầy đủ trong [AI_INTEGRATION.md](AI_INTEGRATION.md). Chính:
+`LLM_EMIT_RENDER_PLAN` (1), `AI_PROVIDER_DEFAULT` (gemini), `LLM_FALLBACK_ENABLED`,
+`GEMINI_API_KEY`/`OPENAI_API_KEY`/`CLAUDE_API_KEY`, `AI_CLOUD_*`,
+`GEMINI_DEFAULT_MODEL`/`GEMINI_THINKING_BUDGET`/`GEMINI_REQUEST_TIMEOUT`,
+`*_MAX_SRT_CHARS`, `REWRITE_MAX_INPUT_CHARS`, `PROMPTS_MAX_SRT_CHARS`.
 
-| Var | Set to |
-|-----|--------|
-| `XDG_CACHE_HOME` | `APP_DATA_DIR/cache` |
-| `TORCH_HOME` | `APP_DATA_DIR/torch` |
-| `HF_HOME` | `APP_DATA_DIR/huggingface` |
-| `TRANSFORMERS_CACHE` | `APP_DATA_DIR/huggingface/hub` |
-| `OLLAMA_MODELS` | `APP_DATA_DIR/ollama/models` |
-| `TEMP`, `TMP` | `APP_DATA_DIR/tmp` (Windows override) |
+## 7. Download (yt-dlp)
 
----
+| Biến | Ý nghĩa |
+|------|---------|
+| `YTDLP_AUTO_UPDATE` | `0` để tắt auto-update yt-dlp lúc startup |
+| `YTDLP_COOKIEFILE` | Đường dẫn file cookie |
+| `YTDLP_COOKIES_FROM_BROWSER` | Lấy cookie từ trình duyệt |
+| `YTDLP_PROXY` | Proxy tải |
+| `YTDLP_WALLCLOCK_TIMEOUT` / `DOWNLOAD_WALLCLOCK_TIMEOUT` | Timeout tải |
+| `OLLAMA_URL` / `OLLAMA_MODEL` | (warmup) endpoint Ollama nếu dùng |
 
-## Feature Flag Notes
+## 8. DB / backup / cleanup
 
-### `FEATURE_RAW_PART_SKIP`
-Skips writing `raw_part.mp4` as an intermediate file. Instead, seek is applied input-side in the encode step. Saves ~1 minute per clip on large source files. Only applies when `motion_aware_crop=False` (motion tracking requires the intermediate file).
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `DB_TIMEOUT` | `30` | Timeout kết nối SQLite (giây) |
+| `JOB_RETENTION_DAYS` | `0` | Xoá job non-active quá tuổi. `0` = tắt. UI Settings ghi đè qua DB |
+| `CLEANUP_INTERVAL_SEC` | `1800` | Chu kỳ vòng cleanup nền |
+| `LOG_KEEP_LAST` | `30` | Giữ N log job gần nhất |
+| `LOG_KEEP_DAYS` | `10` | Xoá log job cũ hơn |
+| `LOG_LEVEL` | — | Mức log |
+| `DB_BACKUP_DIR` / `DB_BACKUP_KEEP_LAST` / `DB_BACKUP_EVERY_N_JOBS` / `DB_BACKUP_MIN_INTERVAL_SEC` | — | Backup DB định kỳ |
 
-### `FEATURE_BASE_CLIP_FIRST` + `FEATURE_OVERLAY_AFTER_BASE_CLIP`
-Together implement a two-pass encode: render base clip (no subtitles/overlays) first, then composite overlays onto it. Both must be ON for the compositing path to activate.
+## 9. Sự kiện / WebSocket
 
-### `LLM_EMIT_RENDER_PLAN`
-When ON (default), Call 2 asks the AI for a full `RenderPlan`. `_scored_from_render_plan()` converts it to `scored[]`, overwriting the Call 1 result. When OFF, only Call 1 segment selection is used.
+| Biến | Ý nghĩa |
+|------|---------|
+| `EVENT_BROADCASTER_QUEUE_SIZE` | Kích thước hàng đợi broadcaster |
+| `EVENT_BROADCASTER_MAX_SUBS` | Số subscriber tối đa |
 
-### `S4_*` flags
-Sprint 4 feature experiments. All default OFF. No production usage confirmed.
+## 10. UI tĩnh
 
-### `NVENC_MAX_SESSIONS`
-Consumer GPU NVENC hardware limit is typically 3-5 sessions. Exceeding it fails ALL active encodes simultaneously with a generic FFmpeg error. Do not raise without knowing the target hardware limit.
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `STATIC_UI_VERSION` | `legacy` | `v2` → phục vụ `backend/static-v2/` (UI React hiện tại) |
+
+> Lưu ý: nhiều biến không có "mặc định" trong bảng nghĩa là giá trị mặc định nằm
+> sâu trong module liên quan; tra trực tiếp `os.getenv(...)` tại file đó khi cần
+> con số chính xác.

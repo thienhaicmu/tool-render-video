@@ -1,266 +1,120 @@
-# Database
+# Database — AI Video Render Studio
 
-## Overview
+> Cập nhật 2026-06-29 từ source. Vùng **HIGH**. Quy tắc additive-only là tuyệt đối.
 
-Single SQLite database at `data/app.db`. WAL mode enabled. No cloud sync, no replication. Deletion is permanent — there is no recovery path.
+## 1. Nguyên tắc cốt lõi (Sacred Contract #7)
 
-Connection module: `backend/app/db/connection.py`
+`data/app.db` là **nguồn chân lý duy nhất** của mọi trạng thái job. Không Redis,
+không cloud, không fallback in-memory sống sót qua restart.
 
----
+- **KHÔNG** xoá file này.
+- **KHÔNG** `sqlite3.connect()` thô ngoài `backend/app/db/`.
+- **KHÔNG** `DROP` / `TRUNCATE` / `ALTER TABLE RENAME` cột hay bảng.
+- Đây là app desktop — **không có backup, không có recovery**. Mất = mất vĩnh viễn.
 
-## Tables
+Vị trí thực: `APP_DATA_DIR/app.db` (xem [CONFIGURATION.md](CONFIGURATION.md)). Khi
+đường dẫn chính không ghi được, `connection.py` fallback sang `LOCALAPPDATA` và
+log CRITICAL + tạo `DB_FALLBACK_ENGAGED.flag` (split-DB là tình huống cần xử lý).
 
-### jobs
+## 2. Mô hình kết nối
 
-Primary job state table.
+File: `backend/app/db/connection.py`. **WAL mode** bật lúc startup — không đổi
+journal mode (DELETE mode khiến writer chặn reader, làm UI đứng khi render).
 
-```sql
-CREATE TABLE jobs (
-    job_id           TEXT PRIMARY KEY,
-    kind             TEXT NOT NULL,           -- "render" | "download"
-    channel_code     TEXT NOT NULL,
-    status           TEXT NOT NULL,           -- "queued"|"running"|"completed"|"failed"|"cancelling"
-    stage            TEXT DEFAULT '',         -- JobStage enum value
-    progress_percent INTEGER DEFAULT 0,
-    message          TEXT DEFAULT '',
-    payload_json     TEXT,                    -- RenderRequest.model_dump() JSON
-    result_json      TEXT,                    -- result blob (see below)
-    created_at       TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at       TEXT DEFAULT CURRENT_TIMESTAMP,
-    priority         INTEGER DEFAULT 0,
-    error_kind       TEXT,
-    render_plan_json TEXT                     -- RenderPlan JSON (migration 0001)
-);
-CREATE INDEX idx_jobs_updated ON jobs(updated_at DESC, created_at DESC);
-CREATE INDEX idx_jobs_status_kind ON jobs(status, kind);
-```
+Hai pattern kết nối (steady state, đã chốt giữ nguyên):
 
-### result_json Structure
+| Pattern | Dùng cho | Hành vi |
+|---------|----------|---------|
+| `db_conn()` (context manager) | HTTP path / thao tác có giới hạn | Auto-commit khi thoát thường, rollback khi exception |
+| `_thread_conn()` | Hot path render | Connection thread-local bền; dùng bởi `update_job_progress()` + `upsert_job_part()`; giải phóng bằng `close_thread_conn()` |
 
-Assembled by `pipeline_finalize.py`. Key fields:
+`db_conn` chậm hơn ~165× mỗi call (3.152 μs vs 18.8 μs) → việc hợp nhất bị hoãn
+vô thời hạn. **Không** thêm pattern thứ ba (raw `sqlite3.connect()` ngoài các chỗ
+được phép: `connection.py`, `pipeline/db_backup.py`,
+`features/download/engine/cookie_extractor.py`).
 
-```python
-{
-    "outputs": [str, ...],                 # list of output file paths
-    "segments": [...],                     # scored[] list
-    "output_ranking": [                    # SACRED CONTRACT #1
-        {
-            "output_rank_score": float,    # must always be present
-            "is_best_output": bool,        # must always be present
-            "is_best_clip": bool,          # must always be present
-            "output_file": str,
-            "output_rank": int,
-            "part_no": int,
-            ...
-        }
-    ],
-    "best_clip": {...},
-    "best_exports": [...],
-    "failed_parts": [int, ...],
-    "failed_parts_detail": [...],
-    "selected_segments_count": int,
-    "successful_outputs_count": int,
-    "failed_outputs_count": int,
-    "is_partial_success": bool,
-    "recovery_notes": [str, ...],
-    "voice_summary": {...},
-    "subtitle_translate_summary": {...},
-    # Phase-X removals (kept empty for consumer compat):
-    "ai_director": {"enabled": false},
-    "story": {},
-    "preset_evolution": {},
-    "creator_style": {},
-    "ai_output_ranking": {"available": false},
-    "ai_render_quality_evaluation": {"available": false},
-    "ai_ux": {}
-}
-```
+Repo (tất cả qua `db/`): `jobs_repo`, `creator_repo`, `feedback_repo`,
+`download_repo`, `assets_repo`, `presets_repo`, `history_repo`, `ab_scores_repo`,
+`platform_metrics_repo`.
 
----
+## 3. Schema baseline (`connection.py::init_db`)
 
-### job_parts
+### `jobs`
+| Cột | Kiểu | Ghi chú |
+|-----|------|---------|
+| `job_id` | TEXT PK | |
+| `kind` | TEXT | `render` / `download` |
+| `channel_code` | TEXT | |
+| `status` | TEXT | running/queued/done/failed/cancelled |
+| `stage` | TEXT | giá trị `JobStage` |
+| `progress_percent` | INTEGER | |
+| `message` | TEXT | |
+| `payload_json` | TEXT | `RenderRequest` đầy đủ (để replay) |
+| `result_json` | TEXT | kết quả + key Sacred Contract #1 |
+| `priority` | INTEGER | thêm qua `_ensure_columns` |
+| `error_kind` | TEXT | |
+| `render_plan_json` | TEXT | thêm qua migration 0001 |
+| `created_at` / `updated_at` | TEXT | |
 
-Per-clip render state.
+Index: `idx_jobs_updated(updated_at DESC, created_at DESC)`,
+`idx_jobs_status_kind(status, kind)`.
 
-```sql
-CREATE TABLE job_parts (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_id           TEXT NOT NULL,
-    part_no          INTEGER NOT NULL,        -- 1-based clip index
-    part_name        TEXT NOT NULL,
-    status           TEXT NOT NULL,           -- JobPartStage enum value
-    progress_percent INTEGER DEFAULT 0,
-    start_sec        REAL DEFAULT 0,
-    end_sec          REAL DEFAULT 0,
-    duration         REAL DEFAULT 0,
-    viral_score      REAL DEFAULT 0,
-    motion_score     REAL DEFAULT 0,
-    hook_score       REAL DEFAULT 0,
-    output_file      TEXT DEFAULT '',
-    message          TEXT DEFAULT '',
-    created_at       TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at       TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(job_id, part_no)
-);
-```
+### `job_parts`
+Mỗi clip một dòng: `id` PK, `job_id`, `part_no`, `part_name`, `status` (giá trị
+`JobPartStage`), `progress_percent`, `start_sec`, `end_sec`, `duration`,
+`viral_score`, `motion_score`, `hook_score`, `output_file`, `message`, timestamps.
+`UNIQUE(job_id, part_no)` + `FOREIGN KEY(job_id) → jobs(job_id) ON DELETE CASCADE`
+(DB mới; DB cũ được retrofit bằng migration 0003). Migration 0011 thêm
+cover_quality.
 
----
+### `creator_prefs`
+Singleton (`id=1`), `prefs_json` — chứa creator context, data_retention
+(`job_retention_days`), render defaults… Migration 0005 thêm bảng per-channel.
 
-### creator_prefs
+### `download_jobs`
+Job tải độc lập (yt-dlp), không gắn vào render pipeline: url, platform, status,
+progress, speed/eta, output_path/dir, filename, title, duration, height, fps,
+filesize, error_msg, timestamps. Index theo status + created_at.
 
-Singleton table (always exactly 1 row, id=1).
+### `clip_feedback` (Phase 6)
+Rating người dùng để bias chọn clip AI tương lai: `job_id`, `part_no`,
+`channel_code`, `goal`, `rating ∈ {-1, 1}`, `hook_type`, `clip_type`, thời lượng,
+`rated_at`. `UNIQUE(job_id, part_no)` + FK cascade. Index theo `(channel_code, goal)`.
 
-```sql
-CREATE TABLE creator_prefs (
-    id           INTEGER PRIMARY KEY CHECK (id = 1),
-    prefs_json   TEXT DEFAULT '{}',
-    updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
-);
-```
+Bảng khác qua migration: `render_ab_scores` (0004/0006), `assets` (0007/0009),
+`render_presets` (0008), `platform_metrics` (0010), `schema_versions` (runner).
 
-Stores user settings and `creator_context` nested JSON (Sprint 3 CreatorContext).
+## 4. Migration (additive-only)
 
----
+Runner: `backend/app/db/migrations.py`. File trong `db/migration_steps/` theo quy
+ước `NNNN_slug.py`, export `VERSION: int`, `NAME: str`, `up(conn)`. Mỗi migration
+chạy trong transaction riêng; lỗi → rollback + `MigrationError` (init_db bắt để
+app vẫn boot). Bảng `schema_versions` ghi version đã áp dụng (idempotent).
 
-### download_jobs
+Thứ tự khởi động: `init_db()` dựng/migrate baseline (CREATE IF NOT EXISTS +
+`_ensure_columns` ALTER ADD COLUMN) → `run_pending_migrations()` áp các step mới.
 
-Download task tracking (separate from render jobs).
+### Cho phép vs Cấm
 
-```sql
-CREATE TABLE download_jobs (
-    id           TEXT PRIMARY KEY,
-    url          TEXT NOT NULL,
-    platform     TEXT DEFAULT '',
-    status       TEXT DEFAULT 'queued',
-    progress     INTEGER DEFAULT 0,
-    speed_str    TEXT DEFAULT '',
-    eta_str      TEXT DEFAULT '',
-    output_path  TEXT DEFAULT '',
-    output_dir   TEXT DEFAULT '',
-    filename     TEXT DEFAULT '',
-    title        TEXT DEFAULT '',
-    duration     REAL DEFAULT 0,
-    height       INTEGER DEFAULT 0,
-    fps          REAL DEFAULT 0,
-    filesize     INTEGER DEFAULT 0,
-    error_msg    TEXT DEFAULT '',
-    created_at   TEXT DEFAULT (datetime('now')),
-    updated_at   TEXT DEFAULT (datetime('now'))
-);
-CREATE INDEX idx_dl_jobs_status ON download_jobs(status);
-CREATE INDEX idx_dl_jobs_created ON download_jobs(created_at DESC);
-```
+| Cho phép | Cấm |
+|----------|-----|
+| Bảng mới (cột nullable hoặc có DEFAULT) | DROP TABLE |
+| Cột mới có DEFAULT | DROP COLUMN |
+| Index mới | RENAME COLUMN / ALTER TABLE RENAME |
+| | Đổi kiểu cột |
 
----
+Lý do: app desktop không có đường rollback migration. Migration phá huỷ chạy trên
+máy người dùng = mất dữ liệu vĩnh viễn.
 
-### clip_feedback
+## 5. Retention & cleanup
 
-User ratings for rendered clips.
+`prune_old_jobs(max_age_days)` chạy mỗi tick cleanup (mặc định 30 phút). Đọc
+`data_retention.job_retention_days` từ `creator_prefs` (UI Settings), fallback env
+`JOB_RETENTION_DAYS`. `0` = tắt retention (mặc định). Job đang active
+(`running`/`queued`) **không bao giờ** bị prune bất kể tuổi (Contract #7).
 
-```sql
-CREATE TABLE clip_feedback (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_id       TEXT NOT NULL,
-    part_no      INTEGER NOT NULL,
-    channel_code TEXT NOT NULL DEFAULT '',
-    goal         TEXT NOT NULL DEFAULT '',
-    rating       INTEGER NOT NULL CHECK(rating IN (-1, 1)),
-    hook_type    TEXT NOT NULL DEFAULT 'none',
-    clip_type    TEXT NOT NULL DEFAULT 'unknown',
-    start_sec    REAL NOT NULL DEFAULT 0.0,
-    end_sec      REAL NOT NULL DEFAULT 0.0,
-    duration_sec REAL NOT NULL DEFAULT 0.0,
-    rated_at     TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(job_id, part_no)
-);
-CREATE INDEX idx_feedback_channel ON clip_feedback(channel_code, goal);
-```
+## 6. Quan sát
 
----
-
-### schema_versions
-
-Migration tracking.
-
-```sql
-CREATE TABLE schema_versions (
-    version    INTEGER NOT NULL PRIMARY KEY,
-    name       TEXT NOT NULL,
-    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
-
----
-
-## Migrations
-
-| File | Version | Change |
-|------|---------|--------|
-| `0001_jobs_add_render_plan_json.py` | 1 | `ALTER TABLE jobs ADD COLUMN render_plan_json TEXT` |
-| `0002_jobs_rewrite_groq_to_llm.py` | 2 | Rewrite `groq_*` fields to `llm_*` in stored `payload_json` |
-
----
-
-## Connection Model
-
-Two patterns — do not introduce a third.
-
-### `db_conn()` — HTTP request path
-
-```python
-@contextlib.contextmanager
-def db_conn():
-    conn = get_conn()       # new connection
-    try:
-        yield conn
-        conn.commit()       # auto-commit on success
-    except Exception:
-        conn.rollback()
-    finally:
-        conn.close()
-```
-
-Used by: `jobs_repo.py` (upsert_job, get_job, list_jobs), `creator_repo.py`, `feedback_repo.py`, `download_repo.py`.
-
-### `_thread_conn()` — render hot path only
-
-```python
-_tls = threading.local()
-
-def _thread_conn() -> sqlite3.Connection:
-    if not hasattr(_tls, 'conn'):
-        _tls.conn = get_conn()
-    return _tls.conn
-
-def close_thread_conn():
-    if hasattr(_tls, 'conn'):
-        _tls.conn.close()
-        del _tls.conn
-```
-
-Used by: `update_job_progress()`, `upsert_job_part()` — high-frequency writes during render.
-
-`close_thread_conn()` called in `finally` block of `render_pipeline.py`.
-
-**Why two patterns:** `db_conn()` is ~165× slower than `_thread_conn()` per call (3,152 μs vs 18.8 μs median, WAL mode). The render progress write rate makes `db_conn()` unacceptable on the hot path. Unification deferred indefinitely — see `docs/review/SPRINT_7_7_BENCHMARK_PREP_2026-06-05.md`.
-
----
-
-## WAL Mode
-
-Set at connection open time. **Never change journal mode.**
-
-WAL enables concurrent readers while a write is open. Without it, every `update_job_progress` write blocks all HTTP polling responses — progress UI appears frozen during renders.
-
----
-
-## DB Fallback
-
-If primary `data/app.db` is unwritable, `_resolve_db_path()` falls back to `%LOCALAPPDATA%\tool-render-video\data\app.db`.
-
-- Detected at startup by `_check_db_fallback_at_startup()`
-- Logged at `CRITICAL` level
-- `DB_FALLBACK_ENGAGED.flag` file written to `APP_DATA_DIR`
-- `/health` endpoint returns `"db_fallback_active": true`
-
-This creates a split-DB condition — job state is written to two different files. Recover by fixing permissions on primary path and restarting.
+Mỗi lần acquire connection phát vào histogram Prometheus
+`db_conn_acquire_seconds` với label `role={db_conn|_thread_conn}` (bỏ qua cache
+hit của `_thread_conn`). Xem `/metrics`.

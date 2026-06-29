@@ -1,41 +1,22 @@
 # CLAUDE.md — AI Video Render Studio
 
-> ⚠️ **STALE-CONTENT NOTICE (refreshed 2026-06-06 post-Batch 10R):**
-> The Phase 1-18 feature-layer migration (commits `cf80766`, `e641a21`)
-> + 18 batches of audit closures (Batches 10A–R) have moved or deleted
-> several paths this file used to reference. The Sacred Contracts still
-> apply; file paths have moved. Highlights:
-> - **CRITICAL paths now under `backend/app/features/render/{ai,engine,editing}/`** —
->   `backend/app/orchestration/`, `backend/app/services/render/`,
->   `backend/app/ai/` no longer exist.
-> - `render_pipeline.py` is now `backend/app/features/render/engine/pipeline/render_pipeline.py`.
-> - `part_renderer.py` is now `backend/app/features/render/engine/stages/part_renderer.py` —
->   path derivation extracted to `stages/segment_metadata.py` (Batch 10P)
->   and three Sacred Contract #5 transitions extracted to
->   `stages/part_db.py` (Batch 10Q).
-> - `motion_crop.py` is now `backend/app/features/render/engine/motion/crop.py`.
-> - `ffmpeg_helpers.py` is now `backend/app/features/render/engine/encoder/ffmpeg_helpers.py`.
-> - **Deleted (do NOT recreate):**
->   `backend/app/services/db.py` (Batch 9 audit A14 closure — use
->   `app/db/connection.py` directly).
->   `backend/app/routes/channels.py` + 6 orphan endpoints (Batch 10H
->   audit FINDING-API05 — see `tests/test_channels_surface_gone.py`).
-> - **New surfaces introduced by Batches 10A–R:**
->   `backend/app/models/render_public.py` (`RenderRequestPublic`, 88-field
->   FE-facing slice, now the wire surface for `/api/render/process` —
->   Batch 10N/10O); `backend/app/models/render.py` + `models/jobs.py`
->   (MT-2 split — `models/schemas.py` is a 39-LOC re-export shim);
->   `backend/app/services/dev/` package (MT-1 decomp from
->   `dev_commands.py`); migration `0003_add_fk_cascade_*` for
->   `job_parts` / `clip_feedback` (MT-6); `/api/settings/data-retention`
->   endpoint (MT-7 UI).
+> 📄 **DOCS REFRESH (2026-06-29):** The `docs/` tree was rebuilt from
+> scratch by reading the current source. The old dated audit folders
+> (`docs/audit-2026-06-06/`, `docs/audit-2026-06-08/`) and the
+> `docs/perf-*.md` programme files were **deleted** and replaced by a
+> concise, code-verified doc set. Start at
+> [docs/README.md](docs/README.md), then drill into
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) →
+> [docs/RENDER_PIPELINE.md](docs/RENDER_PIPELINE.md). When docs and code
+> conflict: **trust code.**
 >
-> The audit catalog is closed end-to-end. For a clean current view,
-> prefer reading [docs/audit-2026-06-06/BATCH10_CLOSURE_LEDGER.md](docs/audit-2026-06-06/BATCH10_CLOSURE_LEDGER.md)
-> first (3 sections — original + 2 addenda covering Batches 10A–R),
-> then drill into [17_system_overview.md](docs/audit-2026-06-06/17_system_overview.md) →
-> [18_architecture.md](docs/audit-2026-06-06/18_architecture.md) →
-> [19_backend.md](docs/audit-2026-06-06/19_backend.md).
+> Path reminders (still accurate after the Phase 1-18 feature-layer
+> migration): CRITICAL paths live under
+> `backend/app/features/render/{ai,engine,editing}/`. The old
+> `backend/app/orchestration/`, `backend/app/services/render/`,
+> `backend/app/ai/` trees no longer exist. Deleted and must NOT be
+> recreated: `backend/app/services/db.py` (use `app/db/connection.py`
+> directly) and `backend/app/routes/channels.py`.
 
 ## ⚡ AGENT TEAM PROTOCOL
 
@@ -105,9 +86,11 @@ Current file state may differ from any prior analysis.
 
 | Domain | Doc |
 |--------|-----|
+| Docs index | `docs/README.md` |
 | Render pipeline stages | `docs/RENDER_PIPELINE.md` |
 | System architecture | `docs/ARCHITECTURE.md` |
-| Frontend API contract | `docs/FRONTEND_CONTRACT.md` |
+| REST + WebSocket API contract | `docs/API_CONTRACT.md` |
+| Frontend + Electron shell | `docs/FRONTEND.md` |
 | AI/LLM integration | `docs/AI_INTEGRATION.md` |
 | Database schema | `docs/DATABASE.md` |
 | Environment variables | `docs/CONFIGURATION.md` |
@@ -696,31 +679,28 @@ The render pipeline handles `None` returns from AI modules with fallback behavio
 
 ## Audit Ledger
 
-Architecture audits live in dated folders under `docs/`. The current
-canonical audit is `docs/audit-2026-06-06/`. The older `docs/review/`
-folder was archived during the Phase 1-18 feature-layer migration
-(commit `e641a21`) — its files are recoverable from git history but
-the directory no longer exists on the working tree. `docs/archive/**`
-likewise holds frozen historical artifacts.
+> **2026-06-29:** the old dated audit folders (`docs/audit-2026-06-06/`,
+> `docs/audit-2026-06-08/`) and the `docs/perf-*.md` programme files were
+> deleted when the `docs/` tree was rebuilt from source. They remain
+> recoverable from git history. There is currently **no active audit
+> folder** — the living documentation is the code-verified doc set under
+> `docs/` (see [docs/README.md](docs/README.md)).
 
-The append-only rule still applies to whichever folder is current.
-For `audit-2026-06-06/` specifically:
+If a future audit is opened, recreate a dated folder under `docs/`
+(e.g. `docs/audit-YYYY-MM-DD/`) and apply the append-only rule below to
+it:
 
-1. NEW findings or follow-up closures go in NEW files (e.g.
-   `BATCH10_CLOSURE_LEDGER.md`, `SMOKE_TEST_2026-06-06_BATCH10R.md`).
-2. Existing files in the audit folder are NEVER edited in place —
-   the closure ledger uses append-only addenda at the bottom (see
-   the 3-section structure of `BATCH10_CLOSURE_LEDGER.md` for the
-   pattern).
+1. NEW findings or follow-up closures go in NEW files.
+2. Existing files in the audit folder are NEVER edited in place — use
+   append-only addenda at the bottom.
 3. If a finding relates to a prior file, reference it by filename in
    the new file's body.
-4. Never delete files from any audit folder.
+4. Never delete files from an active audit folder.
 
-**Why:** the audit folder is the history of architectural knowledge
-at specific points in time. Editing existing files rewrites history.
+**Why:** an audit folder is the history of architectural knowledge at
+specific points in time. Editing existing files rewrites history.
 Future auditors must be able to read what was known at each point in
-time and trace what changed. Mutating historical records destroys the
-audit trail.
+time and trace what changed.
 
 ---
 
@@ -855,7 +835,7 @@ Check auto-reject conditions first. Reject immediately on the first violation fo
 - [ ] Output validation still catches: missing file, file too small, no video stream, no audio stream, zero duration
 - [ ] Subtitle and voice code paths no-op cleanly when those features are disabled
 - [ ] AI module changes bounded: no import-time failures on missing optional deps, no unhandled raises
-- [ ] Any behavior or specification change is reflected in a new file under the current audit folder (`docs/audit-2026-06-06/` as of 2026-06-06)
+- [ ] Any behavior or specification change is reflected in the relevant doc under `docs/` (see [docs/README.md](docs/README.md))
 
 **Overengineering Flags (stop, escalate to Planner for rescoping):**
 

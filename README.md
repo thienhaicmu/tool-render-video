@@ -243,8 +243,9 @@ python -m pytest                          # full suite (~8 min)
 python -m pytest tests/test_foo.py -v     # focused
 ```
 
-**Baseline:** 1396 passed (verified across the 2026-06-17 12-phase
-perf optimisation programme — see [docs/perf-optimization-plan-2026-06-16.md](docs/perf-optimization-plan-2026-06-16.md)).
+Run the **full suite** before any CRITICAL/HIGH-tier change and compare the
+pass/fail count against the pre-edit baseline (see the Render Edit Protocol in
+[CLAUDE.md](CLAUDE.md)).
 
 ---
 
@@ -265,68 +266,39 @@ perf optimisation programme — see [docs/perf-optimization-plan-2026-06-16.md](
 | GET | `/api/downloader/jobs/{id}/ws` | Download progress WebSocket |
 | GET | `/metrics` | Prometheus metrics (see Performance section) |
 
-Full contract: [docs/FRONTEND_CONTRACT.md](docs/FRONTEND_CONTRACT.md)
+Full contract: [docs/API_CONTRACT.md](docs/API_CONTRACT.md)
 
 ---
 
-## Performance
+## Observability (`/metrics`)
 
-The render + download pipelines went through a 12-phase optimisation
-programme on 2026-06-17. 7 phases shipped; per-phase results and the
-canonical plan live under `docs/perf-*.md`.
-
-### Observability (`/metrics`)
-
-Phase 0 added 4 metric families on top of the pre-existing
-`render_jobs_total` / `nvenc_acquire_wait_seconds` / `db_conn_acquire_seconds`:
+Prometheus metrics are served at `GET /metrics` (`backend/app/routes/metrics.py`
++ `services/metrics.py`). Notable families:
 
 | Metric | Labels | Meaning |
 |---|---|---|
-| `render_stage_seconds` | `stage` | Histogram per pipeline stage (job-level + `per_part_*`) |
-| `render_cache_lookups_total` | `cache`, `outcome` | Hit/miss counter for 5 caches (`whisper_srt`, `llm_plan`, `ass`, `scores`, `motion_path`) |
-| `whisper_transcribe_seconds` | `model`, `engine` | Wallclock per Whisper call |
-| `render_db_writes_total` | `surface` | DB write count by writer (`update_job_progress`, `upsert_job_part`, …) |
+| `render_stage_seconds` | `stage` | Histogram per pipeline stage |
+| `db_conn_acquire_seconds` | `role` | DB connection acquire time (`db_conn` / `_thread_conn`) |
+| `render_jobs_total` / `nvenc_acquire_wait_seconds` | — | Job counters + NVENC wait |
 
-### Highlights shipped
-
-| Phase | What | Realised gain |
-|---|---|---|
-| 3 | `/api/downloader/info` LRU 5-min TTL | **14× speed-up** on repeat preview clicks (3.8 s → 0.27 s) |
-| 3 | Whisper-tiny singleton in enrichment | 5–15 s per asset enrichment |
-| 7 | Source-seek fuse (Sprint 7.4/7.8 wired) | Opt-in via `RENDER_FUSE_CUT=1`; eliminates raw_part.mp4 intermediate |
-| 8 | Audio `-c:a copy` fast path | Bit-perfect AAC pass-through (also improves output quality) |
-| 9 | LLM cache key = full-SRT SHA-256 | Eliminates 8 KB prefix aliasing on long videos |
-| 10 | Parallel enrichment (lang ∥ thumb) | 5–10 s per asset |
-
-Discipline: 1396/1396 pytest preserved across every merged phase;
-zero `output_rank_score` drift across 5 smoke renders; every Sacred
-Contract and Frozen API surface untouched. Full per-phase rationale +
-operator runbook in [docs/perf-phase-12-result-2026-06-17.md](docs/perf-phase-12-result-2026-06-17.md).
+`GET /health` reports the active DB path and whether the LOCALAPPDATA fallback
+is engaged.
 
 ---
 
 ## Documentation index
 
-### Architecture + contracts
-
 | File | Contents |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System overview, data flow, component map |
-| [docs/RENDER_PIPELINE.md](docs/RENDER_PIPELINE.md) | All render stages, parallelism, resume logic |
-| [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | RenderPlan contract, LLM providers, prompt flow |
-| [docs/FRONTEND_CONTRACT.md](docs/FRONTEND_CONTRACT.md) | REST + WebSocket frozen API contracts |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | All environment variables with descriptions |
-| [docs/DATABASE.md](docs/DATABASE.md) | Schema, migrations, WAL mode, connection model |
+| [docs/README.md](docs/README.md) | Documentation map (start here) |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System overview, components, process/thread model, job lifecycle |
+| [docs/RENDER_PIPELINE.md](docs/RENDER_PIPELINE.md) | Render stages, per-part rendering, Sacred Contracts |
+| [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | RenderPlan contract, LLM providers, prompt flow, AI safety |
+| [docs/DATABASE.md](docs/DATABASE.md) | Schema, connection model, additive-only migrations |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | All environment variables + data paths |
+| [docs/API_CONTRACT.md](docs/API_CONTRACT.md) | REST + WebSocket API, frozen contracts |
+| [docs/FRONTEND.md](docs/FRONTEND.md) | React frontend + Electron shell structure |
 | [CLAUDE.md](CLAUDE.md) | Sacred Contracts, blast radius tiers, agent protocol |
-
-### Performance programme (2026-06-17)
-
-| File | Contents |
-|---|---|
-| [docs/perf-optimization-plan-2026-06-16.md](docs/perf-optimization-plan-2026-06-16.md) | Canonical 12-phase plan + append-only STATUS log |
-| [docs/perf-baseline-2026-06-16.md](docs/perf-baseline-2026-06-16.md) | Frozen baseline (1396 tests, median historical render 885 s, fresh control 55 s rank 85.6) |
-| [docs/perf-phase-12-result-2026-06-17.md](docs/perf-phase-12-result-2026-06-17.md) | **Programme summary + operator runbook** |
-| `docs/perf-phase-{1,2,3,7,8,9,10}-result-*.md` | Per-merged-phase result docs |
 
 ---
 

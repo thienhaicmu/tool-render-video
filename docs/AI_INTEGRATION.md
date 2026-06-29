@@ -1,278 +1,162 @@
-# AI Integration
+# AI Integration — AI Video Render Studio
 
-## Overview
+> Cập nhật 2026-06-29 từ source. Vùng **HIGH**. Quy tắc an toàn AI là tuyệt đối.
 
-Two LLM calls per render job when `LLM_EMIT_RENDER_PLAN=1` (default ON):
+## 1. Vai trò của AI
 
-| Call | Function | Returns | Used for |
-|------|----------|---------|---------|
-| Call 1 | `select_segments()` | `list[LLMSegment]` | Initial segment selection |
-| Call 2 | `select_render_plan()` | `RenderPlan` | Full render config |
+AI (LLM cloud) là **người quyết định chọn cảnh**: nhận transcript (SRT từ
+Whisper) + ngữ cảnh creator, rồi phát ra một **RenderPlan** (danh sách clip +
+chính sách phụ đề + chiến lược camera + audio plan + overlay). Render engine là
+bộ thực thi thuần — không tự quyết nội dung.
 
-When Call 2 returns a valid `RenderPlan`, `_scored_from_render_plan()` converts it to `scored[]`, **overwriting** the Call 1 result. Call 1 serves as fallback when Call 2 fails.
+```
+Video local → Whisper (SRT) → Creator Context Builder
+            → AI Director (Gemini/OpenAI/Claude) → RenderPlan
+            → Render Engine (executor)
+```
 
-Transcription (Whisper) is NOT an LLM call — it runs locally offline.
+AI là **tuỳ chọn**: nếu không có API key hoặc AI lỗi/trả None, pipeline fallback
+sang logic suy từ payload (giữ nguyên hành vi cũ — Sacred Contract #2).
 
----
+## 2. Vị trí canonical
 
-## Module Structure
+Tất cả import phải trỏ thẳng đường dẫn canonical — **không có shim**:
 
 ```
 backend/app/features/render/ai/
-└── llm/
-    ├── __init__.py        Dispatcher (select_segments, select_render_plan)
-    ├── parser.py          Response parsing (LLMSegment, RenderPlan parsing)
-    ├── prompts.py         Prompt builders (build_segment_prompt, build_render_plan_prompt)
-    └── providers/
-        ├── gemini.py      Google Gemini implementation
-        ├── openai.py      OpenAI GPT implementation
-        └── claude.py      Anthropic Claude implementation
-
-backend/app/ai/llm/__init__.py   Compat shim — re-exports from features/render/ai/llm/
+├── llm/
+│   ├── __init__.py        # dispatcher: select_render_plan(provider=...)
+│   ├── providers/         # gemini.py, openai.py, claude.py
+│   ├── parser.py          # parse phản hồi LLM
+│   ├── prompts.py         # template prompt (an toàn format là then chốt)
+│   ├── retry.py           # retry có kiểm soát
+│   ├── cache.py           # cache phản hồi LLM
+│   └── rewrite.py / rewrite_prompts.py / rewrite_parser.py  # viết lại phụ đề
+├── context/builder.py     # dựng creator-context cho prompt
+├── feedback/signals.py    # tín hiệu từ rating người dùng (bias chọn clip)
+├── visibility/            # tóm tắt khả năng quan sát AI vào result_json
+├── dependencies.py        # cờ availability cho dep tuỳ chọn
+├── diagnostics.py         # GET /api/render/ai-diagnostics
+└── tracing.py
 ```
 
----
+## 3. Quy tắc AN TOÀN AI (tuyệt đối — Sacred Contract #3)
 
-## Providers
+> Mọi hàm public trong `backend/app/features/render/ai/**` (và `app/ai/**` nếu
+> có) phải **bắt mọi exception và trả `None`** khi lỗi. **Không bao giờ** để
+> exception lan ra ngoài.
 
-### Google Gemini (`providers/gemini.py`)
-
-| Parameter | Value |
-|-----------|-------|
-| Default model | `gemini-2.5-flash` |
-| Model override | `AI_CLOUD_MODEL` env var |
-| Max SRT chars | 60,000 (`GEMINI_MAX_SRT_CHARS`) |
-| Request timeout | 120s (`GEMINI_REQUEST_TIMEOUT`) |
-| API key | `GEMINI_API_KEY` env var or `payload.gemini_api_key` |
-| Library | `google.genai.Client` |
-
-### OpenAI (`providers/openai.py`)
-
-| Parameter | Value |
-|-----------|-------|
-| Default model | `gpt-4o-mini` |
-| Max SRT chars | 30,000 (`OPENAI_MAX_SRT_CHARS`) |
-| API key | `OPENAI_API_KEY` env var |
-| Library | `openai.OpenAI` |
-
-### Anthropic Claude (`providers/claude.py`)
-
-| Parameter | Value |
-|-----------|-------|
-| Default model | `claude-3-5-sonnet-20241022` |
-| Max SRT chars | 50,000 (`CLAUDE_MAX_SRT_CHARS`) |
-| API key | `CLAUDE_API_KEY` env var |
-| Library | `anthropic.Anthropic` |
-
----
-
-## Call 1 — Segment Selection
-
-**Prompt builder:** `build_segment_prompt()` in `prompts.py`
-
-**Input:** SRT file content (timestamps converted to `[83.5 - 123.1]` format, saving ~50% tokens), `output_count`, `min_sec`, `max_sec`, `video_duration`.
-
-**Expected output:**
-```json
-{
-  "segments": [
-    {
-      "start": 83.5,
-      "end": 123.1,
-      "viral_score": 85,
-      "hook_score": 72,
-      "retention_score": 68,
-      "content_type": "interview",
-      "hook_type": "question",
-      "subtitle_style": "viral",
-      "speech_density": 0.8,
-      "duration_fit_score": 0.9,
-      "ai_subtitle_style": "viral",
-      "cover_hint_ratio": 0.3
-    }
-  ]
-}
-```
-
-**Parser:** `parse_segment_response()` in `parser.py` — defensive, never raises. Handles markdown fences, wrapped JSON objects, and raw arrays.
-
-**`LLMSegment` dataclass fields:**
-- `start`, `end` — seconds (float)
-- `viral_score`, `hook_score`, `retention_score` — 0-100
-- `content_type` — `"interview"` / `"vlog"` / `"tutorial"` / `"montage"`
-- `hook_type` — `"question"` / `"reveal"` / `"contrast"` / `"humor"`
-- `subtitle_style` — `"viral"` / `"clean"` / `"story"` / `"gaming"` / `""`
-- `speech_density` — 0.0-1.0
-- `duration_fit_score` — 0.0-1.0
-- `cover_hint_ratio` — 0.0-1.0 (thumbnail time offset advisory)
-- `title`, `reason` — strings
-
----
-
-## Call 2 — RenderPlan Emission
-
-**Prompt builder:** `build_render_plan_prompt()` in `prompts.py`
-
-**Expected output:**
-```json
-{
-  "clips": [...],
-  "subtitle_policy": {...},
-  "camera_strategy": {...},
-  "audio_plan": {...},
-  "output_config": {...},
-  "overlays": []
-}
-```
-
-**Parser:** `parse_render_plan_response()` in `parser.py` → `RenderPlan.from_json()` in `domain/render_plan.py`. Both defensive, never raise.
-
----
-
-## RenderPlan Domain Object
-
-**File:** `backend/app/domain/render_plan.py`
-
-### RenderPlan
+Lý do: pipeline gọi module AI giữa lúc render. Một exception chưa bắt → job
+render abort, mất toàn bộ công sức, có thể làm hỏng thread state của job khác.
+`return None` báo pipeline dùng fallback và tiếp tục.
 
 ```python
-@dataclass
-class RenderPlan:
-    schema_version: int = 1
-    clips: list[ClipPlan] = []
-    subtitle_policy: SubtitlePolicy = SubtitlePolicy()
-    camera_strategy: CameraStrategy = CameraStrategy()
-    audio_plan: AudioPlan = AudioPlan()
-    output_config: OutputConfig = OutputConfig()
-    overlays: list[dict] = []
-    creator_context_id: str = ""
-```
-
-### ClipPlan
-
-| Field | Type | Consumer |
-|-------|------|---------|
-| `start` | float | `part_cut.py` — segment start time (seconds) |
-| `end` | float | `part_cut.py` — segment end time (seconds) |
-| `rank` | int | `pipeline_ranking.py:_resolve_rank_from_plan()` |
-| `score` | float | `_scored_from_render_plan()` → `viral_score` if missing |
-| `viral_score` | float | `_scored_from_render_plan()` → output scoring |
-| `hook_score` | float | `_scored_from_render_plan()` → output scoring |
-| `retention_score` | float | `_scored_from_render_plan()` → output scoring |
-| `title` | str | `pipeline_finalize.py` → `result_json` |
-| `reason` | str | `pipeline_finalize.py` → `result_json` |
-| `subtitle_style` | str | `part_asset_planner.py` → subtitle style tier 2 |
-| `content_type` | str | `pipeline_ranking.py` → ranking reason |
-| `hook_type` | str | `pipeline_ranking.py` → ranking reason |
-| `speech_density` | float | `_scored_from_render_plan()` → ranking weight |
-| `duration_fit` | float | `_scored_from_render_plan()` → ranking weight |
-| `cover_offset_ratio` | float | `_scored_from_render_plan()` → `cover_hint_ratio` in seg dict |
-| `clip_name` | str | `_scored_from_render_plan()` → internal name |
-
-### SubtitlePolicy
-
-| Field | Type | Consumer |
-|-------|------|---------|
-| `style` | str | `part_asset_planner.py` — global style override (tier 1) |
-| `market` | str | `part_asset_planner.py` — market / locale override |
-| `emphasis_pass` | bool | `part_asset_planner.py` — extra emphasis effects |
-| `line_break_rule` | str | `part_asset_planner.py` — market-specific line breaking |
-
-### CameraStrategy
-
-| Field | Type | Consumer |
-|-------|------|---------|
-| `motion_aware_crop` | bool | `part_render_setup.py` — override `payload.motion_aware_crop` |
-| `reframe_mode` | str | `part_render_setup.py` — `"center"` / `"track"` / `"fixed"` |
-| `tracker` | str | `part_render_setup.py` — `"bytetrack"` / `"trackerless"` / `"legacy"` |
-
-### AudioPlan
-
-| Field | Type | Consumer |
-|-------|------|---------|
-| `voice_enabled` | bool | `part_voice_mix.py` — override `payload.voice_enabled` |
-| `voice_provider` | str | `part_voice_mix.py` — `"xtts"` / `"edge"` |
-| `bgm_enabled` | bool | `part_voice_mix.py` — background music |
-| `cta_audio` | str | `part_voice_mix.py` — CTA audio file path |
-
-### OutputConfig
-
-| Field | Type | Consumer |
-|-------|------|---------|
-| `codec` | str | `part_render_encode.py` — `"h264"` / `"h265"` |
-| `preset` | str | `part_render_encode.py` — FFmpeg preset |
-| `crf` | int | `part_render_encode.py` — quality (0-51) |
-| `fps` | int | `part_render_encode.py` — frame rate |
-| `width`, `height` | int | `part_render_encode.py` — resolution |
-
----
-
-## Subtitle Style Resolution (5-Tier)
-
-In `part_asset_planner.py`, the final subtitle style is resolved in priority order:
-
-```
-Tier 1 (highest): RenderPlan.subtitle_policy.style          (global override)
-Tier 2:           seg["subtitle_style"] from ClipPlan        (per-clip AI choice)
-Tier 3:           seg["ai_subtitle_style"] from Call 1        (legacy segment field)
-Tier 4:           payload.subtitle_style                      (user choice)
-Tier 5:           platform bias + content_type default        (heuristic fallback)
-```
-
----
-
-## Output Ranking Weights
-
-In `pipeline_ranking.py`:
-
-```
-output_rank_score =
-    viral_score      × 0.35
-  + hook_score       × 0.20
-  + retention_score  × 0.20
-  + speech_density   × 0.10
-  + market_score     × 0.10
-  + duration_fit     × 0.05
-```
-
-AI ranks from `ClipPlan.rank` take precedence over score-based sort when `LLM_EMIT_RENDER_PLAN=1`.
-
----
-
-## Sacred Contract #3 — AI Never Crashes Render
-
-Every public function in `features/render/ai/**` and `ai/**` must:
-
-```python
-def select_render_plan(...) -> Optional[RenderPlan]:
+# ĐÚNG
+def analyze(self, data):
     try:
-        # ... AI call ...
-        return RenderPlan(...)
+        return self._run_inference(data)
     except Exception:
-        logger.warning("...")
-        return None  # ALWAYS return None, NEVER raise
+        return None   # caller dùng fallback
+
+# SAI — lan exception ra ngoài, giết job
+def analyze(self, data):
+    return self._run_inference(data)
 ```
 
-Returning `None` causes the orchestrator to use fallback behavior. Raising an exception terminates the active render job with no recovery path.
+## 4. Dependency tuỳ chọn
 
----
-
-## Lazy Optional Dependencies
-
-AI providers must not crash FastAPI startup if optional libraries are absent:
+- Package suy luận AI tuỳ chọn (torch, transformers, …) **chỉ** nằm trong
+  `requirements-ai.txt`. Không thêm vào `requirements.txt`.
+- Module AI phải **import được kể cả khi thiếu dep**. Dùng lazy import + cờ:
 
 ```python
-# Correct pattern
 try:
-    import google.genai as genai
-    _GENAI_AVAILABLE = True
+    import torch
+    _TORCH_AVAILABLE = True
 except ImportError:
-    _GENAI_AVAILABLE = False
+    _TORCH_AVAILABLE = False
 
-def select_render_plan(...):
-    if not _GENAI_AVAILABLE:
+def run_model(x):
+    if not _TORCH_AVAILABLE:
         return None
     ...
 ```
 
-AI extras live in `requirements-ai.txt`, NOT `requirements.txt`.
+Vi phạm → cả FastAPI fail khởi động, không render được gì.
+
+SDK provider (`google-genai`, `openai`, `anthropic`) cũng lazy-import trong từng
+provider để thiếu extra không làm chết startup.
+
+## 5. RenderPlan (contract AI → engine)
+
+Dataclass thuần tại `backend/app/domain/render_plan.py` (không I/O, không SDK).
+Schema hiện tại `SCHEMA_VERSION = 1`.
+
+```
+RenderPlan
+├── schema_version: int = 1
+├── clips: list[ClipPlan]
+│     start, end, rank, score, clip_name, title, reason,
+│     hook_type, content_type, subtitle_style,
+│     viral_score, hook_score, retention_score, speech_density,
+│     duration_fit, cover_offset_ratio, pacing, hook_intensity
+├── subtitle_policy: SubtitlePolicy  (style, market, emphasis_pass, subtitle_mode)
+├── camera_strategy: CameraStrategy  (motion_aware_crop, reframe_mode, tracker)
+├── audio_plan: AudioPlan            (voice_*, bgm_*, cta_audio)
+└── overlays: list[dict]             (kind=hook|cta, text, ...)
+```
+
+Quy tắc baked-in:
+- **Mọi field có default an toàn** — nạp payload cũ thiếu field là no-op, không lỗi
+  (Contract #2). Chuỗi rỗng = "inherit", backend resolver là authority.
+- **`from_json` phòng thủ tuyệt đối**: None/rỗng/JSON hỏng → trả `None`; key lạ bị
+  bỏ; field thiếu về default; **không bao giờ raise** (tinh thần Contract #3).
+- **`to_json` xác định** (sorted keys, compact) → blob lưu DB ổn định.
+
+Persist trong cột `jobs.render_plan_json` (xem [DATABASE.md](DATABASE.md)). Khi
+resume/retry, plan được nạp lại để bỏ qua call LLM (tiết kiệm latency + token).
+
+## 6. Dispatcher & provider
+
+`ai/llm/__init__.py::select_render_plan(provider, srt_content, output_count,
+min_sec, max_sec, video_duration, api_key, model, language, editorial_hint,
+target_duration, clip_lock, clip_exclude, target_platform, video_type,
+hook_strength, ai_target_market, subtitle_emphasis, multi_variant,
+structure_bias)`.
+
+- Provider hỗ trợ: `gemini` | `openai` | `claude`.
+- Provider mặc định server: `AI_PROVIDER_DEFAULT` (mặc định `gemini`).
+- Resolve API key theo thứ tự: key trong payload → env fallback
+  (`GEMINI_API_KEY` / `OPENAI_API_KEY` / `CLAUDE_API_KEY`).
+- `LLM_FALLBACK_ENABLED` cho phép thử provider khác khi provider chính lỗi.
+
+## 7. Cache plan LLM
+
+`pipeline_cache.py` (`_llm_plan_cache_key/get/put`): bỏ qua call API khi cùng nội
+dung + cùng tham số đã render trước đó. Key gồm: hash SRT, output_count, min/max
+sec (đã scale theo platform speed), platform, provider, model, editorial_hint,
+target_duration, clip_lock/exclude, language, và các creator preference
+(video_type, hook_strength, ai_target_market, subtitle_emphasis, multi_variant,
+structure_bias). Đổi bất kỳ giá trị nào → cache miss.
+
+## 8. Prompt & parser
+
+- `prompts.py`: template + `check_srt_truncation()` cảnh báo khi transcript bị cắt
+  (giới hạn `*_MAX_SRT_CHARS` theo provider). An toàn `.format()` là then chốt —
+  ký tự `{}` trong nội dung phải được escape.
+- `parser.py`: parse phản hồi thành RenderPlan/segment, phòng thủ trước JSON lệch.
+
+## 9. Cờ điều khiển AI (env)
+
+| Env | Mặc định | Ý nghĩa |
+|-----|----------|---------|
+| `LLM_EMIT_RENDER_PLAN` | `1` | Bật AI emit RenderPlan đầy đủ. `0` = fallback payload-derived |
+| `AI_PROVIDER_DEFAULT` | `gemini` | Provider cho job mới |
+| `LLM_FALLBACK_ENABLED` | — | Cho phép fallback provider khi lỗi |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` / `CLAUDE_API_KEY` | — | Key env fallback |
+| `GEMINI_DEFAULT_MODEL` / `GEMINI_THINKING_BUDGET` / `GEMINI_REQUEST_TIMEOUT` | — | Tinh chỉnh Gemini |
+| `*_MAX_SRT_CHARS` | — | Giới hạn ký tự SRT gửi LLM theo provider |
+| `LLM_WHISPER_MODEL` / `LLM_WHISPER_AUTO_SELECT` / `LLM_WHISPER_TIMEOUT_MULT` | — | Whisper trong nhánh LLM |
+| `REWRITE_MAX_INPUT_CHARS` / `PROMPTS_MAX_SRT_CHARS` | — | Giới hạn input rewrite/prompt |
+
+Danh sách env đầy đủ: [CONFIGURATION.md](CONFIGURATION.md).
