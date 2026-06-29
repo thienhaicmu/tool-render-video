@@ -165,6 +165,13 @@ def _branch_test_env(monkeypatch, tmp_path):
     def _noop_cleanup(path, *a, **kw):
         return path
 
+    # Language-safe fallback (2026-07): when rewrite returns None the branch
+    # translates the original transcript to the voice language (Google
+    # Translate, no key) instead of speaking wrong-language text. Mock it so
+    # the test is deterministic + offline.
+    import app.features.render.engine.subtitle.translation_service as _TRSVC
+    monkeypatch.setattr(_TRSVC, "translate_text", lambda text, **kw: "VI:" + str(text))
+
     monkeypatch.setattr(PVM, "_llm_rewrite_subtitle", _spy_rewrite)
     monkeypatch.setattr(PVM, "synthesize_timed_narration", _spy_synth)
     monkeypatch.setattr(PVM, "_emit_render_event", _spy_emit)
@@ -203,18 +210,36 @@ def test_ai_rewrite_feeds_segments_into_synthesizer_when_llm_returns_segments(_b
     assert "voice_tts_started" in events
 
 
-def test_ai_rewrite_falls_back_to_single_segment_when_llm_returns_none(_branch_test_env, tmp_path):
+def test_ai_rewrite_fallback_narrates_translated_original_not_gibberish(_branch_test_env, tmp_path):
+    """When rewrite returns None on a cross-language job, the fallback must
+    narrate the original transcript TRANSLATED to the voice language — never
+    the raw source language with the target voice (the old gibberish bug)."""
     captured, events, srt_part = _branch_test_env
     captured["rewrite_return"] = None
-    ctx = _make_ctx(tmp_path, _make_payload())
+    ctx = _make_ctx(tmp_path, _make_payload())  # voice_language=vi-VN, source EN
     _invoke_branch(ctx, srt_part, {"start": 0.0, "end": 8.0, "content_type_hint": "vlog"}, idx=1)
-    # Fallback path: synthesizer receives ONE segment whose text == extracted SRT plain text.
     segs = captured["synth_kwargs"]["segments"]
     assert len(segs) == 1
-    assert segs[0]["start"] == 0.0
-    assert segs[0]["end"] == 8.0
-    assert "First utterance from source" in segs[0]["text"]
-    assert "Second utterance from source" in segs[0]["text"]
+    assert segs[0]["start"] == 0.0 and segs[0]["end"] == 8.0
+    # Translated (mock prefixes "VI:") — NOT the raw English text.
+    assert segs[0]["text"].startswith("VI:")
+    assert "voice_ai_rewrite_fallback" in events
+
+
+def test_ai_rewrite_fallback_skips_when_translation_unavailable(_branch_test_env, tmp_path, monkeypatch):
+    """If both rewrite AND translation fail, narration is skipped (empty
+    segments → synthesizer gets []), never wrong-language audio."""
+    captured, events, srt_part = _branch_test_env
+    captured["rewrite_return"] = None
+    import app.features.render.engine.subtitle.translation_service as _TRSVC
+
+    def _boom(*a, **kw):
+        raise RuntimeError("translate offline")
+    monkeypatch.setattr(_TRSVC, "translate_text", _boom)
+    ctx = _make_ctx(tmp_path, _make_payload())
+    _invoke_branch(ctx, srt_part, {"start": 0.0, "end": 8.0, "content_type_hint": "vlog"}, idx=1)
+    # Synthesizer received an empty segment list (skip) — no gibberish.
+    assert captured["synth_kwargs"]["segments"] == []
     assert "voice_ai_rewrite_fallback" in events
 
 

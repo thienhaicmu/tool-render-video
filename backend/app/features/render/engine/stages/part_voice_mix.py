@@ -558,27 +558,60 @@ def run_part_voice_mix(
                 )
                 _used_fallback = False
                 if not _segments:
-                    # v1 fallback — synthesize a single-segment narration of
-                    # the original transcript spanning the full clip.
-                    _segments = [{
-                        "start": 0.0,
-                        "end": _clip_dur,
-                        "text": _orig_text.strip(),
-                    }]
-                    _used_fallback = True
-                    _job_log(
-                        ctx.effective_channel, ctx.job_id,
-                        f"voice.ai_rewrite_fallback part_no={idx} using original text (1 segment)",
-                        kind="warning",
-                    )
+                    # Rewrite returned None (LLM error / rate-limit / parse).
+                    # 2026-07 BUGFIX: the old fallback spoke the ORIGINAL-language
+                    # transcript with the TARGET voice — on a cross-language job
+                    # (e.g. English source + Vietnamese voice) that is gibberish
+                    # ("ra cái gì không hiểu"), and it also dropped the reaction
+                    # structure. Safety net: translate the original to the voice
+                    # language via Google Translate (NO API key, independent of
+                    # the LLM that just failed); if translation is unavailable,
+                    # SKIP narration for this part rather than emit wrong-language
+                    # audio.
+                    _vlang = (str(_voice_lang).split("-")[0] or "en").lower()
+                    _fb_text = ""
+                    try:
+                        from app.features.render.engine.subtitle.translation_service import translate_text
+                        _tr = translate_text(_orig_text.strip(), target_language=_vlang)
+                        _fb_text = (_tr or "").strip()
+                    except Exception as _tr_exc:
+                        _job_log(
+                            ctx.effective_channel, ctx.job_id,
+                            f"voice.ai_rewrite_fallback translate failed part_no={idx} target={_vlang}: {_tr_exc}",
+                            kind="warning",
+                        )
+                    if _fb_text:
+                        _segments = [{"start": 0.0, "end": _clip_dur, "text": _fb_text}]
+                        _used_fallback = True
+                        _job_log(
+                            ctx.effective_channel, ctx.job_id,
+                            f"voice.ai_rewrite_fallback part_no={idx}: rewrite None → narrating TRANSLATED original (→{_vlang})",
+                            kind="warning",
+                        )
+                    else:
+                        # Cannot narrate safely (translate unavailable) → skip.
+                        # Empty _segments → synth returns None → no narration mix.
+                        _segments = []
+                        _job_log(
+                            ctx.effective_channel, ctx.job_id,
+                            f"voice.ai_rewrite_fallback part_no={idx}: rewrite None + translate unavailable → SKIP narration (avoids wrong-language audio)",
+                            kind="warning",
+                        )
                     _emit_render_event(
                         channel_code=ctx.effective_channel,
                         job_id=ctx.job_id,
                         event="voice_ai_rewrite_fallback",
                         level="WARNING",
-                        message=f"AI rewrite returned None — using original transcript (part {idx})",
+                        message=(
+                            f"AI rewrite returned None — "
+                            f"{'narrating translated original' if _used_fallback else 'narration skipped (no safe text)'} (part {idx})"
+                        ),
                         step="voice.tts",
-                        context={"part_no": idx, "reason": "llm_returned_none"},
+                        context={
+                            "part_no": idx, "reason": "llm_returned_none",
+                            "translated_fallback": _used_fallback,
+                            "voice_language": _voice_lang,
+                        },
                     )
                 else:
                     # 2026-06-28: log per-part rewrite preview (first segment
