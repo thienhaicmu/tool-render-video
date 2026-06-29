@@ -4,6 +4,17 @@
 > (nội dung đúng → khớp rewrite → TTS đọc đúng → Reaction ra sao), review nguyên
 > lý hoạt động, và lên plan nâng cấp 3 tính năng. Đọc từ code thật.
 
+## TRẠNG THÁI (cập nhật 2026-07)
+- ✅ **N1** — QA ngôn ngữ narration (dịch text sai ngôn ngữ trước TTS). Commit `a392472a`.
+- ✅ **N2** — hết overlap "nhè nhè" (concat no-overlap, cắt segment đúng slot). Commit `a392472a`.
+- ✅ **N4** — reaction_intensity (low/medium/high) + verify interleave. Commit `8eb5248d`.
+- ✅ **N5** — recap continuity (truyền intent scene trước) + coverage check. Commit `5369de82`.
+- ✅ **N3** — gộp segment liền kề → ngữ điệu liền mạch. Commit `553587cd`.
+- 🟡 **N6** — *cache* select_recap_plan (`gemini-recap`) + rewrite (`gemini-rewrite`) **đã có sẵn** (bền 72h);
+  *batch rewrite* (N part → 1 call) **HOÃN**: refactor HIGH-risk, lợi ích (rate-limit/chi phí)
+  đã được throttle + cache + retry giải quyết. Làm sau khi thực sự cần, theo plan riêng.
+- 🔧 Trước đó: fix gibberish fallback (`3db6f43a`) + throttle rate-limit rewrite (`5cec8096`).
+
 ---
 
 ## PHẦN 1 — Nguyên lý hoạt động hiện tại (data flow)
