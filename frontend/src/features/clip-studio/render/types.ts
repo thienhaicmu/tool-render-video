@@ -44,6 +44,9 @@ export interface ConfigState {
   voiceMixMode:  'replace_original' | 'keep_original_low'
   outputDir:     string
   renderProfile: 'fast' | 'balanced' | 'quality' | 'best'
+  // Render mode: 'clips' = N short clips (default) | 'recap' = one long,
+  // act-structured recap/review video (AI picks scenes + length).
+  renderFormat:    'clips' | 'recap'
   targetDuration:  number
   outputCount:     number
   focusMode:       'auto' | 'face' | 'object' | 'center'

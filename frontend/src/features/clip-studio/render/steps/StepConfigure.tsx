@@ -359,6 +359,38 @@ function StepConfigureBase({
           </div>
         </div>
 
+        {/* Render mode: short clips vs one long recap/review video. */}
+        <div className="cfg-section">
+          <div className="cfg-sec-hd">
+            <span>{t.cfgRenderMode}</span>
+            <span className="cfg-sec-api">render_format</span>
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {([
+              { v: 'clips', label: t.cfgModeClips, desc: t.cfgModeClipsDesc },
+              { v: 'recap', label: t.cfgModeRecap, desc: t.cfgModeRecapDesc },
+            ] as const).map(({ v, label, desc }) => (
+              <div
+                key={v}
+                className={`seg-b${cfg.renderFormat === v ? ' on' : ''}`}
+                style={{ flex: 1, textAlign: 'center', padding: '8px 6px' }}
+                onClick={() => {
+                  setCfgKey('renderFormat', v)
+                  if (v === 'recap') {
+                    // Recap defaults: 16:9 film framing + narrated review.
+                    setCfgKey('ratio', 'r169')
+                    setCfgKey('narrEnabled', true)
+                    setCfgKey('voiceSource', 'ai_rewrite')
+                  }
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>{label}</div>
+                <div style={{ fontSize: '9px', color: cfg.renderFormat === v ? 'rgba(255,255,255,.6)' : 'var(--text-3)', marginTop: '2px', fontFamily: 'var(--fb)', fontWeight: 400, lineHeight: 1.3 }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Pha 5.7 — trim the source (In/Out) before render. Only meaningful
             once the source is prepared and we know its duration. */}
         {prepareResult && prepareResult.duration > 0 && (
@@ -377,6 +409,8 @@ function StepConfigureBase({
           </div>
         )}
 
+        {/* C+D — clip-only sections. Recap decides scene length + count via AI. */}
+        {cfg.renderFormat !== 'recap' && (<>
         {/* C. Duration */}
         <div className="cfg-section">
           <div className="cfg-sec-hd">
@@ -435,6 +469,7 @@ function StepConfigureBase({
             </div>
           </div>
         </div>
+        </>)}
 
         {/* A. Platform */}
         <div className="cfg-section">

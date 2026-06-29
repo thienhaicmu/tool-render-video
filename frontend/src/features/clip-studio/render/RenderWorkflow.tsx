@@ -52,6 +52,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     voiceSource: 'translated_subtitle', voiceText: '', rewriteTone: '', narrationMode: '', voiceMixMode: 'replace_original',
     outputDir: '',
     renderProfile: 'balanced',
+    renderFormat: 'clips',
     targetDuration: 90, outputCount: 1, focusMode: 'auto',
     llmEnabled:   true,
     aiProvider:   (localStorage.getItem('rw_ai_provider') as 'gemini' | 'openai' | 'claude') ?? 'gemini',
@@ -508,8 +509,10 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       effect_preset:       cfg.style,
       render_profile:      cfg.renderProfile,
       whisper_model:       cfg.whisperModel !== 'auto' ? cfg.whisperModel : undefined,
+      render_format:       cfg.renderFormat,
       target_duration:     cfg.targetDuration,
-      output_count:        cfg.outputCount,
+      // Recap = one long video; the AI picks scenes, so output_count is forced to 1.
+      output_count:        cfg.renderFormat === 'recap' ? 1 : cfg.outputCount,
       reframe_mode:        cfg.focusMode,
       // T1.4 — Audit 2026-06-08 closure: removed `energy_style`,
       // `output_language`, `narration_style` (v2 vision dead — never
