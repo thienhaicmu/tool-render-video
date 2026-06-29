@@ -6,6 +6,7 @@ import type { WsLogEvent } from '@/websocket/events'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 import { estimateRenderEtaSec } from '../eta'
 import { stageBlendedPercent } from '../progress'
+import { RecapLiveView } from './RecapLiveView'
 import { extendJob } from '@/api/jobs'
 import type { JobPartStageEnum } from '@/types/enums'
 
@@ -632,6 +633,10 @@ function StepRenderingBase({
           ))}
         </div>
       )}
+
+      {/* R5 — recap live-build view (renders only when a recap.plan.ready event
+          has arrived; null otherwise so clips mode is unaffected). */}
+      <RecapLiveView liveEvents={liveEvents || []} liveParts={liveParts} />
 
       {/* S4.5 — event log tail panel */}
       <EventLogPanel events={liveEvents || []} t={t} />
