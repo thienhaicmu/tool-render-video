@@ -34,6 +34,10 @@ _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 _MAX_SRT_CHARS = int(os.getenv("CLAUDE_MAX_SRT_CHARS", "50000"))  # ~12K tokens
 _MAX_TOKENS = 4096
 _TEMPERATURE = 0.2
+# Narration rewrite is creative (vs deterministic JSON extraction) — the shared
+# 0.2 produced flat, robotic narration. Higher temperature gives natural rhythm
+# + per-clip variation. Override via CLAUDE_REWRITE_TEMPERATURE.
+_REWRITE_TEMPERATURE = float(os.getenv("CLAUDE_REWRITE_TEMPERATURE", "0.85"))
 
 try:
     from anthropic import Anthropic as _AnthClient
@@ -330,7 +334,7 @@ def _call_claude_rewrite_once(api_key: str, model: str, system_prompt: str, user
     resp = client.messages.create(
         model=model,
         max_tokens=2048,
-        temperature=_TEMPERATURE,
+        temperature=_REWRITE_TEMPERATURE,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )

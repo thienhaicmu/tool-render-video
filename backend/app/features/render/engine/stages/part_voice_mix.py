@@ -88,7 +88,7 @@ from app.features.render.engine.stages.part_render_context import PartRenderCont
 from app.features.render.engine.audio.mixer import mix_narration_audio, mix_with_bgm
 from app.features.render.engine.stages.manifest_writer import write_manifest
 from app.features.render.engine.subtitle.generator.srt import slice_srt_to_text, parse_srt_blocks
-from app.features.render.engine.audio.tts import generate_narration_audio
+from app.features.render.engine.audio.tts import generate_narration_audio, clean_spoken_text
 from app.features.render.engine.audio.timed_narration import synthesize_timed_narration
 from app.features.render.ai.llm.rewrite import rewrite_subtitle as _llm_rewrite_subtitle
 from app.features.render.ai.llm.rewrite_prompts import format_segments_for_prompt
@@ -260,7 +260,7 @@ def run_part_voice_mix(
                         context={"part_no": idx, "language": ctx.payload.voice_language, "source": "subtitle"},
                     )
                     _part_subtitle_voice_path = generate_narration_audio(
-                        text=_part_narration_text,
+                        text=clean_spoken_text(_part_narration_text, ctx.payload.voice_language),
                         language=ctx.payload.voice_language,
                         gender=ctx.payload.voice_gender,
                         rate=ctx.payload.voice_rate,
@@ -370,7 +370,7 @@ def run_part_voice_mix(
                         context={"part_no": idx, "language": ctx.payload.voice_language, "target": _tgt_lang_voice},
                     )
                     _part_subtitle_voice_path = generate_narration_audio(
-                        text=_part_narration_text,
+                        text=clean_spoken_text(_part_narration_text, ctx.payload.voice_language),
                         language=ctx.payload.voice_language,
                         gender=ctx.payload.voice_gender,
                         rate=ctx.payload.voice_rate,

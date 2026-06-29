@@ -28,6 +28,10 @@ _DEFAULT_MODEL = "gpt-4o-mini"
 _MAX_SRT_CHARS = int(os.getenv("OPENAI_MAX_SRT_CHARS", "30000"))  # ~7.5K tokens
 _MAX_TOKENS = 4096
 _TEMPERATURE = 0.2
+# Narration rewrite is creative (vs deterministic JSON extraction) — the shared
+# 0.2 produced flat, robotic narration. Higher temperature gives natural rhythm
+# + per-clip variation. Override via OPENAI_REWRITE_TEMPERATURE.
+_REWRITE_TEMPERATURE = float(os.getenv("OPENAI_REWRITE_TEMPERATURE", "0.85"))
 
 try:
     import openai as _openai
@@ -326,7 +330,7 @@ def _call_openai_rewrite_once(api_key: str, model: str, system_prompt: str, user
             {"role": "user", "content": user_prompt},
         ],
         max_tokens=2048,
-        temperature=_TEMPERATURE,
+        temperature=_REWRITE_TEMPERATURE,
         response_format={"type": "json_object"},
     )
     return resp.choices[0].message.content

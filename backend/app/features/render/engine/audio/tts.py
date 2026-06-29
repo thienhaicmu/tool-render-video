@@ -107,6 +107,78 @@ def humanize_narration_text(text: str, pause_style: str = "normal") -> str:
 
 
 # ---------------------------------------------------------------------------
+# Spoken-text cleanup — strip caption disfluencies before TTS (P0b)
+# ---------------------------------------------------------------------------
+# The "subtitle" / "translated_subtitle" voice sources speak the RAW
+# transcript verbatim. Auto-captions are full of disfluencies ("um", "uh",
+# "ờ", "えーと"), stutter repeats ("the the"), and run-on fragments that a
+# TTS engine reads literally — which is a major cause of robotic-sounding
+# narration. This is a CONSERVATIVE, no-LLM cleanup: it only removes tokens
+# that are unambiguously fillers (never meaningful content words like
+# "like"/"so"/"well"), collapses immediate word repeats, and normalises
+# punctuation/whitespace. Disable via SPOKEN_TEXT_CLEANUP=0.
+_SPOKEN_CLEANUP_ENABLED: bool = os.environ.get("SPOKEN_TEXT_CLEANUP", "1") == "1"
+
+# Standalone filler tokens by language primary tag. Matched only as WHOLE
+# words (word boundaries) so substrings inside real words are never touched.
+_FILLERS_BY_LANG: dict[str, tuple[str, ...]] = {
+    "en": ("um", "uh", "erm", "uhh", "umm", "hmm", "mhm", "uh-huh"),
+    "vi": ("ờ", "à", "ừm", "ừ", "ừa", "á", "ời", "hử", "hả"),
+    "ja": ("えーと", "えっと", "あのー", "あの", "ええと", "まあ", "なんか"),
+    "ko": ("음", "어", "에", "그게", "저기", "뭐랄까"),
+}
+# Multi-word English fillers removed as phrases (case-insensitive).
+_EN_FILLER_PHRASES = ("you know", "i mean", "sort of", "kind of", "you know what i mean")
+
+
+def _filler_pattern_for(language: str) -> "re.Pattern | None":
+    prefix = (language or "").split("-")[0].lower()
+    toks = _FILLERS_BY_LANG.get(prefix)
+    if not toks:
+        return None
+    # CJK has no whitespace word boundaries → match the literal token; Latin
+    # uses \b boundaries + optional trailing comma so "um," is removed cleanly.
+    if prefix in ("ja", "ko"):
+        return re.compile("|".join(re.escape(t) for t in toks))
+    return re.compile(r"\b(?:%s)\b[,]?" % "|".join(re.escape(t) for t in toks), re.IGNORECASE)
+
+
+def clean_spoken_text(text: str, language: str = "en-US") -> str:
+    """Conservatively strip caption disfluencies before TTS. Never raises;
+    returns the input unchanged on any failure or when disabled."""
+    if not _SPOKEN_CLEANUP_ENABLED or not text or not text.strip():
+        return text
+    try:
+        s = text
+        prefix = (language or "").split("-")[0].lower()
+        if prefix == "en":
+            for ph in _EN_FILLER_PHRASES:
+                s = re.sub(r"\b%s\b[,]?" % re.escape(ph), "", s, flags=re.IGNORECASE)
+        pat = _filler_pattern_for(language)
+        if pat is not None:
+            s = pat.sub("", s)
+        # Collapse immediate duplicate words ("the the" / "rồi rồi") — Latin only.
+        if prefix not in ("ja", "ko"):
+            s = re.sub(r"\b(\w+)(\s+\1\b)+", r"\1", s, flags=re.IGNORECASE)
+        # Normalise leftover punctuation/space artefacts.
+        s = re.sub(r"\s+([,.!?;:])", r"\1", s)     # space before punctuation
+        s = re.sub(r"([,.!?;:])\1{2,}", r"\1", s)  # 3+ repeated punctuation
+        s = re.sub(r"\s+([、。，．！？])", r"\1", s)  # space before CJK punctuation
+        s = re.sub(r"\s{2,}", " ", s)
+        # leading junk after stripping a lead filler (Latin + CJK punctuation)
+        s = re.sub(r"^[\s,;:.\-—、。，．！？]+", "", s)
+        s = s.strip()
+        # Safety: if cleanup nuked almost everything (over-aggressive on a
+        # filler-only fragment), keep the original so narration isn't lost.
+        if len(s) < max(2, int(len(text.strip()) * 0.4)):
+            return text.strip()
+        return s
+    except Exception as exc:
+        logger.debug("clean_spoken_text fallback reason=%s", exc)
+        return text
+
+
+# ---------------------------------------------------------------------------
 # SSML humanizer — Edge-TTS semantic pacing (OQ-4.1)
 # ---------------------------------------------------------------------------
 

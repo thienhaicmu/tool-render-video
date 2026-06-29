@@ -49,6 +49,15 @@ _REWRITE_MAX_TOKENS = 2048
 # latency accepted). Override via GEMINI_THINKING_BUDGET env var; set to 0 to
 # disable thinking entirely (reverts to pre-upgrade speed).
 _THINKING_BUDGET = int(os.getenv("GEMINI_THINKING_BUDGET", "1024"))
+# Narration rewrite is a CREATIVE task (not deterministic JSON extraction like
+# select_render_plan), so it gets its own, higher temperature — the shared
+# 0.2 produced flat, generic, repetitive narration that sounded robotic.
+# ~0.85 gives natural rhythm + per-clip variation while staying coherent.
+# Override via GEMINI_REWRITE_TEMPERATURE. Rewrite needs no chain-of-thought
+# reasoning, so its thinking budget defaults to 0 (saves ~2–4s latency/part);
+# override via GEMINI_REWRITE_THINKING_BUDGET.
+_REWRITE_TEMPERATURE = float(os.getenv("GEMINI_REWRITE_TEMPERATURE", "0.85"))
+_REWRITE_THINKING_BUDGET = int(os.getenv("GEMINI_REWRITE_THINKING_BUDGET", "0"))
 
 try:
     from google import genai as _genai
@@ -366,9 +375,9 @@ def _call_gemini_rewrite_once(api_key: str, model: str, system_prompt: str, user
         config={
             "system_instruction": system_prompt,
             "response_mime_type": "application/json",
-            "temperature": _TEMPERATURE,
+            "temperature": _REWRITE_TEMPERATURE,
             "max_output_tokens": _REWRITE_MAX_TOKENS,
-            "thinking_config": {"thinking_budget": _THINKING_BUDGET},
+            "thinking_config": {"thinking_budget": _REWRITE_THINKING_BUDGET},
         },
     )
     return resp.text

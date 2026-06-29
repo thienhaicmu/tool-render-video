@@ -11,6 +11,17 @@ from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
 _PROBE_TIMEOUT_SEC: int = 30
 _AUDIO_FFMPEG_TIMEOUT_SEC: int = max(60, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "3600")))
 
+# Loudness normalisation (EBU R128) applied to the narration track before it is
+# mixed in. Without it, per-clip TTS loudness drifts (engine/voice/segment
+# dependent) so narration sounds inconsistent — louder on some clips, near-mute
+# on others. Single-pass loudnorm at the social/speech target (-16 LUFS, -1.5
+# dBTP) lands every clip's voice at the same perceived level. Disable via
+# NARRATION_LOUDNORM=0; tune via NARRATION_LOUDNORM_PARAMS (raw ffmpeg filter).
+_NARRATION_LOUDNORM_ENABLED: bool = os.getenv("NARRATION_LOUDNORM", "1") == "1"
+_NARRATION_LOUDNORM: str = os.getenv(
+    "NARRATION_LOUDNORM_PARAMS", "loudnorm=I=-16:TP=-1.5:LRA=11"
+)
+
 
 def _has_audio_stream(input_path: str) -> bool:
     try:
@@ -74,6 +85,8 @@ def mix_narration_audio(
     except Exception:
         speed = 1.0
     apply_atempo = abs(speed - 1.0) > 1e-4
+    # Loudness-normalise the narration chain for consistent per-clip voice level.
+    _ln = f",{_NARRATION_LOUDNORM}" if _NARRATION_LOUDNORM_ENABLED else ""
 
     # Probe once — used to cap output at video duration instead of TTS duration.
     # Without this, -shortest would truncate to the shorter TTS stream (~15s)
@@ -87,7 +100,7 @@ def mix_narration_audio(
     if str(mix_mode or "").strip() == "replace_original":
         if apply_atempo:
             cmd += [
-                "-filter_complex", f"[1:a]atempo={speed:.4f},apad[narr]",
+                "-filter_complex", f"[1:a]atempo={speed:.4f},apad{_ln}[narr]",
                 "-map", "0:v:0",
                 "-map", "[narr]",
                 "-c:v", "copy",
@@ -97,7 +110,7 @@ def mix_narration_audio(
             ]
         else:
             cmd += [
-                "-filter_complex", "[1:a]apad[narr]",
+                "-filter_complex", f"[1:a]apad{_ln}[narr]",
                 "-map", "0:v:0",
                 "-map", "[narr]",
                 "-c:v", "copy",
@@ -129,7 +142,7 @@ def mix_narration_audio(
             if apply_atempo:
                 cmd += [
                     "-filter_complex",
-                    f"[1:a]atempo={speed:.4f},apad,volume=1.0,asplit=2[narr][key];[0:a][key]{_DUCK}[duck];[duck][narr]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    f"[1:a]atempo={speed:.4f},apad{_ln},volume=1.0,asplit=2[narr][key];[0:a][key]{_DUCK}[duck];[duck][narr]amix=inputs=2:duration=first:dropout_transition=2[aout]",
                     "-map", "0:v:0",
                     "-map", "[aout]",
                     "-c:v", "copy",
@@ -140,7 +153,7 @@ def mix_narration_audio(
             else:
                 cmd += [
                     "-filter_complex",
-                    f"[1:a]apad,volume=1.0,asplit=2[narr][key];[0:a][key]{_DUCK}[duck];[duck][narr]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    f"[1:a]apad{_ln},volume=1.0,asplit=2[narr][key];[0:a][key]{_DUCK}[duck];[duck][narr]amix=inputs=2:duration=first:dropout_transition=2[aout]",
                     "-map", "0:v:0",
                     "-map", "[aout]",
                     "-c:v", "copy",
@@ -151,7 +164,7 @@ def mix_narration_audio(
         else:
             if apply_atempo:
                 cmd += [
-                    "-filter_complex", f"[1:a]atempo={speed:.4f},apad[narr]",
+                    "-filter_complex", f"[1:a]atempo={speed:.4f},apad{_ln}[narr]",
                     "-map", "0:v:0",
                     "-map", "[narr]",
                     "-c:v", "copy",
@@ -161,7 +174,7 @@ def mix_narration_audio(
                 ]
             else:
                 cmd += [
-                    "-filter_complex", "[1:a]apad[narr]",
+                    "-filter_complex", f"[1:a]apad{_ln}[narr]",
                     "-map", "0:v:0",
                     "-map", "[narr]",
                     "-c:v", "copy",

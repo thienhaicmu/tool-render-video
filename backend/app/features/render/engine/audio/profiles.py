@@ -38,9 +38,23 @@ VOICE_LIST = {
     ],
     "ja-JP": [
         {"id": "ja-JP-NanamiNeural", "label": "Nanami", "gender": "female", "recommended_use": "warm, conversational"},
+        {"id": "ja-JP-AoiNeural",    "label": "Aoi",    "gender": "female", "recommended_use": "bright, casual"},
+        {"id": "ja-JP-MayuNeural",   "label": "Mayu",   "gender": "female", "recommended_use": "gentle, narration"},
         {"id": "ja-JP-KeitaNeural",  "label": "Keita",  "gender": "male",   "recommended_use": "professional"},
+        {"id": "ja-JP-DaichiNeural", "label": "Daichi", "gender": "male",   "recommended_use": "energetic, casual"},
+        {"id": "ja-JP-NaokiNeural",  "label": "Naoki",  "gender": "male",   "recommended_use": "calm, news"},
     ],
     "en-US": [
+        # Newer conversational neural voices — markedly more natural / less
+        # robotic than the older Jenny/Guy. Listed first as the recommended set.
+        {"id": "en-US-AvaNeural",    "label": "Ava",    "gender": "female", "recommended_use": "natural, expressive (recommended)"},
+        {"id": "en-US-AndrewNeural", "label": "Andrew", "gender": "male",   "recommended_use": "natural, warm (recommended)"},
+        {"id": "en-US-EmmaNeural",   "label": "Emma",   "gender": "female", "recommended_use": "casual, friendly"},
+        {"id": "en-US-BrianNeural",  "label": "Brian",  "gender": "male",   "recommended_use": "calm, conversational"},
+        # Multilingual variants — same natural timbre, handle code-switching.
+        {"id": "en-US-AvaMultilingualNeural",    "label": "Ava (Multilingual)",    "gender": "female", "recommended_use": "natural, multilingual"},
+        {"id": "en-US-AndrewMultilingualNeural", "label": "Andrew (Multilingual)", "gender": "male",   "recommended_use": "natural, multilingual"},
+        # Original voices — kept for backward compatibility / preference.
         {"id": "en-US-JennyNeural", "label": "Jenny", "gender": "female", "recommended_use": "friendly, conversational"},
         {"id": "en-US-AriaNeural",  "label": "Aria",  "gender": "female", "recommended_use": "expressive, engaging"},
         {"id": "en-US-GuyNeural",   "label": "Guy",   "gender": "male",   "recommended_use": "professional"},
@@ -49,12 +63,18 @@ VOICE_LIST = {
     "en-GB": [
         {"id": "en-GB-SoniaNeural",  "label": "Sonia",  "gender": "female", "recommended_use": "clear, authoritative"},
         {"id": "en-GB-LibbyNeural",  "label": "Libby",  "gender": "female", "recommended_use": "casual, warm"},
+        {"id": "en-GB-MaisieNeural", "label": "Maisie", "gender": "female", "recommended_use": "youthful, friendly"},
         {"id": "en-GB-RyanNeural",   "label": "Ryan",   "gender": "male",   "recommended_use": "documentary, narration"},
+        {"id": "en-GB-ThomasNeural", "label": "Thomas", "gender": "male",   "recommended_use": "calm, measured"},
         {"id": "en-GB-OliverNeural", "label": "Oliver", "gender": "male",   "recommended_use": "formal, professional"},
     ],
     "ko-KR": [
         {"id": "ko-KR-SunHiNeural",  "label": "SunHi",  "gender": "female", "recommended_use": "warm, conversational"},
+        {"id": "ko-KR-JiMinNeural",  "label": "JiMin",  "gender": "female", "recommended_use": "bright, casual"},
+        {"id": "ko-KR-SeoHyeonNeural", "label": "SeoHyeon", "gender": "female", "recommended_use": "soft, narration"},
         {"id": "ko-KR-InJoonNeural", "label": "InJoon", "gender": "male",   "recommended_use": "professional"},
+        {"id": "ko-KR-HyunsuMultilingualNeural", "label": "Hyunsu (Multilingual)", "gender": "male", "recommended_use": "natural, multilingual"},
+        {"id": "ko-KR-GookMinNeural", "label": "GookMin", "gender": "male",  "recommended_use": "energetic, casual"},
     ],
 }
 
