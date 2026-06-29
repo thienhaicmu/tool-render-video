@@ -332,11 +332,19 @@ def _build_clip_context_section(
     target_platform: str,
     part_idx: int,
     total_parts: int,
+    editorial_hint: str = "",
 ) -> str:
     """Render the optional CLIP CONTEXT block. Returns "" when every hint is
     empty / default so back-compat callers see the pre-A2.1 prompt verbatim.
+
+    ``editorial_hint`` (R3) is a per-scene DIRECTOR'S INTENT — e.g. the recap
+    plan's narration_intent + act context. When set it is the strongest steer:
+    the narrator should convey exactly this beat. Empty = no line (back-compat).
     """
     lines: list[str] = []
+    hint = (editorial_hint or "").strip()
+    if hint:
+        lines.append(f"DIRECTOR'S INTENT: {hint} (convey THIS beat — top priority)")
     ct = (content_type or "").strip().lower()
     guidance_ct = _CONTENT_TYPE_GUIDANCE.get(ct, "")
     if ct and guidance_ct:
@@ -389,6 +397,7 @@ def build_rewrite_prompt(
     part_idx: int = 0,
     total_parts: int = 0,
     narration_mode: str = "",
+    editorial_hint: str = "",
     # Back-compat alias for v1 callers passing `text` instead of `srt_segmented`.
     text: Optional[str] = None,
     target_duration_sec: Optional[float] = None,
@@ -424,6 +433,7 @@ def build_rewrite_prompt(
         target_platform=target_platform,
         part_idx=part_idx,
         total_parts=total_parts,
+        editorial_hint=editorial_hint,
     )
     # Reaction persona: swap system prompt + inject the reaction directive.
     # Any other value (incl. "") keeps the default faithful-rewrite prompt

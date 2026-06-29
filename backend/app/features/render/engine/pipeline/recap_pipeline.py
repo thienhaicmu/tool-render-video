@@ -72,12 +72,23 @@ def _scored_from_recap_plan(recap_plan) -> list[dict]:
     chronological, not viral-ranked). `act_index` rides along so the finalize
     step can group scenes back into acts for title cards."""
     out: list[dict] = []
+    n_acts = len(recap_plan.acts)
     for act_i, act in enumerate(recap_plan.acts):
         for scene in act.scenes:
             start = float(scene.start)
             end = float(scene.end)
             if end <= start:
                 continue
+            # R3: compose the per-scene DIRECTOR'S INTENT — act position + the
+            # plan's narration_intent — so the narrator tells one continuous
+            # story across scenes (not isolated per-clip blurbs).
+            _intent = (scene.narration_intent or "").strip()
+            _act_tag = f"Act {act_i + 1}/{n_acts}"
+            if act.title:
+                _act_tag += f" — {act.title}"
+            if act.beat:
+                _act_tag += f" ({act.beat})"
+            _editorial = f"[Recap {_act_tag}] {_intent}".strip() if (_intent or act.title) else ""
             out.append({
                 "start": start,
                 "end": end,
@@ -91,6 +102,8 @@ def _scored_from_recap_plan(recap_plan) -> list[dict]:
                 "clip_name": (scene.title or f"scene_{len(out)+1}"),
                 "ai_title": scene.title or "",
                 "ai_reason": scene.narration_intent or "",
+                "narration_intent": _intent,
+                "editorial_hint": _editorial,
                 "source": "recap",
                 "content_type_hint": "",
                 "is_climax": bool(scene.is_climax),

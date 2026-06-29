@@ -279,6 +279,7 @@ def rewrite_subtitle(
     part_idx: int = 0,
     total_parts: int = 0,
     narration_mode: str = "",
+    editorial_hint: str = "",
 ) -> Optional[list[dict]]:
     """Rewrite per-part transcript into timed TTS narration segments.
 
@@ -301,6 +302,7 @@ def rewrite_subtitle(
             part_idx=part_idx,
             total_parts=total_parts,
             narration_mode=narration_mode,
+            editorial_hint=editorial_hint,
         )
     except Exception as exc:
         logger.warning("gemini_client: rewrite_subtitle unexpected error %s", exc, exc_info=True)
@@ -321,6 +323,7 @@ def _run_rewrite(
     part_idx: int = 0,
     total_parts: int = 0,
     narration_mode: str = "",
+    editorial_hint: str = "",
 ) -> Optional[list[dict]]:
     if not _GENAI_SDK:
         logger.warning("gemini_client: google-genai SDK not installed (rewrite path)")
@@ -343,6 +346,7 @@ def _run_rewrite(
         part_idx=part_idx,
         total_parts=total_parts,
         narration_mode=narration_mode,
+        editorial_hint=editorial_hint,
     )
     resolved_model = model or _DEFAULT_MODEL
     word_budget = _compute_word_budget(clip_duration_sec, target_language)

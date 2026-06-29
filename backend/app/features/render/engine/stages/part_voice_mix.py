@@ -551,6 +551,10 @@ def run_part_voice_mix(
                     # faceless reaction/storyteller). Default "" keeps prior
                     # behaviour byte-identical (Sacred Contract #2).
                     narration_mode=str(getattr(ctx.payload, "narration_mode", "") or ""),
+                    # R3: per-scene DIRECTOR'S INTENT — recap scenes carry the
+                    # plan's narration_intent + act context here so the narrator
+                    # tells the story across scenes. Empty for clips (no change).
+                    editorial_hint=str(seg.get("editorial_hint", "") or ""),
                 )
                 _used_fallback = False
                 if not _segments:

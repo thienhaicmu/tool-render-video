@@ -150,6 +150,30 @@ def test_scored_from_recap_plan_shape():
         assert s["source"] == "recap"
 
 
+def test_recap_scene_carries_editorial_hint():
+    """R3 — each recap scene composes a DIRECTOR'S INTENT (act context +
+    narration_intent) that steers the per-scene narration."""
+    from app.features.render.engine.pipeline.recap_pipeline import _scored_from_recap_plan
+    plan = RecapPlan.from_json(json.dumps({
+        "acts": [{"title": "Mo dau", "beat": "setup", "scenes": [
+            {"start": 0, "end": 30, "narration_intent": "introduce the hero"},
+        ]}],
+    }))
+    s = _scored_from_recap_plan(plan)[0]
+    assert "Recap Act 1/1" in s["editorial_hint"]
+    assert "introduce the hero" in s["editorial_hint"]
+    assert s["narration_intent"] == "introduce the hero"
+
+
+def test_editorial_hint_in_rewrite_prompt():
+    """R3 — editorial_hint surfaces a DIRECTOR'S INTENT line; empty = no line."""
+    from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt
+    _, u = build_rewrite_prompt("[0-5] a", 5.0, "vi-VN", editorial_hint="[Recap Act 1/3] he buys a car")
+    assert "DIRECTOR'S INTENT" in u and "buys a car" in u
+    _, u2 = build_rewrite_prompt("[0-5] a", 5.0, "vi-VN")
+    assert "DIRECTOR'S INTENT" not in u2
+
+
 def test_recap_plan_column_exists_after_migration(_isolated_db):
     conn = sqlite3.connect(str(_isolated_db))
     try:
