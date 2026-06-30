@@ -191,7 +191,7 @@ Every batch in this session honoured all 8 Sacred Contracts. Notes:
 
 | Issue | Where flagged | Risk |
 |-------|---------------|------|
-| Piper + XTTS per-engine cache keys omit `voice_id` AND `rate` — same text + different voice = wrong audio | `tts_cache.py` docstring (D-1) | Latent — Edge cache fixed it by construction; offline engines retain the bug. Follow-up D-1.1. |
+| ~~Piper + XTTS per-engine cache keys omit `voice_id` AND `rate`~~ — **claim retracted 2026-06-30** | `tts_cache.py` docstring (D-1) | NOT a bug. Re-inspected at session close: Piper / XTTS don't accept `voice_id` or `rate` as public kwargs (voice resolves internally from `(language, gender)` for Piper and `(content_type, gender)` for XTTS). Cache keys already cover every caller-variable dimension. Docstring corrected. |
 | Pre-existing test failures: `test_llm_metrics::test_*` fail on `_run_render_plan() got an unexpected keyword argument 'reaction_intensity'` | Pre-existing, not this session | Kwarg drift between dispatcher and `_run_render_plan` helper. ~30min fix. |
 | Pre-existing test failures: 8× `test_recap_plan` fail on `ModuleNotFoundError: No module named 'whisper'` | Pre-existing, not this session | Test venv missing optional `whisper` SDK. Env issue, not bug. |
 

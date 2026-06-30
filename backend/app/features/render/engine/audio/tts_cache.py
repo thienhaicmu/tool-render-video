@@ -12,10 +12,21 @@ Key
     SHA-256(text | language | gender | rate | voice_id | content_type |
             TTS_HUMANIZER_VERSION)
 
-    Folds the rate AND voice_id into the key — Piper's and XTTS's
-    existing per-engine caches OMIT both, which is a latent bug
-    (different voice_id → same cache hit). Documented here but NOT
-    fixed in D-1 (out of scope; tracked as D-1.1 follow-up).
+    Folds the rate AND voice_id into the key because Edge-TTS's
+    public ``edge_tts.Communicate(text, voice_id, rate=...)`` API
+    accepts both as caller-tunable parameters that materially change
+    the synthesised audio.
+
+    Note on Piper / XTTS (correction posted 2026-06-30 to the D-1
+    commit body): the original D-1 docstring claimed Piper's and
+    XTTS's per-engine cache keys had a "latent voice_id / rate bug."
+    On re-inspection that claim is incorrect — those engines do NOT
+    accept ``voice_id`` or ``rate`` as public kwargs. Piper resolves
+    its single-speaker model via ``_resolve_model(language, gender)``;
+    XTTS resolves its content-type persona via
+    ``_resolve_speaker(content_type, gender)``. Both already key on
+    every dimension a caller can vary, so their cache keys are
+    correct given their engine APIs. No D-1.1 follow-up required.
 
     ``TTS_HUMANIZER_VERSION`` bumps when ``humanize_narration_text`` or
     ``ssml_humanize_for_edge`` change in ways that affect the audio. Same
