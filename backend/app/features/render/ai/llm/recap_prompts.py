@@ -67,9 +67,10 @@ CREATOR TONE:       {tone_clause}
 8. For each scene, WRITE THE ACTUAL NARRATION ("narration") the voice-over will
    speak over that scene — in {lang_name}. This is the real recap script, not a
    note: write it as ONE cohesive story that flows from the previous scene into
-   this one (use connective phrasing). Keep each scene's narration roughly within
-   its on-screen time at a natural speaking pace. Mark is_climax=true for the few
-   peak/turning-point scenes.
+   this one (use connective phrasing). Keep each scene's narration CONCISE — about
+   1-3 sentences, speakable within its on-screen time at a natural pace (do NOT
+   write paragraphs; brevity keeps the whole recap from being cut off). Mark
+   is_climax=true for the few peak/turning-point scenes.
 9. Preserve every key fact, name, and number — your recap retells, it never
    fabricates. Keep the SAME chronological order and plot as the film.
 

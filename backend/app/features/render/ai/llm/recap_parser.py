@@ -79,6 +79,70 @@ def _extract_json_object(raw: str) -> Optional[dict]:
         return None
 
 
+def _balance_close(s: str) -> str:
+    """Close any unterminated string + open brackets so a truncated JSON parses.
+    Drops a dangling trailing comma. Pragmatic — recovers the complete prefix."""
+    stack: list[str] = []
+    in_str = False
+    esc = False
+    for ch in s:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            stack.append("}")
+        elif ch == "[":
+            stack.append("]")
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+    res = s
+    if in_str:
+        res += '"'
+    res = res.rstrip()
+    if res.endswith(","):
+        res = res[:-1]
+    res += "".join(reversed(stack))
+    return res
+
+
+def _salvage_json(raw: str) -> Optional[dict]:
+    """Recover a usable dict from a TRUNCATED JSON response (the recap output is
+    large and can be cut off by the model's token limit). Tries to balance-close
+    the whole thing, then progressively trims back to earlier '}' boundaries
+    (dropping the cut-off tail scene). Returns the first dict that has 'acts'."""
+    try:
+        i = raw.find("{")
+        if i < 0:
+            return None
+        s = raw[i:]
+        candidates = [_balance_close(s)]
+        pos = len(s)
+        for _ in range(12):
+            j = s.rfind("}", 0, pos)
+            if j < 0:
+                break
+            candidates.append(_balance_close(s[: j + 1]))
+            pos = j
+        for cand in candidates:
+            try:
+                d = json.loads(cand)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(d, dict) and isinstance(d.get("acts"), list) and d["acts"]:
+                return d
+        return None
+    except Exception:
+        return None
+
+
 def _clean(data: dict, video_duration: float) -> Optional[RecapPlan]:
     """Build + clamp a RecapPlan from a parsed dict. Returns None if nothing usable."""
     dur = float(video_duration) if video_duration and video_duration > 0 else 0.0
@@ -149,7 +213,13 @@ def parse_recap_response(raw: str, video_duration: float) -> Optional[RecapPlan]
         text = _strip_wrappers(str(raw).strip())
         data = _extract_json_object(text)
         if not isinstance(data, dict):
-            logger.warning("recap_parser: no JSON object found")
+            # The recap output is large and can be truncated by the token limit
+            # → salvage the complete prefix (drops only the cut-off tail scene).
+            data = _salvage_json(text)
+            if isinstance(data, dict):
+                logger.warning("recap_parser: response was truncated — salvaged %d act(s)", len(data.get("acts", [])))
+        if not isinstance(data, dict):
+            logger.warning("recap_parser: no JSON object found (even after salvage)")
             return None
         plan = _clean(data, video_duration)
         if plan is None or not plan.acts:

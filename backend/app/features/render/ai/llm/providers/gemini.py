@@ -418,11 +418,15 @@ def _call_gemini_rewrite(api_key: str, model: str, system_prompt: str, user_prom
 
 
 # ── Recap/Review Film selection (render_format="recap") ──────────────────────
-# Larger output budget (a long film yields many scenes) + lower temperature
-# (scene selection should be deterministic, not creative). Narration is authored
-# later by the rewrite/reaction path. Override via GEMINI_RECAP_* env vars.
-_RECAP_MAX_TOKENS = int(os.getenv("GEMINI_RECAP_MAX_TOKENS", "16384"))
+# Recap now ALSO authors the full narration per scene → the JSON output is large
+# (a feature film = many scenes × real narration text). 16384 truncated the JSON
+# mid-stream (esp. with thinking eating the budget) → "no JSON object found" →
+# recap failed. Gemini 2.5 Flash supports up to 65536 output tokens — use it.
+# Thinking is unnecessary for this structured task, so default the recap thinking
+# budget to 0 (leave the whole budget for the answer). Override via GEMINI_RECAP_*.
+_RECAP_MAX_TOKENS = int(os.getenv("GEMINI_RECAP_MAX_TOKENS", "65536"))
 _RECAP_TEMPERATURE = float(os.getenv("GEMINI_RECAP_TEMPERATURE", "0.4"))
+_RECAP_THINKING_BUDGET = int(os.getenv("GEMINI_RECAP_THINKING_BUDGET", "0"))
 
 
 def select_recap_plan(
@@ -477,7 +481,7 @@ def _call_gemini_recap_once(api_key: str, model: str, system_prompt: str, user_p
             "response_mime_type": "application/json",
             "temperature": _RECAP_TEMPERATURE,
             "max_output_tokens": _RECAP_MAX_TOKENS,
-            "thinking_config": {"thinking_budget": _THINKING_BUDGET},
+            "thinking_config": {"thinking_budget": _RECAP_THINKING_BUDGET},
         },
     )
     return resp.text

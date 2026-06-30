@@ -349,3 +349,19 @@ def test_grouping_strips_timestamp_from_spoken_text():
     from app.features.render.engine.audio.timed_narration import _group_voice_segments as g
     u = g([{"kind": "voice", "start": 0, "end": 5, "text": "[0.0 - 5.0] Mở đầu phim"}], 0.6)
     assert u[0]["text"] == "Mở đầu phim"   # no timestamp spoken
+
+
+# ── Truncated recap JSON recovery (the "no JSON object found" failure) ────────
+
+def test_recap_parser_salvages_truncated_json():
+    """A long recap output can be cut off by the token limit → the parser must
+    salvage the complete prefix instead of failing the whole render."""
+    trunc = (
+        '{"story_summary":"...","total_target_sec":120,"acts":[{"title":"A",'
+        '"beat":"setup","scenes":[{"start":10,"end":40,"narration":"Mở đầu phim."},'
+        '{"start":60,"end":90,"narration":"Cao trào bắt đầu khi'   # ← cut off mid-string
+    )
+    plan = parse_recap_response(trunc, 300.0)
+    assert plan is not None
+    assert plan.scene_count() >= 2
+    assert plan.scenes()[0].narration == "Mở đầu phim."
