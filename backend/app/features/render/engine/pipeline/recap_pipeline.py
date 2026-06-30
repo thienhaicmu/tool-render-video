@@ -251,7 +251,26 @@ def run_recap(
         if recap_plan is None or not recap_plan.acts:
             raise RuntimeError("Recap: AI returned no usable plan")
         update_recap_plan(job_id, recap_plan.to_json())
-        _n_original = sum(1 for s in recap_plan.scenes() if getattr(s, "audio_mode", "narrate") == "original")
+        # Build the chronological scene list now (pure) so the plan.ready event
+        # can ship full per-scene timing for the editor-style timeline view.
+        scored = _scored_from_recap_plan(recap_plan)
+        if not scored:
+            raise RuntimeError("Recap: plan produced no valid scenes")
+        total_parts = len(scored)
+        _n_original = sum(1 for s in scored if s.get("audio_mode") == "original")
+        # Per-scene blocks (part_no order = render order) for the NLE timeline:
+        # each carries its duration → the FE lays them out proportionally.
+        _scene_blocks = [
+            {
+                "n": i, "ep": int(s.get("episode_index", 0)), "act": int(s.get("act_index", 0)),
+                "start": round(float(s.get("start", 0.0)), 1), "end": round(float(s.get("end", 0.0)), 1),
+                "dur": round(float(s.get("duration", 0.0)), 1),
+                "title": str(s.get("ai_title", "") or ""),
+                "mode": str(s.get("audio_mode", "narrate")),
+                "climax": bool(s.get("is_climax", False)),
+            }
+            for i, s in enumerate(scored, start=1)
+        ]
         _emit_render_event(
             channel_code=effective_channel, job_id=job_id, event="recap.plan.ready",
             level="INFO",
@@ -266,12 +285,10 @@ def run_recap(
                     for ep in recap_plan.episodes
                 ],
                 "acts": [{"title": a.title, "beat": a.beat, "scenes": len(a.scenes)} for a in recap_plan.acts],
-                # Flat per-scene audio mode in part order — lets the live view mark
-                # which scenes play original audio vs narration.
-                "scene_modes": [
-                    ("original" if getattr(s, "audio_mode", "narrate") == "original" else "narrate")
-                    for s in recap_plan.scenes()
-                ],
+                # Full per-scene blocks (timing + mode) for the editor timeline.
+                "scenes": _scene_blocks,
+                # Back-compat: flat per-scene audio mode in part order.
+                "scene_modes": [b["mode"] for b in _scene_blocks],
                 "original_audio_scenes": _n_original,
                 "total_target_sec": recap_plan.total_target_sec,
             },
@@ -301,11 +318,6 @@ def run_recap(
                 )
         except Exception:
             pass
-
-        scored = _scored_from_recap_plan(recap_plan)
-        if not scored:
-            raise RuntimeError("Recap: plan produced no valid scenes")
-        total_parts = len(scored)
 
         # 4. Render each scene as a "part" (reuse the clips render loop) ------
         # R6: force subtitle ON for "original audio" scenes so the viewer can

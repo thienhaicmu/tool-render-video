@@ -1,40 +1,49 @@
 /**
- * RecapLiveView (Phase R5) — "live build" view for render_format="recap".
+ * RecapLiveView — editor-style "live build" timeline for render_format="recap".
  *
- * Visualises the recap being assembled in real time from the WebSocket event
- * stream (no new backend data needed — all of this already flows):
- *   • recap.plan.ready  → act/scene timeline scaffold (acts + scene counts)
- *   • liveParts         → each scene lights up as it renders (scene = part)
- *   • voice_*_completed → narration script streams in (first_segment_preview)
- *   • reaction_freeze_applied → ⏸ freeze marker on a scene
- *   • recap.concat.done → "assembled" status
+ * Recap IS a timeline (chronological scenes), so it's shown like an NLE: each
+ * episode (Tập) is a sequence with a V1 (video) track + an A1 (audio) track.
+ * Scene blocks are laid out left→right, width proportional to scene duration,
+ * coloured by render status; the A1 lane shows narration vs original audio.
  *
- * Renders nothing (returns null) until a recap.plan.ready event arrives, so it
- * is safe to mount unconditionally in the rendering screen.
+ * Data (all from the WebSocket stream — no extra fetch):
+ *   • recap.plan.ready  → { episodes[], scenes[{n,ep,act,start,end,dur,title,mode,climax}] }
+ *   • liveParts         → per-scene render status (part_no === scene.n)
+ *   • voice_*_completed → narration script preview per scene
+ *   • reaction_freeze_applied → ⏸ on a scene
+ *   • recap.concat.done → "ghép xong"
+ *
+ * Returns null until recap.plan.ready arrives, so clips mode is unaffected.
  */
+import type { ReactNode } from 'react'
 import type { JobPart } from '@/types/api'
 import type { WsLogEvent } from '@/websocket/events'
 
-interface ActInfo { title: string; beat: string; scenes: number }
 interface EpisodeInfo { title: string; acts: number; scenes: number }
-
-const _BEAT_COLOR: Record<string, string> = {
-  setup: '#3b82f6',
-  rising: '#f59e0b',
-  climax: '#ef4444',
-  resolution: '#10b981',
+interface SceneBlock {
+  n: number; ep: number; act: number
+  start: number; end: number; dur: number
+  title: string; mode: string; climax: boolean
 }
 
-function _sceneColor(status: string | undefined): string {
-  switch (status) {
+// Video-track block colour by render status.
+function _statusColor(status: string | undefined): string {
+  switch ((status || '').toLowerCase()) {
     case 'done': return 'var(--accent, #10b981)'
     case 'rendering':
     case 'cutting':
     case 'transcribing': return '#f59e0b'
-    case 'failed': return '#ef4444'
-    case 'skipped': return 'var(--text-3, #888)'
-    default: return 'var(--border, #444)'   // queued / waiting / unknown
+    case 'failed':
+    case 'cancelled': return '#ef4444'
+    default: return 'var(--border, #3a3a3a)'   // queued / waiting / unknown
   }
+}
+function _isActive(status: string | undefined): boolean {
+  return ['rendering', 'cutting', 'transcribing'].includes((status || '').toLowerCase())
+}
+function _fmt(sec: number): string {
+  const s = Math.max(0, Math.round(sec))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
 export function RecapLiveView({
@@ -44,31 +53,12 @@ export function RecapLiveView({
   liveEvents: WsLogEvent[]
   liveParts: JobPart[]
 }) {
-  // Latest plan wins (resume/retry can re-emit).
   const planEv = [...liveEvents].reverse().find((e) => e.event === 'recap.plan.ready')
   if (!planEv) return null
 
-  const acts = ((planEv.context?.acts as ActInfo[]) || []).filter(Boolean)
-  const totalTarget = Number(planEv.context?.total_target_sec || 0)
-  if (acts.length === 0) return null
-
-  // R6: episode grouping + per-scene audio mode. Back-compat — a pre-R6 event
-  // has no `episodes`; treat all acts as a single (untitled) episode.
+  const scenes = ((planEv.context?.scenes as SceneBlock[]) || []).filter(Boolean)
   const episodes = ((planEv.context?.episodes as EpisodeInfo[]) || []).filter(Boolean)
-  const sceneModes = (planEv.context?.scene_modes as string[]) || []
-  const multiEpisode = episodes.length > 1
-  // Build [start, count] act-slices per episode from the episode act-counts.
-  const epSlices: { ep: EpisodeInfo; actStart: number; actCount: number }[] = []
-  if (episodes.length > 0) {
-    let cursor = 0
-    for (const ep of episodes) {
-      const n = Math.max(0, ep.acts | 0)
-      epSlices.push({ ep, actStart: cursor, actCount: n })
-      cursor += n
-    }
-  } else {
-    epSlices.push({ ep: { title: '', acts: acts.length, scenes: 0 }, actStart: 0, actCount: acts.length })
-  }
+  const totalTarget = Number(planEv.context?.total_target_sec || 0)
 
   const partByNo = new Map<number, JobPart>(liveParts.map((p) => [p.part_no, p]))
   const frozen = new Set<number>(
@@ -77,7 +67,6 @@ export function RecapLiveView({
       .map((e) => Number(e.context?.part_no))
       .filter((n) => !Number.isNaN(n)),
   )
-  // Narration previews, keyed by part_no (last preview wins).
   const previews = new Map<number, string>()
   for (const e of liveEvents) {
     if (e.event === 'voice_ai_rewrite_completed' || e.event === 'voice_tts_completed') {
@@ -87,127 +76,173 @@ export function RecapLiveView({
     }
   }
   const concatDone = liveEvents.some((e) => e.event === 'recap.concat.done')
-  // Overall scene progress (X/Y done) for the header.
-  const totalScenes = acts.reduce((n, a) => n + Math.max(0, a.scenes | 0), 0)
   const doneScenes = liveParts.filter((p) => (p.status || '').toLowerCase() === 'done').length
 
-  // Flatten scenes → global part_no (1-based, in act order).
-  let partNo = 0
-  const scriptLines: { pn: number; act: string; text: string }[] = []
+  // Still waiting on the scene list (e.g. resume of a pre-timeline job).
+  if (scenes.length === 0) {
+    return (
+      <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-3)' }}>
+        🎬 RECAP — đang dựng kế hoạch cảnh…
+      </div>
+    )
+  }
+
+  // Group scenes by episode, in order.
+  const epOrder: number[] = []
+  const byEpisode = new Map<number, SceneBlock[]>()
+  for (const sc of scenes) {
+    if (!byEpisode.has(sc.ep)) { byEpisode.set(sc.ep, []); epOrder.push(sc.ep) }
+    byEpisode.get(sc.ep)!.push(sc)
+  }
+  const multiEpisode = epOrder.length > 1
+  const scriptLines: { n: number; text: string }[] = []
+  for (const sc of scenes) {
+    const pv = previews.get(sc.n)
+    if (pv) scriptLines.push({ n: sc.n, text: pv })
+  }
+
+  const GUTTER = 30
 
   return (
     <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)' }}>
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: 'var(--text-1)' }}>
           🎬 RECAP — LIVE BUILD
         </span>
         <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
-          {doneScenes}/{totalScenes} cảnh
-          {multiEpisode ? ` · ${episodes.length} tập` : ''}
-          {totalTarget > 0 ? ` · ~${Math.round(totalTarget)}s` : ''}
-          {concatDone ? ` · ✓ ghép xong` : ''}
+          {doneScenes}/{scenes.length} cảnh
+          {multiEpisode ? ` · ${epOrder.length} tập` : ''}
+          {totalTarget > 0 ? ` · ~${_fmt(totalTarget)}` : ''}
+          {concatDone ? ' · ✓ ghép xong' : ''}
         </span>
       </div>
 
-      {/* Status legend — what the scene colours mean */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10, fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 10, fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
         {([
-          ['var(--border, #444)', 'chờ'],
+          ['var(--border, #3a3a3a)', 'chờ'],
           ['#f59e0b', 'đang dựng'],
           ['var(--accent, #10b981)', 'xong'],
           ['#ef4444', 'lỗi'],
         ] as const).map(([c, lbl]) => (
           <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: c, display: 'inline-block' }} />
-            {lbl}
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: c, display: 'inline-block' }} />{lbl}
           </span>
         ))}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#14b8a6', display: 'inline-block' }} />A1 thuyết minh
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#a855f7', display: 'inline-block' }} />🔊 tiếng gốc
+        </span>
+        <span>★ cao trào</span>
       </div>
 
-      {/* Episode → act → scene timeline */}
+      {/* One NLE sequence per episode */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {epSlices.map(({ ep, actStart, actCount }, ei) => (
-          <div key={ei}>
-            {multiEpisode && (
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)', marginBottom: 6 }}>
-                🎞 {ep.title || `Tập ${ei + 1}`}
+        {epOrder.map((ep) => {
+          const epScenes = byEpisode.get(ep)!
+          const epDur = epScenes.reduce((n, s) => n + Math.max(0.1, s.dur), 0)
+          const epTitle = episodes[ep]?.title || `Tập ${ep + 1}`
+          return (
+            <div key={ep} style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-card, rgba(255,255,255,.02))' }}>
+              {/* Sequence header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', background: 'rgba(255,255,255,.04)', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>
+                  {multiEpisode ? `🎞 ${epTitle}` : `🎞 ${epTitle}`}
+                </span>
+                <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
+                  {epScenes.length} cảnh · ~{_fmt(epDur)}
+                </span>
               </div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: multiEpisode ? 6 : 0 }}>
-              {acts.slice(actStart, actStart + actCount).map((act, ai) => {
-                const beat = (act.beat || '').toLowerCase()
-                const beatColor = _BEAT_COLOR[beat] || 'var(--text-3)'
-                return (
-                  <div key={ai}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 2, background: beatColor, display: 'inline-block' }} />
-                      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-2)' }}>
-                        {act.title || `Act ${actStart + ai + 1}`}
-                      </span>
-                      {beat && <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>· {beat}</span>}
-                    </div>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', paddingLeft: 14 }}>
-                      {Array.from({ length: Math.max(0, act.scenes | 0) }).map((_, si) => {
-                        partNo += 1
-                        const pn = partNo
-                        const part = partByNo.get(pn)
-                        const preview = previews.get(pn)
-                        const isOriginal = sceneModes[pn - 1] === 'original'
-                        if (preview) scriptLines.push({ pn, act: act.title || `Act ${actStart + ai + 1}`, text: preview })
-                        const mark = frozen.has(pn) ? '⏸' : isOriginal ? '🔊' : ''
-                        return (
-                          <div
-                            key={si}
-                            title={`Cảnh ${pn}${isOriginal ? ' · tiếng gốc' : ' · thuyết minh'}${part ? ' · ' + part.status : ' · chờ'}`}
-                            style={{
-                              position: 'relative',
-                              minWidth: 30, height: 20, borderRadius: 4, padding: '0 5px',
-                              background: _sceneColor(part?.status),
-                              border: isOriginal ? '1.5px solid #a855f7' : '1px solid transparent',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2,
-                              fontSize: 10, fontWeight: 600, color: '#fff', fontFamily: 'var(--fb)',
-                            }}
-                          >
-                            {pn}{mark}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
 
-      {sceneModes.includes('original') && (
-        <div style={{ marginTop: 8, fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 12, height: 9, borderRadius: 2, border: '1.5px solid #a855f7', display: 'inline-block' }} />
-          🔊 = giữ tiếng gốc (AI để khoảnh khắc tự nói) · còn lại = AI thuyết minh
-        </div>
-      )}
+              {/* V1 — video track */}
+              <Track label="V1" gutter={GUTTER}>
+                {epScenes.map((sc) => {
+                  const part = partByNo.get(sc.n)
+                  const active = _isActive(part?.status)
+                  const isOrig = sc.mode === 'original'
+                  return (
+                    <div
+                      key={sc.n}
+                      title={`Cảnh ${sc.n}${sc.title ? ' · ' + sc.title : ''} · ${_fmt(sc.start)}–${_fmt(sc.end)} (${Math.round(sc.dur)}s) · ${isOrig ? 'tiếng gốc' : 'thuyết minh'} · ${part?.status || 'chờ'}`}
+                      style={{
+                        flexGrow: Math.max(0.1, sc.dur), flexBasis: 0, minWidth: 26,
+                        height: 30, borderRadius: 4,
+                        background: _statusColor(part?.status),
+                        border: active ? '1.5px solid #fff' : '1px solid rgba(0,0,0,.25)',
+                        borderTop: isOrig ? '2px solid #a855f7' : undefined,
+                        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                        padding: '0 4px', overflow: 'hidden', cursor: 'default',
+                      }}
+                    >
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', lineHeight: 1.1 }}>
+                        {sc.n}{sc.climax ? ' ★' : ''}{frozen.has(sc.n) ? ' ⏸' : ''}{isOrig ? ' 🔊' : ''}
+                      </span>
+                      {sc.title && (
+                        <span style={{ fontSize: 8, color: 'rgba(255,255,255,.8)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'var(--fb)' }}>
+                          {sc.title}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </Track>
+
+              {/* A1 — audio track (narration vs original) */}
+              <Track label="A1" gutter={GUTTER}>
+                {epScenes.map((sc) => {
+                  const isOrig = sc.mode === 'original'
+                  return (
+                    <div
+                      key={sc.n}
+                      title={isOrig ? 'Tiếng gốc (AI để khoảnh khắc tự nói)' : 'AI thuyết minh'}
+                      style={{
+                        flexGrow: Math.max(0.1, sc.dur), flexBasis: 0, minWidth: 26,
+                        height: 16, borderRadius: 3,
+                        background: isOrig ? '#a855f7' : '#14b8a6',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '0 4px', overflow: 'hidden',
+                      }}
+                    >
+                      <span style={{ fontSize: 8, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'var(--fb)' }}>
+                        {isOrig ? '🔊 gốc' : 'thuyết minh'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </Track>
+            </div>
+          )
+        })}
+      </div>
 
       {/* Narration script — streams in as scenes get narrated */}
       {scriptLines.length > 0 && (
         <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>
-            NARRATION SCRIPT
-          </div>
-          <div
-            style={{
-              maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4,
-              background: 'var(--bg-card)', borderRadius: 6, padding: '6px 8px',
-            }}
-          >
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>KỊCH BẢN THUYẾT MINH</div>
+          <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--bg-card)', borderRadius: 6, padding: '6px 8px' }}>
             {scriptLines.map((l) => (
-              <div key={l.pn} style={{ fontSize: 10, color: 'var(--text-2)', lineHeight: 1.4, fontFamily: 'var(--fb)' }}>
-                <span style={{ color: 'var(--text-3)' }}>#{l.pn}</span> {l.text}
+              <div key={l.n} style={{ fontSize: 10, color: 'var(--text-2)', lineHeight: 1.4, fontFamily: 'var(--fb)' }}>
+                <span style={{ color: 'var(--text-3)' }}>#{l.n}</span> {l.text}
               </div>
             ))}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** One NLE track lane: a fixed left gutter label + a proportional block row. */
+function Track({ label, gutter, children }: { label: string; gutter: number; children: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, padding: '4px 6px' }}>
+      <div style={{ width: gutter, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'var(--fb)', background: 'rgba(255,255,255,.03)', borderRadius: 3 }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', gap: 3, flex: 1, minWidth: 0 }}>{children}</div>
     </div>
   )
 }
