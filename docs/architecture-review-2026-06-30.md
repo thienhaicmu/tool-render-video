@@ -30,7 +30,8 @@ the session's outcome, not a living spec.
 | **D-2-motion Phase 3** | [`20c8249`](#) | **Actual `motion/crop.py` swap** — `scene_map` kwarg threaded through `render_motion_aware_crop` ← `render_part_smart` ← `part_render_encode.py`. Policy A: SceneMap when `MOTION_USE_SCENE_MAP=1` + non-empty, pixel-diff fallback otherwise. Shipped default OFF (Sacred Contract #2 conservative). | 0 new (zero regression on 2147 baseline) |
 | **D-2-motion default flip** | [`50cefcd`](#) | **`MOTION_USE_SCENE_MAP` default 0 → 1** — operator authorisation; deviates from Phase 2 verdict's 2-3-validation-renders recommendation. One-character change in `motion/crop.py`. Pixel-diff fallback (Policy A) bounds risk to subtle visual drift on cinematic content. Instant rollback via env var. | 0 new (zero regression on 2147 baseline) |
 | **C.1 Phase 1** | [`c1b7812`](#) | **Clip-path Comprehension substrate** — `use_story_intelligence: bool = False` on RenderRequest + audit doc + 16 contract tests pinning the Phase 2/3 wire-up surface. NO `render_pipeline.py` touch. NO provider touch. Default False → bit-identical production. | +16 (2147 → 2163 baseline) |
-| **C.1 Phase 2** | (this commit) | **`render_pipeline.py` wire-in** — reads `payload.use_story_intelligence`, calls `run_comprehension(...)` before the LLM call (cache-miss branch only). Double-gated by the env var + payload flag. Sacred Contract #3 try/except. NO provider touch yet. StoryModel is produced + persisted; Phase 3 wires consumer. | 0 new (zero regression on 2163 baseline; sentinel B6 flipped to assert-present) |
+| **C.1 Phase 2** | [`c4f7d67`](#) | **`render_pipeline.py` wire-in** — reads `payload.use_story_intelligence`, calls `run_comprehension(...)` before the LLM call (cache-miss branch only). Double-gated by the env var + payload flag. Sacred Contract #3 try/except. NO provider touch yet. StoryModel is produced + persisted; Phase 3 wires consumer. | 0 new (zero regression on 2163 baseline; sentinel B6 flipped to assert-present) |
+| **C.1 Phase 3** | (this commit) | **Closure — providers + prompt + producer↔consumer wire** — `story_model` kwarg added to dispatcher + 3 providers + `build_render_plan_prompt`. New `_story_block_clips` helper injects whole-source semantic understanding into clips prompt. `render_pipeline.py` captures + forwards `_clip_story_model`. **PROMPT_VERSION NOT bumped** — empty story block renders to `""` so legacy prompts are byte-identical (LLM cache key SHA stable). **#1 strategic gap CLOSED.** | +6 (2163 → 2169 baseline; B7 sentinel flipped, prompt-format tests added) |
 
 ---
 
@@ -60,13 +61,14 @@ the session's outcome, not a living spec.
 | **D-2-motion default flip** (`MOTION_USE_SCENE_MAP` 0 → 1 — operator authorisation, deviates from verdict recommendation) | **D-2-motion default flip** |
 | **C.1 Phase 1** (Clip-path Comprehension substrate — schema field + audit + contract tests) | **C.1 Phase 1** |
 | **C.1 Phase 2** (`render_pipeline.py` wire-in — Comprehension call before LLM, double-gated, Sacred Contract #3) | **C.1 Phase 2** |
+| **C.1 Phase 3** (providers + prompt + producer↔consumer wire — **#1 strategic gap CLOSED**) | **C.1 Phase 3** |
 
 ### ⏳ Deferred (consumer-wiring follow-ups)
 
 | Item | Priority | Risk | Effort | Notes |
 |------|----------|------|--------|-------|
 | **D-2-motion production-validate** — run 2-3 real-content renders; flip back to `0` if visual quality regresses on dissolves / lighting-change-in-shot content | Operator side | LOW | ~30min | The verdict's recommended Phase 2 fallback step. If renders look bad: `export MOTION_USE_SCENE_MAP=0` |
-| **C.1 Phase 3** — 3 provider `select_render_plan` sigs + `_story_block` prompt injection + `PROMPT_VERSION = 2` bump | #1 strategic | HIGH × 3 | ~2h | Final closure of architecture review's #1 strategic gap. Phase 2 already produces + persists StoryModel; Phase 3 wires consumer (provider signature + clips prompt). |
+| **C.1 production-validate** — flip a Clip job's `use_story_intelligence` to `true`, inspect the produced clips for theme/conflict grounding. Flip default to `true` once validated. | Operator side | LOW | ~30min | One env knob: `use_story_intelligence` on the next render payload. SceneMap-style validation pattern. |
 
 **Recommended next-sprint order:** Production-validate D-2-motion (~30min) → C.1 (own sprint, CRITICAL).
 

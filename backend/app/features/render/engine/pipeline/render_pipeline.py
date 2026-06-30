@@ -896,6 +896,13 @@ def run_render_pipeline(
                         # so a flaky Comprehension call NEVER blocks the
                         # render — the legacy LLM call proceeds unchanged
                         # (Sacred Contract #3 spirit).
+                        # Architecture-review C.1 Phase 3 (2026-06-30):
+                        # capture the StoryModel produced by Comprehension
+                        # so it can be forwarded to _llm_select_render_plan
+                        # below. Pre-Phase-3 the return value was discarded
+                        # (Phase 2 substrate only); Phase 3 wires the
+                        # producer↔consumer connection.
+                        _clip_story_model = None
                         if getattr(payload, "use_story_intelligence", False):
                             try:
                                 from app.features.render.engine.pipeline.comprehension_stage import (
@@ -903,7 +910,7 @@ def run_render_pipeline(
                                     is_hoist_enabled as _comprehension_enabled,
                                 )
                                 if _comprehension_enabled():
-                                    _run_comprehension(
+                                    _clip_story_model = _run_comprehension(
                                         job_id=job_id,
                                         channel_code=effective_channel,
                                         srt_content=_ai_srt_content,
@@ -920,10 +927,11 @@ def run_render_pipeline(
                                     )
                             except Exception as _comp_exc:
                                 logger.warning(
-                                    "render_plan: C.1 Phase 2 Comprehension stage "
+                                    "render_plan: C.1 Phase 3 Comprehension stage "
                                     "raised — proceeding without StoryModel: %s",
                                     _comp_exc,
                                 )
+                                _clip_story_model = None
                         logger.info(
                             "render_plan: LLM_EMIT_RENDER_PLAN=1 — attempting AI emission (provider=%s)",
                             _ai_provider,
@@ -950,6 +958,13 @@ def run_render_pipeline(
                             subtitle_emphasis=(_llm_sub_emph or None),
                             multi_variant=_llm_multi_variant,
                             structure_bias=(_llm_structure_bias or None),
+                            # C.1 Phase 3 — Story Intelligence (None when
+                            # use_story_intelligence flag is False, when
+                            # Comprehension stage is env-disabled, or when
+                            # Comprehension raised. Prompt builder collapses
+                            # the story block to "" → byte-identical wire
+                            # shape for legacy callers).
+                            story_model=_clip_story_model,
                         )
                         if _render_plan is not None:
                             _llm_plan_cache_put(_llm_cache_key, _render_plan.to_json())

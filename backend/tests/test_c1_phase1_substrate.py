@@ -227,16 +227,40 @@ def test_b6_render_pipeline_wires_comprehension_under_flag():
     ), "C1.3 B6: Phase 2 wire-in is missing the Sacred Contract #3 try/except guard"
 
 
-def test_b7_select_render_plan_does_not_yet_accept_story_model():
-    """Phase 3 work. Today's signature must NOT have story_model. When
-    Phase 3 ships, REMOVE this test."""
+def test_b7_select_render_plan_now_accepts_story_model():
+    """C.1 Phase 3 (2026-06-30, post-flip): the original Phase 1 sentinel
+    asserted select_render_plan did NOT yet accept story_model. Phase 3
+    shipped the kwarg + prompt injection, so this test now asserts
+    story_model IS in the signature with default None (Sacred Contract
+    #2 — byte-identical pre-Phase-3 prompt when not provided)."""
     import inspect
     from app.features.render.ai.llm import select_render_plan
     sig = inspect.signature(select_render_plan)
-    assert "story_model" not in sig.parameters, (
-        "C1.3 B7: select_render_plan already accepts story_model — Phase 3 "
-        "shipped. Update or remove this test."
+    assert "story_model" in sig.parameters, (
+        "C1.3 B7: Phase 3 wire-in missing — select_render_plan no longer "
+        "accepts story_model. Did a refactor undo Phase 3?"
     )
+    # Default MUST be None so legacy callers behave identically.
+    assert sig.parameters["story_model"].default is None, (
+        f"C1.3 B7: story_model default must be None for Sacred Contract #2, "
+        f"got {sig.parameters['story_model'].default!r}"
+    )
+
+
+def test_b7b_all_three_providers_accept_story_model():
+    """Phase 3 hooked story_model through every provider's
+    select_render_plan. If any provider drops the kwarg, the dispatcher's
+    forwarded story_model raises TypeError on that provider's call site."""
+    import inspect
+    from app.features.render.ai.llm.providers import gemini, openai, claude
+    for mod_name, mod in [("gemini", gemini), ("openai", openai), ("claude", claude)]:
+        sig = inspect.signature(mod.select_render_plan)
+        assert "story_model" in sig.parameters, (
+            f"C1.3 B7b: {mod_name}.select_render_plan missing story_model kwarg"
+        )
+        assert sig.parameters["story_model"].default is None, (
+            f"C1.3 B7b: {mod_name}.select_render_plan story_model default must be None"
+        )
 
 
 def test_b8_audit_document_exists():
@@ -252,6 +276,87 @@ def test_b8_audit_document_exists():
 # ---------------------------------------------------------------------------
 # Cross-cutting — Phase 2 implementer's checklist
 # ---------------------------------------------------------------------------
+
+
+def test_prompt_byte_identical_when_story_model_none():
+    """C.1 Phase 3 Sacred Contract #2 (wire-shape): the user prompt
+    produced by build_render_plan_prompt MUST be byte-identical for
+    legacy callers who don't pass story_model. This keeps the LLM disk
+    cache SHA stable, avoiding an operational cache flush."""
+    from app.features.render.ai.llm.prompts import build_render_plan_prompt
+    common = dict(
+        srt_content="00:00:00,000 --> 00:00:05,000\nhello world",
+        output_count=1,
+        min_sec=30.0,
+        max_sec=60.0,
+        language="en-US",
+    )
+    sys_a, user_a = build_render_plan_prompt(**common)
+    sys_b, user_b = build_render_plan_prompt(**common, story_model=None)
+    assert sys_a == sys_b
+    assert user_a == user_b, (
+        "Prompt drifted when story_model=None was passed explicitly — "
+        "would invalidate LLM disk cache for legacy callers."
+    )
+
+
+def test_prompt_injects_story_block_when_story_model_provided():
+    """C.1 Phase 3: when a StoryModel is provided, the user prompt grows
+    a STORY INTELLIGENCE section that the LLM uses to ground clip
+    selection."""
+    from app.domain.recap_plan import StoryModel, StoryBeat, Character
+    from app.features.render.ai.llm.prompts import build_render_plan_prompt
+    sm = StoryModel(
+        summary="A coffee shop loses its identity.",
+        theme="identity",
+        conflict="commercial vs craft",
+        characters=[Character(name="Maya", role="owner", want="preserve heritage")],
+        beats=[StoryBeat(text="franchise approaches", t=120.0)],
+    )
+    _, user_with = build_render_plan_prompt(
+        srt_content="00:00:00,000 --> 00:00:05,000\nhello",
+        output_count=1, min_sec=30.0, max_sec=60.0,
+        story_model=sm,
+    )
+    # The block landed.
+    assert "STORY INTELLIGENCE" in user_with
+    assert "identity" in user_with
+    assert "commercial vs craft" in user_with
+    assert "Maya" in user_with
+    # Editorial instruction is present.
+    assert "viral_score" in user_with or "hook_score" in user_with
+
+
+def test_prompt_story_block_skipped_when_model_is_empty():
+    """An empty StoryModel (no summary, no beats) renders to an empty
+    block — so a Comprehension call that returned junk doesn't poison
+    the clip prompt with a meaningless STORY INTELLIGENCE header."""
+    from app.domain.recap_plan import StoryModel
+    from app.features.render.ai.llm.prompts import build_render_plan_prompt
+    empty_sm = StoryModel()
+    _, user_empty = build_render_plan_prompt(
+        srt_content="00:00:00,000 --> 00:00:05,000\nhello",
+        output_count=1, min_sec=30.0, max_sec=60.0,
+        story_model=empty_sm,
+    )
+    assert "STORY INTELLIGENCE" not in user_empty
+
+
+def test_story_block_clips_helper_returns_empty_for_none():
+    from app.features.render.ai.llm.prompts import _story_block_clips
+    assert _story_block_clips(None) == ""
+
+
+def test_story_block_clips_neutralises_braces_in_user_content():
+    """Defensive — a StoryModel whose summary contains '{' / '}' must NOT
+    break the subsequent str.format() call on the user template."""
+    from app.domain.recap_plan import StoryModel
+    from app.features.render.ai.llm.prompts import _story_block_clips
+    sm = StoryModel(summary="literal { and } in the summary")
+    block = _story_block_clips(sm)
+    assert "{" not in block and "}" not in block, (
+        "Story block leaked literal braces — would break str.format()"
+    )
 
 
 def test_audit_sketch_line_numbers_remain_accurate():

@@ -102,6 +102,9 @@ def select_render_plan(
     subtitle_emphasis: Optional[str] = None,
     multi_variant: bool = False,
     structure_bias: Optional[str] = None,
+    # C.1 Phase 3 (2026-06-30): optional StoryModel forwarded to the
+    # prompt builder. Default None → byte-identical pre-Phase-3 prompt.
+    story_model: Optional[Any] = None,
 ) -> Optional[RenderPlan]:
     """Send SRT to Gemini and return a RenderPlan emitted in one pass.
 
@@ -136,6 +139,7 @@ def select_render_plan(
             subtitle_emphasis=subtitle_emphasis,
             multi_variant=multi_variant,
             structure_bias=structure_bias,
+            story_model=story_model,  # C.1 Phase 3
         )
     except Exception as exc:
         logger.warning("gemini_client: select_render_plan unexpected error — %s", exc, exc_info=True)
@@ -164,6 +168,8 @@ def _run_render_plan(
     subtitle_emphasis: Optional[str] = None,
     multi_variant: bool = False,
     structure_bias: Optional[str] = None,
+    # C.1 Phase 3 (2026-06-30) — optional StoryModel for Story Intelligence.
+    story_model: Optional[Any] = None,
 ) -> Optional[RenderPlan]:
     if not _GENAI_SDK:
         logger.warning("gemini_client: google-genai SDK not installed (render_plan path)")
@@ -196,6 +202,8 @@ def _run_render_plan(
         subtitle_emphasis=subtitle_emphasis,
         multi_variant=multi_variant,
         structure_bias=structure_bias,
+        # C.1 Phase 3 — Story Intelligence section
+        story_model=story_model,
     )
 
     resolved_model = model or _DEFAULT_MODEL

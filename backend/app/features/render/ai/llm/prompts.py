@@ -234,7 +234,7 @@ overlays is an array. Emit at most one entry per kind:
                (subscribe, comment, part 2). Set "type" to one of
                "comment" | "part_2" | "follow" | "auto".
 
-When no overlay fits, return overlays=[] instead of inventing one.{video_meta_section}{clip_lock_section}{clip_exclude_section}{creator_preferences_section}
+When no overlay fits, return overlays=[] instead of inventing one.{video_meta_section}{clip_lock_section}{clip_exclude_section}{creator_preferences_section}{story_block_section}
 
 ─── TRANSCRIPT ───
 
@@ -436,6 +436,75 @@ def _build_creator_preferences_section(
     )
 
 
+def _story_block_clips(story_model) -> str:
+    """Render a StoryModel into a Clip-oriented plain-text block. Returns ""
+    when no usable model (default for legacy non-Story-Intelligence callers),
+    so the ``{story_block_section}`` slot in ``_USER_TEMPLATE_RP`` collapses
+    to empty string and the prompt is **byte-for-byte identical** to the
+    pre-Phase-3 baseline (Sacred Contract #2 spirit at the wire level —
+    LLM cache key SHA also unchanged for legacy jobs).
+
+    Tone diverges from recap_prompts._story_block: that helper asks the
+    pass-2 recap LLM to PLAN narration from the StoryModel; this helper
+    asks the pass-1 clips LLM to GROUND VIRAL HOOK SELECTION in the
+    StoryModel. Same data, different editorial instruction.
+
+    C.1 Phase 3 (2026-06-30). Defensive: braces are neutralised so a
+    StoryModel field that contains ``{`` / ``}`` can't break the
+    subsequent ``str.format()`` call on the user template (same guard
+    as recap_prompts._story_block)."""
+    if story_model is None:
+        return ""
+    try:
+        summary = (getattr(story_model, "summary", "") or "").strip()
+        theme = (getattr(story_model, "theme", "") or "").strip()
+        genre = (getattr(story_model, "genre", "") or "").strip()
+        conflict = (getattr(story_model, "conflict", "") or "").strip()
+        resolution = (getattr(story_model, "resolution", "") or "").strip()
+        characters = [str(c).strip() for c in (getattr(story_model, "characters", []) or []) if str(c).strip()]
+        beats = [str(b).strip() for b in (getattr(story_model, "beats", []) or []) if str(b).strip()]
+        emo = [str(e).strip() for e in (getattr(story_model, "emotional_curve", []) or []) if str(e).strip()]
+        climax = (getattr(story_model, "climax", "") or "").strip()
+        ending = (getattr(story_model, "ending", "") or "").strip()
+        if not (summary or characters or beats or climax or ending or theme or conflict or emo):
+            return ""
+        lines = ["", "═══ STORY INTELLIGENCE (whole-source understanding — ground clip picks in this) ═══"]
+        if summary:
+            lines.append(f"SUMMARY: {summary}")
+        if theme:
+            lines.append(f"THEME: {theme}")
+        if genre:
+            lines.append(f"GENRE: {genre}")
+        if conflict:
+            lines.append(f"CENTRAL CONFLICT: {conflict}")
+        if characters:
+            lines.append("CHARACTERS: " + " · ".join(characters))
+        if beats:
+            lines.append("KEY MOMENTS (chronological):")
+            lines.extend(f"  - {b}" for b in beats)
+        if emo:
+            lines.append("EMOTIONAL CURVE: " + " → ".join(emo))
+        if climax:
+            lines.append(f"PEAK MOMENT: {climax}")
+        if resolution:
+            lines.append(f"RESOLUTION: {resolution}")
+        if ending:
+            lines.append(f"ENDING: {ending}")
+        lines.append(
+            "Use this whole-source understanding to RAISE viral_score and "
+            "hook_score for clips that land on the central conflict, peak "
+            "moment, or strongest character beats. A clip that captures the "
+            "CENTRAL CONFLICT in 60 seconds outranks a clip that's only "
+            "locally funny. Do NOT contradict the theme / characters / "
+            "conflict in titles or reasons."
+        )
+        block = "\n".join(lines) + "\n"
+        # Defensive: neutralise stray braces so an accidental re-format can't break.
+        return block.replace("{", "(").replace("}", ")")
+    except Exception:
+        return ""
+
+
 def build_render_plan_prompt(
     srt_content: str,
     output_count: int,
@@ -459,6 +528,15 @@ def build_render_plan_prompt(
     subtitle_emphasis: str | None = None,
     multi_variant: bool = False,
     structure_bias: str | None = None,
+    # C.1 Phase 3 (2026-06-30): optional StoryModel produced by the
+    # Comprehension stage (Batch C / C.1 Phase 2). When provided, a
+    # ``_story_block_clips`` section is injected into the user prompt
+    # so the LLM grounds clip selection in whole-source semantic
+    # understanding. Default None → block resolves to empty string →
+    # prompt byte-for-byte identical to pre-Phase-3 baseline → LLM
+    # cache key SHA unchanged → no PROMPT_VERSION bump needed (see
+    # commit message rationale).
+    story_model=None,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for LLM RenderPlan emission.
 
@@ -584,6 +662,11 @@ def build_render_plan_prompt(
         structure_bias=structure_bias,
     )
 
+    # C.1 Phase 3 — optional Story Intelligence section. Default empty
+    # string when story_model is None preserves byte-identical wire shape
+    # for legacy callers (Sacred Contract #2 spirit at the prompt level).
+    story_block_section = _story_block_clips(story_model)
+
     user = _USER_TEMPLATE_RP.format(
         language=language,
         srt_content=truncated,
@@ -598,6 +681,7 @@ def build_render_plan_prompt(
         clip_lock_section=clip_lock_section,
         clip_exclude_section=clip_exclude_section,
         creator_preferences_section=creator_preferences_section,
+        story_block_section=story_block_section,
     )
     return system, user
 

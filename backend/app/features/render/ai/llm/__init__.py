@@ -356,6 +356,13 @@ def select_render_plan(
     subtitle_emphasis: Optional[str] = None,
     multi_variant: bool = False,
     structure_bias: Optional[str] = None,
+    # C.1 Phase 3 (2026-06-30): optional StoryModel from the Comprehension
+    # stage (Batch C / C.1 Phase 2). When provided, the active provider's
+    # build_render_plan_prompt injects a _story_block_clips section so the
+    # clip selection LLM grounds picks in whole-source semantic
+    # understanding (theme, conflict, characters, emotional curve).
+    # Default None → byte-identical pre-Phase-3 prompt; no LLM cache flush.
+    story_model: Optional[Any] = None,
 ) -> Optional["RenderPlan"]:
     """Dispatch RenderPlan emission to the named LLM provider.
 
@@ -412,6 +419,8 @@ def select_render_plan(
         subtitle_emphasis=subtitle_emphasis,
         multi_variant=multi_variant,
         structure_bias=structure_bias,
+        # C.1 Phase 3 — optional StoryModel forwarded to the provider
+        story_model=story_model,
     )
 
     for _p in chain:
