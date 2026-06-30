@@ -73,12 +73,77 @@ def _get_job_or_404(job_id: str) -> dict:
     return job
 
 
+def _recap_episode_items(job: dict) -> "list[dict] | None":
+    """For a render_format='recap' job, build output items from the EPISODE
+    entries in result_json (the real deliverables) instead of job_parts (which
+    are internal per-scene intermediates). Returns None for non-recap jobs or
+    when no episode outputs are present — callers then fall back to job_parts.
+    Never raises (defensive JSON)."""
+    import json as _json
+    try:
+        payload = _json.loads(job.get("payload_json") or "{}")
+        if str(payload.get("render_format") or "clips").strip().lower() != "recap":
+            return None
+        result = _json.loads(job.get("result_json") or "{}")
+        eps = result.get("outputs")
+        if not isinstance(eps, list) or not eps:
+            return None
+    except Exception:
+        return None
+
+    items: list[dict] = []
+    for rank, e in enumerate(eps, start=1):
+        if not isinstance(e, dict):
+            continue
+        out_file = str(e.get("output_file") or e.get("path") or e.get("output_path") or "")
+        exists = bool(out_file and Path(out_file).is_file())
+        size = 0
+        if exists:
+            try:
+                size = Path(out_file).stat().st_size
+            except Exception:
+                pass
+        dur = float(e.get("duration") or 0.0)
+        items.append({
+            "part_no":           int(e.get("part_no") or rank),
+            "part_name":         str(e.get("title") or e.get("clip_name") or f"Tập {e.get('episode_no') or rank}"),
+            "status":            "DONE",
+            "output_rank":       rank,
+            "output_rank_score": float(e.get("output_rank_score") or 0.0),
+            "is_best_output":    bool(e.get("is_best_output")),
+            "viral_score":       float(e.get("viral_score") or 0.0),
+            "hook_score":        0.0,
+            "retention_score":   0.0,
+            "start_sec":         0.0,
+            "end_sec":           dur,
+            "duration":          dur,
+            "output_file":       out_file,
+            "file_exists":       exists,
+            "file_size_bytes":   size,
+            "episode_no":        int(e.get("episode_no") or rank),
+        })
+    return items or None
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/{job_id}/outputs")
 def get_outputs(job_id: str):
     """Ranked list of all render outputs for this job."""
-    _get_job_or_404(job_id)
+    job = _get_job_or_404(job_id)
+
+    # Recap: deliverables are the assembled EPISODES (result_json.outputs), not
+    # the internal per-scene job_parts. Clips mode keeps the job_parts path.
+    _recap_items = _recap_episode_items(job)
+    if _recap_items is not None:
+        completed = [i for i in _recap_items if i["file_exists"]]
+        return {
+            "job_id":          job_id,
+            "total_parts":     len(_recap_items),
+            "completed_parts": len(completed),
+            "outputs":         _recap_items,
+        }
+
     parts = list_job_parts(job_id)
     scores = list_ab_scores_for_job(job_id)
 
@@ -100,7 +165,14 @@ def get_outputs(job_id: str):
 @router.get("/{job_id}/outputs/best")
 def get_best_output(job_id: str):
     """Return the single best-ranked output (is_best_output = true)."""
-    _get_job_or_404(job_id)
+    job = _get_job_or_404(job_id)
+
+    # Recap: pick the best EPISODE (episode 1 by convention).
+    _recap_items = _recap_episode_items(job)
+    if _recap_items is not None:
+        best = next((i for i in _recap_items if i["is_best_output"]), None) or _recap_items[0]
+        return best
+
     parts  = list_job_parts(job_id)
     scores = list_ab_scores_for_job(job_id)
 

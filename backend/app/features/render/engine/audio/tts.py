@@ -184,6 +184,32 @@ def clean_spoken_text(text: str, language: str = "en-US") -> str:
 
 _SSML_HUMANIZER_ENABLED: bool = os.environ.get("SSML_HUMANIZER_ENABLED", "1") == "1"
 
+# "MS" bug: edge-tts' Communicate() does NOT consume SSML — it sends the string
+# as plain text, so any <break time='500ms'/> the humanizer injected gets read
+# ALOUD ("ms"/numbers). Same for Piper/XTTS (no SSML at all). Strip SSML break
+# tags + residual markup + stray "Nms" right before handing text to ANY backend.
+# Opt back in to raw SSML (for an environment whose edge-tts genuinely honours
+# it) via TTS_SSML_BREAKS=1.
+_TTS_ALLOW_SSML_BREAKS: bool = os.environ.get("TTS_SSML_BREAKS", "0") == "1"
+_BREAK_TAG_RE = re.compile(r"<break\b[^>]*/?>", re.IGNORECASE)
+_ANY_TAG_RE = re.compile(r"<[^>]+>")
+_STRAY_MS_RE = re.compile(r"\b\d+\s*ms\b", re.IGNORECASE)
+
+
+def _sanitize_plain_tts(text: str) -> str:
+    """Strip SSML break tags / residual markup / stray 'Nms' so a TTS backend
+    that treats its input as plain text never speaks them. Never raises."""
+    try:
+        s = _BREAK_TAG_RE.sub(" ", str(text or ""))
+        s = _ANY_TAG_RE.sub(" ", s)
+        s = _STRAY_MS_RE.sub(" ", s)
+        s = re.sub(r"\s+([,.!?;:])", r"\1", s)
+        s = re.sub(r"\s{2,}", " ", s)
+        return s.strip()
+    except Exception:
+        return text
+
+
 # Break durations in milliseconds, indexed by pause_style.
 _SSML_BREAK_MS: dict[str, dict[str, int]] = {
     "light": {
@@ -383,7 +409,11 @@ def generate_narration_mp3(
         pause_style=_ct_profile["pause_style"],
         language=language,
     )
-    _ssml_active = _SSML_HUMANIZER_ENABLED and "<break" in _humanized
+    # MS-bug fix: edge-tts Communicate() reads SSML as literal text → strip the
+    # <break .../> tags it can't honour (unless explicitly opted back in).
+    if not _TTS_ALLOW_SSML_BREAKS:
+        _humanized = _sanitize_plain_tts(_humanized)
+    _ssml_active = _TTS_ALLOW_SSML_BREAKS and _SSML_HUMANIZER_ENABLED and "<break" in _humanized
     _rate = _effective_rate_for(rate, content_type)
     logger.info(
         "tts_humanized job_id=%s content_type=%s rate=%s pause_style=%s ssml=%s",
@@ -454,7 +484,7 @@ def generate_narration_audio(
         # which Piper would read literally).
         from app.features.render.engine.audio.tts_piper import synthesize_piper
         _ct = _CONTENT_TYPE_VOICE_PROFILES.get(content_type) or _CONTENT_TYPE_VOICE_PROFILES["vlog"]
-        _h = humanize_narration_text(str(text or "").strip(), pause_style=_ct["pause_style"])
+        _h = _sanitize_plain_tts(humanize_narration_text(str(text or "").strip(), pause_style=_ct["pause_style"]))
         return synthesize_piper(
             text=_h, language=language, gender=gender,
             job_id=job_id, content_type=content_type, output_path=output_path,
@@ -468,7 +498,7 @@ def generate_narration_audio(
             raise RuntimeError("Narration text is empty")
         from app.features.render.engine.audio.tts_xtts import synthesize_xtts
         _ct = _CONTENT_TYPE_VOICE_PROFILES.get(content_type) or _CONTENT_TYPE_VOICE_PROFILES["vlog"]
-        _h = humanize_narration_text(clean, pause_style=_ct["pause_style"])
+        _h = _sanitize_plain_tts(humanize_narration_text(clean, pause_style=_ct["pause_style"]))
         logger.info(
             "xtts_route job_id=%s content_type=%s pause_style=%s language=%s",
             job_id, content_type, _ct["pause_style"], language,

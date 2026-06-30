@@ -65,6 +65,25 @@ from app.features.render.engine.stages.recap_title_card import make_act_title_ca
 
 logger = logging.getLogger("app.render.recap")
 
+# Windows-illegal filename chars (+ control chars). Episode titles come from the
+# AI (e.g. "Tập 1: Mở màn án mạng") and may contain ':' '/' etc.
+import re as _re
+_FS_ILLEGAL_RE = _re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _safe_filename(name: str, max_len: int = 120) -> str:
+    """Make an AI-authored title safe to use as a filename stem. Strips illegal
+    chars, collapses whitespace, trims trailing dots/spaces (Windows), caps
+    length. Returns '' if nothing usable survives. Never raises."""
+    try:
+        s = _FS_ILLEGAL_RE.sub(" ", str(name or ""))
+        s = _re.sub(r"\s+", " ", s).strip().strip(".").strip()
+        if len(s) > max_len:
+            s = s[:max_len].rsplit(" ", 1)[0].strip() or s[:max_len].strip()
+        return s
+    except Exception:
+        return ""
+
 
 def _scored_from_recap_plan(recap_plan) -> list[dict]:
     """Flatten RecapPlan episodes→acts→scenes into the chronological `scored`
@@ -338,9 +357,16 @@ def run_recap(
         except Exception:
             max_workers = 1
 
+        # R6 fix: scenes are INTERNAL intermediates, not deliverables. Render them
+        # into a temp dir so the per-part finalize (which writes
+        # output_dir/<clip_name>.mp4) does NOT scatter 26 named scene files into
+        # the user's save folder. Only the assembled episode video(s) land in the
+        # real output_dir (step 5). The scenes dir is cleaned up after QA.
+        scenes_dir = work_dir / "scenes"
+        scenes_dir.mkdir(parents=True, exist_ok=True)
         _part_ctx = PartRenderContext(
             job_id=job_id, effective_channel=effective_channel, total_parts=total_parts,
-            retry_count=retry_count, work_dir=work_dir, output_dir=output_dir,
+            retry_count=retry_count, work_dir=work_dir, output_dir=scenes_dir,
             source_path=source_path, source=source, output_stem=_output_stem,
             payload=payload, existing_parts={int(x["part_no"]): x for x in list_job_parts(job_id)},
             target_platform=target_platform, tuned=tuned, ffmpeg_threads=1,
@@ -391,6 +417,17 @@ def run_recap(
             _outputs.append(_ep)
         if not _outputs:
             raise RuntimeError("Recap: every episode failed QA")
+
+        # A3: episodes are assembled + validated — the per-scene intermediates in
+        # scenes_dir are no longer needed. Remove them so they don't accumulate.
+        # (On a total failure above we KEEP them for debugging — this only runs
+        # once at least one episode is delivered.)
+        try:
+            import shutil as _shutil
+            _shutil.rmtree(scenes_dir, ignore_errors=True)
+            _job_log(effective_channel, job_id, "recap: cleaned per-scene intermediates", kind="debug")
+        except Exception:
+            pass
 
         # 7. Terminal result_json + DONE -------------------------------------
         # N episode outputs. Episode 1 is "best" by convention; rank follows
@@ -484,6 +521,7 @@ def _assemble_recap_episodes(
 
     ep_titles = {i: (ep.title or "") for i, ep in enumerate(recap_plan.episodes)}
     out_episodes: list[dict] = []
+    _used_names: set[str] = set()
 
     for ep_i in sorted(by_episode.keys()):
         ordered_clips: list[str] = []
@@ -507,8 +545,25 @@ def _assemble_recap_episodes(
         if not ordered_clips:
             continue
 
-        _suffix = "_recap.mp4" if single else f"_recap_ep{ep_i + 1:02d}.mp4"
-        _out = Path(output_dir) / f"{output_stem}{_suffix}"
+        # Filename = "<film> - <AI chapter/episode title>.mp4" (FS-safe). Falls
+        # back to "<film> - Tập N" when the AI left the title empty, and to
+        # "<film> - Recap" for a single untitled episode. Collisions get a numeric
+        # suffix so two episodes never overwrite each other.
+        _ep_title = (ep_titles.get(ep_i) or "").strip()
+        if _ep_title:
+            _label = _ep_title
+        elif single:
+            _label = "Recap"
+        else:
+            _label = f"Tập {ep_i + 1}"
+        _base = _safe_filename(f"{output_stem} - {_label}") or f"{output_stem}_recap_ep{ep_i + 1:02d}"
+        _name = _base
+        _n = 2
+        while _name.lower() in _used_names or (Path(output_dir) / f"{_name}.mp4").exists():
+            _name = f"{_base} ({_n})"
+            _n += 1
+        _used_names.add(_name.lower())
+        _out = Path(output_dir) / f"{_name}.mp4"
         _res = concat_clips(ordered_clips, str(_out), width=width, height=height, fps=fps)
         if not _res.get("ok"):
             _job_log(effective_channel, job_id, f"recap_episode_concat_failed ep={ep_i + 1}", kind="warning")
@@ -521,7 +576,7 @@ def _assemble_recap_episodes(
         )
         out_episodes.append({
             "episode_index": ep_i,
-            "title": ep_titles.get(ep_i, "") or (None if single else f"Recap — Tập {ep_i + 1}"),
+            "title": ep_titles.get(ep_i, "") or (None if single else f"Tập {ep_i + 1}"),
             "path": str(_out),
         })
 

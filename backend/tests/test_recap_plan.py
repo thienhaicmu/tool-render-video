@@ -450,3 +450,61 @@ def test_recap_parser_caps_episode_count():
     assert plan is not None
     assert plan.episode_count() <= rp._RECAP_MAX_EPISODES
     assert plan.scene_count() == 7                     # every scene survives
+
+
+# ── R6 fix: recap delivers EPISODES (not per-scene parts) via /api/outputs ────
+
+def test_recap_outputs_returns_episodes_not_parts():
+    """A recap job's /api/outputs must surface the assembled EPISODES from
+    result_json, not the 26 internal per-scene job_parts."""
+    from app.routes.outputs import _recap_episode_items
+    job = {
+        "payload_json": json.dumps({"render_format": "recap"}),
+        "result_json": json.dumps({"render_format": "recap", "outputs": [
+            {"part_no": 1, "episode_no": 1, "title": "Tập 1", "duration": 90.0,
+             "output_file": "/no/such/ep1.mp4", "output_rank_score": 100.0,
+             "is_best_output": True},
+            {"part_no": 2, "episode_no": 2, "title": "Tập 2", "duration": 88.0,
+             "output_file": "/no/such/ep2.mp4", "output_rank_score": 99.0,
+             "is_best_output": False},
+        ]}),
+    }
+    items = _recap_episode_items(job)
+    assert items is not None and len(items) == 2
+    assert items[0]["episode_no"] == 1 and items[0]["is_best_output"] is True
+    assert items[0]["part_name"] == "Tập 1"
+    # a clips job → None (falls back to job_parts path, unchanged)
+    clip_job = {"payload_json": json.dumps({"render_format": "clips"}), "result_json": "{}"}
+    assert _recap_episode_items(clip_job) is None
+    # recap with no outputs yet → None
+    empty = {"payload_json": json.dumps({"render_format": "recap"}), "result_json": "{}"}
+    assert _recap_episode_items(empty) is None
+
+
+# ── R6 fix: "MS" bug — TTS must never speak SSML <break> tags ─────────────────
+
+def test_sanitize_plain_tts_strips_ssml_break_and_ms():
+    """edge-tts reads SSML as plain text → <break time='500ms'/> was spoken as
+    'ms'. The sanitizer must remove break tags, residual markup and stray Nms."""
+    from app.features.render.engine.audio.tts import _sanitize_plain_tts as f
+    assert "ms" not in f("a <break time='500ms'/> b").lower()
+    assert "<break" not in f("x <break time='300ms'/> y")
+    assert "500ms" not in f("dừng 500ms rồi đi")
+    assert "<" not in f("a <emphasis>b</emphasis> c")     # any residual markup
+    # clean narration is untouched (no false positives)
+    assert f("Nam tưởng mọi chuyện đã yên.") == "Nam tưởng mọi chuyện đã yên."
+
+
+# ── R6 fix: episode files named by AI chapter title, not "_recap_ep01" ────────
+
+def test_recap_episode_filename_is_fs_safe():
+    """Episode output filenames use the AI chapter title and must be filesystem
+    safe (no Windows-illegal chars, no trailing dot, length-capped)."""
+    from app.features.render.engine.pipeline.recap_pipeline import _safe_filename as f
+    out = f('Hidden Weapons - Tập 1: Mở màn án mạng')
+    assert ":" not in out and "/" not in out and "\\" not in out
+    assert "Tập 1" in out and "Mở màn" in out          # title preserved (minus ':')
+    assert f("a/b\\c:d") and "/" not in f("a/b\\c:d")  # illegal chars stripped
+    assert f("trailing dots...") == "trailing dots"     # Windows trailing-dot trim
+    assert f("") == "" and f("::::") == ""              # nothing usable → empty
+    assert len(f("x" * 500)) <= 120                     # length cap
