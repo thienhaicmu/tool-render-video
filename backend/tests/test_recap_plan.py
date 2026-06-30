@@ -415,8 +415,10 @@ def test_story_model_from_dict_defensive():
         "climax": "Đối mặt", "ending": "Công lý",
     })
     assert sm.summary == "Nam tìm sự thật."
-    assert sm.characters == ["Nam — thám tử", "Lan — nghi phạm"]   # blanks/None dropped
-    assert sm.beats == ["a single string becomes one beat"]
+    # v2: characters coerce to Character entities; v1 "name — role" string parsed.
+    assert [c.name for c in sm.characters] == ["Nam", "Lan"]   # blanks/None dropped
+    assert sm.characters[0].role == "thám tử" and sm.characters[1].role == "nghi phạm"
+    assert [b.text for b in sm.beats] == ["a single string becomes one beat"]
     # garbage in → empty model, never raises
     assert story_model_from_dict(None) == StoryModel()
     assert story_model_from_dict("nope") == StoryModel()
@@ -431,11 +433,13 @@ def test_recapplan_nested_story_roundtrips():
     })
     p = RecapPlan.from_json(raw)
     assert p is not None
-    assert p.story.summary == "S" and p.story.characters == ["A", "B"]
-    assert p.story.beats == ["x", "y"] and p.story.climax == "C" and p.story.ending == "E"
+    assert p.story.summary == "S"
+    assert [c.name for c in p.story.characters] == ["A", "B"]   # v2 entities
+    assert [b.text for b in p.story.beats] == ["x", "y"]
+    assert p.story.climax == "C" and p.story.ending == "E"
     assert p.story_summary == "S"                       # back-compat property
-    # deterministic round-trip preserves the nested story
-    assert RecapPlan.from_json(p.to_json()).story.beats == ["x", "y"]
+    # deterministic round-trip preserves the nested story (entities → dict → entities)
+    assert [b.text for b in RecapPlan.from_json(p.to_json()).story.beats] == ["x", "y"]
 
 
 def test_recapplan_v1_flat_story_summary_wraps_into_story():
@@ -454,7 +458,7 @@ def test_parse_story_model_response_ok():
     })
     sm = parse_story_model_response(raw)
     assert sm is not None and sm.summary == "Một vụ án mạng."
-    assert sm.characters == ["Nam", "Lan"] and len(sm.beats) == 2
+    assert [c.name for c in sm.characters] == ["Nam", "Lan"] and len(sm.beats) == 2
 
 
 def test_parse_story_model_response_salvages_truncated():
@@ -671,3 +675,272 @@ def test_recap_thumbnail_resolves_to_episode_file():
     # clips job → None (routes fall back to job_parts, unchanged)
     clip = {"payload_json": json.dumps({"render_format": "clips"}), "result_json": "{}"}
     assert g(clip, 1) is None
+
+
+# ── Phase 1 (2026-06-30 architecture review): two-pass prompt trimming + aliases ──
+
+def test_recap_prompt_drops_story_summary_when_two_pass():
+    """When a Story Model is supplied (two-pass), pass-2 must NOT re-ask for
+    story_summary / THINK FIRST — it's already injected and authoritative."""
+    sm = StoryModel(summary="S", characters=["Nam — detective"], beats=["b1"],
+                    climax="c", ending="e")
+    _, two_pass = build_recap_prompt("[0-30] x", 1800.0, "vi-VN", story_model=sm)
+    assert "STORY MODEL" in two_pass            # pass-1 understanding injected
+    assert "story_summary" not in two_pass      # not re-requested in two-pass
+    assert "THINK FIRST" not in two_pass
+    assert "{{" not in two_pass and "}}" not in two_pass  # no format-brace leak
+    # Single-pass keeps both (back-compat, unchanged behaviour).
+    _, single = build_recap_prompt("[0-30] x", 1800.0, "vi-VN")
+    assert "story_summary" in single and "THINK FIRST" in single
+    assert "{{" not in single and "}}" not in single
+
+
+def test_recap_prompt_empty_story_model_stays_single_pass():
+    """An empty StoryModel yields no block → behave exactly like single-pass."""
+    _, u = build_recap_prompt("[0-30] x", 1800.0, "vi-VN", story_model=StoryModel())
+    assert "STORY MODEL" not in u
+    assert "story_summary" in u and "THINK FIRST" in u
+
+
+def test_beat_naming_aliases():
+    """Act.act_phase aliases Act.beat (structural phase); StoryModel.plot_turns
+    aliases StoryModel.beats (plot turns). Wire keys stay beat/beats."""
+    from app.domain.recap_plan import Act
+    act = Act(title="t", beat="climax")
+    assert act.act_phase == "climax"
+    sm = StoryModel(beats=["turn1", "turn2"])
+    assert sm.plot_turns == ["turn1", "turn2"]
+    # Aliases are read-only properties → not serialised (wire keys unchanged).
+    plan = RecapPlan.from_json(json.dumps({"story": {"beats": ["x"]},
+        "episodes": [{"acts": [{"beat": "setup", "scenes": [{"start": 0, "end": 30}]}]}]}))
+    blob = plan.to_json()
+    assert '"beat":"setup"' in blob               # act phase → wire key stays "beat"
+    assert '"beats":[{' in blob and '"text":"x"' in blob  # story beats → "beats" (v2 entities)
+    assert "act_phase" not in blob and "plot_turns" not in blob
+
+
+def test_recap_two_pass_metrics_emit_without_key():
+    """Dispatcher records pass outcomes even with no API key (all None). The
+    metric helpers must never raise (observation only, Sacred #3 spirit)."""
+    from app.features.render.ai.llm import (
+        select_recap_plan, select_story_model, _inc_recap_pass, _inc_recap_two_pass,
+    )
+    _inc_recap_pass("story", "empty")          # smoke: never raises
+    _inc_recap_two_pass(False, "empty")
+    assert select_story_model(provider="gemini", srt_content="[0-5] x",
+                              video_duration=5.0, api_key="") is None
+    assert select_recap_plan(provider="gemini", srt_content="[0-5] x",
+                             video_duration=5.0, api_key="") is None
+
+
+# ── Phase 2 (2026-06-30 review): StoryModel v2 — entities + richer fields ─────
+
+def test_storymodel_v2_entities_and_new_fields_roundtrip():
+    from app.domain.recap_plan import Character, StoryBeat
+    raw = json.dumps({"story": {
+        "schema_version": 2,
+        "summary": "S", "theme": "revenge", "genre": "thriller",
+        "conflict": "Nam vs the syndicate", "resolution": "truth exposed",
+        "characters": [{"name": "Nam", "role": "detective", "want": "justice"}],
+        "beats": [{"text": "the body is found", "t": 12.5, "kind": "setup"}],
+        "emotional_curve": ["calm", "dread", "catharsis"],
+        "climax": "C", "ending": "E",
+    }, "episodes": [{"acts": [{"scenes": [{"start": 0, "end": 30}]}]}]})
+    p = RecapPlan.from_json(raw)
+    assert p is not None
+    sm = p.story
+    assert sm.schema_version == 2 and sm.theme == "revenge" and sm.genre == "thriller"
+    assert sm.conflict.startswith("Nam") and sm.resolution == "truth exposed"
+    assert sm.emotional_curve == ["calm", "dread", "catharsis"]
+    assert isinstance(sm.characters[0], Character) and sm.characters[0].want == "justice"
+    assert isinstance(sm.beats[0], StoryBeat) and sm.beats[0].t == 12.5 and sm.beats[0].kind == "setup"
+    p2 = RecapPlan.from_json(p.to_json())
+    assert p2.story.theme == "revenge" and p2.story.characters[0].name == "Nam"
+    assert p2.story.beats[0].t == 12.5
+
+
+def test_storymodel_v1_strings_upgrade_to_entities():
+    """A persisted v1 blob (flat-string characters/beats) must load as v2 entities."""
+    from app.domain.recap_plan import story_model_from_dict, Character, StoryBeat
+    sm = story_model_from_dict({
+        "characters": ["Nam — detective", "Lan"],
+        "beats": ["opening", "twist"],
+    })
+    assert all(isinstance(c, Character) for c in sm.characters)
+    assert sm.characters[0].name == "Nam" and sm.characters[0].role == "detective"
+    assert sm.characters[1].name == "Lan" and sm.characters[1].role == ""
+    assert all(isinstance(b, StoryBeat) for b in sm.beats)
+    assert [b.text for b in sm.beats] == ["opening", "twist"]
+    assert sm.schema_version == 2
+
+
+def test_storymodel_to_public_dict_is_json_safe():
+    from app.domain.recap_plan import StoryModel, Character, StoryBeat
+    sm = StoryModel(summary="s", characters=[Character(name="N", role="r", want="w")],
+                    beats=[StoryBeat(text="b", t=3.0, kind="turn")], theme="t",
+                    emotional_curve=["a", "b"])
+    d = sm.to_public_dict()
+    blob = json.dumps(d)
+    assert '"name": "N"' in blob and '"theme": "t"' in blob
+    assert d["beats"][0]["t"] == 3.0
+
+
+def test_storymodel_entity_str_for_prompt():
+    from app.domain.recap_plan import Character, StoryBeat
+    assert str(Character(name="Nam", role="detective", want="justice")) == "Nam — detective (wants justice)"
+    assert str(Character(name="Lan")) == "Lan"
+    assert str(StoryBeat(text="the reveal", t=42.0)) == "[42s] the reveal"
+    assert str(StoryBeat(text="unanchored")) == "unanchored"
+
+
+def test_storymodel_is_empty_respects_new_fields():
+    from app.domain.recap_plan import StoryModel
+    assert StoryModel().is_empty()
+    assert not StoryModel(theme="x").is_empty()
+    assert not StoryModel(emotional_curve=["a"]).is_empty()
+
+
+def test_story_prompt_requests_v2_entity_schema():
+    _, user = build_story_model_prompt("[0-30] x", 1800.0, "vi-VN")
+    for key in ('"theme"', '"conflict"', '"resolution"', '"emotional_curve"', '"want"', '"kind"'):
+        assert key in user
+    assert "{{" not in user and "}}" not in user
+
+
+def test_recap_story_block_renders_v2_fields():
+    from app.features.render.ai.llm.recap_prompts import _story_block
+    from app.domain.recap_plan import StoryModel, Character, StoryBeat
+    sm = StoryModel(summary="S", theme="revenge", conflict="X vs Y",
+                    characters=[Character(name="Nam", role="cop")],
+                    beats=[StoryBeat(text="reveal", t=10.0)],
+                    emotional_curve=["hope", "dread"])
+    block = _story_block(sm)
+    assert "THEME: revenge" in block and "CONFLICT: X vs Y" in block
+    assert "Nam — cop" in block and "[10s] reveal" in block
+    assert "EMOTIONAL CURVE: hope → dread" in block
+
+
+# ── Phase 3 (2026-06-30 review): Editorial Blueprint (story → editorial → bind) ─
+
+def test_editorial_blueprint_roundtrip_and_defensive():
+    from app.domain.recap_plan import (
+        EditorialBlueprint, EditorialBeat, editorial_blueprint_from_dict,
+    )
+    raw = {
+        "schema_version": 1, "episode_count": 3,
+        "episode_rationale": "breaks at the two time jumps",
+        "pacing": "slow burn then accelerate",
+        "beats": [
+            {"summary": "the body is found", "story_role": "setup",
+             "emotional_intent": "unease", "treatment": "narrate"},
+            {"summary": "the killer confesses", "story_role": "climax",
+             "emotional_intent": "shock", "treatment": "hold"},
+        ],
+    }
+    eb = editorial_blueprint_from_dict(raw)
+    assert eb.episode_count == 3 and eb.pacing.startswith("slow")
+    assert isinstance(eb.beats[0], EditorialBeat)
+    assert eb.beats[1].treatment == "hold" and eb.beats[1].story_role == "climax"
+    # defensive: garbage → empty, never raises
+    assert editorial_blueprint_from_dict(None) == EditorialBlueprint()
+    assert editorial_blueprint_from_dict("nope") == EditorialBlueprint()
+    # treatment normalisation + string-beat coercion
+    eb2 = editorial_blueprint_from_dict({"episode_count": 1, "beats": ["just a moment",
+        {"summary": "x", "treatment": "ORIGINAL"}]})
+    assert eb2.beats[0].summary == "just a moment" and eb2.beats[0].treatment == "narrate"
+    assert eb2.beats[1].treatment == "hold"
+
+
+def test_recapplan_carries_editorial_and_bumps_schema():
+    from app.domain.recap_plan import SCHEMA_VERSION
+    assert SCHEMA_VERSION == 4
+    raw = json.dumps({
+        "editorial": {"episode_count": 2, "pacing": "p",
+                      "beats": [{"summary": "b", "treatment": "hold"}]},
+        "episodes": [{"acts": [{"scenes": [{"start": 0, "end": 30}]}]}],
+    })
+    p = RecapPlan.from_json(raw)
+    assert p is not None and p.editorial.episode_count == 2
+    assert p.editorial.beats[0].treatment == "hold"
+    # deterministic round-trip preserves the editorial blueprint
+    p2 = RecapPlan.from_json(p.to_json())
+    assert p2.editorial.episode_count == 2 and p2.editorial.pacing == "p"
+    # legacy blob without "editorial" → default-empty, no error
+    legacy = RecapPlan.from_json(json.dumps({"acts": [{"scenes": [{"start": 0, "end": 30}]}]}))
+    assert legacy is not None and legacy.editorial.is_empty()
+
+
+def test_editorial_to_public_dict_json_safe():
+    from app.domain.recap_plan import EditorialBlueprint, EditorialBeat
+    eb = EditorialBlueprint(episode_count=2, pacing="p",
+                            beats=[EditorialBeat(summary="s", story_role="climax",
+                                                 emotional_intent="awe", treatment="hold")])
+    blob = json.dumps(eb.to_public_dict())          # must not raise
+    assert '"treatment": "hold"' in blob and '"episode_count": 2' in blob
+
+
+def test_parse_editorial_response_ok_salvage_and_none_safe():
+    from app.features.render.ai.llm.recap_parser import parse_editorial_response
+    ok = json.dumps({"episode_count": 2, "pacing": "p",
+                     "beats": [{"summary": "b", "treatment": "hold"}]})
+    eb = parse_editorial_response(ok)
+    assert eb is not None and eb.episode_count == 2 and eb.beats[0].treatment == "hold"
+    # truncated → salvaged
+    trunc = '{"episode_count":2,"pacing":"slow","beats":[{"summary":"the rev'
+    assert parse_editorial_response(trunc) is not None
+    # none-safe
+    assert parse_editorial_response("") is None
+    assert parse_editorial_response("no json") is None
+    assert parse_editorial_response("{}") is None
+
+
+def test_build_editorial_prompt_shape():
+    from app.features.render.ai.llm.recap_prompts import build_editorial_prompt
+    from app.domain.recap_plan import StoryModel, Character, StoryBeat
+    sm = StoryModel(summary="S", characters=[Character(name="Nam")],
+                    beats=[StoryBeat(text="b")], emotional_curve=["hope", "dread"])
+    system, user = build_editorial_prompt(sm, 1800.0, "vi-VN")
+    assert "editor" in system.lower() or "show-runner" in system.lower()
+    for key in ('"episode_count"', '"episode_rationale"', '"pacing"', '"treatment"', '"story_role"'):
+        assert key in user
+    assert "STORY UNDERSTANDING" in user                 # story injected as input
+    assert "{{" not in user and "}}" not in user         # no format-brace leak
+
+
+def test_build_recap_prompt_injects_editorial_and_overrides_episodes():
+    from app.domain.recap_plan import EditorialBlueprint, EditorialBeat
+    eb = EditorialBlueprint(episode_count=2, episode_rationale="break at midpoint",
+                            pacing="slow build", beats=[EditorialBeat(
+                                summary="reveal", story_role="climax",
+                                emotional_intent="shock", treatment="hold")])
+    _, user = build_recap_prompt("[0-30] x", 6000.0, "vi-VN", editorial=eb)
+    assert "EDITORIAL PLAN" in user and "EPISODES: 2" in user
+    assert "reveal" in user and "hold" in user
+    assert "EXACTLY 2 episodes" in user                  # episode_count overrides heuristic
+    assert "{{" not in user and "}}" not in user
+    # no editorial supplied → no editorial block
+    _, plain = build_recap_prompt("[0-30] x", 6000.0, "vi-VN")
+    assert "EDITORIAL PLAN" not in plain
+
+
+def test_editorial_block_format_safe():
+    from app.features.render.ai.llm.recap_prompts import build_recap_prompt
+    from app.domain.recap_plan import EditorialBlueprint, EditorialBeat
+    eb = EditorialBlueprint(episode_count=1, pacing="keep {tight}",
+                            beats=[EditorialBeat(summary="a }b{ c", treatment="narrate")])
+    _, user = build_recap_prompt("[0-30] x", 1800.0, "vi-VN", editorial=eb)
+    assert "keep (tight)" in user and "a )b( c" in user  # braces neutralised
+    assert "{{" not in user and "}}" not in user
+
+
+def test_editorial_dispatch_helpers_none_safe():
+    from app.features.render.ai.llm import (
+        select_editorial_blueprint, _get_editorial_impl, _RECAP_EDITORIAL_PASS,
+    )
+    from app.domain.recap_plan import StoryModel
+    assert _get_editorial_impl("gemini") is not None      # gemini has a pass-2 impl
+    assert isinstance(_RECAP_EDITORIAL_PASS, bool)        # flag exists (default off)
+    # no story model → None; no api key → None (no network)
+    assert select_editorial_blueprint(provider="gemini", story_model=None, video_duration=5.0) is None
+    assert select_editorial_blueprint(provider="gemini", story_model=StoryModel(summary="s"),
+                                      video_duration=5.0, api_key="") is None

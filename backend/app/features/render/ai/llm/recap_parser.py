@@ -12,7 +12,13 @@ import logging
 import re
 from typing import Optional
 
-from app.domain.recap_plan import RecapPlan, StoryModel, story_model_from_dict
+from app.domain.recap_plan import (
+    EditorialBlueprint,
+    RecapPlan,
+    StoryModel,
+    editorial_blueprint_from_dict,
+    story_model_from_dict,
+)
 
 logger = logging.getLogger("app.render.llm_recap_parser")
 
@@ -317,12 +323,68 @@ def parse_story_model_response(raw: str) -> Optional[StoryModel]:
             logger.warning("recap_parser: no story model JSON found")
             return None
         sm = story_model_from_dict(data)
-        if not (sm.summary or sm.characters or sm.beats or sm.climax or sm.ending):
+        if sm.is_empty():
             logger.warning("recap_parser: story model empty after cleaning")
             return None
         return sm
     except Exception as exc:
         logger.warning("recap_parser: story model parse error %s", exc, exc_info=True)
+        return None
+
+
+def _salvage_editorial(raw: str) -> Optional[dict]:
+    """Recover an Editorial Blueprint dict from a TRUNCATED pass-2 response.
+    Balance-close the prefix, progressively trimming to earlier '}' boundaries.
+    Returns the first dict carrying any EditorialBlueprint key. Never raises."""
+    try:
+        i = raw.find("{")
+        if i < 0:
+            return None
+        s = raw[i:]
+        candidates = [_balance_close(s)]
+        pos = len(s)
+        for _ in range(8):
+            j = s.rfind("}", 0, pos)
+            if j < 0:
+                break
+            candidates.append(_balance_close(s[: j + 1]))
+            pos = j
+        for cand in candidates:
+            try:
+                d = json.loads(cand)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(d, dict) and any(
+                k in d for k in ("episode_count", "episode_rationale", "pacing", "beats")
+            ):
+                return d
+        return None
+    except Exception:
+        return None
+
+
+def parse_editorial_response(raw: str) -> Optional[EditorialBlueprint]:
+    """Parse the pass-2 Editorial Blueprint LLM response into an EditorialBlueprint.
+    Returns None on any failure or when nothing usable was produced (Sacred #3)."""
+    try:
+        if not raw or not str(raw).strip():
+            return None
+        text = _strip_wrappers(str(raw).strip())
+        data = _extract_json_object(text)
+        if not isinstance(data, dict):
+            data = _salvage_editorial(text)
+            if isinstance(data, dict):
+                logger.warning("recap_parser: editorial response was truncated — salvaged")
+        if not isinstance(data, dict):
+            logger.warning("recap_parser: no editorial JSON found")
+            return None
+        eb = editorial_blueprint_from_dict(data)
+        if eb.is_empty():
+            logger.warning("recap_parser: editorial blueprint empty after cleaning")
+            return None
+        return eb
+    except Exception as exc:
+        logger.warning("recap_parser: editorial parse error %s", exc, exc_info=True)
         return None
 
 

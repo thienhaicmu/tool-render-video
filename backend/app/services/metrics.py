@@ -165,6 +165,25 @@ if _AVAILABLE:
         registry=REGISTRY,
     )
 
+    # R7 recap two-pass observability (2026-06-30 architecture review, Phase 1).
+    # LLM_RECAP_PASS_CALLS — outcome of each recap pass (pass-1 story model
+    # health + pass-2 scene selection). Label `phase` is story|recap (NOT `pass`
+    # — that's a Python keyword and breaks .labels(**)). status: success|empty.
+    LLM_RECAP_PASS_CALLS = Counter(
+        "llm_recap_pass_calls_total",
+        "Recap two-pass LLM calls by phase and outcome",
+        ["phase", "status"],   # phase: story | recap ; status: success | empty
+        registry=REGISTRY,
+    )
+    # LLM_RECAP_TWO_PASS_TOTAL — pass-2 outcome split by whether a pass-1 story
+    # model was available, so the two-pass quality uplift is measurable directly.
+    LLM_RECAP_TWO_PASS_TOTAL = Counter(
+        "llm_recap_two_pass_total",
+        "Recap selection outcome by whether a pass-1 story model was available",
+        ["story_model", "status"],   # story_model: yes|no ; status: success|empty
+        registry=REGISTRY,
+    )
+
     # AI rewrite (voice_source="ai_rewrite") — per-part LLM call that
     # rewrites the per-part transcript into TTS narration sized for the
     # clip duration. Mirrors LLM_RENDER_PLAN_* shape so dashboards can
@@ -284,6 +303,8 @@ else:
     LLM_RENDER_PLAN_CALLS = _NoOpMetric()     # type: ignore[assignment]
     LLM_RENDER_PLAN_LATENCY = _NoOpMetric()   # type: ignore[assignment]
     LLM_SEGMENTS_SELECTED = _NoOpMetric()     # type: ignore[assignment]
+    LLM_RECAP_PASS_CALLS = _NoOpMetric()      # type: ignore[assignment]
+    LLM_RECAP_TWO_PASS_TOTAL = _NoOpMetric()  # type: ignore[assignment]
     LLM_REWRITE_CALLS = _NoOpMetric()         # type: ignore[assignment]
     LLM_REWRITE_LATENCY = _NoOpMetric()       # type: ignore[assignment]
     LLM_REWRITE_CHAR_DELTA = _NoOpMetric()    # type: ignore[assignment]

@@ -34,6 +34,31 @@ _LLM_FALLBACK_ENABLED: bool = os.getenv("LLM_FALLBACK_ENABLED", "1") == "1"
 # code revert). Pass-1 failure is non-fatal: the plan falls back to single-pass.
 _RECAP_TWO_PASS: bool = os.getenv("RECAP_TWO_PASS", "1") == "1"
 
+# R7.3 editorial pass: when ON (and two-pass produced a Story Model), a pass-2
+# "Editorial Blueprint" call plans HOW to tell the recap FROM the Story Model
+# (cheap — no transcript) before scene binding. Default OFF — set
+# RECAP_EDITORIAL_PASS=1 to enable. Failure is non-fatal: binding proceeds
+# without the blueprint (Sacred Contract #3).
+_RECAP_EDITORIAL_PASS: bool = os.getenv("RECAP_EDITORIAL_PASS", "0") == "1"
+
+
+def _inc_recap_pass(phase: str, status: str) -> None:
+    """Best-effort recap two-pass metric — never raises (observation only)."""
+    try:
+        from app.services.metrics import LLM_RECAP_PASS_CALLS
+        LLM_RECAP_PASS_CALLS.labels(phase=phase, status=status).inc()
+    except Exception:
+        pass
+
+
+def _inc_recap_two_pass(has_story: bool, status: str) -> None:
+    """Best-effort pass-2-outcome-by-story-availability metric — never raises."""
+    try:
+        from app.services.metrics import LLM_RECAP_TWO_PASS_TOTAL
+        LLM_RECAP_TWO_PASS_TOTAL.labels(story_model="yes" if has_story else "no", status=status).inc()
+    except Exception:
+        pass
+
 
 def _get_provider_impl(provider_name: str):
     """Return the select_render_plan callable for the named provider."""
@@ -79,6 +104,22 @@ def _get_story_impl(provider_name: str):
         return None
 
 
+def _get_editorial_impl(provider_name: str):
+    """Return the select_editorial_blueprint (pass-2) callable for the named
+    provider, or None if that provider has no pass-2 impl. Defensive — never raises."""
+    try:
+        if provider_name == "openai":
+            from app.features.render.ai.llm.providers import openai as _mod
+        elif provider_name == "claude":
+            from app.features.render.ai.llm.providers import claude as _mod
+        else:
+            from app.features.render.ai.llm.providers import gemini as _mod
+        return getattr(_mod, "select_editorial_blueprint", None)
+    except Exception as exc:
+        logger.warning("llm: _get_editorial_impl(%s) import failed %s", provider_name, exc)
+        return None
+
+
 def select_story_model(
     *,
     provider: str = DEFAULT_PROVIDER,
@@ -114,7 +155,52 @@ def select_story_model(
         if result is not None:
             if _p != primary:
                 logger.info("llm: story fallback succeeded provider=%s (primary=%s None)", _p, primary)
+            _inc_recap_pass("story", "success")
             return result
+    _inc_recap_pass("story", "empty")
+    return None
+
+
+def select_editorial_blueprint(
+    *,
+    provider: str = DEFAULT_PROVIDER,
+    story_model,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+):
+    """Dispatch pass-2 Editorial Blueprint selection to a provider. Returns an
+    EditorialBlueprint or None (Sacred Contract #3). With LLM_FALLBACK_ENABLED,
+    providers that have a pass-2 impl are tried in order until one yields a plan."""
+    if story_model is None:
+        return None
+    primary = (provider or DEFAULT_PROVIDER).strip().lower()
+    if primary not in SUPPORTED_PROVIDERS:
+        primary = "gemini"
+    chain = [primary]
+    if _LLM_FALLBACK_ENABLED:
+        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    kwargs = dict(
+        story_model=story_model, video_duration=video_duration,
+        target_language=target_language, tone=tone, api_key=api_key, model=model,
+    )
+    for _p in chain:
+        impl = _get_editorial_impl(_p)
+        if impl is None:
+            continue
+        try:
+            result = impl(**kwargs)
+        except Exception as exc:  # defensive — provider modules already never raise
+            logger.warning("llm: select_editorial_blueprint provider=%s raised %s", _p, exc)
+            result = None
+        if result is not None:
+            if _p != primary:
+                logger.info("llm: editorial fallback succeeded provider=%s (primary=%s None)", _p, primary)
+            _inc_recap_pass("editorial", "success")
+            return result
+    _inc_recap_pass("editorial", "empty")
     return None
 
 
@@ -154,6 +240,20 @@ def select_recap_plan(
             logger.warning("llm: pass-1 story model raised %s — single-pass", exc)
             story_model = None
         logger.info("llm: recap two-pass enabled story_model=%s", story_model is not None)
+    # R7.3 pass-2: build the Editorial Blueprint FROM the Story Model (best-effort,
+    # gated on the flag + a non-empty story model). None → binding proceeds without
+    # it, so a flaky pass-2 never blocks a render (Sacred Contract #3).
+    editorial = None
+    if _RECAP_EDITORIAL_PASS and story_model is not None:
+        try:
+            editorial = select_editorial_blueprint(
+                provider=primary, story_model=story_model, video_duration=video_duration,
+                target_language=target_language, tone=tone, api_key=api_key, model=model,
+            )
+        except Exception as exc:
+            logger.warning("llm: pass-2 editorial raised %s — binding without it", exc)
+            editorial = None
+        logger.info("llm: recap editorial-pass enabled editorial=%s", editorial is not None)
     kwargs = dict(
         srt_content=srt_content,
         video_duration=video_duration,
@@ -162,7 +262,9 @@ def select_recap_plan(
         api_key=api_key,
         model=model,
         story_model=story_model,
+        editorial=editorial,
     )
+    _has_story = story_model is not None
     for _p in chain:
         try:
             result = _get_recap_impl(_p)(**kwargs)
@@ -172,8 +274,12 @@ def select_recap_plan(
         if result is not None:
             if _p != primary:
                 logger.info("llm: recap fallback succeeded provider=%s (primary=%s None)", _p, primary)
+            _inc_recap_pass("recap", "success")
+            _inc_recap_two_pass(_has_story, "success")
             return result
         logger.warning("llm: recap provider=%s returned None", _p)
+    _inc_recap_pass("recap", "empty")
+    _inc_recap_two_pass(_has_story, "empty")
     return None
 
 

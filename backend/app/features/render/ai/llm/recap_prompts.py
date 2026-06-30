@@ -55,7 +55,7 @@ _USER_TEMPLATE_RECAP = """═══ TRANSCRIPT (seconds into the film) ═══
 NARRATION LANGUAGE: {lang_name}
 FILM DURATION:      {video_duration:.0f} seconds (~{video_minutes:.0f} min)
 CREATOR TONE:       {tone_clause}
-{story_block}
+{story_block}{editorial_block}
 ═══ HOW TO WORK ═══
 1. Read the timestamped transcript below — the numbers are SECONDS into the film.
 2. Select the KEY scenes that, in order, tell the whole story. Skip filler.
@@ -93,14 +93,7 @@ CREATOR TONE:       {tone_clause}
 10. Mark is_climax=true for the few peak/turning-point scenes.
 11. Preserve every key fact, name, and number — your recap retells, it never
    fabricates. Keep the SAME chronological order and plot as the film.
-
-═══ THINK FIRST (fill story_summary before anything else) ═══
-Before selecting scenes, mentally reconstruct the WHOLE film: who the characters
-are, what they want, the central conflict, the key turns, and the ending. Capture
-it in `story_summary` (3-6 sentences). Then split episodes + select scenes + write
-narration that SERVE that through-line. This prevents a recap that just samples
-the opening.
-
+{think_first_block}
 ═══ NARRATION QUALITY BAR ═══
 GOOD narration: "Nam tưởng mọi chuyện đã yên — cho đến khi viên cảnh sát lật hồ sơ
 chiếc xe. Một cái tên hiện ra, và mọi lời nói dối bắt đầu sụp đổ."
@@ -112,8 +105,7 @@ scene's line flows from the previous one.
 
 ═══ OUTPUT FORMAT (STRICT — return ONLY this JSON) ═══
 {{
-  "story_summary": "<3-6 câu tóm tắt toàn phim ({lang_name}) — bạn hiểu gì về phim>",
-  "total_target_sec": <float>,
+{story_summary_line}  "total_target_sec": <float>,
   "episodes": [
     {{
       "title": "<episode title, e.g. 'Tập 1: ...'>",
@@ -150,6 +142,20 @@ scene's line flows from the previous one.
 """
 
 
+# Single-pass "think first" block. Only injected when NO pass-1 Story Model is
+# supplied — in two-pass mode the committed StoryModel is already injected via
+# {story_block}, so asking the model to re-reconstruct + re-emit story_summary
+# just wastes output tokens (the field is overwritten by plan.story downstream).
+_THINK_FIRST_SECTION = (
+    "═══ THINK FIRST (fill story_summary before anything else) ═══\n"
+    "Before selecting scenes, mentally reconstruct the WHOLE film: who the characters\n"
+    "are, what they want, the central conflict, the key turns, and the ending. Capture\n"
+    "it in `story_summary` (3-6 sentences). Then split episodes + select scenes + write\n"
+    "narration that SERVE that through-line. This prevents a recap that just samples\n"
+    "the opening."
+)
+
+
 # ── R7 pass-1: Story Model (whole-film understanding) ────────────────────────
 _SYSTEM_STORY = (
     "You are an expert film analyst. You READ THE WHOLE film transcript and "
@@ -170,16 +176,31 @@ BEFORE any editing. Write in {lang_name}. Base everything on the transcript abov
 ═══ OUTPUT FORMAT (STRICT — return ONLY this JSON) ═══
 {{
   "summary": "<3-6 sentence whole-film synopsis in {lang_name}>",
-  "characters": ["<principal characters: 'name — role/what they want'>"],
-  "beats": ["<key plot turns in CHRONOLOGICAL order, short lines, in {lang_name}>"],
+  "theme": "<the central theme, one line in {lang_name}>",
+  "genre": "<genre / tone, short>",
+  "conflict": "<the central conflict driving the film, one line in {lang_name}>",
+  "resolution": "<how that conflict resolves, one line in {lang_name}>",
+  "characters": [
+    {{ "name": "<character name>", "role": "<who they are / their function>",
+       "want": "<what they want — the motor of their arc>" }}
+  ],
+  "beats": [
+    {{ "text": "<key plot turn, short, in {lang_name}>",
+       "t": <approx second into the film, or -1 if unsure>,
+       "kind": "setup|turn|reveal|climax|resolution" }}
+  ],
+  "emotional_curve": ["<emotion per phase, ORDERED setup→ending, e.g. 'hope','dread','catharsis'>"],
   "climax": "<the single peak / turning point, one line in {lang_name}>",
   "ending": "<how the film resolves, one line in {lang_name}>"
 }}
 
 ═══ HARD RULES ═══
 1. ONE JSON object. No markdown, no prose, no code fences.
-2. Every field present. characters + beats are non-empty arrays.
-3. Retell, never fabricate — preserve names, facts, chronology.
+2. Every field present. characters + beats are non-empty arrays of OBJECTS (not
+   bare strings). emotional_curve is a non-empty ordered array of short strings.
+3. beats in CHRONOLOGICAL order; set "t" to the approximate transcript second
+   (use -1 only when genuinely unknown).
+4. Retell, never fabricate — preserve names, facts, chronology.
 
 ═══ OUTPUT JSON ═══
 """
@@ -194,22 +215,37 @@ def _story_block(story_model) -> str:
         return ""
     try:
         summary = (getattr(story_model, "summary", "") or "").strip()
-        characters = [c for c in (getattr(story_model, "characters", []) or []) if str(c).strip()]
-        beats = [b for b in (getattr(story_model, "beats", []) or []) if str(b).strip()]
+        theme = (getattr(story_model, "theme", "") or "").strip()
+        genre = (getattr(story_model, "genre", "") or "").strip()
+        conflict = (getattr(story_model, "conflict", "") or "").strip()
+        resolution = (getattr(story_model, "resolution", "") or "").strip()
+        characters = [str(c).strip() for c in (getattr(story_model, "characters", []) or []) if str(c).strip()]
+        beats = [str(b).strip() for b in (getattr(story_model, "beats", []) or []) if str(b).strip()]
+        emo = [str(e).strip() for e in (getattr(story_model, "emotional_curve", []) or []) if str(e).strip()]
         climax = (getattr(story_model, "climax", "") or "").strip()
         ending = (getattr(story_model, "ending", "") or "").strip()
-        if not (summary or characters or beats or climax or ending):
+        if not (summary or characters or beats or climax or ending or theme or conflict or emo):
             return ""
         lines = ["", "═══ STORY MODEL (your pass-1 understanding — plan FROM this) ═══"]
         if summary:
             lines.append(f"SUMMARY: {summary}")
+        if theme:
+            lines.append(f"THEME: {theme}")
+        if genre:
+            lines.append(f"GENRE: {genre}")
+        if conflict:
+            lines.append(f"CONFLICT: {conflict}")
         if characters:
-            lines.append("CHARACTERS: " + " · ".join(str(c).strip() for c in characters))
+            lines.append("CHARACTERS: " + " · ".join(characters))
         if beats:
             lines.append("KEY BEATS (chronological):")
-            lines.extend(f"  - {str(b).strip()}" for b in beats)
+            lines.extend(f"  - {b}" for b in beats)
+        if emo:
+            lines.append("EMOTIONAL CURVE: " + " → ".join(emo))
         if climax:
             lines.append(f"CLIMAX: {climax}")
+        if resolution:
+            lines.append(f"RESOLUTION: {resolution}")
         if ending:
             lines.append(f"ENDING: {ending}")
         lines.append(
@@ -218,6 +254,49 @@ def _story_block(story_model) -> str:
         )
         block = "\n".join(lines) + "\n"
         # Defensive: neutralise stray braces so an accidental re-format can't break.
+        return block.replace("{", "(").replace("}", ")")
+    except Exception:
+        return ""
+
+
+def _editorial_block(editorial) -> str:
+    """Render an EditorialBlueprint into a plain-text block for injection into the
+    pass-3 recap prompt. Returns "" when no usable plan. Passed to ``str.format``
+    as a VALUE (brace-neutralised) — format-safe. Never raises."""
+    if editorial is None:
+        return ""
+    try:
+        ep_count = int(getattr(editorial, "episode_count", 0) or 0)
+        rationale = (getattr(editorial, "episode_rationale", "") or "").strip()
+        pacing = (getattr(editorial, "pacing", "") or "").strip()
+        raw_beats = getattr(editorial, "beats", []) or []
+        if not (ep_count or rationale or pacing or raw_beats):
+            return ""
+        lines = ["", "═══ EDITORIAL PLAN (your pass-2 plan — EXECUTE it) ═══"]
+        if ep_count:
+            lines.append(f"EPISODES: {ep_count}" + (f" — {rationale}" if rationale else ""))
+        elif rationale:
+            lines.append(f"EPISODES: {rationale}")
+        if pacing:
+            lines.append(f"PACING: {pacing}")
+        beat_lines: list[str] = []
+        for b in raw_beats:
+            summ = str(getattr(b, "summary", "") or "").strip()
+            if not summ:
+                continue
+            role = str(getattr(b, "story_role", "") or "").strip()
+            emo = str(getattr(b, "emotional_intent", "") or "").strip()
+            treat = str(getattr(b, "treatment", "") or "").strip()
+            meta = " · ".join(x for x in (role, emo, treat) if x)
+            beat_lines.append(f"  - {summ}" + (f" ({meta})" if meta else ""))
+        if beat_lines:
+            lines.append("BEATS (role · emotional intent · treatment):")
+            lines.extend(beat_lines)
+        lines.append(
+            "EXECUTE this plan: split into the stated episodes, match the pacing, "
+            "and set audio_mode=original for the beats marked 'hold'."
+        )
+        block = "\n".join(lines) + "\n"
         return block.replace("{", "(").replace("}", ")")
     except Exception:
         return ""
@@ -310,17 +389,38 @@ def build_recap_prompt(
     target_language: str = "vi-VN",
     tone: str = "",
     story_model=None,
+    editorial=None,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for the recap selection LLM call.
 
     R7: when ``story_model`` is provided (pass-1 output), its understanding is
-    injected so pass-2 plans FROM a committed Story Model. The block is passed as
-    a ``str.format`` value (not re-parsed) and brace-neutralised — format-safe."""
+    injected so pass-2 plans FROM a committed Story Model.
+    R7.3: when ``editorial`` (pass-2 EditorialBlueprint) is provided, its plan is
+    injected and its ``episode_count`` overrides the duration-based episode range
+    (pass-3 EXECUTES the editorial plan). Both blocks are passed as ``str.format``
+    values (not re-parsed) and brace-neutralised — format-safe."""
     cleaned = _fit_transcript((srt_content or "").strip(), MAX_RECAP_SRT_CHARS)
     lang_name = _LANG_NAMES.get(target_language, target_language or "the target language")
     tone_clause = (tone or "").strip() or "engaging / cinematic"
     dur = float(video_duration or 0.0)
-    ep_lo, ep_hi = _episode_range(dur)
+    # Two-pass when a non-empty Story Model block is available: drop the
+    # "think first" reasoning + the story_summary output field (the StoryModel is
+    # already injected above and is authoritative). Single-pass keeps both.
+    story_block = _story_block(story_model)
+    has_story = bool(story_block)
+    think_first_block = "" if has_story else f"\n{_THINK_FIRST_SECTION}\n"
+    story_summary_line = (
+        "" if has_story
+        else f'  "story_summary": "<3-6 câu tóm tắt toàn phim ({lang_name}) — bạn hiểu gì về phim>",\n'
+    )
+    # Editorial blueprint (pass-2). When it pins an episode_count, that is the
+    # authoritative split for pass-3; otherwise fall back to the duration heuristic.
+    editorial_block = _editorial_block(editorial)
+    ed_count = int(getattr(editorial, "episode_count", 0) or 0) if editorial is not None else 0
+    if ed_count >= 1:
+        ep_lo = ep_hi = min(ed_count, _RECAP_MAX_EPISODES)
+    else:
+        ep_lo, ep_hi = _episode_range(dur)
     user = _USER_TEMPLATE_RECAP.format(
         lang_name=lang_name,
         video_duration=dur,
@@ -329,7 +429,79 @@ def build_recap_prompt(
         episode_min=ep_lo,
         episode_max=ep_hi,
         episode_guidance=_episode_guidance(ep_lo, ep_hi),
-        story_block=_story_block(story_model),
+        story_block=story_block,
+        editorial_block=editorial_block,
+        think_first_block=think_first_block,
+        story_summary_line=story_summary_line,
         srt_content=cleaned,
     )
     return _SYSTEM_RECAP, user
+
+
+# ── R7.3 pass-2: Editorial Blueprint (HOW to tell it — from the StoryModel) ───
+_SYSTEM_EDITORIAL = (
+    "You are an expert film-recap EDITOR / show-runner. Given a whole-film STORY "
+    "UNDERSTANDING (not the transcript), you plan HOW to TELL it as a recap: how "
+    "many EPISODES (Tập) and WHY (where the story naturally breaks), the overall "
+    "PACING (driven by the emotional curve), and per key beat its editorial ROLE, "
+    "the EMOTIONAL INTENT to land, and whether to NARRATE or HOLD (let the source "
+    "audio play for a peak beat). You do NOT pick timestamps or write narration — "
+    "the next step does that. Output ONLY valid JSON in the exact shape requested "
+    "— no prose, no markdown, no code fences. Plan only from the story given."
+)
+
+_USER_TEMPLATE_EDITORIAL = """═══ STORY UNDERSTANDING (plan FROM this) ═══
+{story_block}
+═══ TASK ═══
+Plan HOW to tell this ~{video_minutes:.0f}-min film as a recap. Write in {lang_name}.
+Decide:
+- EPISODES (Tập): how many and WHY — cut at natural story breaks. Suggested {episode_min}–{episode_max}.
+- PACING: overall rhythm, using the emotional curve (where to linger, where to move fast).
+- per key BEAT: its editorial role, the emotional intent to land, and NARRATE vs HOLD
+  (HOLD = let source audio play for a peak beat — use sparingly, 1–3 total).
+Do NOT pick timestamps and do NOT write narration — that is the next step.
+
+═══ OUTPUT FORMAT (STRICT — return ONLY this JSON) ═══
+{{
+  "episode_count": <int, >= 1>,
+  "episode_rationale": "<why this many / where the breaks are, in {lang_name}>",
+  "pacing": "<overall pacing guidance from the emotional curve, in {lang_name}>",
+  "beats": [
+    {{ "summary": "<which beat / moment, short>",
+       "story_role": "setup|inciting|rising|climax|resolution",
+       "emotional_intent": "<the feeling this beat should land, in {lang_name}>",
+       "treatment": "narrate|hold" }}
+  ]
+}}
+
+═══ HARD RULES ═══
+1. ONE JSON object. No markdown, no prose, no code fences.
+2. episode_count >= 1. beats is a non-empty array of objects in chronological order.
+3. Use "hold" sparingly (peak beats only); the rest are "narrate".
+4. Plan FROM the story understanding above — do not invent events.
+
+═══ OUTPUT JSON ═══
+"""
+
+
+def build_editorial_prompt(
+    story_model,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+) -> tuple[str, str]:
+    """R7.3 pass-2 — return (system, user) for the Editorial Blueprint call. Input
+    is the StoryModel (rendered as text), NOT the transcript — so the call is cheap.
+    ``tone`` is accepted for signature parity but not used (editorial is structural)."""
+    block = _story_block(story_model) or "(no story model available)"
+    lang_name = _LANG_NAMES.get(target_language, target_language or "the target language")
+    dur = float(video_duration or 0.0)
+    ep_lo, ep_hi = _episode_range(dur)
+    user = _USER_TEMPLATE_EDITORIAL.format(
+        story_block=block,
+        lang_name=lang_name,
+        video_minutes=dur / 60.0,
+        episode_min=ep_lo,
+        episode_max=ep_hi,
+    )
+    return _SYSTEM_EDITORIAL, user

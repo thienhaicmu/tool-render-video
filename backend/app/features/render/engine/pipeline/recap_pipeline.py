@@ -311,14 +311,11 @@ def run_recap(
                 "original_audio_scenes": _n_original,
                 "total_target_sec": recap_plan.total_target_sec,
                 # Story Model — what the AI understood before it edited (R7 two-pass).
+                # to_public_dict() is JSON-safe (Character/StoryBeat entities → dicts).
                 "story_summary": recap_plan.story_summary,
-                "story_model": {
-                    "summary": recap_plan.story.summary,
-                    "characters": recap_plan.story.characters,
-                    "beats": recap_plan.story.beats,
-                    "climax": recap_plan.story.climax,
-                    "ending": recap_plan.story.ending,
-                },
+                "story_model": recap_plan.story.to_public_dict(),
+                # Editorial Blueprint — HOW the AI planned to tell it (R7.3 pass-2).
+                "editorial": recap_plan.editorial.to_public_dict(),
             },
         )
 
@@ -472,13 +469,8 @@ def run_recap(
             "outputs": _output_entries,
             "render_format": "recap",
             "story_summary": recap_plan.story_summary,
-            "story_model": {
-                "summary": recap_plan.story.summary,
-                "characters": recap_plan.story.characters,
-                "beats": recap_plan.story.beats,
-                "climax": recap_plan.story.climax,
-                "ending": recap_plan.story.ending,
-            },
+            "story_model": recap_plan.story.to_public_dict(),
+            "editorial": recap_plan.editorial.to_public_dict(),
             "recap_plan": recap_plan.to_json(),
             "recap_episodes_count": len(_output_entries),
             "output_ranking": [dict(e, output_rank=i) for i, e in enumerate(_output_entries, start=1)],

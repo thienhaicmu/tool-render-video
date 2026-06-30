@@ -382,9 +382,11 @@ def select_recap_plan(
     api_key: str = "",
     model: Optional[str] = None,
     story_model=None,
+    editorial=None,
 ) -> Optional["RecapPlan"]:
     """Select scenes + act structure for a recap. None on any failure (Sacred #3).
-    R7: pass-2 plans FROM ``story_model`` when supplied (pass-1 by the dispatcher)."""
+    R7: pass-3 plans FROM ``story_model`` when supplied (pass-1 by the dispatcher).
+    R7.3: when ``editorial`` (pass-2 blueprint) is supplied, pass-3 EXECUTES it."""
     try:
         if not _OPENAI_SDK:
             logger.warning("openai_client: openai SDK not installed (recap path)")
@@ -393,9 +395,10 @@ def select_recap_plan(
             return None
         resolved_model = model or _DEFAULT_MODEL
         system_prompt, user_prompt = build_recap_prompt(
-            srt_content, video_duration, target_language, tone, story_model=story_model)
-        logger.info("openai_client: calling recap model=%s film_dur=%.0fs two_pass=%s",
-                    resolved_model, video_duration, story_model is not None)
+            srt_content, video_duration, target_language, tone,
+            story_model=story_model, editorial=editorial)
+        logger.info("openai_client: calling recap model=%s film_dur=%.0fs two_pass=%s editorial=%s",
+                    resolved_model, video_duration, story_model is not None, editorial is not None)
         raw = _call_openai_recap(api_key, resolved_model, system_prompt, user_prompt)
         if not raw:
             return None
@@ -403,6 +406,8 @@ def select_recap_plan(
         if plan is not None:
             if story_model is not None:
                 plan.story = story_model
+            if editorial is not None:
+                plan.editorial = editorial
             logger.info("openai_client: recap OK acts=%d scenes=%d", len(plan.acts), plan.scene_count())
         return plan
     except Exception as exc:

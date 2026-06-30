@@ -45,7 +45,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
-SCHEMA_VERSION = 3  # R7: nested StoryModel (two-pass story understanding)
+SCHEMA_VERSION = 4  # R7.3: nested EditorialBlueprint (story → editorial → binding)
 
 # Allowed per-scene audio modes. "narrate" = TTS the AI narration over the clip
 # (default, conservative — the recap default behaviour). "original" = drop the
@@ -75,8 +75,18 @@ class RecapScene:
 class Act:
     """A chapter of the recap — a group of consecutive scenes."""
     title: str = ""
+    # Structural PHASE of the act. NOTE: this is unrelated to StoryModel.beats
+    # (which are plot turns) — see the act_phase alias below. Wire key stays
+    # ``beat`` for back-compat.
     beat: str = ""               # setup|rising|climax|resolution|"" = unspecified
     scenes: list[RecapScene] = field(default_factory=list)
+
+    @property
+    def act_phase(self) -> str:
+        """Clearer read-only alias for ``beat`` — the act's structural PHASE
+        (setup|rising|climax|resolution). Distinct from StoryModel.plot_turns.
+        The persisted key stays ``beat`` (asdict serialises the field, not this)."""
+        return self.beat
 
 
 @dataclass
@@ -96,17 +106,130 @@ class Episode:
         return sum(len(a.scenes) for a in self.acts)
 
 
+# StoryModel's OWN schema version (independent of RecapPlan.SCHEMA_VERSION). v1 =
+# flat str characters/beats; v2 = Character/StoryBeat entities + theme/genre/
+# conflict/resolution/emotional_curve. Bumped here, read defensively everywhere.
+STORY_SCHEMA_VERSION = 2
+
+
+@dataclass
+class Character:
+    """A principal character entity (v2). Replaces the v1 free-string
+    "name — role/want". Serialises as a dict; coerces from a v1 string."""
+    name: str = ""
+    role: str = ""    # who they are / their narrative function
+    want: str = ""    # what they want — the motor of their arc
+
+    def __str__(self) -> str:
+        bits = [b for b in (self.name.strip(), self.role.strip()) if b]
+        s = " — ".join(bits)
+        want = self.want.strip()
+        if want:
+            s = (f"{s} (wants {want})").strip() if s else f"wants {want}"
+        return s
+
+
+@dataclass
+class StoryBeat:
+    """A key plot turn (v2). Replaces the v1 free-string beat. ``t`` is an
+    OPTIONAL source-second anchor (-1 = unanchored) so beats can later be tied
+    to scenes; ``kind`` is a free tag (setup|turn|reveal|climax|resolution|…)."""
+    text: str = ""
+    t: float = -1.0
+    kind: str = ""
+
+    def __str__(self) -> str:
+        txt = self.text.strip()
+        if self.t is not None and self.t >= 0:
+            return f"[{self.t:.0f}s] {txt}".strip()
+        return txt
+
+
 @dataclass
 class StoryModel:
     """R7 — the recap's whole-film understanding, produced by the pass-1 "Story
     Understanding" LLM call BEFORE any scene selection. Pass-2 editorial planning
     is conditioned on it, and it is persisted for UI / future re-edit. Every field
-    defaults empty so a partial/legacy blob never errors (Sacred Contract #3 spirit)."""
-    summary: str = ""                                      # 3-6 sentence whole-film synopsis
-    characters: list[str] = field(default_factory=list)   # principal characters (name — role/want)
-    beats: list[str] = field(default_factory=list)         # key plot turns, chronological
-    climax: str = ""                                       # the peak/turning point, one line
-    ending: str = ""                                       # how the film resolves, one line
+    defaults empty so a partial/legacy blob never errors (Sacred Contract #3 spirit).
+
+    v2 (2026-06-30 architecture review): characters/beats are now ENTITIES
+    (Character/StoryBeat) and the model carries theme/genre/conflict/resolution/
+    emotional_curve + its own ``schema_version``. ``story_model_from_dict`` loads
+    BOTH v1 (flat strings) and v2 (objects) blobs — back-compat is preserved."""
+    schema_version: int = STORY_SCHEMA_VERSION
+    summary: str = ""                                        # 3-6 sentence whole-film synopsis
+    # Principal characters as ENTITIES. NOTE: constructing directly with raw
+    # strings is tolerated downstream (str(c) is used for prompts), but
+    # ``story_model_from_dict`` always yields Character instances.
+    characters: list[Character] = field(default_factory=list)
+    # Key plot TURNS, chronological, as entities. NOTE: unrelated to Act.beat (the
+    # structural phase) — see the plot_turns alias below. Wire key stays ``beats``.
+    beats: list[StoryBeat] = field(default_factory=list)
+    climax: str = ""                                         # the peak/turning point, one line
+    ending: str = ""                                         # how the film resolves, one line
+    theme: str = ""                                          # central theme, one line
+    genre: str = ""                                          # genre / tone, short
+    conflict: str = ""                                       # the central conflict, one line
+    resolution: str = ""                                     # how the conflict resolves, one line
+    # Emotion per phase, ordered (e.g. ["hope","dread","catharsis"]). The pacing
+    # spine for editorial planning (consumed by the Phase 3 editorial layer).
+    emotional_curve: list[str] = field(default_factory=list)
+
+    @property
+    def plot_turns(self) -> list[StoryBeat]:
+        """Clearer read-only alias for ``beats`` — the story's key plot turns.
+        Distinct from Act.act_phase (the structural phase). The persisted key
+        stays ``beats`` (asdict serialises the field, not this property)."""
+        return self.beats
+
+    def is_empty(self) -> bool:
+        """True when no field carries usable content — used by the parser to
+        decide whether pass-1 produced anything worth keeping."""
+        return not (
+            self.summary or self.characters or self.beats or self.climax
+            or self.ending or self.theme or self.genre or self.conflict
+            or self.resolution or self.emotional_curve
+        )
+
+    def to_public_dict(self) -> dict[str, Any]:
+        """JSON-safe nested dict (entities → dicts) for result_json / events / UI.
+        Use this instead of touching the dataclass fields directly when emitting."""
+        return asdict(self)
+
+
+# EditorialBlueprint's OWN schema version (independent of RecapPlan/StoryModel).
+EDITORIAL_SCHEMA_VERSION = 1
+
+
+@dataclass
+class EditorialBeat:
+    """One planned editorial beat (R7.3 pass-2). Maps a story beat to its
+    editorial role + the emotional intent to land + whether to NARRATE or HOLD
+    (let source audio play). No timestamps — pass-3 binds those."""
+    summary: str = ""          # which beat / moment
+    story_role: str = ""       # setup|inciting|rising|climax|resolution|…
+    emotional_intent: str = "" # the feeling this beat should land
+    treatment: str = ""        # "narrate" | "hold"
+
+
+@dataclass
+class EditorialBlueprint:
+    """R7.3 — the recap's EDITORIAL plan ("HOW to tell it"), produced by the
+    pass-2 editorial LLM call FROM the StoryModel (no transcript → cheap), BEFORE
+    scene binding. Pass-3 executes it. Persisted on the RecapPlan for re-edit.
+    Every field defaults empty so a partial/legacy blob never errors (Sacred #3)."""
+    schema_version: int = EDITORIAL_SCHEMA_VERSION
+    episode_count: int = 0     # 0 = unspecified → fall back to the duration heuristic
+    episode_rationale: str = ""
+    pacing: str = ""           # overall pacing guidance derived from emotional_curve
+    beats: list[EditorialBeat] = field(default_factory=list)
+
+    def is_empty(self) -> bool:
+        return not (self.episode_count or self.episode_rationale or self.pacing or self.beats)
+
+    def to_public_dict(self) -> dict[str, Any]:
+        """JSON-safe nested dict (entities → dicts) for result_json / events / UI."""
+        return asdict(self)
 
 
 @dataclass
@@ -118,6 +241,9 @@ class RecapPlan:
     # ``story_summary`` field — back-compat preserved via the ``story_summary``
     # property + defensive ``_from_dict`` (a v1 blob's flat string is wrapped).
     story: "StoryModel" = field(default_factory=StoryModel)
+    # R7.3: nested Editorial Blueprint (pass-2 plan). Default-empty so legacy
+    # blobs (pre-R7.3, no "editorial" key) load fine — back-compat preserved.
+    editorial: "EditorialBlueprint" = field(default_factory=EditorialBlueprint)
     episodes: list[Episode] = field(default_factory=list)
 
     # ── Convenience ──────────────────────────────────────────────────────
@@ -192,10 +318,12 @@ class RecapPlan:
             story = story_model_from_dict(raw_story)
         else:
             story = StoryModel(summary=str(data.get("story_summary", "") or "").strip())
+        editorial = editorial_blueprint_from_dict(data.get("editorial"))
         return cls(
             schema_version=_coerce_int(data.get("schema_version"), SCHEMA_VERSION),
             total_target_sec=_coerce_float(data.get("total_target_sec"), 0.0),
             story=story,
+            editorial=editorial,
             episodes=episodes,
         )
 
@@ -250,17 +378,133 @@ def _coerce_str_list(value: Any, max_items: int = 24) -> list[str]:
     return out
 
 
+def _split_name_role(s: str) -> tuple[str, str]:
+    """Parse a v1 "Name — role/want" free string into (name, role). Tries a few
+    common separators; falls back to the whole string as the name."""
+    for sep in ("—", "–", " - ", ":"):
+        if sep in s:
+            name, _, rest = s.partition(sep)
+            return name.strip(), rest.strip()
+    return s.strip(), ""
+
+
+def _coerce_character(v: Any) -> Optional["Character"]:
+    """One Character from a Character / v1 string / v2 dict. None if empty."""
+    if isinstance(v, Character):
+        return v if (v.name or v.role or v.want) else None
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        name, role = _split_name_role(s)
+        return Character(name=name, role=role)
+    if isinstance(v, dict):
+        name = str(v.get("name", "") or "").strip()
+        role = str(v.get("role", "") or "").strip()
+        want = str(v.get("want", v.get("goal", "")) or "").strip()
+        if not (name or role or want):
+            return None
+        return Character(name=name, role=role, want=want)
+    return None
+
+
+def _coerce_beat(v: Any) -> Optional["StoryBeat"]:
+    """One StoryBeat from a StoryBeat / v1 string / v2 dict. None if empty."""
+    if isinstance(v, StoryBeat):
+        return v if v.text else None
+    if isinstance(v, str):
+        s = v.strip()
+        return StoryBeat(text=s) if s else None
+    if isinstance(v, dict):
+        text = str(v.get("text", v.get("beat", "")) or "").strip()
+        if not text:
+            return None
+        return StoryBeat(
+            text=text,
+            t=_coerce_float(v.get("t", v.get("time", -1.0)), -1.0),
+            kind=str(v.get("kind", "") or "").strip(),
+        )
+    return None
+
+
+def _coerce_list(value: Any, coerce_one, max_items: int = 24) -> list:
+    """Generic defensive list coercion: accepts a single item or a list, drops
+    Nones, caps the count. ``coerce_one`` maps one raw item → obj|None. Never raises."""
+    out: list = []
+    if isinstance(value, (str, dict)):
+        value = [value]
+    if isinstance(value, (list, tuple)):
+        for v in value:
+            try:
+                item = coerce_one(v)
+            except Exception:
+                item = None
+            if item is not None:
+                out.append(item)
+            if len(out) >= max_items:
+                break
+    return out
+
+
 def story_model_from_dict(d: Any) -> "StoryModel":
-    """Defensive StoryModel from a dict. Unknown keys dropped, missing keys
+    """Defensive StoryModel from a dict. Loads BOTH v1 (flat str characters/beats)
+    and v2 (Character/StoryBeat objects) blobs. Unknown keys dropped, missing keys
     default-empty. Never raises."""
     if not isinstance(d, dict):
         return StoryModel()
     return StoryModel(
+        schema_version=_coerce_int(d.get("schema_version"), STORY_SCHEMA_VERSION),
         summary=str(d.get("summary", "") or "").strip(),
-        characters=_coerce_str_list(d.get("characters")),
-        beats=_coerce_str_list(d.get("beats")),
+        characters=_coerce_list(d.get("characters"), _coerce_character),
+        beats=_coerce_list(d.get("beats"), _coerce_beat),
         climax=str(d.get("climax", "") or "").strip(),
         ending=str(d.get("ending", "") or "").strip(),
+        theme=str(d.get("theme", "") or "").strip(),
+        genre=str(d.get("genre", "") or "").strip(),
+        conflict=str(d.get("conflict", "") or "").strip(),
+        resolution=str(d.get("resolution", "") or "").strip(),
+        emotional_curve=_coerce_str_list(d.get("emotional_curve")),
+    )
+
+
+def _coerce_treatment(value: Any) -> str:
+    """Normalise an editorial beat treatment → 'narrate' | 'hold'. Default
+    narrate (conservative — hold is the AI's explicit opt-in for source audio)."""
+    s = str(value or "").strip().lower()
+    return "hold" if s in ("hold", "original", "source", "raw", "silent", "keep") else "narrate"
+
+
+def _coerce_editorial_beat(v: Any) -> Optional["EditorialBeat"]:
+    """One EditorialBeat from an EditorialBeat / string / dict. None if empty."""
+    if isinstance(v, EditorialBeat):
+        return v if (v.summary or v.story_role or v.emotional_intent) else None
+    if isinstance(v, str):
+        s = v.strip()
+        return EditorialBeat(summary=s, treatment=_coerce_treatment(None)) if s else None
+    if isinstance(v, dict):
+        summary = str(v.get("summary", v.get("text", "")) or "").strip()
+        story_role = str(v.get("story_role", v.get("role", "")) or "").strip()
+        emo = str(v.get("emotional_intent", v.get("emotion", "")) or "").strip()
+        if not (summary or story_role or emo):
+            return None
+        return EditorialBeat(
+            summary=summary, story_role=story_role, emotional_intent=emo,
+            treatment=_coerce_treatment(v.get("treatment")),
+        )
+    return None
+
+
+def editorial_blueprint_from_dict(d: Any) -> "EditorialBlueprint":
+    """Defensive EditorialBlueprint from a dict. Unknown keys dropped, missing
+    keys default-empty. Never raises."""
+    if not isinstance(d, dict):
+        return EditorialBlueprint()
+    return EditorialBlueprint(
+        schema_version=_coerce_int(d.get("schema_version"), EDITORIAL_SCHEMA_VERSION),
+        episode_count=max(0, _coerce_int(d.get("episode_count"), 0)),
+        episode_rationale=str(d.get("episode_rationale", "") or "").strip(),
+        pacing=str(d.get("pacing", "") or "").strip(),
+        beats=_coerce_list(d.get("beats"), _coerce_editorial_beat),
     )
 
 

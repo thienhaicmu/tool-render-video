@@ -18,8 +18,12 @@ from app.features.render.ai.llm.prompts import build_render_plan_prompt
 from app.features.render.ai.llm.retry import call_with_retry
 from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
-from app.features.render.ai.llm.recap_prompts import build_recap_prompt, build_story_model_prompt
-from app.features.render.ai.llm.recap_parser import parse_recap_response, parse_story_model_response
+from app.features.render.ai.llm.recap_prompts import (
+    build_recap_prompt, build_story_model_prompt, build_editorial_prompt,
+)
+from app.features.render.ai.llm.recap_parser import (
+    parse_recap_response, parse_story_model_response, parse_editorial_response,
+)
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.gemini_client")
@@ -473,10 +477,13 @@ def select_recap_plan(
     api_key: str = "",
     model: Optional[str] = None,
     story_model=None,
+    editorial=None,
 ) -> Optional["RecapPlan"]:
     """Select scenes + act structure for a recap. Returns RecapPlan or None
     (Sacred Contract #3 — never raises). R7: when ``story_model`` is provided
-    (pass-1), pass-2 plans FROM it and the model is stamped onto the plan."""
+    (pass-1), pass-3 plans FROM it and the model is stamped onto the plan. R7.3:
+    when ``editorial`` (pass-2 blueprint) is provided, pass-3 EXECUTES it and it
+    is stamped onto the plan too."""
     try:
         if not _GENAI_SDK:
             logger.warning("gemini_client: google-genai SDK not installed (recap path)")
@@ -489,10 +496,12 @@ def select_recap_plan(
             return None
         resolved_model = model or _DEFAULT_MODEL
         system_prompt, user_prompt = build_recap_prompt(
-            srt_content, video_duration, target_language, tone, story_model=story_model)
+            srt_content, video_duration, target_language, tone,
+            story_model=story_model, editorial=editorial)
         logger.info(
-            "gemini_client: calling recap model=%s film_dur=%.0fs lang=%s in_chars=%d two_pass=%s",
-            resolved_model, video_duration, target_language, len(srt_content), story_model is not None,
+            "gemini_client: calling recap model=%s film_dur=%.0fs lang=%s in_chars=%d two_pass=%s editorial=%s",
+            resolved_model, video_duration, target_language, len(srt_content),
+            story_model is not None, editorial is not None,
         )
         raw = _call_gemini_recap(api_key, resolved_model, system_prompt, user_prompt)
         if not raw:
@@ -502,6 +511,8 @@ def select_recap_plan(
         if plan is not None:
             if story_model is not None:
                 plan.story = story_model     # pass-1 understanding is authoritative
+            if editorial is not None:
+                plan.editorial = editorial   # pass-2 editorial plan is authoritative
             logger.info(
                 "gemini_client: recap OK model=%s acts=%d scenes=%d total=%.0fs",
                 resolved_model, len(plan.acts), plan.scene_count(), plan.total_target_sec,
@@ -509,6 +520,75 @@ def select_recap_plan(
         return plan
     except Exception as exc:
         logger.warning("gemini_client: select_recap_plan unexpected error %s", exc, exc_info=True)
+        return None
+
+
+# ── R7.3 pass-2: Editorial Blueprint (cheap — StoryModel input, no transcript) ──
+_EDITORIAL_MAX_TOKENS = int(os.getenv("GEMINI_EDITORIAL_MAX_TOKENS", "8192"))
+_EDITORIAL_TEMPERATURE = float(os.getenv("GEMINI_EDITORIAL_TEMPERATURE", "0.4"))
+_EDITORIAL_THINKING_BUDGET = int(os.getenv("GEMINI_EDITORIAL_THINKING_BUDGET", "8192"))
+
+
+def _call_gemini_editorial_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _genai.Client(api_key=api_key, http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000})
+    resp = client.models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "response_mime_type": "application/json",
+            "temperature": _EDITORIAL_TEMPERATURE,
+            "max_output_tokens": _EDITORIAL_MAX_TOKENS,
+            "thinking_config": {"thinking_budget": _EDITORIAL_THINKING_BUDGET},
+        },
+    )
+    return resp.text
+
+
+def _call_gemini_editorial(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Editorial Blueprint call with cache + retry. Cache namespaced 'gemini-editorial'."""
+    cached = llm_cache_get("gemini-editorial", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("gemini_client: editorial cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
+        lambda: _call_gemini_editorial_once(api_key, model, system_prompt, user_prompt),
+        label="gemini-editorial",
+    )
+    if result is not None:
+        llm_cache_put("gemini-editorial", model, system_prompt, user_prompt, result)
+    return result
+
+
+def select_editorial_blueprint(
+    story_model,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["EditorialBlueprint"]:
+    """R7.3 pass-2 — plan HOW to tell the recap, FROM the StoryModel (no transcript
+    → cheap). Returns EditorialBlueprint or None (Sacred #3)."""
+    try:
+        if not _GENAI_SDK or not api_key or story_model is None:
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        system_prompt, user_prompt = build_editorial_prompt(story_model, video_duration, target_language, tone)
+        logger.info("gemini_client: calling editorial model=%s film_dur=%.0fs", resolved_model, video_duration)
+        raw = _call_gemini_editorial(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            logger.warning("gemini_client: empty editorial response (model=%s)", resolved_model)
+            return None
+        eb = parse_editorial_response(raw)
+        if eb is not None:
+            logger.info(
+                "gemini_client: editorial OK model=%s episodes=%d beats=%d",
+                resolved_model, eb.episode_count, len(eb.beats),
+            )
+        return eb
+    except Exception as exc:
+        logger.warning("gemini_client: select_editorial_blueprint unexpected error %s", exc, exc_info=True)
         return None
 
 
