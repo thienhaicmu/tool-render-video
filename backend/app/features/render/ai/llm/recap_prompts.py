@@ -73,8 +73,24 @@ CREATOR TONE:       {tone_clause}
 9. Preserve every key fact, name, and number — your recap retells, it never
    fabricates. Keep the SAME chronological order and plot as the film.
 
+═══ THINK FIRST (fill story_summary before anything else) ═══
+Before selecting scenes, mentally reconstruct the WHOLE film: who the characters
+are, what they want, the central conflict, the key turns, and the ending. Capture
+it in `story_summary` (3-6 sentences). Then select scenes + write narration that
+SERVE that through-line. This prevents a recap that just samples the opening.
+
+═══ NARRATION QUALITY BAR ═══
+GOOD narration: "Nam tưởng mọi chuyện đã yên — cho đến khi viên cảnh sát lật hồ sơ
+chiếc xe. Một cái tên hiện ra, và mọi lời nói dối bắt đầu sụp đổ."
+BAD (avoid): "Cảnh này có một người đàn ông và cảnh sát nói chuyện về xe." (mô tả
+khô khan, không kể chuyện) · liệt kê sự kiện rời rạc · lặp cấu trúc câu mỗi cảnh ·
+spoiler-dump không cảm xúc.
+Write like a great film-recap channel: cohesive, vivid, emotionally aware, each
+scene's line flows from the previous one.
+
 ═══ OUTPUT FORMAT (STRICT — return ONLY this JSON) ═══
 {{
+  "story_summary": "<3-6 câu tóm tắt toàn phim ({lang_name}) — bạn hiểu gì về phim>",
   "total_target_sec": <float>,
   "acts": [
     {{

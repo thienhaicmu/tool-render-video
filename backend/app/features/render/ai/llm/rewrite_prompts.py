@@ -206,6 +206,16 @@ SENTENCE VARIETY:
   - Save the strongest point or twist for the LAST segment if the source allows it.
   - Avoid filler words ("basically", "you know", "kind of"). Every word earns its slot.
 
+QUALITY BAR (this is the difference between good and bad output):
+  SOURCE line: "[12.0 - 16.0] So um, what I want to talk about today is how I
+    saved like a thousand dollars on groceries."
+  BAD  (literal/stiff): "Ờ, hôm nay tôi muốn nói về việc tôi đã tiết kiệm khoảng
+    một nghìn đô tiền tạp hóa." (dịch sát, có 'ờ', nhạt)
+  GOOD (native, punchy): "Một nghìn đô tiền chợ — tôi đã cắt sạch. Và cách làm
+    đơn giản hơn bạn nghĩ." (idiomatic, hook, no filler, same fact)
+  Always aim for the GOOD register: faithful meaning, native phrasing, a hook,
+  zero filler, fits the time.
+
 TONE INTERPRETATION (multi-language preset table)
 
 The creator may type the tone in ANY of the 5 supported languages: English (en),
@@ -333,12 +343,20 @@ RULES:
   • Use freeze_after only before the strongest payoff(s); you decide how often.
   • Keep the creator's TONE; reaction amplifies it.
 
-REACTION OUTPUT EXAMPLE (shape only — your timestamps come from the source):
+REACTION QUALITY — the lines should sound like a REAL person, reacting to a
+SPECIFIC moment with a real opinion (not a neutral description):
+  BAD  voice: "Anh ấy nói chuyện với cảnh sát về chiếc xe." (mô tả trung tính)
+  GOOD voice: "Nhìn mặt tỉnh bơ kìa — nhưng tôi đoán cái xe này mới là vấn đề.
+    Coi thử…" (có quan điểm, dự đoán, dẫn vào khoảnh khắc)
+
+REACTION OUTPUT EXAMPLE (shape + quality; YOUR timestamps come from the source):
   { "segments": [
-    { "kind": "voice", "start": 3.0, "end": 6.0,
-      "text": "He looks calm… until the officer mentions the car.",
-      "freeze_after": 1.5, "freeze_text": "Wait for it…" },
-    { "kind": "original", "start": 7.5, "end": 12.0 }
+    { "kind": "voice", "start": 3.0, "end": 6.2,
+      "text": "Nhìn anh ta bình tĩnh ghê… nhưng khoan, cảnh sát vừa nhắc tới chiếc xe đó.",
+      "freeze_after": 1.5, "freeze_text": "Chú ý chiếc xe…" },
+    { "kind": "original", "start": 7.5, "end": 12.0 },
+    { "kind": "voice", "start": 12.0, "end": 15.0,
+      "text": "Thấy chưa? Tôi biết ngay mà — lời nói dối bắt đầu lộ rồi." }
   ] }"""
 
 
