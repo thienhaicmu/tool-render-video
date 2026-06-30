@@ -404,6 +404,13 @@ function StepRenderingBase({
   // visual) is misleading — scenes aren't deliverable clips. Show ONLY the
   // recap live-build view instead, so the screen isn't two stacked timelines.
   const isRecap = (liveEvents || []).some((e) => e.event === 'recap.plan.ready')
+  // Recap counts are different from clips: 23 internal scenes ("parts") get
+  // assembled into a few EPISODES (the real deliverables). Pull the authoritative
+  // scene + episode counts from the plan so the chrome stops saying "8 clips".
+  const recapPlanEv = isRecap ? [...(liveEvents || [])].reverse().find((e) => e.event === 'recap.plan.ready') : undefined
+  const recapScenes = (recapPlanEv?.context?.scenes as unknown[] | undefined)?.length ?? 0
+  const recapEpisodes = (recapPlanEv?.context?.episodes as unknown[] | undefined)?.length ?? 0
+  const effTotal = isRecap && recapScenes > 0 ? recapScenes : totalCount
 
   function getStatusLabel(s: string): string {
     const sl = s.toLowerCase()
@@ -471,9 +478,11 @@ function StepRenderingBase({
             )}
           </span>
           <div className="rd-overall-right">
-            {totalCount > 0 && (
+            {effTotal > 0 && (
               <span className="rd-clips-text">
-                {t.rndClipsDone(doneCount, totalCount)}
+                {isRecap
+                  ? `${doneCount} / ${effTotal} cảnh${recapEpisodes > 0 ? ` · ${recapEpisodes} tập` : ''}`
+                  : t.rndClipsDone(doneCount, totalCount)}
                 {failedCount > 0 && <span style={{ color: 'var(--fail)' }}> · {t.rndClipsFailed(failedCount)}</span>}
               </span>
             )}
@@ -500,8 +509,12 @@ function StepRenderingBase({
               ? <><span className="rd-ai-pulse" /> AI Director analyzing content — selecting best moments…</>
               : stage === 'transcribe' && !isTerminal
               ? 'Transcribing audio — Whisper AI processing…'
+              : stage === 'render' && !isTerminal && isRecap && effTotal > 0
+              ? `Dựng ${effTotal} cảnh → ${recapEpisodes || 1} tập — recap đang chạy`
               : stage === 'render' && !isTerminal && totalCount > 0
               ? `Rendering ${totalCount} clip${totalCount !== 1 ? 's' : ''} — AI scene tracking active`
+              : isTerminal && !isFailed && isRecap
+              ? `Recap xong — ${recapEpisodes || 1} tập`
               : isTerminal && !isFailed
               ? `Analysis complete — ${doneCount} clip${doneCount !== 1 ? 's' : ''} selected`
               : displayMsg || 'Processing…'
@@ -648,7 +661,7 @@ function StepRenderingBase({
       <div className="rd-abp-toolbar">
         <div className="rd-abp-job">
           <div className="rd-abp-title">{jobId ? jobId.slice(-12) : '—'}</div>
-          <div className="rd-abp-meta">{totalCount > 0 ? `${totalCount} clips · ${aspectRatio}` : aspectRatio}</div>
+          <div className="rd-abp-meta">{isRecap && effTotal > 0 ? `${effTotal} cảnh · ${recapEpisodes || 1} tập · ${aspectRatio}` : totalCount > 0 ? `${totalCount} clips · ${aspectRatio}` : aspectRatio}</div>
         </div>
         <div className="rd-abp-progress">
           <div className="rd-abp-bar-track">

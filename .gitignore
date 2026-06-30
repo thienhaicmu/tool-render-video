@@ -98,3 +98,5 @@ checkpoints/
 .cache/
 
 frontend/*.tsbuildinfo
+# pytest session sandbox (isolated data dir — never the real data/)
+backend/tests/.pytest-data/
