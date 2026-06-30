@@ -60,10 +60,49 @@ def nvenc_runtime_ready(codec_name: str) -> bool:
         return False
 
 
+@lru_cache(maxsize=2)
+def qsv_runtime_ready(codec_name: str) -> bool:
+    """Probe whether Intel Quick Sync (QSV) can actually open an encode session.
+    Strict: only True when a tiny test encode succeeds (rc==0). Mirrors
+    nvenc_runtime_ready but conservative — QSV is opt-in so a false negative
+    just keeps the safe CPU path."""
+    try:
+        proc = subprocess.run(
+            [
+                get_ffmpeg_bin(), "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.1",
+                "-an", "-c:v", codec_name, "-f", "null", "-",
+            ],
+            capture_output=True, text=True, encoding="utf-8",
+        )
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
+def qsv_enabled() -> bool:
+    """QSV is OFF by default (the CPU/NVENC behaviour is unchanged) — opt in via
+    ENABLE_QSV=1. Read at call time so tests/env toggles take effect."""
+    return os.getenv("ENABLE_QSV", "0").strip() == "1"
+
+
+def _maybe_qsv(c: str) -> str | None:
+    """Shared QSV decision used by BOTH resolvers (encoder_helpers.resolve_encoder
+    and ffmpeg_helpers._resolve_codec) so they can never diverge — see
+    tests/test_nvenc_codec_resolver_parity.py. Returns the QSV codec name when
+    QSV is enabled AND available for this codec, else None (caller continues to
+    the CPU fallback)."""
+    if not qsv_enabled():
+        return None
+    if c == "h265":
+        return "hevc_qsv" if has_encoder("hevc_qsv") and qsv_runtime_ready("hevc_qsv") else None
+    return "h264_qsv" if has_encoder("h264_qsv") and qsv_runtime_ready("h264_qsv") else None
+
+
 def resolve_encoder(codec: str, encoder_mode: str = "auto") -> str:
     """Return the best available FFmpeg video encoder for the given codec/mode pair.
 
-    Falls back to libx264/libx265 when NVENC is requested but unavailable.
+    Order: NVENC (if auto/nvenc) → QSV (opt-in) → libx264/libx265 CPU fallback.
     """
     c = (codec or "h264").lower()
     mode = (encoder_mode or "auto").lower()
@@ -72,6 +111,9 @@ def resolve_encoder(codec: str, encoder_mode: str = "auto") -> str:
             return "hevc_nvenc"
         if c != "h265" and has_encoder("h264_nvenc") and nvenc_runtime_ready("h264_nvenc"):
             return "h264_nvenc"
+    _qsv = _maybe_qsv(c)
+    if _qsv:
+        return _qsv
     if c == "h265":
         return "libx265"
     return "libx264"
@@ -87,6 +129,10 @@ def map_preset_for_encoder(video_preset: str, resolved_codec: str) -> str:
             "slow": "p6", "slower": "p7", "veryslow": "p7",
         }
         return mapping.get(p, "p6")
+    if c in ("h264_qsv", "hevc_qsv"):
+        # QSV accepts veryfast..veryslow directly; clamp ultra/superfast.
+        valid = {"veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"}
+        return p if p in valid else "medium"
     return p
 
 
@@ -118,6 +164,19 @@ def codec_extra_flags(
             "-spatial_aq", "1", "-temporal_aq", "1", "-aq-strength", "8",
             "-rc-lookahead", "32", "-bf", "3",
         ]
+    if c in ("h264_qsv", "hevc_qsv"):
+        # Intel QSV: ICQ (intelligent constant quality) via -global_quality,
+        # mapped from the CRF target. Look-ahead improves quality at a small
+        # speed cost. Constrained by the same delivery maxrate/bufsize. QSV runs
+        # on the iGPU — no NVENC semaphore needed (not an NVENC codec).
+        flags = [
+            "-global_quality", str(video_crf),
+            "-look_ahead", "1", "-look_ahead_depth", "40",
+            "-maxrate", f"{maxrate_m}M", "-bufsize", f"{bufsize_m}M",
+        ]
+        if c == "hevc_qsv":
+            flags += ["-tag:v", "hvc1"]
+        return flags
     if c == "libx265":
         if p in ("veryslow", "slower"):
             x265p = "aq-mode=3:aq-strength=1.0:deblock=-1,-1:rc-lookahead=60:ref=5:bframes=4:psy-rdoq=1.0:rdoq-level=2"

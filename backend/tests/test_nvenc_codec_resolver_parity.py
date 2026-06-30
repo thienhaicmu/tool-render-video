@@ -112,6 +112,29 @@ def test_resolvers_agree_on_every_codec_mode_scenario(monkeypatch, scenario, cod
     )
 
 
+@pytest.mark.parametrize("codec,mode", list(itertools.product(_CODECS, _MODES)))
+def test_resolvers_agree_with_qsv_enabled(monkeypatch, codec, mode):
+    """QSV (opt-in via ENABLE_QSV=1) is resolved through the SAME shared helper
+    in both resolvers, so they must still agree — including that a QSV codec is
+    never an NVENC codec (so the acquire decision correctly skips the NVENC
+    semaphore for a QSV run)."""
+    monkeypatch.setenv("ENABLE_QSV", "1")
+    encoder_helpers.qsv_runtime_ready.cache_clear()
+    # No NVENC available → both should consider QSV; force QSV present+ready.
+    _patch_availability(monkeypatch, set())
+    monkeypatch.setattr(encoder_helpers, "has_encoder", lambda name: "qsv" in name)
+    monkeypatch.setattr(encoder_helpers, "qsv_runtime_ready", lambda name: True)
+
+    from_caller = _resolve_codec(codec, encoder_mode=mode)
+    from_crop = _resolve_encoder(codec, encoder_mode=mode)
+    assert from_caller == from_crop, (
+        f"QSV resolvers diverged: codec={codec!r} mode={mode!r} "
+        f"caller={from_caller!r} crop={from_crop!r}"
+    )
+    if "qsv" in from_caller:
+        assert "nvenc" not in from_caller   # QSV must never be treated as NVENC
+
+
 def test_parity_matrix_actually_exercises_nvenc_selection(monkeypatch):
     """Guard against a vacuous parity test: confirm that under
     ``both_nvenc`` availability the resolvers genuinely select an NVENC

@@ -403,6 +403,15 @@ def _resolve_codec(codec: str, encoder_mode: str = "auto"):
             # Requested nvenc but unavailable: fallback CPU.
             pass
 
+    # QSV (opt-in) — MUST mirror encoder_helpers.resolve_encoder exactly so this
+    # acquire decision matches the codec crop actually runs
+    # (tests/test_nvenc_codec_resolver_parity.py). The shared _maybe_qsv helper
+    # guarantees the two resolvers never diverge.
+    from app.features.render.engine.encoder.encoder_helpers import _maybe_qsv as _eh_maybe_qsv
+    _qsv = _eh_maybe_qsv(c)
+    if _qsv:
+        return _qsv
+
     if c == "h265":
         return "libx265"
     return "libx264"
