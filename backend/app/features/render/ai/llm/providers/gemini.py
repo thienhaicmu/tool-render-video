@@ -181,6 +181,16 @@ def _run_render_plan(
         logger.warning("gemini_client: empty transcript (render_plan path)")
         return None
 
+    # Latent-bug fix (2026-06-30): build_render_plan_prompt does not accept
+    # reaction_intensity (that field is only used by the rewrite-prompt
+    # path in rewrite_prompts.build_rewrite_prompt, not the render-plan
+    # path). Passing it here used to TypeError on any real LLM call —
+    # hidden because test_llm_metrics mocks at the public select_render_plan
+    # entry, never exercising this code path. Removed from all 3 providers
+    # (gemini / openai / claude) for consistency. The public select_render_plan
+    # signature still ACCEPTS reaction_intensity so callers using the
+    # uniform provider API don't break — it's silently dropped on the
+    # render-plan path, same as before but without the runtime crash.
     system_prompt, user_prompt = build_render_plan_prompt(
         srt_content=srt_content,
         output_count=output_count,
@@ -189,7 +199,6 @@ def _run_render_plan(
         language=language,
         max_srt_chars=_MAX_SRT_CHARS,
         editorial_hint=editorial_hint,
-        reaction_intensity=reaction_intensity,
         target_duration=target_duration,
         clip_lock=clip_lock,
         clip_exclude=clip_exclude,

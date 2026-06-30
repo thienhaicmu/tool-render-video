@@ -86,6 +86,14 @@ def select_render_plan(
     (Sacred Contract #3).
     """
     try:
+        # Latent-bug fix (2026-06-30): _run_render_plan does NOT accept
+        # reaction_intensity — passing it here used to TypeError on every
+        # real LLM call. test_llm_metrics never exercised this path
+        # because it mocks at the public select_render_plan entry. Public
+        # signature still accepts reaction_intensity for API uniformity
+        # with the rewrite path (rewrite_subtitle DOES consume it); on
+        # the render-plan path it's silently dropped, same as before but
+        # without the runtime crash.
         return _run_render_plan(
             srt_content=srt_content,
             output_count=output_count,
@@ -96,7 +104,6 @@ def select_render_plan(
             model=model,
             language=language,
             editorial_hint=editorial_hint,
-            reaction_intensity=reaction_intensity,
             target_duration=target_duration,
             clip_lock=clip_lock,
             clip_exclude=clip_exclude,
@@ -156,7 +163,9 @@ def _run_render_plan(
         language=language,
         max_srt_chars=_MAX_SRT_CHARS,
         editorial_hint=editorial_hint,
-        reaction_intensity=reaction_intensity,
+        # Note: reaction_intensity intentionally NOT forwarded here —
+        # build_render_plan_prompt doesn't accept it. See public-entry
+        # comment above for the historical bug + fix.
         target_duration=target_duration,
         clip_lock=clip_lock,
         clip_exclude=clip_exclude,
