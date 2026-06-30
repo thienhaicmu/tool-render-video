@@ -40,7 +40,7 @@ from app.db.jobs_repo import list_job_parts, update_job_progress, upsert_job, up
 from app.jobs import cancel as cancel_registry
 from app.jobs.manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.features.render.ai.llm import select_recap_plan
-from app.features.render.engine.encoder.ffmpeg_helpers import resolve_target_dimensions
+from app.features.render.engine.encoder.ffmpeg_helpers import resolve_target_dimensions, resolve_ffmpeg_threads
 from app.features.render.engine.pipeline.pipeline_setup import setup_render_pipeline, prepare_output_dir
 from app.features.render.engine.pipeline.pipeline_source_prep import prepare_render_source
 from app.features.render.engine.pipeline.pipeline_config import _resolve_profile
@@ -356,6 +356,16 @@ def run_recap(
             max_workers = max(1, min(_user_req, _hw_cap)) if _user_req > 0 else _hw_cap
         except Exception:
             max_workers = 1
+        # P1 (perf): recap was hardcoding ffmpeg_threads=1 → each per-scene encode
+        # ran single-threaded, leaving most CPU cores idle (~31% on a 16-core box)
+        # on the CPU/libx264 path. Use the shared helper to give each parallel
+        # part a fair thread slice (min(8, cores // workers)) so the box is
+        # saturated. Output is byte-for-byte the same quality (threads only affect
+        # speed, not the codec/crf).
+        try:
+            _ffmpeg_threads = resolve_ffmpeg_threads(max_workers)
+        except Exception:
+            _ffmpeg_threads = 1
 
         # R6 fix: scenes are INTERNAL intermediates, not deliverables. Render them
         # into a temp dir so the per-part finalize (which writes
@@ -369,7 +379,7 @@ def run_recap(
             retry_count=retry_count, work_dir=work_dir, output_dir=scenes_dir,
             source_path=source_path, source=source, output_stem=_output_stem,
             payload=payload, existing_parts={int(x["part_no"]): x for x in list_job_parts(job_id)},
-            target_platform=target_platform, tuned=tuned, ffmpeg_threads=1,
+            target_platform=target_platform, tuned=tuned, ffmpeg_threads=_ffmpeg_threads,
             cancel_registry=cancel_registry, src_stat_for_motion=_src_stat_for_motion,
             full_srt=full_srt, full_srt_available=full_srt_available,
             subtitle_enabled_by_idx=subtitle_enabled_by_idx, subtitle_cutoff=0,
