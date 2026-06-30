@@ -24,6 +24,7 @@ the session's outcome, not a living spec.
 | D-3 | [`a3b555c`](#) | `LLM_MAX_SRT_CHARS` parity knob + Anthropic prompt-cache extension to clips + rewrite paths | 30 |
 | D-2-thin | [`0caf895`](#) | **SceneMap substrate** — `scene_detector.detect_scenes()` revived from dead code | 48 |
 | D-2-snap | [`13cfb6d`](#) | **Pass-3 snap-to-shot reconciler** — `RecapPlan.snap_scenes_to_shots()` consumes D-2-thin SceneMap | 17 |
+| D-2-motion Phase 1 | (this commit) | **Audit + scaffolding** — architecture audit doc, `SceneMap.slice()` helper, mock-based motion dispatch tests, A/B benchmark script + 3 synthetic fixtures. NO motion/crop.py touch. | 31 |
 
 ---
 
@@ -47,15 +48,17 @@ the session's outcome, not a living spec.
 | SceneMap substrate (`jobs.scene_map_json`, stage, domain) | D-2-thin |
 | `scene_detector.py` dead-code revival | D-2-thin |
 | **Pass-3 picks snap to nearest shot boundary** (Recap quality win) | **D-2-snap** |
+| **D-2-motion Phase 1** (audit + scaffolding + helper) | **D-2-motion Phase 1** |
 
 ### ⏳ Deferred (consumer-wiring follow-ups)
 
 | Item | Priority | Risk | Effort | Notes |
 |------|----------|------|--------|-------|
+| **D-2-motion Phase 2** — Install cv2 + run A/B benchmark on fixtures | Operator side | LOW | ~1h | Use `scripts/benchmark_scene_detection.py` against `backend/tests/fixtures/scene_detection/`. GO/NO-GO determines whether Phase 3 ships. |
+| **D-2-motion Phase 3** — Actual `motion/crop.py` swap (gated by Phase 2 GO) | Quality | **CRITICAL** | 1-2 days | Phase 1 audit + tests + helper ready. Needs cv2 in venv + Render Edit Protocol. See [audit](audit-d-2-motion-2026-06-30.md) §11. |
 | **C.1** — Clip pipeline consumes StoryModel via Comprehension stage | #1 strategic | **CRITICAL** (`render_pipeline.py`) | 1.5-2 days | Substrate ready (Batch C); needs prompt update + 3 provider sigs + `use_story_intelligence: bool = False` on RenderRequest. PROMPT_VERSION bump → cache flush. |
-| **D-2-motion** — `motion/crop.py` reads persisted SceneMap | Correctness + perf | **CRITICAL** | 3-5 days | Needs full pytest baseline + Render Edit Protocol. Own sprint. |
 
-**Recommended next-sprint order:** D-2-motion (own sprint, CRITICAL) → C.1 (own sprint, CRITICAL).
+**Recommended next-sprint order:** D-2-motion Phase 2+3 (~1 sprint when cv2 + fixtures available) → C.1 (own sprint, CRITICAL).
 
 ---
 
@@ -72,6 +75,7 @@ All defaults preserve historical behaviour — **Sacred Contract #2 spirit**.
 | `RECAP_SNAP_TO_SHOTS_ENABLED` | `1` | `0` → `RecapPlan.snap_scenes_to_shots()` is not called; scenes keep their AI-emitted timestamps. |
 | `RECAP_SNAP_TOLERANCE_SEC` | `0.5` | In-tolerance window for the snap reconciler. Matches scene_detector's `_TV2_MERGE_GAP_SEC` by design. |
 | `TTS_CACHE_ENABLED` | `1` | `0` → Edge-TTS hits the network on every call (legacy). |
+| `MOTION_USE_SCENE_MAP` | not yet wired | Reserved for D-2-motion Phase 3. When that ships, `0` → pixel-diff (legacy default); `1` → SceneMap-via-`SceneMap.slice()` with pixel-diff fallback. |
 
 ### Claude prompt-cache gates (all default `1` = ON)
 

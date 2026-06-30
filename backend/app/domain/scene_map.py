@@ -108,6 +108,50 @@ class SceneMap:
                     best, best_d = boundary, d
         return best
 
+    def slice(self, start_sec: float, end_sec: float) -> list[tuple[float, float]]:
+        """Return shot ranges overlapping the ``[start_sec, end_sec]`` window,
+        clipped to window edges. Output matches the contract of
+        ``_detect_scene_ranges_in_clip`` in ``motion/pixel_diff.py``:
+        chronological, non-overlapping ``(scene_start, scene_end)`` tuples
+        in source-global seconds.
+
+        D-2-motion Phase 1 deliverable (D1.2). The D-2-motion Phase 3 swap
+        feeds the result of this method to ``build_subject_path``'s
+        ``_scene_ranges`` parameter as a drop-in replacement for the
+        pixel-diff detector.
+
+        Rules:
+          - Empty map → empty list (caller falls back to legacy detector).
+          - Invalid window (end <= start, NaN, etc.) → empty list.
+          - Shots fully outside the window → dropped.
+          - Shots partially overlapping → clipped to window edges.
+          - Output is always non-overlapping and chronological.
+
+        Defensive: returns ``[]`` on any failure. Never raises
+        (Sacred Contract #3 spirit)."""
+        try:
+            try:
+                s = float(start_sec)
+                e = float(end_sec)
+            except (TypeError, ValueError):
+                return []
+            if not (e > s) or not self.shots:
+                return []
+            out: list[tuple[float, float]] = []
+            for shot in self.shots:
+                # Drop shots entirely outside the window.
+                if shot.end <= s or shot.start >= e:
+                    continue
+                # Clip to window edges.
+                clipped_start = max(shot.start, s)
+                clipped_end = min(shot.end, e)
+                # Drop zero-duration clips (boundary touches edge).
+                if clipped_end > clipped_start:
+                    out.append((clipped_start, clipped_end))
+            return out
+        except Exception:
+            return []
+
     def to_public_dict(self) -> dict[str, Any]:
         """JSON-safe nested dict — drop-in for result_json / events / UI."""
         return asdict(self)

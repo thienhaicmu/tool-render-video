@@ -236,3 +236,154 @@ def test_to_public_dict_is_json_safe():
     d = sm.to_public_dict()
     # Should round-trip through json.dumps without TypeError.
     json.dumps(d)
+
+
+# ---------------------------------------------------------------------------
+# SceneMap.slice — D-2-motion Phase 1 D1.2
+# ---------------------------------------------------------------------------
+
+
+def test_slice_empty_map_returns_empty():
+    """The motion/crop.py caller treats `[]` as "no SceneMap available" and
+    falls back to the legacy pixel-diff detector."""
+    sm = SceneMap()
+    assert sm.slice(0.0, 30.0) == []
+
+
+def test_slice_full_overlap_returns_all_shots_clipped():
+    sm = _three_shot_map()  # shots 0-10, 10-25, 25-60
+    result = sm.slice(0.0, 60.0)
+    assert result == [(0.0, 10.0), (10.0, 25.5), (25.5, 60.0)]
+
+
+def test_slice_window_drops_out_of_range_shots():
+    sm = _three_shot_map()
+    # Window covers only the middle shot.
+    result = sm.slice(11.0, 24.0)
+    assert result == [(11.0, 24.0)]  # clipped to window edges
+
+
+def test_slice_partial_overlap_clips_to_window_edges():
+    sm = _three_shot_map()
+    # Window straddles shot 0 (0-10) and shot 1 (10-25.5) partially.
+    result = sm.slice(5.0, 15.0)
+    assert result == [(5.0, 10.0), (10.0, 15.0)]
+
+
+def test_slice_window_before_all_shots_returns_empty():
+    sm = SceneMap(shots=[Shot(start=10.0, end=20.0)])
+    assert sm.slice(0.0, 5.0) == []
+
+
+def test_slice_window_after_all_shots_returns_empty():
+    sm = SceneMap(shots=[Shot(start=10.0, end=20.0)])
+    assert sm.slice(30.0, 40.0) == []
+
+
+def test_slice_window_inside_single_shot():
+    sm = SceneMap(shots=[Shot(start=0.0, end=100.0)])
+    result = sm.slice(20.0, 80.0)
+    assert result == [(20.0, 80.0)]
+
+
+def test_slice_window_touches_boundary_excludes_zero_width():
+    """If the window's start exactly equals a shot's end, no overlap → no entry.
+    Prevents zero-duration ranges in the output."""
+    sm = SceneMap(shots=[Shot(start=0.0, end=10.0), Shot(start=10.0, end=20.0)])
+    # Window starts exactly at the first shot's end → only shot[1] qualifies.
+    result = sm.slice(10.0, 20.0)
+    assert result == [(10.0, 20.0)]
+
+
+def test_slice_invalid_window_returns_empty():
+    sm = _three_shot_map()
+    # end <= start.
+    assert sm.slice(20.0, 10.0) == []
+    assert sm.slice(10.0, 10.0) == []
+
+
+def test_slice_garbage_window_does_not_raise():
+    sm = _three_shot_map()
+    # Defensive — never raise on bad input.
+    assert sm.slice("garbage", 10.0) == []  # type: ignore[arg-type]
+    assert sm.slice(None, None) == []       # type: ignore[arg-type]
+    assert sm.slice(0.0, "x") == []         # type: ignore[arg-type]
+
+
+def test_slice_output_is_chronological_and_non_overlapping():
+    sm = SceneMap(shots=[
+        Shot(start=0.0, end=10.0),
+        Shot(start=10.0, end=25.5),
+        Shot(start=25.5, end=60.0),
+    ])
+    result = sm.slice(5.0, 30.0)
+    # Verify ordering.
+    for i in range(len(result) - 1):
+        assert result[i][0] < result[i][1], f"non-monotonic range at index {i}"
+        assert result[i][1] <= result[i + 1][0], f"overlap between {i} and {i+1}"
+
+
+def test_slice_matches_pixel_diff_contract_shape():
+    """Slice output must be drop-in compatible with
+    ``_detect_scene_ranges_in_clip`` shape: list of (start, end) float tuples,
+    chronological, non-overlapping, in source-global seconds."""
+    sm = _three_shot_map()
+    result = sm.slice(0.0, 60.0)
+    assert isinstance(result, list)
+    for entry in result:
+        assert isinstance(entry, tuple) and len(entry) == 2
+        assert isinstance(entry[0], float) and isinstance(entry[1], float)
+        assert entry[1] > entry[0]
+
+
+def test_slice_single_shot_window_returns_one_range():
+    """A window that touches only one shot returns exactly one range."""
+    sm = _three_shot_map()
+    result = sm.slice(12.0, 20.0)
+    assert len(result) == 1
+    assert result[0] == (12.0, 20.0)
+
+
+def test_slice_window_clip_preserves_shot_inside_when_short():
+    """A short window contained entirely inside a long shot returns just
+    that window (the whole window IS the scene from motion/crop.py's POV)."""
+    sm = SceneMap(shots=[Shot(start=0.0, end=100.0)])
+    result = sm.slice(40.0, 41.0)
+    assert result == [(40.0, 41.0)]
+
+
+def test_slice_negative_window_start_clamps_to_shot_start():
+    """A negative window start is clamped against each shot's actual start —
+    no shot starts before 0.0, so the leftmost shot's start wins."""
+    sm = _three_shot_map()
+    result = sm.slice(-10.0, 5.0)
+    # Window [-10, 5] overlaps shot 0 (0, 10) → clipped to (0, 5).
+    assert result == [(0.0, 5.0)]
+
+
+def test_slice_zero_duration_inputs_handled_gracefully():
+    sm = SceneMap(shots=[Shot(start=0.0, end=5.0)])
+    # Equal-bound window → empty (invalid window).
+    assert sm.slice(2.0, 2.0) == []
+
+
+# ---------------------------------------------------------------------------
+# Slice + nearest_boundary cross-check — invariant
+# ---------------------------------------------------------------------------
+
+
+def test_slice_results_align_with_nearest_boundary():
+    """For each range in the slice output, the start/end should be either:
+      - The window edge, OR
+      - A shot boundary in the original map.
+    This is the invariant motion/crop.py relies on for EMA state carry."""
+    sm = _three_shot_map()
+    start_sec, end_sec = 5.0, 30.0
+    result = sm.slice(start_sec, end_sec)
+    all_boundaries = {start_sec, end_sec}
+    for shot in sm.shots:
+        all_boundaries.add(shot.start)
+        all_boundaries.add(shot.end)
+    for r_start, r_end in result:
+        assert r_start in all_boundaries, f"unexpected start {r_start}"
+        assert r_end in all_boundaries, f"unexpected end {r_end}"
