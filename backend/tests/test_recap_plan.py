@@ -160,7 +160,9 @@ def test_recap_scene_carries_editorial_hint():
         ]}],
     }))
     s = _scored_from_recap_plan(plan)[0]
-    assert "Recap Act 1/1" in s["editorial_hint"]
+    # R6: hint now carries an episode tag too (legacy acts → single episode).
+    assert "Recap Ep 1/1" in s["editorial_hint"]
+    assert "Act 1/1" in s["editorial_hint"]
     assert "introduce the hero" in s["editorial_hint"]
     assert s["narration_intent"] == "introduce the hero"
 
@@ -365,3 +367,86 @@ def test_recap_parser_salvages_truncated_json():
     assert plan is not None
     assert plan.scene_count() >= 2
     assert plan.scenes()[0].narration == "Mở đầu phim."
+
+
+# ── R6: episodes + per-scene audio_mode ──────────────────────────────────────
+
+def test_recap_episodes_roundtrip_and_flatten():
+    """New R6 shape: episodes → acts → scenes. acts/scenes flatten across eps."""
+    raw = json.dumps({"total_target_sec": 300, "episodes": [
+        {"title": "Tập 1", "acts": [{"title": "Setup", "beat": "setup", "scenes": [
+            {"start": 0, "end": 30, "narration": "a", "audio_mode": "narrate"}]}]},
+        {"title": "Tập 2", "acts": [{"title": "Climax", "beat": "climax", "scenes": [
+            {"start": 40, "end": 70, "narration": "b"}]}]},
+    ]})
+    plan = RecapPlan.from_json(raw)
+    assert plan.episode_count() == 2
+    assert plan.scene_count() == 2
+    assert len(plan.acts) == 2                       # flattened property
+    # deterministic round-trip preserves the episode layer
+    assert RecapPlan.from_json(plan.to_json()).episode_count() == 2
+
+
+def test_recap_legacy_acts_wrap_into_single_episode():
+    """A pre-R6 blob (top-level acts, no episodes) loads as one episode."""
+    legacy = json.dumps({"total_target_sec": 50, "acts": [
+        {"title": "A", "scenes": [{"start": 0, "end": 10, "narration": "x"}]}]})
+    plan = RecapPlan.from_json(legacy)
+    assert plan.episode_count() == 1
+    assert plan.scene_count() == 1
+    assert plan.scenes()[0].audio_mode == "narrate"   # conservative default
+
+
+def test_recap_parser_audio_mode_original_drops_narration():
+    """An 'original' scene must never carry narration — the source audio plays."""
+    raw = json.dumps({"episodes": [{"title": "Tập 1", "acts": [{"scenes": [
+        {"start": 0, "end": 12, "audio_mode": "narrate", "narration": "kể chuyện"},
+        {"start": 14, "end": 22, "audio_mode": "original", "narration": "should drop"},
+    ]}]}]})
+    plan = parse_recap_response(raw, 200.0)
+    assert plan is not None
+    sc = plan.scenes()
+    assert sc[0].audio_mode == "narrate" and sc[0].narration == "kể chuyện"
+    assert sc[1].audio_mode == "original" and sc[1].narration == ""
+
+
+def test_recap_episode_range_scales_with_duration():
+    from app.features.render.ai.llm.recap_prompts import _episode_range
+    assert _episode_range(30 * 60) == (1, 1)          # short → single
+    assert _episode_range(94 * 60)[0] >= 2            # feature film → split
+    lo, hi = _episode_range(130 * 60)
+    assert hi <= 4 and lo >= 2                         # capped, multi-episode
+
+
+def test_recap_prompt_requests_episodes_and_audio_mode():
+    from app.features.render.ai.llm.recap_prompts import build_recap_prompt
+    _, u = build_recap_prompt("[0-30] x", 94 * 60, "vi-VN")
+    assert '"episodes"' in u and '"audio_mode"' in u
+    assert "Tập" in u                                  # episode labelling guidance
+
+
+def test_recap_scored_carries_episode_and_audio_mode():
+    from app.features.render.engine.pipeline.recap_pipeline import _scored_from_recap_plan
+    plan = RecapPlan.from_json(json.dumps({"episodes": [
+        {"title": "Tập 1", "acts": [{"title": "S", "scenes": [
+            {"start": 0, "end": 12, "narration": "a"},
+            {"start": 14, "end": 22, "audio_mode": "original"}]}]},
+        {"title": "Tập 2", "acts": [{"title": "C", "scenes": [
+            {"start": 30, "end": 45, "narration": "b"}]}]},
+    ]}))
+    scored = _scored_from_recap_plan(plan)
+    assert [s["episode_index"] for s in scored] == [0, 0, 1]
+    assert scored[1]["audio_mode"] == "original" and scored[1]["narration_text"] == ""
+    # distinct global act ids across episodes (→ separate title cards)
+    assert scored[0]["act_index"] != scored[2]["act_index"]
+
+
+def test_recap_parser_caps_episode_count():
+    """More episodes than the cap fold into the last kept episode (no scene loss)."""
+    import app.features.render.ai.llm.recap_parser as rp
+    eps = [{"title": f"Tập {i}", "acts": [{"scenes": [
+        {"start": i * 20, "end": i * 20 + 12, "narration": f"n{i}"}]}]} for i in range(7)]
+    plan = parse_recap_response(json.dumps({"episodes": eps}), 1000.0)
+    assert plan is not None
+    assert plan.episode_count() <= rp._RECAP_MAX_EPISODES
+    assert plan.scene_count() == 7                     # every scene survives

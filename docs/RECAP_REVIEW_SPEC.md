@@ -290,3 +290,48 @@ chỉ rẽ nhánh 1 chỗ.
 ## 12. Thứ tự build đề xuất
 R1 → R2 → R3 (backend chạy được end-to-end) → R4 (bấm được trên app) → R5 (live view).
 Mỗi pha: code → py_compile/tsc → pytest/vitest → báo cáo → (commit khi bạn duyệt).
+
+---
+
+## 13. R6 — Episodes (Tập) + per-scene audio mode (2026-06-30)
+
+**Thay đổi cốt lõi so với R1–R5:** recap không còn là *1 video dài duy nhất*.
+AI Director giờ điều phối toàn bộ theo đề xuất của người dùng:
+
+1. **Chia tập (episodes)** — AI tự quyết chia 1 phim dài thành **1..N tập** tại
+   điểm ngắt tự nhiên của cốt truyện. Mỗi tập = **1 output video riêng** (1 entry
+   History, có Sacred #1 keys). Chặn mềm theo độ dài phim (`_episode_range`):
+   <40′ → 1 tập · 40–70′ → 1–2 · 70–100′ → 2–3 · >100′ → 3–4. Cap cứng
+   `RECAP_MAX_EPISODES` (mặc định 4) enforce ở parser (thừa thì gộp vào tập cuối).
+2. **AI tự viết lời recap** (đã có từ content-strategy) — narration soạn sẵn theo
+   từng scene, engine chỉ TTS.
+3. **narrate vs original** — mỗi scene có `audio_mode`:
+   - `"narrate"` (mặc định, đa số): TTS lời AI viết, đè lên clip.
+   - `"original"` (vài cao trào/câu thoại đắt mỗi tập): **bỏ narration, để tiếng
+     gốc bật full**. `narration` ép rỗng. `part_voice_mix` thoát sớm → audio gốc
+     nguyên vẹn (không TTS, không duck). **Tự bật phụ đề** cho scene này để người
+     xem hiểu thoại gốc.
+
+**Data model** (`domain/recap_plan.py`, `schema_version=2`):
+```
+RecapPlan → episodes[] → Episode{title, acts[]} → Act → RecapScene{..., audio_mode}
+```
+`RecapPlan.acts` giữ lại làm **property phẳng** (back-compat). Blob cũ (top-level
+`acts`, không `episodes`) → load thành **1 tập** bọc các acts đó → replay
+bit-identical (Sacred #2/#3).
+
+**Pipeline** (`recap_pipeline.py`): `_scored_from_recap_plan` gắn `episode_index`
++ `audio_mode` vào mỗi scene; `_assemble_recap_episodes` gom theo tập → concat
+mỗi tập 1 file (`{stem}_recap.mp4` nếu 1 tập, `{stem}_recap_epNN.mp4` nếu nhiều);
+QA từng tập (tập lỗi bị bỏ qua = partial success, không fail cả job); `outputs[]`
+nhiều entry, tập 1 = best.
+
+**FE** (`RecapLiveView.tsx`): event `recap.plan.ready` thêm `episodes[]` +
+`scene_modes[]` (phẳng theo part order) + `original_audio_scenes`. Live view nhóm
+act theo tập (header "🎞 Tập N") và đánh dấu scene tiếng-gốc (viền tím + 🔊).
+
+**Env**: `RECAP_MAX_EPISODES` (cap tập, default 4) ·
+`GEMINI_RECAP_MAX_TOKENS`/`_THINKING_BUDGET` (đã có từ fix truncation).
+
+> Cập nhật mục §11.4: độ dài vẫn AI quyết, nhưng output giờ là **N tập** thay vì
+> 1 video — mỗi tập là một arc tự chứa, kết ở hook.

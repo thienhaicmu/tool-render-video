@@ -67,63 +67,71 @@ logger = logging.getLogger("app.render.recap")
 
 
 def _scored_from_recap_plan(recap_plan) -> list[dict]:
-    """Flatten RecapPlan acts→scenes into the chronological `scored` shape the
-    render loop / part_renderer expects. Neutral scores (recap order is
-    chronological, not viral-ranked). `act_index` rides along so the finalize
-    step can group scenes back into acts for title cards."""
+    """Flatten RecapPlan episodes→acts→scenes into the chronological `scored`
+    shape the render loop / part_renderer expects. Neutral scores (recap order
+    is chronological, not viral-ranked). `episode_index` + `act_index` ride
+    along so the finalize step can group scenes back into episodes (→ one output
+    each) and acts (→ title cards). R6: `audio_mode` tells part_voice_mix whether
+    to narrate or let the source audio play raw."""
     out: list[dict] = []
-    n_acts = len(recap_plan.acts)
-    _prev_intent = ""   # N5: carry the previous scene's intent for continuity
-    for act_i, act in enumerate(recap_plan.acts):
-        for scene in act.scenes:
-            start = float(scene.start)
-            end = float(scene.end)
-            if end <= start:
-                continue
-            # R3 + N5: compose the per-scene DIRECTOR'S INTENT — act position +
-            # the PREVIOUS scene's intent + this scene's intent — so the narrator
-            # tells ONE continuous story that flows scene→scene (not isolated
-            # per-clip blurbs).
-            _intent = (scene.narration_intent or "").strip()
-            _act_tag = f"Act {act_i + 1}/{n_acts}"
-            if act.title:
-                _act_tag += f" — {act.title}"
-            if act.beat:
-                _act_tag += f" ({act.beat})"
-            _hint_parts = [f"[Recap {_act_tag}]"]
-            if _prev_intent:
-                _hint_parts.append(f"Previously: {_prev_intent}.")
-            if _intent:
-                _hint_parts.append(f"Now: {_intent}")
-            _editorial = " ".join(_hint_parts).strip() if (_intent or act.title or _prev_intent) else ""
-            if _intent:
-                _prev_intent = _intent
-            out.append({
-                "start": start,
-                "end": end,
-                "duration": end - start,
-                "viral_score": 50.0,
-                "hook_score": 50.0,
-                "motion_score": 50.0,
-                "diversity_score": 50.0,
-                "retention_score": 50.0,
-                "audio_energy": 50.0,
-                "clip_name": (scene.title or f"scene_{len(out)+1}"),
-                "ai_title": scene.title or "",
-                "ai_reason": scene.narration_intent or "",
-                "narration_intent": _intent,
-                "editorial_hint": _editorial,
-                # AI-authored recap narration (content-strategy: AI writes it,
-                # engine just speaks it). When present, part_voice_mix TTS's this
-                # directly and SKIPS the per-scene rewrite LLM call.
-                "narration_text": (scene.narration or "").strip(),
-                "source": "recap",
-                "content_type_hint": "",
-                "is_climax": bool(scene.is_climax),
-                "act_index": act_i,
-                "act_title": act.title or "",
-                "act_beat": act.beat or "",
-            })
+    _global_act = 0     # monotonically-increasing act id for title-card grouping
+    for ep_i, ep in enumerate(recap_plan.episodes):
+        n_acts = len(ep.acts)
+        _prev_intent = ""   # N5: continuity resets at each episode boundary
+        for act_local, act in enumerate(ep.acts):
+            for scene in act.scenes:
+                start = float(scene.start)
+                end = float(scene.end)
+                if end <= start:
+                    continue
+                _mode = "original" if (getattr(scene, "audio_mode", "narrate") == "original") else "narrate"
+                # R3 + N5: compose the per-scene DIRECTOR'S INTENT — act position +
+                # previous scene's intent + this scene's intent — so the narrator
+                # tells ONE continuous story that flows scene→scene.
+                _intent = (scene.narration_intent or "").strip()
+                _act_tag = f"Act {act_local + 1}/{n_acts}"
+                if act.title:
+                    _act_tag += f" — {act.title}"
+                if act.beat:
+                    _act_tag += f" ({act.beat})"
+                _ep_tag = f"Ep {ep_i + 1}/{len(recap_plan.episodes)}"
+                _hint_parts = [f"[Recap {_ep_tag} · {_act_tag}]"]
+                if _prev_intent:
+                    _hint_parts.append(f"Previously: {_prev_intent}.")
+                if _intent:
+                    _hint_parts.append(f"Now: {_intent}")
+                _editorial = " ".join(_hint_parts).strip() if (_intent or act.title or _prev_intent) else ""
+                if _intent:
+                    _prev_intent = _intent
+                out.append({
+                    "start": start,
+                    "end": end,
+                    "duration": end - start,
+                    "viral_score": 50.0,
+                    "hook_score": 50.0,
+                    "motion_score": 50.0,
+                    "diversity_score": 50.0,
+                    "retention_score": 50.0,
+                    "audio_energy": 50.0,
+                    "clip_name": (scene.title or f"scene_{len(out)+1}"),
+                    "ai_title": scene.title or "",
+                    "ai_reason": scene.narration_intent or "",
+                    "narration_intent": _intent,
+                    "editorial_hint": _editorial,
+                    # AI-authored recap narration. Empty for "original" scenes —
+                    # part_voice_mix then skips voice and keeps the source audio.
+                    "narration_text": (scene.narration or "").strip(),
+                    "audio_mode": _mode,
+                    "source": "recap",
+                    "content_type_hint": "",
+                    "is_climax": bool(scene.is_climax),
+                    "episode_index": ep_i,
+                    "episode_title": ep.title or "",
+                    "act_index": _global_act,
+                    "act_title": act.title or "",
+                    "act_beat": act.beat or "",
+                })
+            _global_act += 1
     return out
 
 
@@ -243,11 +251,28 @@ def run_recap(
         if recap_plan is None or not recap_plan.acts:
             raise RuntimeError("Recap: AI returned no usable plan")
         update_recap_plan(job_id, recap_plan.to_json())
+        _n_original = sum(1 for s in recap_plan.scenes() if getattr(s, "audio_mode", "narrate") == "original")
         _emit_render_event(
             channel_code=effective_channel, job_id=job_id, event="recap.plan.ready",
-            level="INFO", message=f"Recap plan: {len(recap_plan.acts)} acts, {recap_plan.scene_count()} scenes",
+            level="INFO",
+            message=(
+                f"Recap plan: {recap_plan.episode_count()} episode(s), "
+                f"{len(recap_plan.acts)} acts, {recap_plan.scene_count()} scenes "
+                f"({_n_original} original-audio)"
+            ),
             step="render.recap", context={
+                "episodes": [
+                    {"title": ep.title, "acts": len(ep.acts), "scenes": ep.scene_count()}
+                    for ep in recap_plan.episodes
+                ],
                 "acts": [{"title": a.title, "beat": a.beat, "scenes": len(a.scenes)} for a in recap_plan.acts],
+                # Flat per-scene audio mode in part order — lets the live view mark
+                # which scenes play original audio vs narration.
+                "scene_modes": [
+                    ("original" if getattr(s, "audio_mode", "narrate") == "original" else "narrate")
+                    for s in recap_plan.scenes()
+                ],
+                "original_audio_scenes": _n_original,
                 "total_target_sec": recap_plan.total_target_sec,
             },
         )
@@ -283,8 +308,12 @@ def run_recap(
         total_parts = len(scored)
 
         # 4. Render each scene as a "part" (reuse the clips render loop) ------
+        # R6: force subtitle ON for "original audio" scenes so the viewer can
+        # follow the raw source dialogue even when global subtitles are off.
+        _add_sub = bool(getattr(payload, "add_subtitle", False))
         subtitle_enabled_by_idx = {
-            i: bool(getattr(payload, "add_subtitle", False)) for i in range(1, total_parts + 1)
+            i: (_add_sub or str(scored[i - 1].get("audio_mode", "")) == "original")
+            for i in range(1, total_parts + 1)
         }
         try:
             _src_stat_for_motion = source_path.stat()
@@ -322,42 +351,68 @@ def run_recap(
         )
         failed_parts = _loop.failed_parts
 
-        # 5. Assemble: act cards + scene clips → ONE long video --------------
-        _set_stage(JobStage.WRITING_REPORT, 90, "Assembling recap video")
-        _final_path = _assemble_recap(
+        # 5. Assemble: one output video PER EPISODE (Tập) --------------------
+        _n_eps = recap_plan.episode_count()
+        _set_stage(JobStage.WRITING_REPORT, 90, f"Assembling recap ({_n_eps} episode(s))")
+        _episodes = _assemble_recap_episodes(
             job_id=job_id, effective_channel=effective_channel, payload=payload,
             output_dir=output_dir, output_stem=_output_stem, source_path=source_path,
             scored=scored, recap_plan=recap_plan,
         )
-        if not _final_path:
+        if not _episodes:
             raise RuntimeError("Recap: assembly produced no output")
 
-        # 6. QA the single delivered output (Sacred #8) ----------------------
-        _qa = _validate_render_output(Path(_final_path), expect_audio=True)
-        if not _qa["ok"]:
-            raise RuntimeError(f"Recap output failed QA: {_qa.get('error')}")
-        _dur = float(_qa["metadata"].get("duration") or 0.0)
+        # 6. QA each delivered episode (Sacred #8) — keep the ones that pass --
+        _outputs: list[dict] = []
+        _failed_eps: list[int] = []
+        for _ep in _episodes:
+            _qa = _validate_render_output(Path(_ep["path"]), expect_audio=True)
+            if not _qa["ok"]:
+                _failed_eps.append(int(_ep["episode_index"]))
+                _job_log(
+                    effective_channel, job_id,
+                    f"recap_episode_qa_failed ep={_ep['episode_index'] + 1}: {_qa.get('error')}",
+                    kind="warning",
+                )
+                continue
+            _ep["duration"] = float(_qa["metadata"].get("duration") or 0.0)
+            _outputs.append(_ep)
+        if not _outputs:
+            raise RuntimeError("Recap: every episode failed QA")
 
         # 7. Terminal result_json + DONE -------------------------------------
-        _output_entry = {
-            "part_no": 1, "path": _final_path, "output_file": _final_path,
-            "output_path": _final_path, "title": source.get("title") or "Recap",
-            "clip_name": "recap", "ai_title": "Recap", "start_sec": 0.0,
-            "end_sec": _dur, "duration": _dur, "viral_score": 100.0,
-            # Sacred Contract #1 keys (one output, it is the best by definition).
-            "output_rank_score": 100.0, "is_best_output": True, "is_best_clip": True,
-        }
+        # N episode outputs. Episode 1 is "best" by convention; rank follows
+        # episode order. Every entry carries the Sacred #1 keys.
+        _output_entries: list[dict] = []
+        for _rank, _ep in enumerate(_outputs, start=1):
+            _is_best = _rank == 1
+            _ep_no = int(_ep["episode_index"]) + 1
+            _dur_ep = float(_ep.get("duration") or 0.0)
+            _title = _ep.get("title") or f"Recap — Tập {_ep_no}"
+            _output_entries.append({
+                "part_no": _rank, "path": _ep["path"], "output_file": _ep["path"],
+                "output_path": _ep["path"], "title": _title,
+                "clip_name": f"recap_ep{_ep_no:02d}", "ai_title": _title,
+                "episode_no": _ep_no, "start_sec": 0.0, "end_sec": _dur_ep,
+                "duration": _dur_ep, "viral_score": 100.0,
+                # Sacred Contract #1 keys — present on EVERY output.
+                "output_rank_score": float(max(1, 101 - _rank)),
+                "is_best_output": _is_best, "is_best_clip": _is_best,
+            })
+        _total_dur = sum(float(e.get("duration") or 0.0) for e in _output_entries)
         _result = {
-            "outputs": [_output_entry],
+            "outputs": _output_entries,
             "render_format": "recap",
             "recap_plan": recap_plan.to_json(),
-            "output_ranking": [dict(_output_entry, output_rank=1)],
-            "best_clip": _output_entry,
-            "successful_outputs_count": 1,
-            "failed_outputs_count": len(failed_parts),
+            "recap_episodes_count": len(_output_entries),
+            "output_ranking": [dict(e, output_rank=i) for i, e in enumerate(_output_entries, start=1)],
+            "best_clip": _output_entries[0],
+            "successful_outputs_count": len(_output_entries),
+            "failed_outputs_count": len(failed_parts) + len(_failed_eps),
             "failed_parts": [int(f.get("part_no", 0)) for f in failed_parts],
+            "failed_episodes": _failed_eps,
             "selected_segments_count": total_parts,
-            "is_partial_success": bool(failed_parts),
+            "is_partial_success": bool(failed_parts) or bool(_failed_eps),
             "ai_director": {"enabled": False},
             "recap_acts": [
                 {"title": a.title, "beat": a.beat, "scenes": len(a.scenes)} for a in recap_plan.acts
@@ -366,14 +421,18 @@ def run_recap(
         upsert_job(
             job_id, "render", effective_channel, "completed", payload.model_dump(), _result,
             stage=JobStage.DONE, progress_percent=100,
-            message=f"Recap complete: {recap_plan.scene_count()} scenes, {_dur:.0f}s",
+            message=f"Recap complete: {len(_output_entries)} episode(s), {recap_plan.scene_count()} scenes, {_total_dur:.0f}s",
         )
         _emit_render_event(
             channel_code=effective_channel, job_id=job_id, event="render.complete",
             level="INFO", message="Recap render complete", step="render.complete",
-            context={"duration_sec": _dur, "scenes": total_parts, "acts": len(recap_plan.acts)},
+            context={"duration_sec": _total_dur, "scenes": total_parts,
+                     "episodes": len(_output_entries), "acts": len(recap_plan.acts)},
         )
-        _job_log(effective_channel, job_id, f"Recap DONE: {_final_path} ({_dur:.0f}s)")
+        _job_log(
+            effective_channel, job_id,
+            f"Recap DONE: {len(_output_entries)} episode(s) ({_total_dur:.0f}s total)",
+        )
     finally:
         try:
             unregister_job_log_dir(job_id)
@@ -385,12 +444,15 @@ def run_recap(
             pass
 
 
-def _assemble_recap(
+def _assemble_recap_episodes(
     *, job_id, effective_channel, payload, output_dir, output_stem,
     source_path, scored, recap_plan,
-) -> Optional[str]:
-    """Build act title cards, then concat [card, scenes…] per act into 1 video."""
-    # Map rendered scene files from the DB (output_file column) by part order.
+) -> list[dict]:
+    """R6: assemble ONE output video per EPISODE. Within each episode, insert an
+    act title card before the first scene of each act, then concat
+    [card, scenes…] → {output_stem}_recap_epNN.mp4. Returns a list of
+    {episode_index, title, path} for the episodes that produced a file (partial
+    success: an episode whose clips all failed is skipped, not fatal)."""
     parts = {int(p["part_no"]): p for p in list_job_parts(job_id)}
     width, height = resolve_target_dimensions(str(getattr(payload, "aspect_ratio", "16:9") or "16:9"))
     try:
@@ -400,36 +462,55 @@ def _assemble_recap(
 
     card_dir = TEMP_DIR / job_id / "recap_cards"
     card_dir.mkdir(parents=True, exist_ok=True)
-    ordered_clips: list[str] = []
-    _seen_acts: set[int] = set()
 
+    # Group the rendered scene parts by episode, preserving order.
+    n_eps = recap_plan.episode_count()
+    single = n_eps <= 1
+    by_episode: dict[int, list[tuple[int, dict]]] = {}
     for idx, seg in enumerate(scored, start=1):
-        act_i = int(seg.get("act_index", 0))
-        # One title card before the first scene of each act.
-        if act_i not in _seen_acts:
-            _seen_acts.add(act_i)
-            _card = card_dir / f"act_{act_i:02d}.mp4"
-            if make_act_title_card(
-                source_video=str(source_path), at_sec=float(seg.get("start", 0.0)),
-                title_text=str(seg.get("act_title") or f"Act {act_i + 1}"),
-                out_path=str(_card), width=width, height=height, fps=fps,
-            ):
-                ordered_clips.append(str(_card))
-        _row = parts.get(idx)
-        _file = (_row or {}).get("output_file") if _row else None
-        if _file and Path(_file).exists() and Path(_file).stat().st_size > 0:
-            ordered_clips.append(str(_file))
+        by_episode.setdefault(int(seg.get("episode_index", 0)), []).append((idx, seg))
 
-    if not ordered_clips:
-        return None
+    ep_titles = {i: (ep.title or "") for i, ep in enumerate(recap_plan.episodes)}
+    out_episodes: list[dict] = []
 
-    _out = Path(output_dir) / f"{output_stem}_recap.mp4"
-    _res = concat_clips(ordered_clips, str(_out), width=width, height=height, fps=fps)
-    if not _res.get("ok"):
-        return None
-    _emit_render_event(
-        channel_code=effective_channel, job_id=job_id, event="recap.concat.done",
-        level="INFO", message=f"Recap assembled ({_res.get('method')})",
-        step="render.recap", context={"clips": len(ordered_clips), "method": _res.get("method")},
-    )
-    return str(_out)
+    for ep_i in sorted(by_episode.keys()):
+        ordered_clips: list[str] = []
+        _seen_acts: set[int] = set()
+        for idx, seg in by_episode[ep_i]:
+            act_i = int(seg.get("act_index", 0))
+            if act_i not in _seen_acts:
+                _seen_acts.add(act_i)
+                _card = card_dir / f"act_{act_i:02d}.mp4"
+                if make_act_title_card(
+                    source_video=str(source_path), at_sec=float(seg.get("start", 0.0)),
+                    title_text=str(seg.get("act_title") or f"Act {act_i + 1}"),
+                    out_path=str(_card), width=width, height=height, fps=fps,
+                ):
+                    ordered_clips.append(str(_card))
+            _row = parts.get(idx)
+            _file = (_row or {}).get("output_file") if _row else None
+            if _file and Path(_file).exists() and Path(_file).stat().st_size > 0:
+                ordered_clips.append(str(_file))
+
+        if not ordered_clips:
+            continue
+
+        _suffix = "_recap.mp4" if single else f"_recap_ep{ep_i + 1:02d}.mp4"
+        _out = Path(output_dir) / f"{output_stem}{_suffix}"
+        _res = concat_clips(ordered_clips, str(_out), width=width, height=height, fps=fps)
+        if not _res.get("ok"):
+            _job_log(effective_channel, job_id, f"recap_episode_concat_failed ep={ep_i + 1}", kind="warning")
+            continue
+        _emit_render_event(
+            channel_code=effective_channel, job_id=job_id, event="recap.concat.done",
+            level="INFO", message=f"Recap episode {ep_i + 1} assembled ({_res.get('method')})",
+            step="render.recap",
+            context={"episode": ep_i + 1, "clips": len(ordered_clips), "method": _res.get("method")},
+        )
+        out_episodes.append({
+            "episode_index": ep_i,
+            "title": ep_titles.get(ep_i, "") or (None if single else f"Recap — Tập {ep_i + 1}"),
+            "path": str(_out),
+        })
+
+    return out_episodes

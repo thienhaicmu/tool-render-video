@@ -21,12 +21,21 @@ logger = logging.getLogger("app.render.llm_recap_parser")
 # neighbour. Override via RECAP_MIN_SCENE_SEC.
 import os as _os
 _RECAP_MIN_SCENE_SEC: float = max(0.0, float(_os.getenv("RECAP_MIN_SCENE_SEC", "6") or 6))
+# R6 — hard cap on episode count (soft-guided in the prompt, enforced here).
+_RECAP_MAX_EPISODES: int = max(1, int(_os.getenv("RECAP_MAX_EPISODES", "4") or 4))
+
+
+def _merge_two_modes(a: str, b: str) -> str:
+    """Audio mode of a merged scene: narrate wins (only stays original when BOTH
+    are original) so a short 'original' fragment folded into a narrated beat
+    doesn't silence the narration."""
+    return "original" if (a == "original" and b == "original") else "narrate"
 
 
 def _merge_short_scenes(scenes: list[dict], min_sec: float) -> list[dict]:
     """Merge consecutive scenes shorter than min_sec into a neighbour so no
-    2–5s fragments survive. Combines is_climax + keeps the first non-empty
-    narration_intent. Never raises."""
+    2–5s fragments survive. Combines is_climax + audio_mode + keeps the first
+    non-empty narration_intent. Never raises."""
     if not scenes or min_sec <= 0:
         return scenes
     try:
@@ -36,6 +45,8 @@ def _merge_short_scenes(scenes: list[dict], min_sec: float) -> list[dict]:
             if (prev["end"] - prev["start"]) < min_sec:
                 prev["end"] = s["end"]
                 prev["is_climax"] = bool(prev.get("is_climax")) or bool(s.get("is_climax"))
+                prev["audio_mode"] = _merge_two_modes(
+                    str(prev.get("audio_mode") or "narrate"), str(s.get("audio_mode") or "narrate"))
                 # Concatenate the AI-authored narration so the merged scene keeps
                 # both lines (the engine speaks the combined text).
                 if s.get("narration"):
@@ -44,6 +55,9 @@ def _merge_short_scenes(scenes: list[dict], min_sec: float) -> list[dict]:
                     prev["narration_intent"] = s["narration_intent"]
                 if not prev.get("title") and s.get("title"):
                     prev["title"] = s["title"]
+                # A merged scene that ended up narrate must not have empty text.
+                if prev["audio_mode"] == "narrate" and not str(prev.get("narration", "")).strip():
+                    prev["narration"] = str(s.get("narration", "") or "").strip()
             else:
                 out.append(dict(s))
         # If the final scene is still too short, fold it back into its neighbour.
@@ -51,6 +65,8 @@ def _merge_short_scenes(scenes: list[dict], min_sec: float) -> list[dict]:
             last = out.pop()
             out[-1]["end"] = last["end"]
             out[-1]["is_climax"] = bool(out[-1].get("is_climax")) or bool(last.get("is_climax"))
+            out[-1]["audio_mode"] = _merge_two_modes(
+                str(out[-1].get("audio_mode") or "narrate"), str(last.get("audio_mode") or "narrate"))
         return out
     except Exception:
         return scenes
@@ -136,60 +152,105 @@ def _salvage_json(raw: str) -> Optional[dict]:
                 d = json.loads(cand)
             except (json.JSONDecodeError, TypeError):
                 continue
-            if isinstance(d, dict) and isinstance(d.get("acts"), list) and d["acts"]:
+            if not isinstance(d, dict):
+                continue
+            # Accept either the R6 episode shape or the legacy top-level acts.
+            if isinstance(d.get("episodes"), list) and d["episodes"]:
+                return d
+            if isinstance(d.get("acts"), list) and d["acts"]:
                 return d
         return None
     except Exception:
         return None
 
 
-def _clean(data: dict, video_duration: float) -> Optional[RecapPlan]:
-    """Build + clamp a RecapPlan from a parsed dict. Returns None if nothing usable."""
-    dur = float(video_duration) if video_duration and video_duration > 0 else 0.0
-    acts_out: list[dict] = []
-    raw_acts = data.get("acts")
-    if not isinstance(raw_acts, list):
+def _norm_audio_mode(v) -> str:
+    s = str(v or "").strip().lower()
+    return "original" if s in ("original", "source", "raw", "keep", "keep_original", "silent") else "narrate"
+
+
+def _clean_act(act: dict, dur: float) -> Optional[dict]:
+    """Clean one act dict → {title, beat, scenes[]} or None if it has no usable
+    scene. Clamps + merges short scenes; carries R6 audio_mode."""
+    if not isinstance(act, dict):
         return None
-    for act in raw_acts:
-        if not isinstance(act, dict):
+    scenes_out: list[dict] = []
+    for s in (act.get("scenes") or []):
+        if not isinstance(s, dict):
             continue
-        scenes_out: list[dict] = []
-        for s in (act.get("scenes") or []):
-            if not isinstance(s, dict):
-                continue
-            try:
-                st = float(s.get("start"))
-                en = float(s.get("end"))
-            except (TypeError, ValueError):
-                continue
-            if st < 0:
-                st = 0.0
-            if dur and en > dur:
-                en = dur
-            if en <= st or (en - st) < 0.3:
-                continue
-            scenes_out.append({
-                "start": round(st, 3), "end": round(en, 3),
-                "title": str(s.get("title", "") or "").strip(),
-                "narration": str(s.get("narration", "") or "").strip(),
-                "narration_intent": str(s.get("narration_intent", "") or "").strip(),
-                "is_climax": bool(s.get("is_climax", False)),
-            })
-        if not scenes_out:
+        try:
+            st = float(s.get("start"))
+            en = float(s.get("end"))
+        except (TypeError, ValueError):
             continue
-        scenes_out.sort(key=lambda x: x["start"])
-        scenes_out = _merge_short_scenes(scenes_out, _RECAP_MIN_SCENE_SEC)
-        acts_out.append({
-            "title": str(act.get("title", "") or "").strip(),
-            "beat": str(act.get("beat", "") or "").strip().lower(),
-            "scenes": scenes_out,
+        if st < 0:
+            st = 0.0
+        if dur and en > dur:
+            en = dur
+        if en <= st or (en - st) < 0.3:
+            continue
+        mode = _norm_audio_mode(s.get("audio_mode"))
+        narration = str(s.get("narration", "") or "").strip()
+        # An "original" scene plays the source audio — never carries narration.
+        if mode == "original":
+            narration = ""
+        scenes_out.append({
+            "start": round(st, 3), "end": round(en, 3),
+            "title": str(s.get("title", "") or "").strip(),
+            "narration": narration,
+            "narration_intent": str(s.get("narration_intent", "") or "").strip(),
+            "audio_mode": mode,
+            "is_climax": bool(s.get("is_climax", False)),
         })
-    if not acts_out:
+    if not scenes_out:
         return None
+    scenes_out.sort(key=lambda x: x["start"])
+    scenes_out = _merge_short_scenes(scenes_out, _RECAP_MIN_SCENE_SEC)
+    return {
+        "title": str(act.get("title", "") or "").strip(),
+        "beat": str(act.get("beat", "") or "").strip().lower(),
+        "scenes": scenes_out,
+    }
+
+
+def _clean(data: dict, video_duration: float) -> Optional[RecapPlan]:
+    """Build + clamp a RecapPlan from a parsed dict. Handles both the R6 episode
+    shape and the legacy top-level-acts shape. Returns None if nothing usable."""
+    dur = float(video_duration) if video_duration and video_duration > 0 else 0.0
+
+    # Normalise input to a list of raw episode dicts ({title, acts[]}). Legacy
+    # blobs (top-level "acts", no "episodes") become a single episode.
+    raw_eps = data.get("episodes")
+    if isinstance(raw_eps, list) and raw_eps:
+        raw_episodes = [e for e in raw_eps if isinstance(e, dict)]
+    elif isinstance(data.get("acts"), list) and data["acts"]:
+        raw_episodes = [{"title": "", "acts": data["acts"]}]
+    else:
+        return None
+
+    episodes_out: list[dict] = []
+    for ep in raw_episodes:
+        acts_out: list[dict] = []
+        for act in (ep.get("acts") or []):
+            cleaned = _clean_act(act, dur)
+            if cleaned:
+                acts_out.append(cleaned)
+        if acts_out:
+            episodes_out.append({"title": str(ep.get("title", "") or "").strip(), "acts": acts_out})
+    if not episodes_out:
+        return None
+
+    # Enforce the episode cap: fold any overflow episodes' acts into the last
+    # kept episode (keeps every scene, just fewer deliverables).
+    if len(episodes_out) > _RECAP_MAX_EPISODES:
+        head = episodes_out[: _RECAP_MAX_EPISODES]
+        for extra in episodes_out[_RECAP_MAX_EPISODES:]:
+            head[-1]["acts"].extend(extra["acts"])
+        episodes_out = head
 
     # total_target_sec: trust the model but clamp to (0, film duration]; fall
     # back to the summed scene durations when missing/insane.
-    summed = sum(sc["end"] - sc["start"] for a in acts_out for sc in a["scenes"])
+    summed = sum(sc["end"] - sc["start"] for e in episodes_out for a in e["acts"] for sc in a["scenes"])
     try:
         total = float(data.get("total_target_sec") or 0.0)
     except (TypeError, ValueError):
@@ -201,7 +262,7 @@ def _clean(data: dict, video_duration: float) -> Optional[RecapPlan]:
 
     return RecapPlan.from_json(json.dumps({
         "total_target_sec": round(total, 3),
-        "acts": acts_out,
+        "episodes": episodes_out,
     }))
 
 
@@ -217,7 +278,8 @@ def parse_recap_response(raw: str, video_duration: float) -> Optional[RecapPlan]
             # → salvage the complete prefix (drops only the cut-off tail scene).
             data = _salvage_json(text)
             if isinstance(data, dict):
-                logger.warning("recap_parser: response was truncated — salvaged %d act(s)", len(data.get("acts", [])))
+                _n = len(data.get("episodes") or data.get("acts") or [])
+                logger.warning("recap_parser: response was truncated — salvaged %d episode/act group(s)", _n)
         if not isinstance(data, dict):
             logger.warning("recap_parser: no JSON object found (even after salvage)")
             return None

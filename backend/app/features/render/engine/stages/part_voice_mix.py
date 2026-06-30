@@ -278,6 +278,26 @@ def run_part_voice_mix(
     # body below is byte-for-byte identical to the pre-2.5b code.
     _part_manifest = part_manifest
 
+    # ── R6 recap "original audio" scene ─────────────────────────────────────
+    # The AI Director marked this scene audio_mode="original": stop narrating
+    # and let the SOURCE audio play RAW (a peak dramatic beat). Skip EVERY voice
+    # branch so final_part keeps its untouched original audio at full volume —
+    # no TTS, no rewrite LLM call, no ducking.
+    if str(seg.get("audio_mode", "") or "").strip().lower() == "original":
+        _job_log(
+            ctx.effective_channel, ctx.job_id,
+            f"voice.recap_original part_no={idx}: AI chose original audio — skipping narration",
+            kind="debug",
+        )
+        _emit_render_event(
+            channel_code=ctx.effective_channel, job_id=ctx.job_id,
+            event="voice_skipped_original", level="INFO",
+            message=f"Scene plays original audio (part {idx})",
+            step="voice.tts",
+            context={"part_no": idx, "audio_mode": "original"},
+        )
+        return
+
     _part_subtitle_voice_path = None
     # Reaction freeze-frame (Phase B): captured from the ai_rewrite segments so
     # the freeze post-pass at the end of this function can apply suspense holds.
