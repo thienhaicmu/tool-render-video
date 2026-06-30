@@ -324,6 +324,16 @@ def startup():
     _configure_error_log_filter()
     init_db()
     _check_db_fallback_at_startup()
+    # Apply persisted performance toggles (Settings UI: iGPU decode / QSV encode)
+    # to the process env the encode helpers read. Defensive — never blocks boot.
+    try:
+        from app.db.creator_repo import get_performance_prefs
+        from app.routes.settings import apply_performance_env
+        _perf = get_performance_prefs()
+        if _perf is not None:
+            apply_performance_env(_perf["hwdecode"], _perf["qsv"])
+    except Exception as _perf_exc:
+        logging.getLogger("app.startup").warning("performance prefs apply failed: %s", _perf_exc)
     # Phase E: seed built-in render presets (idempotent — safe on every restart).
     try:
         from app.services.preset_seeder import seed_builtin_presets

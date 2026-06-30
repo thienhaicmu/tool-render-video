@@ -42,6 +42,39 @@ _CREATOR_CONTEXT_KEY = "creator_context"
 _DATA_RETENTION_KEY = "data_retention"
 
 
+# Perf toggles (P0/P3) under prefs_json["performance"] = {hwdecode, qsv}.
+_PERFORMANCE_KEY = "performance"
+
+
+def get_performance_prefs() -> Optional[dict]:
+    """Return {'hwdecode': bool, 'qsv': bool} or None when never configured
+    (so the route can fall back to the env/.env effective state). Never raises."""
+    try:
+        prefs = get_creator_prefs()
+    except Exception as exc:
+        logger.warning("get_performance_prefs failed: %s", exc)
+        return None
+    nested = prefs.get(_PERFORMANCE_KEY)
+    if not isinstance(nested, dict):
+        return None
+    return {"hwdecode": bool(nested.get("hwdecode")), "qsv": bool(nested.get("qsv"))}
+
+
+def upsert_performance_prefs(hwdecode: bool, qsv: bool) -> dict:
+    """Persist the perf toggles, preserving other prefs keys. Never raises."""
+    out = {"hwdecode": bool(hwdecode), "qsv": bool(qsv)}
+    try:
+        current = get_creator_prefs()
+    except Exception:
+        current = {}
+    current[_PERFORMANCE_KEY] = out
+    try:
+        upsert_creator_prefs(current)
+    except Exception as exc:
+        logger.warning("upsert_performance_prefs failed: %s", exc)
+    return out
+
+
 def get_creator_prefs() -> dict:
     with db_conn() as conn:
         row = conn.execute(

@@ -20,6 +20,7 @@ Design notes:
 """
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -30,11 +31,13 @@ from app.db.creator_repo import (
     get_creator_context_for_channel,
     get_default_output_dir,
     get_job_retention_days,
+    get_performance_prefs,
     get_render_defaults,
     upsert_creator_context,
     upsert_creator_context_for_channel,
     upsert_default_output_dir,
     upsert_job_retention_days,
+    upsert_performance_prefs,
     upsert_render_defaults,
 )
 from app.domain.creator_context import CreatorContext
@@ -267,6 +270,63 @@ def put_settings_data_retention(payload: DataRetentionPayload) -> DataRetentionE
         saved = upsert_job_retention_days(payload.job_retention_days)
     except Exception as exc:  # pragma: no cover — repo helper is defensive
         raise HTTPException(status_code=500, detail=f"data_retention write failed: {exc}")
+    return _data_retention_envelope_after_put(saved)
+
+
+# ── Performance toggles (P0 QSV encode / P3 hwaccel decode) ──────────────
+
+
+def apply_performance_env(hwdecode: bool, qsv: bool) -> None:
+    """Push the perf toggles into the process env that the encode helpers read
+    (encoder_helpers.qsv_enabled / clip_renderer._hwdecode_enabled). Clears the
+    QSV runtime-probe cache so a toggle takes effect on the next render without
+    a restart. Never raises."""
+    os.environ["ENABLE_HWDECODE"] = "1" if hwdecode else "0"
+    os.environ["ENABLE_QSV"] = "1" if qsv else "0"
+    try:
+        from app.features.render.engine.encoder.encoder_helpers import qsv_runtime_ready
+        qsv_runtime_ready.cache_clear()
+    except Exception:
+        pass
+
+
+class PerformancePayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    hwdecode: bool = False   # P3 — iGPU source decode (quality-neutral)
+    qsv: bool = False        # P0 — iGPU QSV encode (faster; slight quality trade)
+
+
+class PerformanceEnvelope(BaseModel):
+    is_configured: bool
+    performance: PerformancePayload
+
+
+@router.get("/performance", response_model=PerformanceEnvelope)
+def get_settings_performance() -> PerformanceEnvelope:
+    """Return the saved perf toggles, or (when never configured) the EFFECTIVE
+    env state so the UI shows the real current value (e.g. a .env ENABLE_HWDECODE=1)."""
+    pref = get_performance_prefs()
+    if pref is None:
+        eff = PerformancePayload(
+            hwdecode=os.getenv("ENABLE_HWDECODE", "0").strip() == "1",
+            qsv=os.getenv("ENABLE_QSV", "0").strip() == "1",
+        )
+        return PerformanceEnvelope(is_configured=False, performance=eff)
+    return PerformanceEnvelope(is_configured=True, performance=PerformancePayload(**pref))
+
+
+@router.put("/performance", response_model=PerformanceEnvelope)
+def put_settings_performance(payload: PerformancePayload) -> PerformanceEnvelope:
+    """Persist the perf toggles and apply them to the live process immediately."""
+    try:
+        saved = upsert_performance_prefs(payload.hwdecode, payload.qsv)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"performance write failed: {exc}")
+    apply_performance_env(saved["hwdecode"], saved["qsv"])
+    return PerformanceEnvelope(is_configured=True, performance=PerformancePayload(**saved))
+
+
+def _data_retention_envelope_after_put(saved) -> "DataRetentionEnvelope":
     return DataRetentionEnvelope(
         is_configured=saved is not None,
         data_retention=DataRetentionPayload(job_retention_days=saved or 0),

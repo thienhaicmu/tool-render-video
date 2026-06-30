@@ -11,6 +11,10 @@ import {
   putDataRetention,
 } from '@/api/dataRetention'
 import {
+  getPerformance,
+  putPerformance,
+} from '@/api/performance'
+import {
   getDefaultOutputDir,
   putDefaultOutputDir,
 } from '@/api/outputDir'
@@ -669,6 +673,111 @@ function DataRetentionSection() {
 }
 
 
+function PerformanceSection() {
+  const [hwdecode, setHwdecode] = useState<boolean>(false)
+  const [qsv, setQsv] = useState<boolean>(false)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [saving, setSaving] = useState<boolean>(false)
+  const [saveResult, setSaveResult] = useState<string | null>(null)
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    try {
+      const env = await getPerformance()
+      setHwdecode(env.performance.hwdecode)
+      setQsv(env.performance.qsv)
+    } catch {
+      setHwdecode(false)
+      setQsv(false)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetch() }, [fetch])
+
+  async function save(next: { hwdecode: boolean; qsv: boolean }) {
+    setSaving(true)
+    setSaveResult(null)
+    setHwdecode(next.hwdecode)   // optimistic
+    setQsv(next.qsv)
+    try {
+      const env = await putPerformance(next)
+      setHwdecode(env.performance.hwdecode)
+      setQsv(env.performance.qsv)
+      setSaveResult('Đã lưu — áp dụng cho lần render tới')
+    } catch {
+      setSaveResult('Lưu thất bại')
+      fetch()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const Toggle = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
+    <button
+      onClick={onClick}
+      disabled={saving}
+      style={{
+        width: 52, height: 26, borderRadius: 99, border: '1px solid var(--border)',
+        background: on ? 'rgba(var(--accent-rgb),.25)' : 'rgba(var(--text-rgb),.08)',
+        position: 'relative', cursor: saving ? 'not-allowed' : 'pointer',
+        transition: 'background .15s', flexShrink: 0,
+      }}
+      aria-pressed={on}
+    >
+      <span style={{
+        position: 'absolute', top: 2, left: on ? 28 : 2, width: 20, height: 20, borderRadius: '50%',
+        background: on ? 'var(--accent)' : 'var(--text-3)', transition: 'left .15s',
+      }} />
+    </button>
+  )
+
+  const Row = ({ label, hint, on, onToggle, warn }: {
+    label: string; hint: string; on: boolean; onToggle: () => void; warn?: boolean
+  }) => (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{label}</div>
+        <div style={{ fontSize: 10, color: warn ? 'var(--warn, #d6a200)' : 'var(--text-3)', lineHeight: 1.5, marginTop: 2 }}>{hint}</div>
+      </div>
+      <Toggle on={on} onClick={onToggle} />
+    </div>
+  )
+
+  return (
+    <div data-testid="performance-section" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
+      <SectionTitle>Hiệu năng / Tốc độ render</SectionTitle>
+      {loading ? (
+        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Đang tải…</div>
+      ) : (
+        <>
+          <Row
+            label="Tăng tốc giải mã (iGPU)"
+            hint="Giải mã video nguồn bằng iGPU thay vì CPU — nhanh hơn, CHẤT LƯỢNG GIỮ NGUYÊN (giải mã không mất mát). Tự rớt về CPU nếu lỗi."
+            on={hwdecode}
+            onToggle={() => save({ hwdecode: !hwdecode, qsv })}
+          />
+          <Row
+            label="Encode bằng iGPU — QSV (nhanh nhất)"
+            hint="Encode trên iGPU thay vì CPU x264 — NHANH NHẤT, nhưng chất lượng giảm nhẹ so với x264. Khuyên chỉ bật khi xuất để đăng social/YouTube."
+            on={qsv}
+            onToggle={() => save({ hwdecode, qsv: !qsv })}
+            warn
+          />
+          {saveResult ? (
+            <div data-testid="perf-status" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10 }}>{saveResult}</div>
+          ) : null}
+          <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5 }}>
+            Render đã tự chạy đa luồng CPU. Hai tùy chọn trên dùng iGPU Intel để nhanh hơn nữa; tắt cả hai = giữ chất lượng x264 tối đa.
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+
 export function SettingsScreen() {
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -752,6 +861,10 @@ export function SettingsScreen() {
 
         <section id="settings-retention">
           <DataRetentionSection />
+        </section>
+
+        <section id="settings-performance">
+          <PerformanceSection />
         </section>
 
       {loading ? (
