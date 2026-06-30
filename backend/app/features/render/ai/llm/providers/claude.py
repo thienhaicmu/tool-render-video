@@ -33,7 +33,12 @@ logger = logging.getLogger("app.render.claude_client")
 logger.info("claude_provider: module loaded (build=2026-06-01.i3-claude)")
 
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-_MAX_SRT_CHARS = int(os.getenv("CLAUDE_MAX_SRT_CHARS", "50000"))  # ~12K tokens
+# Architecture-review Batch D-3a (2026-06-30): provider transcript cap resolves
+# via the shared helper so all three providers honour the same priority chain
+# (per-provider env > global LLM_MAX_SRT_CHARS > hardcoded default). With no
+# env var set, returns 50000 byte-for-byte — historical behaviour preserved.
+from app.features.render.ai.llm.prompts import resolve_provider_max_srt_chars as _resolve_max_srt_chars
+_MAX_SRT_CHARS = _resolve_max_srt_chars(provider_default=50000, provider_env="CLAUDE_MAX_SRT_CHARS")  # ~12K tokens
 _MAX_TOKENS = 4096
 _TEMPERATURE = 0.2
 # Narration rewrite is creative (vs deterministic JSON extraction) — the shared
@@ -200,14 +205,21 @@ def _run_render_plan(
 
 
 def _call_claude_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-    """Single Anthropic Messages API call — raises on SDK error."""
+    """Single Anthropic Messages API call — raises on SDK error.
+
+    Batch D-3b: user content carries the ephemeral cache marker via the
+    CLAUDE_CLIPS_CACHE gate so a re-render of the same clips prompt
+    benefits from Anthropic's prompt-cache discount (typically ~90% off
+    cached tokens). Marker is silently ignored when the prompt is below
+    the model's min cacheable size — no behaviour change for tiny inputs.
+    """
     client = _AnthClient(api_key=api_key, timeout=30)
     resp = client.messages.create(
         model=model,
         max_tokens=_MAX_TOKENS,
         temperature=_TEMPERATURE,
         system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
+        messages=[{"role": "user", "content": _cached_user_content(user_prompt, "CLAUDE_CLIPS_CACHE")}],
     )
     # Claude returns content blocks; concatenate text-type blocks.
     if not resp.content:
@@ -346,14 +358,20 @@ def _run_rewrite(
 
 
 def _call_claude_rewrite_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-    """Single Anthropic Messages call for rewrite — raises on SDK error."""
+    """Single Anthropic Messages call for rewrite — raises on SDK error.
+
+    Batch D-3b: user content carries the ephemeral cache marker via the
+    CLAUDE_REWRITE_CACHE gate. Rewrite prompts are smaller per call but
+    fire N times per render — even partial cache hits add up. Marker is
+    silently ignored when below the model's min cacheable size.
+    """
     client = _AnthClient(api_key=api_key, timeout=30)
     resp = client.messages.create(
         model=model,
         max_tokens=2048,
         temperature=_REWRITE_TEMPERATURE,
         system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
+        messages=[{"role": "user", "content": _cached_user_content(user_prompt, "CLAUDE_REWRITE_CACHE")}],
     )
     if not resp.content:
         return None
@@ -382,13 +400,26 @@ _RECAP_MAX_TOKENS = int(os.getenv("CLAUDE_RECAP_MAX_TOKENS", "8192"))
 _RECAP_TEMPERATURE = float(os.getenv("CLAUDE_RECAP_TEMPERATURE", "0.4"))
 
 
-def _cached_user_content(user_prompt: str) -> list:
-    """R7 Stage C — user content as one text block marked for Anthropic prompt
-    caching (ephemeral). The transcript-first recap/story prompts make this the
-    large cacheable chunk; below the model's min cacheable size the marker is
-    silently ignored (no error). Recap/story path only — the clips path is
-    untouched. Set CLAUDE_RECAP_CACHE=0 to disable."""
-    if os.getenv("CLAUDE_RECAP_CACHE", "1") != "1":
+def _cached_user_content(
+    user_prompt: str,
+    cache_enabled_env: str = "CLAUDE_RECAP_CACHE",
+) -> list:
+    """Wrap ``user_prompt`` as a single text block, marking it for Anthropic
+    prompt caching (ephemeral) unless the gate env var resolves to "0".
+
+    The kill switch is per-call-site so an operator can disable caching on
+    one path (e.g. rewrite) without affecting another (e.g. recap). Below
+    the Anthropic model's min cacheable size (~1024 tokens for Haiku /
+    Sonnet) the marker is silently ignored — no error, no cache hit.
+
+    Architecture-review Batch D-3b (2026-06-30): the ``cache_enabled_env``
+    parameter generalises the original R7 Stage C wiring (which hard-coded
+    CLAUDE_RECAP_CACHE). Recap + story passes keep that env name via the
+    default; clips and rewrite now ride their own gates:
+      - clips    → CLAUDE_CLIPS_CACHE   (default "1" = ON)
+      - rewrite  → CLAUDE_REWRITE_CACHE (default "1" = ON)
+    """
+    if os.getenv(cache_enabled_env, "1") != "1":
         return [{"type": "text", "text": user_prompt}]
     return [{"type": "text", "text": user_prompt, "cache_control": {"type": "ephemeral"}}]
 

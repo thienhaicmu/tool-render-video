@@ -27,7 +27,12 @@ logger = logging.getLogger("app.render.openai_client")
 logger.info("openai_provider: module loaded (build=2026-06-01.i2-openai)")
 
 _DEFAULT_MODEL = "gpt-4o-mini"
-_MAX_SRT_CHARS = int(os.getenv("OPENAI_MAX_SRT_CHARS", "30000"))  # ~7.5K tokens
+# Architecture-review Batch D-3a (2026-06-30): provider transcript cap resolves
+# via the shared helper so all three providers honour the same priority chain
+# (per-provider env > global LLM_MAX_SRT_CHARS > hardcoded default). With no
+# env var set, returns 30000 byte-for-byte — historical behaviour preserved.
+from app.features.render.ai.llm.prompts import resolve_provider_max_srt_chars as _resolve_max_srt_chars
+_MAX_SRT_CHARS = _resolve_max_srt_chars(provider_default=30000, provider_env="OPENAI_MAX_SRT_CHARS")  # ~7.5K tokens
 _MAX_TOKENS = 4096
 _TEMPERATURE = 0.2
 # Narration rewrite is creative (vs deterministic JSON extraction) — the shared

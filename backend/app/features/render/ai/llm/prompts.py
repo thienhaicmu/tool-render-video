@@ -36,6 +36,40 @@ _SRT_BLOCK_NUM_RE = _re.compile(r"^\d+\s*$")
 # most-permissive provider would truncate. Override via PROMPTS_MAX_SRT_CHARS.
 MAX_SRT_CHARS = int(_os.getenv("PROMPTS_MAX_SRT_CHARS", "60000"))
 
+
+def resolve_provider_max_srt_chars(provider_default: int, provider_env: str) -> int:
+    """Architecture-review Batch D-3a (2026-06-30). Single resolver for the
+    per-provider transcript cap so all three providers (Gemini / Claude /
+    OpenAI) honour the same priority chain:
+
+      1. ``<PROVIDER>_MAX_SRT_CHARS`` env var  (highest — fine-grained per-provider)
+      2. ``LLM_MAX_SRT_CHARS`` env var         (global parity knob)
+      3. ``provider_default`` argument         (lowest — current hardcoded value)
+
+    With no env vars set, returns ``provider_default`` byte-for-byte —
+    historical behaviour bit-identical (Sacred Contract #2 spirit on
+    runtime defaults).
+
+    Never raises: a non-integer env value falls through to the next priority
+    level. ``provider_env`` is the per-provider env-var name to consult
+    first ("CLAUDE_MAX_SRT_CHARS", "GEMINI_MAX_SRT_CHARS", "OPENAI_MAX_SRT_CHARS").
+    """
+    def _coerce(raw: str | None) -> int | None:
+        if raw is None or not raw.strip():
+            return None
+        try:
+            return int(raw.strip())
+        except (ValueError, TypeError):
+            return None
+
+    specific = _coerce(_os.getenv(provider_env))
+    if specific is not None:
+        return specific
+    parity = _coerce(_os.getenv("LLM_MAX_SRT_CHARS"))
+    if parity is not None:
+        return parity
+    return int(provider_default)
+
 # Phase B — per-platform editorial guidance injected into the prompt when
 # target_platform is set.  Each entry is a concise paragraph appended as a
 # PLATFORM GUIDANCE section.  Empty platform (or unknown value) suppresses

@@ -40,7 +40,12 @@ logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)
 _DEFAULT_MODEL = os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 
 # 60K chars ≈ 15K tokens — captures ~30 min of dense Vietnamese speech.
-_MAX_SRT_CHARS = int(os.getenv("GEMINI_MAX_SRT_CHARS", "60000"))
+# Architecture-review Batch D-3a (2026-06-30): resolves via the shared helper
+# so all three providers honour the same priority chain (per-provider env >
+# global LLM_MAX_SRT_CHARS > hardcoded default). With no env var set, returns
+# 60000 byte-for-byte — historical behaviour preserved.
+from app.features.render.ai.llm.prompts import resolve_provider_max_srt_chars as _resolve_max_srt_chars
+_MAX_SRT_CHARS = _resolve_max_srt_chars(provider_default=60000, provider_env="GEMINI_MAX_SRT_CHARS")
 
 # Hard upper bound on a single Gemini request — prevents the SDK from
 # blocking the render pipeline on its built-in ~10 min default timeout.
