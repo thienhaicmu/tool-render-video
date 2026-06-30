@@ -23,6 +23,7 @@ cho desktop.
 | [CONFIGURATION.md](CONFIGURATION.md) | Toàn bộ biến môi trường + đường dẫn dữ liệu |
 | [API_CONTRACT.md](API_CONTRACT.md) | REST + WebSocket API, các contract đóng băng |
 | [FRONTEND.md](FRONTEND.md) | Cấu trúc frontend React + vỏ Electron |
+| [architecture-review-2026-06-30.md](architecture-review-2026-06-30.md) | Closure record cho session architecture review 6-batch (commits `eebcfe0..0caf895`): backlog đã ship, operator knobs mới, schema versions mới, các item deferred sang sprint sau |
 
 ## Đọc theo nhu cầu
 
