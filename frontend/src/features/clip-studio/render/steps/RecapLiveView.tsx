@@ -1,22 +1,22 @@
 /**
- * RecapLiveView — "live build" view for render_format="recap".
+ * RecapLiveView — "Now Rendering" live-build view for render_format="recap".
  *
- * Recap is a chronological montage, so each episode (Tập) shows:
- *   • a thin proportional progress strip (the at-a-glance shape), and
- *   • a readable SCENE LIST — one row per scene with its title, source time
- *     range, audio mode (narration vs original), live render status, and the
- *     AI narration line as it streams in — so you can tell what every scene is
- *     actually doing.
+ * Layout (design D): two columns inside the render screen —
+ *   • LEFT  "focus": the scene being rendered right now — a large preview
+ *     placeholder, title, source time range, audio mode, scene progress bar and
+ *     the AI narration line.
+ *   • RIGHT "queue": episodes (Tập) grouped + collapsible. A finished episode
+ *     collapses; the active one expands; pending ones stay folded. Episode chips
+ *     at the top jump to a section. The queue scrolls; the focus stays put.
  *
  * Data (all from the WebSocket stream — no extra fetch):
  *   • recap.plan.ready  → { episodes[], scenes[{n,ep,act,start,end,dur,title,mode,climax}] }
- *   • liveParts         → per-scene render status (part_no === scene.n)
+ *   • liveParts         → per-scene status + progress (part_no === scene.n)
  *   • voice_*_completed → narration preview per scene
- *   • reaction_freeze_applied → ⏸ on a scene
- *   • recap.concat.done → "ghép xong"
  *
  * Returns null until recap.plan.ready arrives, so clips mode is unaffected.
  */
+import { useState } from 'react'
 import type { JobPart } from '@/types/api'
 import type { WsLogEvent } from '@/websocket/events'
 
@@ -26,18 +26,33 @@ interface SceneBlock {
   start: number; end: number; dur: number
   title: string; mode: string; climax: boolean
 }
+type EpState = 'done' | 'active' | 'pending'
 
-// Per-scene render status → colour + a short Vietnamese label.
-function _statusInfo(status: string | undefined): { color: string; label: string; active: boolean } {
-  switch ((status || '').toLowerCase()) {
-    case 'done':         return { color: 'var(--accent, #10b981)', label: 'xong',   active: false }
-    case 'rendering':    return { color: '#f59e0b',                label: 'render', active: true }
-    case 'cutting':      return { color: '#f59e0b',                label: 'cắt',    active: true }
-    case 'transcribing': return { color: '#f59e0b',                label: 'phụ đề', active: true }
+function _norm(status: string | undefined): string { return (status || '').toLowerCase() }
+function _isActive(status: string | undefined): boolean {
+  return ['rendering', 'cutting', 'transcribing'].includes(_norm(status))
+}
+function _isDone(status: string | undefined): boolean { return _norm(status) === 'done' }
+function _isFailed(status: string | undefined): boolean { return ['failed', 'cancelled'].includes(_norm(status)) }
+
+// Short status label + colour for a scene.
+function _statusInfo(status: string | undefined): { color: string; label: string } {
+  switch (_norm(status)) {
+    case 'done':         return { color: 'var(--accent, #10b981)', label: 'xong' }
+    case 'rendering':    return { color: '#f59e0b', label: 'render' }
+    case 'cutting':      return { color: '#f59e0b', label: 'cắt' }
+    case 'transcribing': return { color: '#f59e0b', label: 'phụ đề' }
     case 'failed':
-    case 'cancelled':    return { color: '#ef4444',                label: 'lỗi',    active: false }
-    default:             return { color: 'var(--border, #3a3a3a)', label: 'chờ',    active: false }
+    case 'cancelled':    return { color: '#ef4444', label: 'lỗi' }
+    default:             return { color: 'var(--text-3, #888)', label: 'chờ' }
   }
+}
+// Node glyph for the queue list.
+function _glyph(status: string | undefined): string {
+  if (_isDone(status)) return '✓'
+  if (_isActive(status)) return '◉'
+  if (_isFailed(status)) return '✕'
+  return '○'
 }
 function _fmt(sec: number): string {
   const s = Math.max(0, Math.round(sec))
@@ -53,20 +68,15 @@ export function RecapLiveView({
   liveEvents: WsLogEvent[]
   liveParts: JobPart[]
 }) {
+  const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
+
   const planEv = recapPlan ?? [...liveEvents].reverse().find((e) => e.event === 'recap.plan.ready')
   if (!planEv) return null
 
   const scenes = ((planEv.context?.scenes as SceneBlock[]) || []).filter(Boolean)
   const episodes = ((planEv.context?.episodes as EpisodeInfo[]) || []).filter(Boolean)
-  const totalTarget = Number(planEv.context?.total_target_sec || 0)
 
   const partByNo = new Map<number, JobPart>(liveParts.map((p) => [p.part_no, p]))
-  const frozen = new Set<number>(
-    liveEvents
-      .filter((e) => e.event === 'reaction_freeze_applied')
-      .map((e) => Number(e.context?.part_no))
-      .filter((n) => !Number.isNaN(n)),
-  )
   const previews = new Map<number, string>()
   for (const e of liveEvents) {
     if (e.event === 'voice_ai_rewrite_completed' || e.event === 'voice_tts_completed') {
@@ -75,8 +85,7 @@ export function RecapLiveView({
       if (!Number.isNaN(pn) && pv) previews.set(pn, pv)
     }
   }
-  const concatDone = liveEvents.some((e) => e.event === 'recap.concat.done')
-  const doneScenes = liveParts.filter((p) => (p.status || '').toLowerCase() === 'done').length
+  const doneCount = scenes.filter((s) => _isDone(partByNo.get(s.n)?.status)).length
 
   if (scenes.length === 0) {
     return (
@@ -93,134 +102,183 @@ export function RecapLiveView({
     if (!byEpisode.has(sc.ep)) { byEpisode.set(sc.ep, []); epOrder.push(sc.ep) }
     byEpisode.get(sc.ep)!.push(sc)
   }
-  const multiEpisode = epOrder.length > 1
+  const epState = (ep: number): EpState => {
+    const ss = byEpisode.get(ep)!
+    if (ss.every((s) => _isDone(partByNo.get(s.n)?.status))) return 'done'
+    if (ss.some((s) => _isActive(partByNo.get(s.n)?.status) || _isDone(partByNo.get(s.n)?.status))) return 'active'
+    return 'pending'
+  }
+
+  // Focus scene: the active one nearest completion → else earliest not-done →
+  // else the last scene (all done / assembling).
+  const actives = scenes
+    .filter((s) => _isActive(partByNo.get(s.n)?.status))
+    .sort((a, b) => (partByNo.get(b.n)?.progress_percent ?? 0) - (partByNo.get(a.n)?.progress_percent ?? 0))
+  const focus = actives[0]
+    ?? scenes.find((s) => !_isDone(partByNo.get(s.n)?.status))
+    ?? scenes[scenes.length - 1]
+  const allDone = scenes.every((s) => _isDone(partByNo.get(s.n)?.status))
+
+  const isCollapsed = (ep: number): boolean => collapsed[ep] ?? (epState(ep) !== 'active')
 
   return (
-    <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexShrink: 0 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: 'var(--text-1)' }}>
-          🎬 RECAP — LIVE BUILD
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
-          {doneScenes}/{scenes.length} cảnh
-          {multiEpisode ? ` · ${epOrder.length} tập` : ''}
-          {totalTarget > 0 ? ` · ~${_fmt(totalTarget)}` : ''}
-          {concatDone ? ' · ✓ ghép xong' : ''}
-        </span>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', borderTop: '1px solid var(--border)' }}>
+      {/* ── LEFT: focus on the scene rendering now ──────────────────────── */}
+      <div style={{ width: 360, flexShrink: 0, borderRight: '1px solid var(--border)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: 'var(--text-3)' }}>
+          {allDone ? '✓ ĐÃ DỰNG XONG · ĐANG GHÉP TẬP' : '● ĐANG DỰNG'}
+        </div>
+        {focus && <FocusCard sc={focus} part={partByNo.get(focus.n)} preview={previews.get(focus.n)} epTitle={episodes[focus.ep]?.title || `Tập ${focus.ep + 1}`} />}
       </div>
 
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)', flexShrink: 0 }}>
-        {([
-          ['var(--border, #3a3a3a)', 'chờ'],
-          ['#f59e0b', 'đang dựng'],
-          ['var(--accent, #10b981)', 'xong'],
-          ['#ef4444', 'lỗi'],
-        ] as const).map(([c, lbl]) => (
-          <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: c, display: 'inline-block' }} />{lbl}
+      {/* ── RIGHT: grouped, collapsible queue ───────────────────────────── */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* Episode chips */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 12px 6px', borderBottom: '1px solid var(--border)' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', marginRight: 4, alignSelf: 'center' }}>
+            {doneCount}/{scenes.length} cảnh
           </span>
-        ))}
-        <span>🎙 thuyết minh</span>
-        <span>🔊 tiếng gốc</span>
-        <span>★ cao trào</span>
-      </div>
+          {epOrder.map((ep) => {
+            const st = epState(ep)
+            return (
+              <button
+                key={ep}
+                onClick={() => document.getElementById(`recap-ep-${ep}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                style={{
+                  fontSize: 9, fontWeight: 700, fontFamily: 'var(--fb)', cursor: 'pointer',
+                  padding: '3px 8px', borderRadius: 99, border: '1px solid var(--border)',
+                  background: st === 'active' ? 'rgba(245,158,11,.15)' : 'transparent',
+                  color: st === 'done' ? 'var(--accent, #10b981)' : st === 'active' ? '#f59e0b' : 'var(--text-3)',
+                }}
+              >
+                {st === 'done' ? '✓ ' : st === 'active' ? '● ' : ''}Tập {ep + 1}
+              </button>
+            )
+          })}
+        </div>
 
-      {/* Per-episode: progress strip + readable scene list (scrolls internally
-          so a long film's 20–40 scenes never push under the bottom toolbar). */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: 4 }}>
-        {epOrder.map((ep) => {
-          const epScenes = byEpisode.get(ep)!
-          const epDur = epScenes.reduce((n, s) => n + Math.max(0.1, s.dur), 0)
-          const epTitle = episodes[ep]?.title || `Tập ${ep + 1}`
-          const epDone = epScenes.filter((s) => (partByNo.get(s.n)?.status || '').toLowerCase() === 'done').length
-          return (
-            <div key={ep} style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-card, rgba(255,255,255,.02))' }}>
-              {/* Episode header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 9px', background: 'rgba(255,255,255,.04)', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>🎞 {epTitle}</span>
-                <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
-                  {epDone}/{epScenes.length} cảnh · ~{_fmt(epDur)}
-                </span>
-              </div>
+        {/* Episode sections */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 8px' }}>
+          {epOrder.map((ep) => {
+            const epScenes = byEpisode.get(ep)!
+            const st = epState(ep)
+            const epDone = epScenes.filter((s) => _isDone(partByNo.get(s.n)?.status)).length
+            const epTitle = episodes[ep]?.title || `Tập ${ep + 1}`
+            const folded = isCollapsed(ep)
+            const headColor = st === 'done' ? 'var(--accent, #10b981)' : st === 'active' ? '#f59e0b' : 'var(--text-3)'
+            return (
+              <div key={ep} id={`recap-ep-${ep}`}>
+                {/* Episode header (toggle) */}
+                <div
+                  onClick={() => setCollapsed((c) => ({ ...c, [ep]: !folded }))}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                    padding: '8px 12px', position: 'sticky', top: 0, zIndex: 1,
+                    background: 'var(--bg-panel, #16161c)', borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <span style={{ fontSize: 10, color: 'var(--text-3)', width: 10 }}>{folded ? '▸' : '▾'}</span>
+                  <span style={{ fontSize: 11, color: headColor }}>{st === 'done' ? '✅' : st === 'active' ? '◉' : '⏸'}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {epTitle}
+                  </span>
+                  <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>{epDone}/{epScenes.length}</span>
+                  <span style={{ width: 46, height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                    <span style={{ display: 'block', height: '100%', width: `${epScenes.length ? (epDone / epScenes.length) * 100 : 0}%`, background: headColor }} />
+                  </span>
+                </div>
 
-              {/* Thin proportional progress strip (the at-a-glance shape) */}
-              <div style={{ display: 'flex', gap: 2, padding: '6px 9px 4px' }}>
-                {epScenes.map((sc) => {
-                  const st = _statusInfo(partByNo.get(sc.n)?.status)
-                  return (
-                    <div
-                      key={sc.n}
-                      title={`Cảnh ${sc.n} · ${st.label}`}
-                      style={{
-                        flexGrow: Math.max(0.1, sc.dur), flexBasis: 0, minWidth: 4,
-                        height: 6, borderRadius: 2, background: st.color,
-                        border: sc.mode === 'original' ? '1px solid #a855f7' : 'none',
-                      }}
-                    />
-                  )
-                })}
-              </div>
-
-              {/* Scene list — one readable row per scene */}
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {epScenes.map((sc, i) => {
-                  const st = _statusInfo(partByNo.get(sc.n)?.status)
+                {/* Scene rows */}
+                {!folded && epScenes.map((sc) => {
+                  const part = partByNo.get(sc.n)
+                  const si = _statusInfo(part?.status)
                   const isOrig = sc.mode === 'original'
-                  const preview = previews.get(sc.n)
-                  const line = isOrig
-                    ? '🔊 Để tiếng gốc của phim'
-                    : (preview || (st.active ? 'đang dựng lời…' : (st.label === 'xong' ? '' : 'chờ thuyết minh')))
+                  const isFocus = focus?.n === sc.n
                   return (
                     <div
                       key={sc.n}
                       style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 9px',
-                        borderTop: i === 0 ? 'none' : '1px solid var(--border)',
-                        background: st.active ? 'rgba(245,158,11,.06)' : 'transparent',
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px 5px 14px',
+                        borderLeft: isFocus ? '2px solid #f59e0b' : '2px solid transparent',
+                        background: isFocus ? 'rgba(245,158,11,.07)' : 'transparent',
                       }}
                     >
-                      {/* Status pill */}
-                      <span style={{
-                        flexShrink: 0, marginTop: 1, minWidth: 46, textAlign: 'center',
-                        fontSize: 9, fontWeight: 700, color: '#fff', fontFamily: 'var(--fb)',
-                        background: st.color, borderRadius: 4, padding: '2px 4px',
-                      }}>
-                        {st.label}
-                      </span>
-                      {/* Scene content */}
+                      <span style={{ fontSize: 11, color: si.color, width: 12, textAlign: 'center' }}>{_glyph(part?.status)}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-1)' }}>
-                            #{sc.n} {sc.title || `Cảnh ${sc.n}`}
-                          </span>
-                          <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
-                            {_fmt(sc.start)}–{_fmt(sc.end)}
-                          </span>
-                          <span style={{ fontSize: 10 }}>{isOrig ? '🔊' : '🎙'}</span>
-                          {sc.climax && <span style={{ fontSize: 10 }} title="cao trào">★</span>}
-                          {frozen.has(sc.n) && <span style={{ fontSize: 10 }} title="freeze">⏸</span>}
+                        <div style={{ fontSize: 11, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span style={{ color: 'var(--text-3)' }}>#{sc.n}</span> {sc.title || `Cảnh ${sc.n}`}
+                          {sc.climax && <span style={{ marginLeft: 4 }}>★</span>}
                         </div>
-                        {line && (
-                          <div style={{
-                            fontSize: 10, color: isOrig ? '#c084fc' : 'var(--text-2)',
-                            lineHeight: 1.4, fontFamily: 'var(--fb)', marginTop: 2,
-                            fontStyle: (preview || isOrig) ? 'normal' : 'italic',
-                            opacity: (preview || isOrig) ? 1 : 0.6,
-                          }}>
-                            {line}
-                          </div>
-                        )}
+                        <div style={{ fontSize: 8.5, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
+                          {_fmt(sc.start)}–{_fmt(sc.end)} · {isOrig ? '🔊 tiếng gốc' : '🎙 thuyết minh'}
+                        </div>
                       </div>
+                      <span style={{ fontSize: 8.5, fontWeight: 700, color: si.color, fontFamily: 'var(--fb)', flexShrink: 0 }}>
+                        {_isActive(part?.status) && (part?.progress_percent ?? 0) > 0 ? `${Math.round(part!.progress_percent!)}%` : si.label}
+                      </span>
                     </div>
                   )
                 })}
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
+  )
+}
+
+// ── Left focus card ───────────────────────────────────────────────────────────
+function FocusCard({ sc, part, preview, epTitle }: {
+  sc: SceneBlock; part: JobPart | undefined; preview: string | undefined; epTitle: string
+}) {
+  const si = _statusInfo(part?.status)
+  const isOrig = sc.mode === 'original'
+  const pct = _isActive(part?.status) ? Math.max(2, Math.round(part?.progress_percent ?? 0)) : (_isDone(part?.status) ? 100 : 0)
+  const line = isOrig
+    ? '🔊 Để tiếng gốc của phim tự nói'
+    : (preview || (_isActive(part?.status) ? 'đang dựng lời thuyết minh…' : 'chờ thuyết minh'))
+  return (
+    <>
+      {/* Preview placeholder (a real scene frame isn't available mid-render) */}
+      <div style={{
+        aspectRatio: '16 / 9', borderRadius: 10, border: '1px solid var(--border)',
+        background: 'linear-gradient(135deg, rgba(245,158,11,.10), rgba(168,85,247,.10))',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <span style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-1)', opacity: 0.9 }}>#{sc.n}</span>
+        <span style={{ fontSize: 18 }}>{isOrig ? '🔊' : '🎙'}</span>
+        <span style={{
+          position: 'absolute', top: 8, right: 10, fontSize: 9, fontWeight: 700, color: '#fff',
+          background: si.color, borderRadius: 4, padding: '2px 6px', fontFamily: 'var(--fb)',
+        }}>{si.label}</span>
+        {sc.climax && <span style={{ position: 'absolute', top: 8, left: 10, fontSize: 12 }} title="cao trào">★</span>}
+      </div>
+
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1.3 }}>
+          {sc.title || `Cảnh ${sc.n}`}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--fb)', marginTop: 3 }}>
+          ⏱ {_fmt(sc.start)}–{_fmt(sc.end)}  ·  {isOrig ? '🔊 tiếng gốc' : '🎙 thuyết minh'}  ·  {epTitle}
+        </div>
+      </div>
+
+      {/* Scene progress */}
+      <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: si.color, transition: 'width .3s' }} />
+      </div>
+
+      {/* Narration line */}
+      <div style={{
+        fontSize: 11, lineHeight: 1.5, color: isOrig ? '#c084fc' : 'var(--text-2)',
+        fontFamily: 'var(--fb)', fontStyle: preview || isOrig ? 'normal' : 'italic',
+        opacity: preview || isOrig ? 1 : 0.6,
+        background: 'var(--bg-card, rgba(255,255,255,.03))', borderRadius: 8, padding: '8px 10px',
+      }}>
+        💬 {line}
+      </div>
+    </>
   )
 }
