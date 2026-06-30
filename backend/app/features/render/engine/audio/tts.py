@@ -430,6 +430,32 @@ def generate_narration_mp3(
     mp3_path = Path(output_path) if output_path else work_dir / "narration.mp3"
     mp3_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Architecture-review Batch D-1 (2026-06-30): consult the Edge-TTS cache
+    # BEFORE hitting the network. Key is content-addressable on (clean_text,
+    # language, gender, rate, voice_id, content_type) + TTS_HUMANIZER_VERSION.
+    # Cache hit → copy cached MP3 to mp3_path → return. Cache miss → existing
+    # synth flow runs unchanged; on success the result is cached.
+    #
+    # Both helpers are defensive (try/except → False); a cache failure must
+    # never block a live render (Sacred Contract #3 spirit). Kill switch:
+    # TTS_CACHE_ENABLED=0 reverts to legacy synth-every-time.
+    from app.features.render.engine.audio.tts_cache import (
+        _build_tts_cache_key as _tts_cache_key,
+        tts_cache_get as _tts_cache_get,
+        tts_cache_put as _tts_cache_put,
+    )
+    _cache_key = _tts_cache_key(
+        text=clean_text, language=language, gender=gender,
+        rate=_rate, voice_id=profile.get("voice_id", ""),
+        content_type=content_type,
+    )
+    if _tts_cache_get(_cache_key, mp3_path):
+        logger.info(
+            "tts_cache_hit job_id=%s voice_id=%s key=%s",
+            job_id, profile.get("voice_id"), _cache_key[:12],
+        )
+        return str(mp3_path)
+
     async def _run():
         communicate = edge_tts.Communicate(_humanized, profile["voice_id"], rate=_rate)
         try:
@@ -449,6 +475,9 @@ def generate_narration_mp3(
         try:
             asyncio.run(_run())
             if mp3_path.exists() and mp3_path.stat().st_size > 0:
+                # Batch D-1: persist the freshly-synthesised audio so the
+                # next re-render of the same scene skips the network.
+                _tts_cache_put(_cache_key, mp3_path)
                 return str(mp3_path)
             _last_exc = RuntimeError("output file was not created")
         except Exception as exc:
