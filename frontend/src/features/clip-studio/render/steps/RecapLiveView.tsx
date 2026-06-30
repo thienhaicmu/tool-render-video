@@ -96,9 +96,9 @@ export function RecapLiveView({
   const multiEpisode = epOrder.length > 1
 
   return (
-    <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)' }}>
+    <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexShrink: 0 }}>
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: 'var(--text-1)' }}>
           🎬 RECAP — LIVE BUILD
         </span>
@@ -111,7 +111,7 @@ export function RecapLiveView({
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)', flexShrink: 0 }}>
         {([
           ['var(--border, #3a3a3a)', 'chờ'],
           ['#f59e0b', 'đang dựng'],
@@ -127,8 +127,9 @@ export function RecapLiveView({
         <span>★ cao trào</span>
       </div>
 
-      {/* Per-episode: progress strip + readable scene list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Per-episode: progress strip + readable scene list (scrolls internally
+          so a long film's 20–40 scenes never push under the bottom toolbar). */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: 4 }}>
         {epOrder.map((ep) => {
           const epScenes = byEpisode.get(ep)!
           const epDur = epScenes.reduce((n, s) => n + Math.max(0.1, s.dur), 0)
