@@ -2,7 +2,9 @@ import asyncio
 import html as _html
 import logging
 import os
+import random
 import re
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -191,6 +193,8 @@ _SSML_HUMANIZER_ENABLED: bool = os.environ.get("SSML_HUMANIZER_ENABLED", "1") ==
 # Opt back in to raw SSML (for an environment whose edge-tts genuinely honours
 # it) via TTS_SSML_BREAKS=1.
 _TTS_ALLOW_SSML_BREAKS: bool = os.environ.get("TTS_SSML_BREAKS", "0") == "1"
+# Retry count for edge-tts' transient "No audio was received" (rate-limit) error.
+_TTS_EDGE_RETRIES: int = max(1, int(os.environ.get("TTS_EDGE_RETRIES", "3") or 3))
 _BREAK_TAG_RE = re.compile(r"<break\b[^>]*/?>", re.IGNORECASE)
 _ANY_TAG_RE = re.compile(r"<[^>]+>")
 _STRAY_MS_RE = re.compile(r"\b\d+\s*ms\b", re.IGNORECASE)
@@ -433,15 +437,31 @@ def generate_narration_mp3(
         except asyncio.TimeoutError:
             raise RuntimeError(f"TTS timed out after {TTS_TIMEOUT_SEC}s")
 
-    try:
-        asyncio.run(_run())
-    except Exception as exc:
-        logger.error("tts_generation_failed job_id=%s voice_id=%s: %s", job_id, profile.get("voice_id"), exc)
-        raise RuntimeError(f"AI voice generation failed: {exc}") from exc
+    # edge-tts intermittently returns "No audio was received" under concurrent
+    # load (rate-limiting) — the SAME text succeeds on a retry. Retry with
+    # backoff + jitter so a transient hiccup doesn't drop a scene's narration.
+    _last_exc: Exception | None = None
+    for _attempt in range(max(1, _TTS_EDGE_RETRIES)):
+        try:
+            mp3_path.unlink(missing_ok=True)   # avoid a stale/partial file
+        except Exception:
+            pass
+        try:
+            asyncio.run(_run())
+            if mp3_path.exists() and mp3_path.stat().st_size > 0:
+                return str(mp3_path)
+            _last_exc = RuntimeError("output file was not created")
+        except Exception as exc:
+            _last_exc = exc
+        logger.warning(
+            "tts_attempt_failed job_id=%s voice_id=%s attempt=%d/%d: %s",
+            job_id, profile.get("voice_id"), _attempt + 1, _TTS_EDGE_RETRIES, _last_exc,
+        )
+        if _attempt < _TTS_EDGE_RETRIES - 1:
+            time.sleep(0.4 * (_attempt + 1) + random.uniform(0.0, 0.4))   # backoff + jitter
 
-    if not mp3_path.exists() or mp3_path.stat().st_size <= 0:
-        raise RuntimeError("AI voice generation failed: output file was not created")
-    return str(mp3_path)
+    logger.error("tts_generation_failed job_id=%s voice_id=%s: %s", job_id, profile.get("voice_id"), _last_exc)
+    raise RuntimeError(f"AI voice generation failed: {_last_exc}")
 
 
 def generate_narration_audio(
