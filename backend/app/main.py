@@ -8,7 +8,6 @@ import os
 import logging
 import threading
 from app.db.connection import init_db
-from app.services.channel_service import ensure_channel
 from app.services.maintenance import (
     prune_job_logs,
     prune_old_jobs,
@@ -331,7 +330,6 @@ def startup():
         seed_builtin_presets()
     except Exception as _se:
         logging.getLogger("app.startup").warning("preset_seeder import failed: %s", _se)
-    ensure_channel("k1")
     keep_last = int(os.getenv("LOG_KEEP_LAST", "30"))
     older_days = int(os.getenv("LOG_KEEP_DAYS", "10"))
     prune_job_logs(CHANNELS_DIR, keep_last=keep_last, older_than_days=older_days)
