@@ -25,7 +25,9 @@ the session's outcome, not a living spec.
 | D-2-thin | [`0caf895`](#) | **SceneMap substrate** — `scene_detector.detect_scenes()` revived from dead code | 48 |
 | D-2-snap | [`13cfb6d`](#) | **Pass-3 snap-to-shot reconciler** — `RecapPlan.snap_scenes_to_shots()` consumes D-2-thin SceneMap | 17 |
 | D-2-motion Phase 1 | [`7301db0`](#) | **Audit + scaffolding** — architecture audit doc, `SceneMap.slice()` helper, mock-based motion dispatch tests, A/B benchmark script + 3 synthetic fixtures. NO motion/crop.py touch. | 31 |
-| D-2-motion Phase 2 | (this commit) | **A/B benchmark verdict** — ran benchmark on 3 synthetic fixtures using `backend/.venv` (cv2 4.11.0 + scenedetect 0.6.4 already installed). Verdict: ✅ CONDITIONAL GO with Policy A fallback. Phase 3 unblocked. | — (verdict doc only) |
+| D-2-motion Phase 2 | [`2f5c05b`](#) | **A/B benchmark verdict** — ran benchmark on 3 synthetic fixtures using `backend/.venv` (cv2 4.11.0 + scenedetect 0.6.4 already installed). Verdict: ✅ CONDITIONAL GO with Policy A fallback. Phase 3 unblocked. | — (verdict doc only) |
+| Batch B test fix | [`4cde1de`](#) | Pre-edit pytest baseline housekeeping — `test_storymodel_v1_strings_upgrade_to_entities` had stale `schema_version == 2` assertion from before Batch B's bump to v3. Made Phase 3 delta check meaningful. | — |
+| **D-2-motion Phase 3** | (this commit) | **Actual `motion/crop.py` swap** — `scene_map` kwarg threaded through `render_motion_aware_crop` ← `render_part_smart` ← `part_render_encode.py`. Policy A: SceneMap when `MOTION_USE_SCENE_MAP=1` + non-empty, pixel-diff fallback otherwise. Default OFF preserves production behaviour bit-identically. | 0 new (zero regression on 2147 baseline) |
 
 ---
 
@@ -51,15 +53,16 @@ the session's outcome, not a living spec.
 | **Pass-3 picks snap to nearest shot boundary** (Recap quality win) | **D-2-snap** |
 | **D-2-motion Phase 1** (audit + scaffolding + helper) | **D-2-motion Phase 1** |
 | **D-2-motion Phase 2** (A/B benchmark verdict — CONDITIONAL GO) | **D-2-motion Phase 2** |
+| **D-2-motion Phase 3** (motion/crop.py swap — substrate live, default OFF) | **D-2-motion Phase 3** |
 
 ### ⏳ Deferred (consumer-wiring follow-ups)
 
 | Item | Priority | Risk | Effort | Notes |
 |------|----------|------|--------|-------|
-| **D-2-motion Phase 3** — Actual `motion/crop.py` swap (Phase 2 GO unlocks this) | Quality | **CRITICAL** | 1-2 days | Phase 1 audit + tests + helper ready. Phase 2 verdict approves Policy A. Needs Render Edit Protocol with `backend/.venv` pytest baseline. See [verdict §6.3](verdict-d-2-motion-phase-2-2026-06-30.md#63-phase-3-minimal-edit-sketch) for the minimal-edit sketch. |
+| **D-2-motion flip-default** — flip `MOTION_USE_SCENE_MAP` default to `1` after 2-3 production validation renders | Operator side | LOW | ~1h | One-line env-var default change in `motion/crop.py:528`. Verdict §6 documents the gating criteria. |
 | **C.1** — Clip pipeline consumes StoryModel via Comprehension stage | #1 strategic | **CRITICAL** (`render_pipeline.py`) | 1.5-2 days | Substrate ready (Batch C); needs prompt update + 3 provider sigs + `use_story_intelligence: bool = False` on RenderRequest. PROMPT_VERSION bump → cache flush. |
 
-**Recommended next-sprint order:** D-2-motion Phase 3 (~1 day with verdict already in hand) → C.1 (own sprint, CRITICAL).
+**Recommended next-sprint order:** Production-validate D-2-motion (~1h) → C.1 (own sprint, CRITICAL).
 
 ---
 
@@ -76,7 +79,7 @@ All defaults preserve historical behaviour — **Sacred Contract #2 spirit**.
 | `RECAP_SNAP_TO_SHOTS_ENABLED` | `1` | `0` → `RecapPlan.snap_scenes_to_shots()` is not called; scenes keep their AI-emitted timestamps. |
 | `RECAP_SNAP_TOLERANCE_SEC` | `0.5` | In-tolerance window for the snap reconciler. Matches scene_detector's `_TV2_MERGE_GAP_SEC` by design. |
 | `TTS_CACHE_ENABLED` | `1` | `0` → Edge-TTS hits the network on every call (legacy). |
-| `MOTION_USE_SCENE_MAP` | not yet wired | Reserved for D-2-motion Phase 3. When that ships, `0` → pixel-diff (legacy default); `1` → SceneMap-via-`SceneMap.slice()` with pixel-diff fallback. |
+| `MOTION_USE_SCENE_MAP` | `0` | D-2-motion Phase 3 wire (Sacred Contract #2 conservative default). `0` → pixel-diff (legacy, bit-identical). `1` → SceneMap-via-`SceneMap.slice()` with pixel-diff fallback when SceneMap missing/empty (Policy A). Flip to `1` after 2-3 production validation renders. |
 
 ### Claude prompt-cache gates (all default `1` = ON)
 

@@ -709,6 +709,11 @@ def render_part_smart(
     _fallback_flag: list | None = None,
     visual_intensity_hint: str | None = None,
     zoom_burst: bool = False,
+    # D-2-motion Phase 3 (2026-06-30): optional persisted SceneMap from
+    # the scene_map_stage. Forwarded to render_motion_aware_crop where
+    # MOTION_USE_SCENE_MAP=1 routes scene boundaries through it (Policy A).
+    # Default None preserves legacy pixel-diff behaviour bit-identically.
+    scene_map=None,
 ):
     # Phase 5.7: Resolve effective effect preset from AI visual intensity hint.
     # Renderer OWNS the mapping; AI only passes None/"low"/"medium"/"high".
@@ -767,6 +772,7 @@ def render_part_smart(
                     cfg=crop_cfg,
                     content_type=content_type,
                     _cache_key=_motion_cache_key,
+                    scene_map=scene_map,  # D-2-motion Phase 3 forwarding
                 )
             finally:
                 if _crop_ctx is not None:

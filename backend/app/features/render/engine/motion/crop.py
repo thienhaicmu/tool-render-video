@@ -413,6 +413,13 @@ def render_motion_aware_crop(
     source_start_sec: float | None = None,
     source_duration_sec: float | None = None,
     source_seek_force_accurate: bool = False,
+    # D-2-motion Phase 3 (2026-06-30): optional persisted SceneMap from the
+    # scene_map_stage (D-2-thin). When provided AND MOTION_USE_SCENE_MAP=1,
+    # scene boundaries come from SceneMap.slice() instead of pixel-diff.
+    # Default None preserves legacy pixel-diff behaviour bit-identically
+    # (Sacred Contract #2 spirit). See docs/audit-d-2-motion-2026-06-30.md
+    # §5 (Policy A fallback) and docs/verdict-d-2-motion-phase-2-2026-06-30.md.
+    scene_map=None,
 ) -> str:
     """Render a motion-aware cropped clip.
 
@@ -526,7 +533,29 @@ def render_motion_aware_crop(
     # is Sprint 7.9+ if measured to matter.
     _scene_aware = cfg.scene_aware_tracking and not _fuse_window_mode
     if _scene_aware:
-        scene_ranges = _detect_scene_ranges_in_clip(input_path, cfg)
+        scene_ranges = None
+        # D-2-motion Phase 3 (2026-06-30): when MOTION_USE_SCENE_MAP=1 AND a
+        # persisted SceneMap was passed in, prefer its (PySceneDetect/
+        # TransNetV2) boundaries over pixel-diff for shot-aware tracking.
+        # Policy A fallback (audit §5.2) — pixel-diff runs whenever
+        # SceneMap is missing/empty, so legacy jobs and missing-D-2-thin
+        # jobs keep working unchanged.
+        if os.getenv("MOTION_USE_SCENE_MAP", "0") == "1" and scene_map is not None:
+            _slice_start = float(source_start_sec or 0.0)
+            _slice_end = _slice_start + float(source_duration_sec or 1e9)
+            try:
+                scene_ranges = scene_map.slice(_slice_start, _slice_end) or None
+            except Exception:
+                # Defensive — SceneMap.slice() is documented as never raising,
+                # but a future duck-typed caller might pass something broken.
+                scene_ranges = None
+            if scene_ranges:
+                logger.info(
+                    "scene-aware (SceneMap) window=[%.2f,%.2f] scenes=%d",
+                    _slice_start, _slice_end, len(scene_ranges),
+                )
+        if not scene_ranges:
+            scene_ranges = _detect_scene_ranges_in_clip(input_path, cfg)
         if not scene_ranges or len(scene_ranges) <= 1:
             scene_ranges = None
         else:

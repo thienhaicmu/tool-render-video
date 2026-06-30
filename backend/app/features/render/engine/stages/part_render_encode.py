@@ -118,6 +118,21 @@ def run_render_encode(
         _effective_motion_crop, preflight.camera_strategy.zoom_burst,
         part_subtitle_enabled,
     )
+    # D-2-motion Phase 3 (2026-06-30): load the persisted SceneMap (D-2-thin)
+    # for this job so render_part_smart can route scene-aware tracking
+    # through it under MOTION_USE_SCENE_MAP=1 (Policy A — pixel-diff
+    # fallback when SceneMap is missing/empty). Failure to load is
+    # non-fatal: scene_map stays None, pixel-diff path runs unchanged.
+    _scene_map_obj = None
+    if _effective_motion_crop and not fuse_active:
+        try:
+            from app.db.jobs_repo import get_scene_map
+            from app.domain.scene_map import SceneMap
+            _sm_blob = get_scene_map(ctx.job_id)
+            if _sm_blob:
+                _scene_map_obj = SceneMap.from_json(_sm_blob)
+        except Exception:
+            _scene_map_obj = None
     try:
         if fuse_active:
             # Perf-opt Phase 7 (R8) — fused cut+encode path. Reads
@@ -198,6 +213,7 @@ def run_render_encode(
                 _fallback_flag=_motion_crop_fallback,
                 visual_intensity_hint="high" if preflight.camera_strategy.zoom_burst else None,
                 zoom_burst=preflight.camera_strategy.zoom_burst,
+                scene_map=_scene_map_obj,  # D-2-motion Phase 3
             )
     finally:
         preflight.encode_stop.set()
