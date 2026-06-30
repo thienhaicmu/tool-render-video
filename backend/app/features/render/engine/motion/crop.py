@@ -540,7 +540,11 @@ def render_motion_aware_crop(
         # Policy A fallback (audit §5.2) — pixel-diff runs whenever
         # SceneMap is missing/empty, so legacy jobs and missing-D-2-thin
         # jobs keep working unchanged.
-        if os.getenv("MOTION_USE_SCENE_MAP", "0") == "1" and scene_map is not None:
+        #
+        # Default flipped to "1" on 2026-06-30 (operator decision; deviates
+        # from Phase 2 verdict's "2-3 production validation renders first"
+        # recommendation). Rollback: ``MOTION_USE_SCENE_MAP=0``.
+        if os.getenv("MOTION_USE_SCENE_MAP", "1") == "1" and scene_map is not None:
             _slice_start = float(source_start_sec or 0.0)
             _slice_end = _slice_start + float(source_duration_sec or 1e9)
             try:
