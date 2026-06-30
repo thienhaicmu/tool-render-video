@@ -268,6 +268,49 @@ def get_story_model(job_id: str) -> str | None:
         return None
 
 
+def update_scene_map(job_id: str, scene_map_json: str | None) -> None:
+    """Persist the SceneMap JSON blob for a job. None clears it.
+
+    Architecture-review Batch D-2-thin (2026-06-30). Written by the
+    scene_map pipeline stage after PySceneDetect produces a shot list.
+    Both Recap and Clip jobs may carry it; D-2-thin only wires the Recap
+    path call site, but the column is provider-agnostic. Reads ship in
+    D-2-snap (pass-3 snap-to-shot reconciler) and D-2-motion (motion
+    crop subject-path stage).
+
+    Never raises — logs and returns on DB error so a failure to persist
+    does not crash a live render (Sacred Contract #3 spirit).
+    """
+    try:
+        with db_conn() as conn:
+            conn.execute(
+                "UPDATE jobs SET scene_map_json = ?, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?",
+                (scene_map_json, job_id),
+            )
+            conn.commit()
+        _count_write("update_scene_map")
+    except Exception as exc:
+        logger.warning("update_scene_map failed for job_id=%s: %s", job_id, exc)
+
+
+def get_scene_map(job_id: str) -> str | None:
+    """Return the raw SceneMap JSON blob for a job, or None. Feed the result
+    to ``SceneMap.from_json(...)`` (itself defensive). Never raises."""
+    try:
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT scene_map_json FROM jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            value = row[0] if isinstance(row, tuple) else row["scene_map_json"]
+            return value if isinstance(value, str) and value else None
+    except Exception as exc:
+        logger.warning("get_scene_map failed for job_id=%s: %s", job_id, exc)
+        return None
+
+
 def delete_job(job_id: str) -> None:
     """Permanently delete a job and all its parts from the database."""
     with db_conn() as conn:

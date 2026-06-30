@@ -255,6 +255,26 @@ def run_recap(
         if not _ai_srt.strip():
             raise RuntimeError("Recap: transcript empty — cannot select scenes")
 
+        # 2b. SceneMap substrate (architecture-review Batch D-2-thin,
+        # 2026-06-30). Pre-compute the shot-boundary map so future consumers
+        # (D-2-snap pass-3 snap-to-shot reconciler; D-2-motion crop subject
+        # path) can read it from the persisted blob without re-detecting.
+        # D-2-thin is observation-only — no current consumer; failure here is
+        # informational and never blocks the render. Sacred Contract #3 spirit.
+        try:
+            from app.features.render.engine.pipeline.scene_map_stage import (
+                run_scene_map as _run_scene_map,
+            )
+            _run_scene_map(
+                job_id=job_id, channel_code=effective_channel,
+                video_path=source_path,
+                emit_fn=_emit_render_event,
+            )
+        except Exception:
+            # Defensive — stage already guards, but the recap render must
+            # never abort on a substrate/observability concern.
+            pass
+
         # 3. Recap scene selection (AI) --------------------------------------
         _set_stage(JobStage.SEGMENT_BUILDING, 30, "AI selecting recap scenes + acts")
         from app.core import config as _cfg
