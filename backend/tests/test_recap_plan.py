@@ -330,3 +330,22 @@ def test_recap_prompt_requests_authored_narration_and_full_transcript():
     _, u = build_recap_prompt("[0-30] x", 1800.0, "vi-VN")
     assert '"narration"' in u                 # schema asks for actual narration text
     assert MAX_RECAP_SRT_CHARS >= 500000       # whole-film transcript (no head-truncate)
+
+
+# ── TTS never speaks timestamps/MS (bug fix) ─────────────────────────────────
+
+def test_strip_time_artifacts():
+    from app.features.render.engine.audio.timed_narration import _strip_time_artifacts as f
+    assert f("[0.0 - 5.0] Anh ấy sốc") == "Anh ấy sốc"
+    assert "00:00:05" not in f("Nói 00:00:05,000 rồi nghỉ")
+    assert "ms" not in f("dừng 500ms thôi").lower()
+    assert "-->" not in f("a --> b")
+    assert f("12\n00:00:01 --> 00:00:04\nNội dung thật") == "Nội dung thật"
+    # clean text untouched
+    assert f("Một câu thuyết minh bình thường.") == "Một câu thuyết minh bình thường."
+
+
+def test_grouping_strips_timestamp_from_spoken_text():
+    from app.features.render.engine.audio.timed_narration import _group_voice_segments as g
+    u = g([{"kind": "voice", "start": 0, "end": 5, "text": "[0.0 - 5.0] Mở đầu phim"}], 0.6)
+    assert u[0]["text"] == "Mở đầu phim"   # no timestamp spoken

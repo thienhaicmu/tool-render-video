@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -54,6 +55,37 @@ _TTS_CONCURRENCY: int = max(1, min(8, int(os.getenv("TIMED_NARRATION_TTS_CONCURR
 _MERGE_GAP_SEC: float = max(0.0, float(os.getenv("NARRATION_MERGE_GAP_SEC", "0.6")))
 
 
+# Timestamp / SRT artifacts that must NEVER be spoken by TTS. The LLM (or a
+# verbatim subtitle fallback) sometimes leaves a `[0.0 - 5.0]` prompt marker, an
+# SRT timecode `00:00:05,000`, an `mm:ss`, a `-->` arrow, a bare cue index, or a
+# `500ms` in the narration text → the voice reads "MS"/numbers out loud. Strip
+# them defensively at the TTS boundary so it covers every path (rewrite, recap,
+# reaction, fallback).
+_TIME_ARTIFACT_RES = [
+    re.compile(r"\[\s*\d+(?:\.\d+)?\s*[-–—]\s*\d+(?:\.\d+)?\s*\]"),  # [0.0 - 5.0]
+    re.compile(r"\b\d{1,2}:\d{2}:\d{2}[.,]\d{1,3}\b"),               # 00:00:05,000
+    re.compile(r"\b\d{1,2}:\d{2}:\d{2}\b"),                          # 00:00:05
+    re.compile(r"\b\d{1,2}:\d{2}\b"),                                 # 00:05
+    re.compile(r"-->"),                                               # SRT arrow
+    re.compile(r"\b\d+\s?ms\b", re.IGNORECASE),                       # 500ms / 500 ms
+]
+
+
+def _strip_time_artifacts(text: str) -> str:
+    """Remove timestamp/SRT artifacts so TTS never speaks them. Never raises."""
+    try:
+        s = str(text or "")
+        for _rx in _TIME_ARTIFACT_RES:
+            s = _rx.sub(" ", s)
+        # Drop bare numeric SRT index tokens left on their own (e.g. a lone "12").
+        s = re.sub(r"^\s*\d+\s*$", "", s, flags=re.MULTILINE)
+        s = re.sub(r"\s{2,}", " ", s)
+        s = re.sub(r"\s+([,.!?;:])", r"\1", s)
+        return s.strip()
+    except Exception:
+        return text
+
+
 def _group_voice_segments(segments: list[dict], max_gap: float) -> list[dict]:
     """Merge consecutive voice segments separated by < max_gap into single
     units (text joined, span = first.start..last.end). Skips 'original'
@@ -66,7 +98,7 @@ def _group_voice_segments(segments: list[dict], max_gap: float) -> list[dict]:
                 continue
             st = float(s.get("start", 0.0))
             en = float(s.get("end", 0.0))
-            txt = str(s.get("text", "") or "").strip()
+            txt = _strip_time_artifacts(s.get("text", ""))   # never speak timestamps
         except (TypeError, ValueError):
             continue
         if not txt or en <= st:
