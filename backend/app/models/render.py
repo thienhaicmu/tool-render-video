@@ -363,6 +363,19 @@ class RenderRequest(BaseModel):
     output_count: int = 1
     video_type: str = "auto"          # auto|viral|storytelling|educational|emotional|high_retention
 
+    # Architecture-review C.1 Phase 1 (2026-06-30): when True AND
+    # render_format == "clips", the Comprehension stage runs on the Whisper
+    # transcript to produce a StoryModel that grounds clip selection in
+    # whole-film semantic understanding (theme, conflict, characters,
+    # emotional curve). Default False — Sacred Contract #2: stored
+    # historical payloads replay bit-identically with the legacy no-
+    # StoryModel path. Phase 1 ships this surface only; the Phase 2
+    # render_pipeline.py wire-in and Phase 3 provider+prompt consumption
+    # land in separate commits. Effective only on the Clip path — Recap
+    # always runs Comprehension (gated by STORY_INTELLIGENCE_HOIST_ENABLED
+    # env var since Batch C). See docs/audit-c-1-2026-06-30.md.
+    use_story_intelligence: bool = False
+
     # AI Style
     energy_style: str = "auto"        # auto|fast|balanced|slow
     hook_strength: str = "balanced"   # aggressive|balanced|soft

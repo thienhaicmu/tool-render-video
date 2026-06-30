@@ -28,7 +28,8 @@ the session's outcome, not a living spec.
 | D-2-motion Phase 2 | [`2f5c05b`](#) | **A/B benchmark verdict** — ran benchmark on 3 synthetic fixtures using `backend/.venv` (cv2 4.11.0 + scenedetect 0.6.4 already installed). Verdict: ✅ CONDITIONAL GO with Policy A fallback. Phase 3 unblocked. | — (verdict doc only) |
 | Batch B test fix | [`4cde1de`](#) | Pre-edit pytest baseline housekeeping — `test_storymodel_v1_strings_upgrade_to_entities` had stale `schema_version == 2` assertion from before Batch B's bump to v3. Made Phase 3 delta check meaningful. | — |
 | **D-2-motion Phase 3** | [`20c8249`](#) | **Actual `motion/crop.py` swap** — `scene_map` kwarg threaded through `render_motion_aware_crop` ← `render_part_smart` ← `part_render_encode.py`. Policy A: SceneMap when `MOTION_USE_SCENE_MAP=1` + non-empty, pixel-diff fallback otherwise. Shipped default OFF (Sacred Contract #2 conservative). | 0 new (zero regression on 2147 baseline) |
-| **D-2-motion default flip** | (this commit) | **`MOTION_USE_SCENE_MAP` default 0 → 1** — operator authorisation; deviates from Phase 2 verdict's 2-3-validation-renders recommendation. One-character change in `motion/crop.py`. Pixel-diff fallback (Policy A) bounds risk to subtle visual drift on cinematic content. Instant rollback via env var. | 0 new (zero regression on 2147 baseline) |
+| **D-2-motion default flip** | [`50cefcd`](#) | **`MOTION_USE_SCENE_MAP` default 0 → 1** — operator authorisation; deviates from Phase 2 verdict's 2-3-validation-renders recommendation. One-character change in `motion/crop.py`. Pixel-diff fallback (Policy A) bounds risk to subtle visual drift on cinematic content. Instant rollback via env var. | 0 new (zero regression on 2147 baseline) |
+| **C.1 Phase 1** | (this commit) | **Clip-path Comprehension substrate** — `use_story_intelligence: bool = False` on RenderRequest + audit doc + 16 contract tests pinning the Phase 2/3 wire-up surface. NO `render_pipeline.py` touch. NO provider touch. Default False → bit-identical production. | +16 (2147 → 2163 baseline) |
 
 ---
 
@@ -56,13 +57,15 @@ the session's outcome, not a living spec.
 | **D-2-motion Phase 2** (A/B benchmark verdict — CONDITIONAL GO) | **D-2-motion Phase 2** |
 | **D-2-motion Phase 3** (motion/crop.py swap — substrate live) | **D-2-motion Phase 3** |
 | **D-2-motion default flip** (`MOTION_USE_SCENE_MAP` 0 → 1 — operator authorisation, deviates from verdict recommendation) | **D-2-motion default flip** |
+| **C.1 Phase 1** (Clip-path Comprehension substrate — schema field + audit + contract tests) | **C.1 Phase 1** |
 
 ### ⏳ Deferred (consumer-wiring follow-ups)
 
 | Item | Priority | Risk | Effort | Notes |
 |------|----------|------|--------|-------|
 | **D-2-motion production-validate** — run 2-3 real-content renders; flip back to `0` if visual quality regresses on dissolves / lighting-change-in-shot content | Operator side | LOW | ~30min | The verdict's recommended Phase 2 fallback step. If renders look bad: `export MOTION_USE_SCENE_MAP=0` |
-| **C.1** — Clip pipeline consumes StoryModel via Comprehension stage | #1 strategic | **CRITICAL** (`render_pipeline.py`) | 1.5-2 days | Substrate ready (Batch C); needs prompt update + 3 provider sigs + `use_story_intelligence: bool = False` on RenderRequest. PROMPT_VERSION bump → cache flush. |
+| **C.1 Phase 2** — `render_pipeline.py` reads the flag + calls `run_comprehension(...)` when True | #1 strategic | **CRITICAL** | ~2h | Substrate ready (this commit); see [audit §2.2](audit-c-1-2026-06-30.md) for the exact insertion-point sketch. |
+| **C.1 Phase 3** — 3 provider `select_render_plan` sigs + `_story_block` prompt injection + `PROMPT_VERSION = 2` bump | #1 strategic | HIGH × 3 | ~2h | Final closure of architecture review's #1 strategic gap. |
 
 **Recommended next-sprint order:** Production-validate D-2-motion (~30min) → C.1 (own sprint, CRITICAL).
 

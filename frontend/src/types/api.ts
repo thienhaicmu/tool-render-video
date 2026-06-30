@@ -198,6 +198,16 @@ export interface RenderRequest {
   render_format?: 'clips' | 'recap'
   video_type?: string
   hook_strength?: string
+
+  // Architecture-review C.1 Phase 1 (2026-06-30): Clip-path feature flag
+  // for the Comprehension stage. When true AND render_format === 'clips',
+  // the backend runs Comprehension on the Whisper transcript to produce
+  // a StoryModel that grounds clip selection in whole-film semantic
+  // understanding. Phase 1 ships the field only; backend wire-in lands in
+  // Phase 2 (render_pipeline.py) and Phase 3 (provider + prompt + cache
+  // bump). Default false — stored historical payloads keep the legacy
+  // no-StoryModel behaviour.
+  use_story_intelligence?: boolean
 }
 
 // ── RenderResponse ────────────────────────────────────────────────────────────

@@ -152,6 +152,10 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     "hook_strength",
     # Recap/Review mode ("clips" | "recap")
     "render_format",
+    # Architecture-review C.1 Phase 1 (2026-06-30) — feature flag for the
+    # Clip-path Comprehension stage. Phase 1 ships the field only; Phase 2/3
+    # wire it through render_pipeline.py + providers + prompts.
+    "use_story_intelligence",
 })
 
 

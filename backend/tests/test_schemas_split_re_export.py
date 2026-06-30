@@ -106,8 +106,11 @@ def test_render_request_field_count_unchanged():
     # 2026-06-29 recap R1: +1 (render_format, default "clips") → 155.
     # Sacred Contract #2 verified: render_format defaults to "clips" (current behaviour).
     # 2026-07 N4: +1 (reaction_intensity, default "") → 156.
-    assert field_count == 156, (
-        f"RenderRequest now has {field_count} fields (expected 156 post-N4). "
+    # 2026-06-30 C.1 Phase 1: +1 (use_story_intelligence, default False) → 157.
+    # Sacred Contract #2 verified: use_story_intelligence defaults to False
+    # (Clip path runs without Comprehension stage — bit-identical to pre-C.1).
+    assert field_count == 157, (
+        f"RenderRequest now has {field_count} fields (expected 157 post-C.1-Phase-1). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

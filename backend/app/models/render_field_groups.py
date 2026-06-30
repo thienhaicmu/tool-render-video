@@ -126,6 +126,10 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
     "llm": frozenset({
         "llm_enabled", "llm_model", "llm_language", "llm_min_quality",
         "llm_mode", "groq_only_mode", "ai_provider",
+        # C.1 Phase 1 (2026-06-30): Clip-path feature flag for the Comprehension
+        # stage. Belongs here because it gates an LLM-pipeline behaviour
+        # (run_comprehension produces a StoryModel passed to select_render_plan).
+        "use_story_intelligence",
     }),
     "credentials": frozenset({
         "gemini_api_key", "openai_api_key", "claude_api_key", "groq_api_key",
