@@ -38,6 +38,28 @@ Back-compat: a legacy blob with top-level ``acts`` (pre-R6, no ``episodes``)
 deserialises into a SINGLE episode wrapping those acts — old persisted recap
 plans replay bit-identically. ``RecapPlan.acts`` stays available as a flattened
 property so older consumers keep working.
+
+Naming — the word "beat" carries FOUR distinct roles in this module. Reading
+them as one another is the most common source of bugs in this file:
+
+  1. ``StoryBeat`` (Pass 1, on StoryModel.beats) — a PLOT TURN of the source
+     film: inciting incident, midpoint reveal, climax, etc. Optional ``t``
+     anchors it to a source-second. Read-only alias ``StoryModel.plot_turns``.
+
+  2. ``EditorialBeat`` (Pass 2, on EditorialBlueprint.beats) — a PLANNED
+     EDITORIAL BEAT in the recap's telling: which moment to land, what
+     emotional intent, "narrate" vs "hold" treatment. Carries no timestamp.
+
+  3. ``Act.beat`` (Pass 3, persisted on each act) — the act's STRUCTURAL
+     PHASE in the recap's story curve: setup | rising | climax | resolution.
+     Read-only alias ``Act.act_phase``. Wire key stays ``beat``.
+
+  4. ``RecapScene.is_climax`` (Pass 3, scene-level boolean) — flag marking the
+     single peak scene of an episode for downstream audio/subtitle treatment.
+
+Pass 1 → Pass 2 are linked semantically (Editorial reads the StoryModel) but
+NOT via explicit IDs in v2 — see the architecture-review backlog item
+"StoryBeat.bound_scene_index" (Batch B) for the planned back-reference.
 """
 from __future__ import annotations
 

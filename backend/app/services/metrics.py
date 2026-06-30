@@ -184,6 +184,31 @@ if _AVAILABLE:
         registry=REGISTRY,
     )
 
+    # Architecture-review Batch A (2026-06-30): coarse-grained LLM cost
+    # visibility per provider + task. Uses CHARS, not tokens — counting real
+    # tokens requires touching every provider's response handler (HIGH-tier
+    # files) and is deferred to Batch C, where the Comprehension stage hoist
+    # naturally wraps the call site. Chars/4 ≈ tokens (Anthropic-stated rule
+    # of thumb), so this is sufficient for budget dashboards while the
+    # real-token instrumentation lands.
+    #
+    # task ∈ {render_plan, story, editorial, recap, rewrite}. Adding a new
+    # LLM call elsewhere SHOULD register its own task label here so the
+    # billing surface stays exhaustive.
+    LLM_CALL_PROMPT_CHARS_TOTAL = Counter(
+        "llm_call_prompt_chars_total",
+        "Sum of system+user prompt characters sent to the LLM, by provider and task",
+        ["provider", "task"],
+        registry=REGISTRY,
+    )
+    LLM_CALL_RESPONSE_CHARS = Histogram(
+        "llm_call_response_chars",
+        "Distribution of raw LLM response character count, by provider and task",
+        ["provider", "task"],
+        buckets=(100, 500, 1000, 5000, 10000, 50000, 100000, 250000),
+        registry=REGISTRY,
+    )
+
     # AI rewrite (voice_source="ai_rewrite") — per-part LLM call that
     # rewrites the per-part transcript into TTS narration sized for the
     # clip duration. Mirrors LLM_RENDER_PLAN_* shape so dashboards can
@@ -305,6 +330,8 @@ else:
     LLM_SEGMENTS_SELECTED = _NoOpMetric()     # type: ignore[assignment]
     LLM_RECAP_PASS_CALLS = _NoOpMetric()      # type: ignore[assignment]
     LLM_RECAP_TWO_PASS_TOTAL = _NoOpMetric()  # type: ignore[assignment]
+    LLM_CALL_PROMPT_CHARS_TOTAL = _NoOpMetric()  # type: ignore[assignment]
+    LLM_CALL_RESPONSE_CHARS = _NoOpMetric()      # type: ignore[assignment]
     LLM_REWRITE_CALLS = _NoOpMetric()         # type: ignore[assignment]
     LLM_REWRITE_LATENCY = _NoOpMetric()       # type: ignore[assignment]
     LLM_REWRITE_CHAR_DELTA = _NoOpMetric()    # type: ignore[assignment]

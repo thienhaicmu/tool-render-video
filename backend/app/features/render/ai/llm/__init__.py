@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import time as _time
-from typing import Optional
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger("app.render.llm")
 logger.info("llm: dispatcher loaded (build=2026-06-04.sprint4c-render-plan-dual)")
@@ -28,17 +28,21 @@ DEFAULT_PROVIDER = "gemini"
 # cross-provider fallback; lower cost/latency on a failing render).
 _LLM_FALLBACK_ENABLED: bool = os.getenv("LLM_FALLBACK_ENABLED", "1") == "1"
 
-# R7 two-pass recap: when ON, a pass-1 "Story Model" call precedes scene
-# selection so pass-2 plans FROM a committed whole-film understanding. Default ON
-# — set RECAP_TWO_PASS=0 for the v1 single-pass behaviour (instant rollback, no
-# code revert). Pass-1 failure is non-fatal: the plan falls back to single-pass.
+# Story Intelligence pipeline (architecture-review naming, 2026-06-30):
+# the recap path runs up to THREE LLM passes — story understanding, editorial
+# planning, then scene binding. The flags below independently gate the first
+# two; pass-3 (binding) always runs. Failure at any earlier pass is non-fatal
+# (Sacred Contract #3) — the next pass degrades to the data it does have.
+#
+# Pass 1 — Story Understanding (StoryModel). When ON, the binding pass plans
+# FROM a committed whole-film understanding. Default ON — set RECAP_TWO_PASS=0
+# (legacy env name kept for back-compat) for the pre-R7 single-pass behaviour.
 _RECAP_TWO_PASS: bool = os.getenv("RECAP_TWO_PASS", "1") == "1"
 
-# R7.3 editorial pass: when ON (and two-pass produced a Story Model), a pass-2
-# "Editorial Blueprint" call plans HOW to tell the recap FROM the Story Model
-# (cheap — no transcript) before scene binding. Default OFF — set
-# RECAP_EDITORIAL_PASS=1 to enable. Failure is non-fatal: binding proceeds
-# without the blueprint (Sacred Contract #3).
+# Pass 2 — Editorial Blueprint. When ON (and pass-1 produced a StoryModel), a
+# cheap LLM call (NO transcript) plans HOW to tell the recap FROM the Story
+# Model before scene binding. Default OFF — set RECAP_EDITORIAL_PASS=1 to
+# enable. Binding proceeds without the blueprint if pass-2 fails.
 _RECAP_EDITORIAL_PASS: bool = os.getenv("RECAP_EDITORIAL_PASS", "0") == "1"
 
 
@@ -58,6 +62,23 @@ def _inc_recap_two_pass(has_story: bool, status: str) -> None:
         LLM_RECAP_TWO_PASS_TOTAL.labels(story_model="yes" if has_story else "no", status=status).inc()
     except Exception:
         pass
+
+
+def _safe_callback(cb: Optional[Callable[..., None]], *args, **kwargs) -> None:
+    """Invoke an optional pass-done callback, swallowing every exception.
+
+    Architecture-review Batch A (2026-06-30). The recap dispatcher exposes
+    ``on_pass1_done`` / ``on_pass2_done`` hooks so the pipeline can fire
+    WebSocket events between hidden LLM passes. Sacred Contract #3 spirit:
+    a flaky callback (or a buggy lambda) must never break the dispatch —
+    the LLM call already succeeded, the event is best-effort observation.
+    """
+    if cb is None:
+        return
+    try:
+        cb(*args, **kwargs)
+    except Exception as exc:  # pragma: no cover — defensive only
+        logger.warning("llm: pass-done callback raised %s — ignored", exc)
 
 
 def _get_provider_impl(provider_name: str):
@@ -213,6 +234,8 @@ def select_recap_plan(
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
+    on_pass1_done: Optional[Callable[[Any], None]] = None,
+    on_pass2_done: Optional[Callable[[Any], None]] = None,
 ) -> Optional["RecapPlan"]:
     """Dispatch recap scene-selection (render_format="recap") to a provider.
 
@@ -220,6 +243,13 @@ def select_recap_plan(
     whole film. Returns a RecapPlan or None (Sacred Contract #3). When
     LLM_FALLBACK_ENABLED=1 and the primary returns None, the remaining
     providers are tried in order.
+
+    Architecture-review Batch A — ``on_pass1_done`` and ``on_pass2_done``
+    are optional callbacks the caller (recap_pipeline) uses to emit
+    WebSocket events between the hidden Story Intelligence passes. Each is
+    invoked with the produced model (StoryModel / EditorialBlueprint) on
+    success or ``None`` on failure; failures inside the callback are
+    swallowed and never break the LLM dispatch.
     """
     primary = (provider or DEFAULT_PROVIDER).strip().lower()
     if primary not in SUPPORTED_PROVIDERS:
@@ -227,8 +257,8 @@ def select_recap_plan(
     chain = [primary]
     if _LLM_FALLBACK_ENABLED:
         chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
-    # R7 pass-1: build the Story Model first (best-effort). None → single-pass,
-    # so a flaky pass-1 never blocks a render (Sacred Contract #3).
+    # Pass 1 — Story Understanding. Best-effort: None → single-pass, so a
+    # flaky pass-1 never blocks a render (Sacred Contract #3).
     story_model = None
     if _RECAP_TWO_PASS:
         try:
@@ -239,10 +269,10 @@ def select_recap_plan(
         except Exception as exc:
             logger.warning("llm: pass-1 story model raised %s — single-pass", exc)
             story_model = None
-        logger.info("llm: recap two-pass enabled story_model=%s", story_model is not None)
-    # R7.3 pass-2: build the Editorial Blueprint FROM the Story Model (best-effort,
-    # gated on the flag + a non-empty story model). None → binding proceeds without
-    # it, so a flaky pass-2 never blocks a render (Sacred Contract #3).
+        logger.info("llm: recap pass-1 (story) story_model=%s", story_model is not None)
+        _safe_callback(on_pass1_done, story_model)
+    # Pass 2 — Editorial Blueprint. Best-effort, gated on the flag AND a
+    # non-empty pass-1. None → binding proceeds without it (Sacred Contract #3).
     editorial = None
     if _RECAP_EDITORIAL_PASS and story_model is not None:
         try:
@@ -253,7 +283,8 @@ def select_recap_plan(
         except Exception as exc:
             logger.warning("llm: pass-2 editorial raised %s — binding without it", exc)
             editorial = None
-        logger.info("llm: recap editorial-pass enabled editorial=%s", editorial is not None)
+        logger.info("llm: recap pass-2 (editorial) editorial=%s", editorial is not None)
+        _safe_callback(on_pass2_done, editorial)
     kwargs = dict(
         srt_content=srt_content,
         video_duration=video_duration,

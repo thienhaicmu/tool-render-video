@@ -84,6 +84,41 @@ def test_key_tolerates_none_and_enum_like_values():
 
 
 # ---------------------------------------------------------------------------
+# Prompt version (architecture review Batch A — 2026-06-30)
+# ---------------------------------------------------------------------------
+
+def test_prompt_version_differentiates_key():
+    """Bumping PROMPT_VERSION invalidates the entire cache by construction."""
+    k1 = _build_key("gemini", "flash", "sys", "user", prompt_version=1)
+    k2 = _build_key("gemini", "flash", "sys", "user", prompt_version=2)
+    assert k1 != k2
+
+
+def test_explicit_prompt_version_matches_live_default(monkeypatch):
+    """When no override is passed, _build_key reads the live PROMPT_VERSION
+    from prompts.py. Pinning ``prompt_version=PROMPT_VERSION`` reproduces the
+    default path."""
+    from app.features.render.ai.llm.prompts import PROMPT_VERSION
+    k_default = _build_key("gemini", "flash", "sys", "user")
+    k_explicit = _build_key("gemini", "flash", "sys", "user", prompt_version=PROMPT_VERSION)
+    assert k_default == k_explicit
+
+
+def test_version_bump_misses_old_cache_entries(monkeypatch):
+    """End-to-end: a write at v1 is unreadable after PROMPT_VERSION advances."""
+    # Pin v1 for the write.
+    monkeypatch.setattr(
+        "app.features.render.ai.llm.prompts.PROMPT_VERSION", 1, raising=False
+    )
+    assert llm_cache_put("gemini", "flash", "sys", "user", "payload-v1") is True
+    # Bump to v2 for the read — same prompt, different effective key.
+    monkeypatch.setattr(
+        "app.features.render.ai.llm.prompts.PROMPT_VERSION", 2, raising=False
+    )
+    assert llm_cache_get("gemini", "flash", "sys", "user") is None
+
+
+# ---------------------------------------------------------------------------
 # Round-trip
 # ---------------------------------------------------------------------------
 

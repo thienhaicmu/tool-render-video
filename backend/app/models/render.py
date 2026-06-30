@@ -22,6 +22,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 _security_logger = logging.getLogger("app.api.security")
 
+# Render format — the top-level pipeline mode select. Sacred Contract #2:
+# default "clips" so every stored historical payload deserialises into the
+# legacy clips path bit-identically. The runtime normaliser
+# (_validate_render_format below) tolerates legacy casing/whitespace.
+RenderFormat = Literal["clips", "recap"]
+
 
 class PrepareSourceRequest(BaseModel):
     # extra="ignore" preserves backward compat with stored payloads that still
@@ -349,8 +355,10 @@ class RenderRequest(BaseModel):
     # Render format: "clips" (default — N short clips, current behaviour) |
     # "recap" (one long, act-structured recap/review video — see
     # docs/RECAP_REVIEW_SPEC.md). Sacred Contract #2: default "clips" so stored
-    # historical payloads replay unchanged.
-    render_format: str = "clips"
+    # historical payloads replay unchanged. Typed as ``RenderFormat`` (Literal)
+    # so the OpenAPI schema lists the closed set explicitly; the validator
+    # below still normalises legacy casing/whitespace ("RECAP" → "recap").
+    render_format: RenderFormat = "clips"
     target_duration: int = 90
     output_count: int = 1
     video_type: str = "auto"          # auto|viral|storytelling|educational|emotional|high_retention
@@ -444,9 +452,14 @@ class RenderRequest(BaseModel):
     def _validate_output_count(cls, v: int) -> int:
         return max(1, min(20, int(v)))
 
-    @field_validator("render_format")
+    @field_validator("render_format", mode="before")
     @classmethod
-    def _validate_render_format(cls, v: str) -> str:
+    def _validate_render_format(cls, v) -> str:
+        # mode="before" runs PRIOR to Pydantic's Literal coercion so legacy
+        # casing/whitespace ("RECAP", " Recap ") + None + non-string payloads
+        # are normalised first. The Literal check (RenderFormat) then enforces
+        # the closed set — any value outside {clips, recap} falls back to
+        # "clips" here so historical payloads with unknown values keep loading.
         v = str(v or "clips").strip().lower()
         return v if v in {"clips", "recap"} else "clips"
 

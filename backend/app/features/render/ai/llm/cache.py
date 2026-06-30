@@ -53,14 +53,44 @@ def _cache_dir() -> Path:
     return APP_DATA_DIR / "cache" / _LLM_CACHE_SUBDIR
 
 
-def _build_key(provider: str, model: str, system_prompt: str, user_prompt: str) -> str:
+def _resolve_prompt_version() -> int:
+    """Read the live ``PROMPT_VERSION`` from prompts.py.
+
+    Late import keeps cache.py importable even if prompts.py is partially
+    broken during a hot reload, and means a PROMPT_VERSION bump takes effect
+    on the next call without restart. Defensive: returns 0 on any failure
+    so a stale prompts.py never breaks the cache layer.
+    """
+    try:
+        from app.features.render.ai.llm.prompts import PROMPT_VERSION as _PV
+        return int(_PV)
+    except Exception:
+        return 0
+
+
+def _build_key(
+    provider: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    prompt_version: int | None = None,
+) -> str:
     """Return the SHA-256 hex digest used to address the cache entry.
 
     All four inputs are coerced to ``str`` so callers can pass enum
     members or None without raising. None is normalised to the empty
     string so a missing model behaves identically across callers.
+
+    ``prompt_version`` defaults to the live PROMPT_VERSION read from
+    prompts.py. Tests inject an explicit value to assert version-keyed
+    isolation without touching the prompts module. A bump in PROMPT_VERSION
+    invalidates the entire on-disk cache by construction (different key →
+    cache miss → re-issue LLM call).
     """
+    pv = _resolve_prompt_version() if prompt_version is None else int(prompt_version)
     parts = "|".join([
+        f"v{pv}",
         str(provider or ""),
         str(model or ""),
         str(system_prompt or ""),

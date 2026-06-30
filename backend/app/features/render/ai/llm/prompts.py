@@ -10,6 +10,17 @@ from __future__ import annotations
 import os as _os
 import re as _re
 
+# Prompt schema version. Bump when the wire format of ANY prompt template
+# (segment selection, recap, story model, editorial blueprint, rewrite) changes
+# in a way the LLM's expected output should reflect. The LLM disk cache
+# (cache.py) folds this value into the SHA-256 key so a prompt edit invalidates
+# old cached responses automatically — no manual flush required.
+#
+# History:
+#   1 — Architecture-review Batch A (2026-06-30). Inaugural version. Flushes
+#       all pre-batch cache entries by construction.
+PROMPT_VERSION: int = 1
+
 # SRT timestamp pattern: 00:01:23,456 --> 00:02:03,100
 _SRT_TS_RE = _re.compile(
     r"(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})"

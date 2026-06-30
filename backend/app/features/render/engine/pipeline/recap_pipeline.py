@@ -261,11 +261,59 @@ def run_recap(
         from app.features.render.engine.pipeline.llm_stage import _resolve_api_key as _resolve_llm_api_key
         _provider = (getattr(payload, "ai_provider", "") or "").strip().lower() or getattr(_cfg, "AI_PROVIDER_DEFAULT", "gemini")
         _api_key, _ = _resolve_llm_api_key(payload, _provider)
+
+        # Architecture-review Batch A: emit a WS event after each hidden
+        # Story Intelligence pass so the UI sees progress between pass-1
+        # (story), pass-2 (editorial), pass-3 (binding). Each callback is
+        # invoked with the produced model (None on failure) and is safely
+        # swallowed by the dispatcher if it raises. Sacred Contract #6:
+        # ADDITIVE event names — the top-level {job, parts, summary}
+        # WebSocket shape is untouched.
+        def _on_pass1_done(story_model) -> None:
+            ok = story_model is not None
+            _emit_render_event(
+                channel_code=effective_channel, job_id=job_id,
+                event="recap.pass1.done",
+                level=("INFO" if ok else "WARNING"),
+                message=(
+                    "Pass 1 (Story Understanding) complete"
+                    if ok else
+                    "Pass 1 (Story Understanding) returned empty — single-pass fallback"
+                ),
+                step="render.recap",
+                context={
+                    "pass": "story",
+                    "ok": ok,
+                    "story_model": (story_model.to_public_dict() if ok else None),
+                },
+            )
+
+        def _on_pass2_done(editorial) -> None:
+            ok = editorial is not None
+            _emit_render_event(
+                channel_code=effective_channel, job_id=job_id,
+                event="recap.pass2.done",
+                level=("INFO" if ok else "WARNING"),
+                message=(
+                    "Pass 2 (Editorial Blueprint) complete"
+                    if ok else
+                    "Pass 2 (Editorial Blueprint) returned empty — binding without it"
+                ),
+                step="render.recap",
+                context={
+                    "pass": "editorial",
+                    "ok": ok,
+                    "editorial": (editorial.to_public_dict() if ok else None),
+                },
+            )
+
         recap_plan = select_recap_plan(
             provider=_provider, srt_content=_ai_srt, video_duration=video_duration,
             target_language=(getattr(payload, "voice_language", "") or "vi-VN"),
             tone=(getattr(payload, "rewrite_tone", "") or ""),
             api_key=_api_key, model=getattr(payload, "llm_model", None),
+            on_pass1_done=_on_pass1_done,
+            on_pass2_done=_on_pass2_done,
         )
         if recap_plan is None or not recap_plan.acts:
             raise RuntimeError("Recap: AI returned no usable plan")
