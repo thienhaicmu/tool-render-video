@@ -1,21 +1,22 @@
 /**
- * RecapLiveView — editor-style "live build" timeline for render_format="recap".
+ * RecapLiveView — "live build" view for render_format="recap".
  *
- * Recap IS a timeline (chronological scenes), so it's shown like an NLE: each
- * episode (Tập) is a sequence with a V1 (video) track + an A1 (audio) track.
- * Scene blocks are laid out left→right, width proportional to scene duration,
- * coloured by render status; the A1 lane shows narration vs original audio.
+ * Recap is a chronological montage, so each episode (Tập) shows:
+ *   • a thin proportional progress strip (the at-a-glance shape), and
+ *   • a readable SCENE LIST — one row per scene with its title, source time
+ *     range, audio mode (narration vs original), live render status, and the
+ *     AI narration line as it streams in — so you can tell what every scene is
+ *     actually doing.
  *
  * Data (all from the WebSocket stream — no extra fetch):
  *   • recap.plan.ready  → { episodes[], scenes[{n,ep,act,start,end,dur,title,mode,climax}] }
  *   • liveParts         → per-scene render status (part_no === scene.n)
- *   • voice_*_completed → narration script preview per scene
+ *   • voice_*_completed → narration preview per scene
  *   • reaction_freeze_applied → ⏸ on a scene
  *   • recap.concat.done → "ghép xong"
  *
  * Returns null until recap.plan.ready arrives, so clips mode is unaffected.
  */
-import type { ReactNode } from 'react'
 import type { JobPart } from '@/types/api'
 import type { WsLogEvent } from '@/websocket/events'
 
@@ -26,20 +27,17 @@ interface SceneBlock {
   title: string; mode: string; climax: boolean
 }
 
-// Video-track block colour by render status.
-function _statusColor(status: string | undefined): string {
+// Per-scene render status → colour + a short Vietnamese label.
+function _statusInfo(status: string | undefined): { color: string; label: string; active: boolean } {
   switch ((status || '').toLowerCase()) {
-    case 'done': return 'var(--accent, #10b981)'
-    case 'rendering':
-    case 'cutting':
-    case 'transcribing': return '#f59e0b'
+    case 'done':         return { color: 'var(--accent, #10b981)', label: 'xong',   active: false }
+    case 'rendering':    return { color: '#f59e0b',                label: 'render', active: true }
+    case 'cutting':      return { color: '#f59e0b',                label: 'cắt',    active: true }
+    case 'transcribing': return { color: '#f59e0b',                label: 'phụ đề', active: true }
     case 'failed':
-    case 'cancelled': return '#ef4444'
-    default: return 'var(--border, #3a3a3a)'   // queued / waiting / unknown
+    case 'cancelled':    return { color: '#ef4444',                label: 'lỗi',    active: false }
+    default:             return { color: 'var(--border, #3a3a3a)', label: 'chờ',    active: false }
   }
-}
-function _isActive(status: string | undefined): boolean {
-  return ['rendering', 'cutting', 'transcribing'].includes((status || '').toLowerCase())
 }
 function _fmt(sec: number): string {
   const s = Math.max(0, Math.round(sec))
@@ -51,9 +49,6 @@ export function RecapLiveView({
   liveEvents,
   liveParts,
 }: {
-  // Latched plan event from useRenderSocket — survives the bounded liveEvents
-  // buffer so the timeline doesn't vanish mid-render on long jobs. Falls back to
-  // scanning liveEvents for older mount sites that don't pass it.
   recapPlan?: WsLogEvent | null
   liveEvents: WsLogEvent[]
   liveParts: JobPart[]
@@ -83,7 +78,6 @@ export function RecapLiveView({
   const concatDone = liveEvents.some((e) => e.event === 'recap.concat.done')
   const doneScenes = liveParts.filter((p) => (p.status || '').toLowerCase() === 'done').length
 
-  // Still waiting on the scene list (e.g. resume of a pre-timeline job).
   if (scenes.length === 0) {
     return (
       <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-3)' }}>
@@ -100,13 +94,6 @@ export function RecapLiveView({
     byEpisode.get(sc.ep)!.push(sc)
   }
   const multiEpisode = epOrder.length > 1
-  const scriptLines: { n: number; text: string }[] = []
-  for (const sc of scenes) {
-    const pv = previews.get(sc.n)
-    if (pv) scriptLines.push({ n: sc.n, text: pv })
-  }
-
-  const GUTTER = 30
 
   return (
     <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)' }}>
@@ -124,7 +111,7 @@ export function RecapLiveView({
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 10, fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
         {([
           ['var(--border, #3a3a3a)', 'chờ'],
           ['#f59e0b', 'đang dựng'],
@@ -135,119 +122,104 @@ export function RecapLiveView({
             <span style={{ width: 10, height: 10, borderRadius: 2, background: c, display: 'inline-block' }} />{lbl}
           </span>
         ))}
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#14b8a6', display: 'inline-block' }} />A1 thuyết minh
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#a855f7', display: 'inline-block' }} />🔊 tiếng gốc
-        </span>
+        <span>🎙 thuyết minh</span>
+        <span>🔊 tiếng gốc</span>
         <span>★ cao trào</span>
       </div>
 
-      {/* One NLE sequence per episode */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Per-episode: progress strip + readable scene list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {epOrder.map((ep) => {
           const epScenes = byEpisode.get(ep)!
           const epDur = epScenes.reduce((n, s) => n + Math.max(0.1, s.dur), 0)
           const epTitle = episodes[ep]?.title || `Tập ${ep + 1}`
+          const epDone = epScenes.filter((s) => (partByNo.get(s.n)?.status || '').toLowerCase() === 'done').length
           return (
             <div key={ep} style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-card, rgba(255,255,255,.02))' }}>
-              {/* Sequence header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', background: 'rgba(255,255,255,.04)', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>
-                  {multiEpisode ? `🎞 ${epTitle}` : `🎞 ${epTitle}`}
-                </span>
+              {/* Episode header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 9px', background: 'rgba(255,255,255,.04)', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-1)' }}>🎞 {epTitle}</span>
                 <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
-                  {epScenes.length} cảnh · ~{_fmt(epDur)}
+                  {epDone}/{epScenes.length} cảnh · ~{_fmt(epDur)}
                 </span>
               </div>
 
-              {/* V1 — video track */}
-              <Track label="V1" gutter={GUTTER}>
+              {/* Thin proportional progress strip (the at-a-glance shape) */}
+              <div style={{ display: 'flex', gap: 2, padding: '6px 9px 4px' }}>
                 {epScenes.map((sc) => {
-                  const part = partByNo.get(sc.n)
-                  const active = _isActive(part?.status)
-                  const isOrig = sc.mode === 'original'
+                  const st = _statusInfo(partByNo.get(sc.n)?.status)
                   return (
                     <div
                       key={sc.n}
-                      title={`Cảnh ${sc.n}${sc.title ? ' · ' + sc.title : ''} · ${_fmt(sc.start)}–${_fmt(sc.end)} (${Math.round(sc.dur)}s) · ${isOrig ? 'tiếng gốc' : 'thuyết minh'} · ${part?.status || 'chờ'}`}
+                      title={`Cảnh ${sc.n} · ${st.label}`}
                       style={{
-                        flexGrow: Math.max(0.1, sc.dur), flexBasis: 0, minWidth: 26,
-                        height: 30, borderRadius: 4,
-                        background: _statusColor(part?.status),
-                        border: active ? '1.5px solid #fff' : '1px solid rgba(0,0,0,.25)',
-                        borderTop: isOrig ? '2px solid #a855f7' : undefined,
-                        display: 'flex', flexDirection: 'column', justifyContent: 'center',
-                        padding: '0 4px', overflow: 'hidden', cursor: 'default',
+                        flexGrow: Math.max(0.1, sc.dur), flexBasis: 0, minWidth: 4,
+                        height: 6, borderRadius: 2, background: st.color,
+                        border: sc.mode === 'original' ? '1px solid #a855f7' : 'none',
                       }}
-                    >
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', lineHeight: 1.1 }}>
-                        {sc.n}{sc.climax ? ' ★' : ''}{frozen.has(sc.n) ? ' ⏸' : ''}{isOrig ? ' 🔊' : ''}
-                      </span>
-                      {sc.title && (
-                        <span style={{ fontSize: 8, color: 'rgba(255,255,255,.8)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'var(--fb)' }}>
-                          {sc.title}
-                        </span>
-                      )}
-                    </div>
+                    />
                   )
                 })}
-              </Track>
+              </div>
 
-              {/* A1 — audio track (narration vs original) */}
-              <Track label="A1" gutter={GUTTER}>
-                {epScenes.map((sc) => {
+              {/* Scene list — one readable row per scene */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {epScenes.map((sc, i) => {
+                  const st = _statusInfo(partByNo.get(sc.n)?.status)
                   const isOrig = sc.mode === 'original'
+                  const preview = previews.get(sc.n)
+                  const line = isOrig
+                    ? '🔊 Để tiếng gốc của phim'
+                    : (preview || (st.active ? 'đang dựng lời…' : (st.label === 'xong' ? '' : 'chờ thuyết minh')))
                   return (
                     <div
                       key={sc.n}
-                      title={isOrig ? 'Tiếng gốc (AI để khoảnh khắc tự nói)' : 'AI thuyết minh'}
                       style={{
-                        flexGrow: Math.max(0.1, sc.dur), flexBasis: 0, minWidth: 26,
-                        height: 16, borderRadius: 3,
-                        background: isOrig ? '#a855f7' : '#14b8a6',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        padding: '0 4px', overflow: 'hidden',
+                        display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 9px',
+                        borderTop: i === 0 ? 'none' : '1px solid var(--border)',
+                        background: st.active ? 'rgba(245,158,11,.06)' : 'transparent',
                       }}
                     >
-                      <span style={{ fontSize: 8, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'var(--fb)' }}>
-                        {isOrig ? '🔊 gốc' : 'thuyết minh'}
+                      {/* Status pill */}
+                      <span style={{
+                        flexShrink: 0, marginTop: 1, minWidth: 46, textAlign: 'center',
+                        fontSize: 9, fontWeight: 700, color: '#fff', fontFamily: 'var(--fb)',
+                        background: st.color, borderRadius: 4, padding: '2px 4px',
+                      }}>
+                        {st.label}
                       </span>
+                      {/* Scene content */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-1)' }}>
+                            #{sc.n} {sc.title || `Cảnh ${sc.n}`}
+                          </span>
+                          <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
+                            {_fmt(sc.start)}–{_fmt(sc.end)}
+                          </span>
+                          <span style={{ fontSize: 10 }}>{isOrig ? '🔊' : '🎙'}</span>
+                          {sc.climax && <span style={{ fontSize: 10 }} title="cao trào">★</span>}
+                          {frozen.has(sc.n) && <span style={{ fontSize: 10 }} title="freeze">⏸</span>}
+                        </div>
+                        {line && (
+                          <div style={{
+                            fontSize: 10, color: isOrig ? '#c084fc' : 'var(--text-2)',
+                            lineHeight: 1.4, fontFamily: 'var(--fb)', marginTop: 2,
+                            fontStyle: (preview || isOrig) ? 'normal' : 'italic',
+                            opacity: (preview || isOrig) ? 1 : 0.6,
+                          }}>
+                            {line}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
-              </Track>
+              </div>
             </div>
           )
         })}
       </div>
-
-      {/* Narration script — streams in as scenes get narrated */}
-      {scriptLines.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>KỊCH BẢN THUYẾT MINH</div>
-          <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--bg-card)', borderRadius: 6, padding: '6px 8px' }}>
-            {scriptLines.map((l) => (
-              <div key={l.n} style={{ fontSize: 10, color: 'var(--text-2)', lineHeight: 1.4, fontFamily: 'var(--fb)' }}>
-                <span style={{ color: 'var(--text-3)' }}>#{l.n}</span> {l.text}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** One NLE track lane: a fixed left gutter label + a proportional block row. */
-function Track({ label, gutter, children }: { label: string; gutter: number; children: ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, padding: '4px 6px' }}>
-      <div style={{ width: gutter, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'var(--fb)', background: 'rgba(255,255,255,.03)', borderRadius: 3 }}>
-        {label}
-      </div>
-      <div style={{ display: 'flex', gap: 3, flex: 1, minWidth: 0 }}>{children}</div>
     </div>
   )
 }
