@@ -771,7 +771,13 @@ def test_storymodel_v1_strings_upgrade_to_entities():
     assert sm.characters[1].name == "Lan" and sm.characters[1].role == ""
     assert all(isinstance(b, StoryBeat) for b in sm.beats)
     assert [b.text for b in sm.beats] == ["opening", "twist"]
-    assert sm.schema_version == 2
+    # Batch B (2026-06-30, commit 8ce29cb) bumped STORY_SCHEMA_VERSION 2 → 3
+    # when StoryBeat.bound_scene_index was added. A v1 blob loads with the
+    # CURRENT schema version (3), not its origin version.
+    from app.domain.recap_plan import STORY_SCHEMA_VERSION
+    assert sm.schema_version == STORY_SCHEMA_VERSION
+    # Sanity: the new field defaults correctly on v1 load.
+    assert all(b.bound_scene_index == -1 for b in sm.beats)
 
 
 def test_storymodel_to_public_dict_is_json_safe():
