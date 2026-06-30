@@ -48,13 +48,14 @@ _SYSTEM_RECAP = (
     "markdown, no code fences."
 )
 
-_USER_TEMPLATE_RECAP = """Build a RECAP PLAN for this film.
+_USER_TEMPLATE_RECAP = """═══ TRANSCRIPT (seconds into the film) ═══
+{srt_content}
 
-═══ FILM ═══
+═══ BUILD A RECAP PLAN FOR THIS FILM ═══
 NARRATION LANGUAGE: {lang_name}
 FILM DURATION:      {video_duration:.0f} seconds (~{video_minutes:.0f} min)
 CREATOR TONE:       {tone_clause}
-
+{story_block}
 ═══ HOW TO WORK ═══
 1. Read the timestamped transcript below — the numbers are SECONDS into the film.
 2. Select the KEY scenes that, in order, tell the whole story. Skip filler.
@@ -145,11 +146,81 @@ scene's line flows from the previous one.
 7. audio_mode is "narrate" or "original". Most scenes are "narrate". "original"
    scenes have an EMPTY narration.
 
-═══ TRANSCRIPT (seconds) ═══
+═══ OUTPUT JSON ═══
+"""
+
+
+# ── R7 pass-1: Story Model (whole-film understanding) ────────────────────────
+_SYSTEM_STORY = (
+    "You are an expert film analyst. You READ THE WHOLE film transcript and "
+    "reconstruct the story: who the characters are and what they want, the "
+    "central conflict, the key plot turns in order, the climax, and the ending. "
+    "You think like a storyteller (setup → rising action → climax → resolution). "
+    "Output ONLY valid JSON in the exact shape requested — no prose, no markdown, "
+    "no code fences. Base everything on the transcript; never invent events."
+)
+
+_USER_TEMPLATE_STORY = """═══ TRANSCRIPT (seconds into the film) ═══
 {srt_content}
+
+═══ TASK ═══
+Reconstruct the WHOLE story of this {video_minutes:.0f}-min film ({video_duration:.0f}s)
+BEFORE any editing. Write in {lang_name}. Base everything on the transcript above.
+
+═══ OUTPUT FORMAT (STRICT — return ONLY this JSON) ═══
+{{
+  "summary": "<3-6 sentence whole-film synopsis in {lang_name}>",
+  "characters": ["<principal characters: 'name — role/what they want'>"],
+  "beats": ["<key plot turns in CHRONOLOGICAL order, short lines, in {lang_name}>"],
+  "climax": "<the single peak / turning point, one line in {lang_name}>",
+  "ending": "<how the film resolves, one line in {lang_name}>"
+}}
+
+═══ HARD RULES ═══
+1. ONE JSON object. No markdown, no prose, no code fences.
+2. Every field present. characters + beats are non-empty arrays.
+3. Retell, never fabricate — preserve names, facts, chronology.
 
 ═══ OUTPUT JSON ═══
 """
+
+
+def _story_block(story_model) -> str:
+    """Render a StoryModel into a plain-text block for injection into the pass-2
+    recap prompt. Returns "" when no usable model. The text is passed to
+    ``str.format`` as a VALUE (not re-parsed), so any braces it contains are
+    safe — but we still strip them defensively. Never raises."""
+    if story_model is None:
+        return ""
+    try:
+        summary = (getattr(story_model, "summary", "") or "").strip()
+        characters = [c for c in (getattr(story_model, "characters", []) or []) if str(c).strip()]
+        beats = [b for b in (getattr(story_model, "beats", []) or []) if str(b).strip()]
+        climax = (getattr(story_model, "climax", "") or "").strip()
+        ending = (getattr(story_model, "ending", "") or "").strip()
+        if not (summary or characters or beats or climax or ending):
+            return ""
+        lines = ["", "═══ STORY MODEL (your pass-1 understanding — plan FROM this) ═══"]
+        if summary:
+            lines.append(f"SUMMARY: {summary}")
+        if characters:
+            lines.append("CHARACTERS: " + " · ".join(str(c).strip() for c in characters))
+        if beats:
+            lines.append("KEY BEATS (chronological):")
+            lines.extend(f"  - {str(b).strip()}" for b in beats)
+        if climax:
+            lines.append(f"CLIMAX: {climax}")
+        if ending:
+            lines.append(f"ENDING: {ending}")
+        lines.append(
+            "Select scenes + write narration that SERVE this through-line; keep the "
+            "SAME chronology and characters. Do not contradict the Story Model."
+        )
+        block = "\n".join(lines) + "\n"
+        # Defensive: neutralise stray braces so an accidental re-format can't break.
+        return block.replace("{", "(").replace("}", ")")
+    except Exception:
+        return ""
 
 
 def _fit_transcript(srt: str, max_chars: int) -> str:
@@ -212,13 +283,39 @@ def _episode_guidance(lo: int, hi: int) -> str:
             "on where the story naturally breaks) of roughly comparable length.")
 
 
-def build_recap_prompt(
+def build_story_model_prompt(
     srt_content: str,
     video_duration: float,
     target_language: str = "vi-VN",
     tone: str = "",
 ) -> tuple[str, str]:
-    """Return (system_prompt, user_prompt) for the recap selection LLM call."""
+    """R7 pass-1 — return (system, user) for the Story Model (whole-film
+    understanding) LLM call. ``tone`` is accepted for signature parity with
+    build_recap_prompt but not used (the synopsis is tone-neutral)."""
+    cleaned = _fit_transcript((srt_content or "").strip(), MAX_RECAP_SRT_CHARS)
+    lang_name = _LANG_NAMES.get(target_language, target_language or "the target language")
+    dur = float(video_duration or 0.0)
+    user = _USER_TEMPLATE_STORY.format(
+        lang_name=lang_name,
+        video_duration=dur,
+        video_minutes=dur / 60.0,
+        srt_content=cleaned,
+    )
+    return _SYSTEM_STORY, user
+
+
+def build_recap_prompt(
+    srt_content: str,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    story_model=None,
+) -> tuple[str, str]:
+    """Return (system_prompt, user_prompt) for the recap selection LLM call.
+
+    R7: when ``story_model`` is provided (pass-1 output), its understanding is
+    injected so pass-2 plans FROM a committed Story Model. The block is passed as
+    a ``str.format`` value (not re-parsed) and brace-neutralised — format-safe."""
     cleaned = _fit_transcript((srt_content or "").strip(), MAX_RECAP_SRT_CHARS)
     lang_name = _LANG_NAMES.get(target_language, target_language or "the target language")
     tone_clause = (tone or "").strip() or "engaging / cinematic"
@@ -232,6 +329,7 @@ def build_recap_prompt(
         episode_min=ep_lo,
         episode_max=ep_hi,
         episode_guidance=_episode_guidance(ep_lo, ep_hi),
+        story_block=_story_block(story_model),
         srt_content=cleaned,
     )
     return _SYSTEM_RECAP, user

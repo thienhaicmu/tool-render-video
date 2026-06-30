@@ -18,8 +18,8 @@ from app.features.render.ai.llm.prompts import build_render_plan_prompt
 from app.features.render.ai.llm.retry import call_with_retry
 from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
-from app.features.render.ai.llm.recap_prompts import build_recap_prompt
-from app.features.render.ai.llm.recap_parser import parse_recap_response
+from app.features.render.ai.llm.recap_prompts import build_recap_prompt, build_story_model_prompt
+from app.features.render.ai.llm.recap_parser import parse_recap_response, parse_story_model_response
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.gemini_client")
@@ -423,11 +423,46 @@ def _call_gemini_rewrite(api_key: str, model: str, system_prompt: str, user_prom
 # (a feature film = many scenes × real narration text). 16384 truncated the JSON
 # mid-stream (esp. with thinking eating the budget) → "no JSON object found" →
 # recap failed. Gemini 2.5 Flash supports up to 65536 output tokens — use it.
-# Thinking is unnecessary for this structured task, so default the recap thinking
-# budget to 0 (leave the whole budget for the answer). Override via GEMINI_RECAP_*.
+# Recap is a STORY-UNDERSTANDING task, not flat extraction: the model must rebuild
+# the whole-film arc (setup→climax→resolution) before selecting scenes. Give it a
+# thinking budget so it reasons first — quality lever from the 2026-06-30 recap
+# architecture review (was 0 = single-pass, shallow). 8192 is a small slice of the
+# 65536 answer budget; thinking tokens are billed/budgeted separately from
+# max_output_tokens. Override (incl. back to 0) via GEMINI_RECAP_THINKING_BUDGET.
 _RECAP_MAX_TOKENS = int(os.getenv("GEMINI_RECAP_MAX_TOKENS", "65536"))
 _RECAP_TEMPERATURE = float(os.getenv("GEMINI_RECAP_TEMPERATURE", "0.4"))
-_RECAP_THINKING_BUDGET = int(os.getenv("GEMINI_RECAP_THINKING_BUDGET", "0"))
+_RECAP_THINKING_BUDGET = int(os.getenv("GEMINI_RECAP_THINKING_BUDGET", "8192"))
+
+
+def select_story_model(
+    srt_content: str,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["StoryModel"]:
+    """R7 pass-1 — whole-film Story Model. Returns StoryModel or None (Sacred #3)."""
+    try:
+        if not _GENAI_SDK or not api_key or not srt_content or not srt_content.strip():
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        system_prompt, user_prompt = build_story_model_prompt(srt_content, video_duration, target_language, tone)
+        logger.info("gemini_client: calling story model=%s film_dur=%.0fs", resolved_model, video_duration)
+        raw = _call_gemini_story(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            logger.warning("gemini_client: empty story response (model=%s)", resolved_model)
+            return None
+        sm = parse_story_model_response(raw)
+        if sm is not None:
+            logger.info(
+                "gemini_client: story OK model=%s chars=%d beats=%d",
+                resolved_model, len(sm.characters), len(sm.beats),
+            )
+        return sm
+    except Exception as exc:
+        logger.warning("gemini_client: select_story_model unexpected error %s", exc, exc_info=True)
+        return None
 
 
 def select_recap_plan(
@@ -437,9 +472,11 @@ def select_recap_plan(
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
+    story_model=None,
 ) -> Optional["RecapPlan"]:
     """Select scenes + act structure for a recap. Returns RecapPlan or None
-    (Sacred Contract #3 — never raises)."""
+    (Sacred Contract #3 — never raises). R7: when ``story_model`` is provided
+    (pass-1), pass-2 plans FROM it and the model is stamped onto the plan."""
     try:
         if not _GENAI_SDK:
             logger.warning("gemini_client: google-genai SDK not installed (recap path)")
@@ -451,10 +488,11 @@ def select_recap_plan(
             logger.warning("gemini_client: empty srt_content (recap path)")
             return None
         resolved_model = model or _DEFAULT_MODEL
-        system_prompt, user_prompt = build_recap_prompt(srt_content, video_duration, target_language, tone)
+        system_prompt, user_prompt = build_recap_prompt(
+            srt_content, video_duration, target_language, tone, story_model=story_model)
         logger.info(
-            "gemini_client: calling recap model=%s film_dur=%.0fs lang=%s in_chars=%d",
-            resolved_model, video_duration, target_language, len(srt_content),
+            "gemini_client: calling recap model=%s film_dur=%.0fs lang=%s in_chars=%d two_pass=%s",
+            resolved_model, video_duration, target_language, len(srt_content), story_model is not None,
         )
         raw = _call_gemini_recap(api_key, resolved_model, system_prompt, user_prompt)
         if not raw:
@@ -462,6 +500,8 @@ def select_recap_plan(
             return None
         plan = parse_recap_response(raw, video_duration)
         if plan is not None:
+            if story_model is not None:
+                plan.story = story_model     # pass-1 understanding is authoritative
             logger.info(
                 "gemini_client: recap OK model=%s acts=%d scenes=%d total=%.0fs",
                 resolved_model, len(plan.acts), plan.scene_count(), plan.total_target_sec,
@@ -500,4 +540,42 @@ def _call_gemini_recap(api_key: str, model: str, system_prompt: str, user_prompt
     )
     if result is not None:
         llm_cache_put("gemini-recap", model, system_prompt, user_prompt, result)
+    return result
+
+
+# Pass-1 (Story Model) — a short synopsis, so a smaller answer budget, but a real
+# thinking budget (understanding is the reasoning-heavy step). Override GEMINI_STORY_*.
+_STORY_MAX_TOKENS = int(os.getenv("GEMINI_STORY_MAX_TOKENS", "8192"))
+_STORY_TEMPERATURE = float(os.getenv("GEMINI_STORY_TEMPERATURE", "0.4"))
+_STORY_THINKING_BUDGET = int(os.getenv("GEMINI_STORY_THINKING_BUDGET", "8192"))
+
+
+def _call_gemini_story_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _genai.Client(api_key=api_key, http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000})
+    resp = client.models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "response_mime_type": "application/json",
+            "temperature": _STORY_TEMPERATURE,
+            "max_output_tokens": _STORY_MAX_TOKENS,
+            "thinking_config": {"thinking_budget": _STORY_THINKING_BUDGET},
+        },
+    )
+    return resp.text
+
+
+def _call_gemini_story(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Story Model call with cache + retry. Cache namespaced 'gemini-story'."""
+    cached = llm_cache_get("gemini-story", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("gemini_client: story cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
+        lambda: _call_gemini_story_once(api_key, model, system_prompt, user_prompt),
+        label="gemini-story",
+    )
+    if result is not None:
+        llm_cache_put("gemini-story", model, system_prompt, user_prompt, result)
     return result

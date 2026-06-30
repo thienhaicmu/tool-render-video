@@ -28,6 +28,12 @@ DEFAULT_PROVIDER = "gemini"
 # cross-provider fallback; lower cost/latency on a failing render).
 _LLM_FALLBACK_ENABLED: bool = os.getenv("LLM_FALLBACK_ENABLED", "1") == "1"
 
+# R7 two-pass recap: when ON, a pass-1 "Story Model" call precedes scene
+# selection so pass-2 plans FROM a committed whole-film understanding. Default ON
+# — set RECAP_TWO_PASS=0 for the v1 single-pass behaviour (instant rollback, no
+# code revert). Pass-1 failure is non-fatal: the plan falls back to single-pass.
+_RECAP_TWO_PASS: bool = os.getenv("RECAP_TWO_PASS", "1") == "1"
+
 
 def _get_provider_impl(provider_name: str):
     """Return the select_render_plan callable for the named provider."""
@@ -57,6 +63,61 @@ def _get_recap_impl(provider_name: str):
     return _impl
 
 
+def _get_story_impl(provider_name: str):
+    """Return the select_story_model (pass-1) callable for the named provider, or
+    None if that provider has no pass-1 implementation. Defensive — never raises."""
+    try:
+        if provider_name == "openai":
+            from app.features.render.ai.llm.providers import openai as _mod
+        elif provider_name == "claude":
+            from app.features.render.ai.llm.providers import claude as _mod
+        else:
+            from app.features.render.ai.llm.providers import gemini as _mod
+        return getattr(_mod, "select_story_model", None)
+    except Exception as exc:
+        logger.warning("llm: _get_story_impl(%s) import failed %s", provider_name, exc)
+        return None
+
+
+def select_story_model(
+    *,
+    provider: str = DEFAULT_PROVIDER,
+    srt_content: str,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+):
+    """Dispatch pass-1 Story Model selection to a provider. Returns a StoryModel or
+    None (Sacred Contract #3). With LLM_FALLBACK_ENABLED, providers that have a
+    pass-1 impl are tried in order until one yields a model."""
+    primary = (provider or DEFAULT_PROVIDER).strip().lower()
+    if primary not in SUPPORTED_PROVIDERS:
+        primary = "gemini"
+    chain = [primary]
+    if _LLM_FALLBACK_ENABLED:
+        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    kwargs = dict(
+        srt_content=srt_content, video_duration=video_duration,
+        target_language=target_language, tone=tone, api_key=api_key, model=model,
+    )
+    for _p in chain:
+        impl = _get_story_impl(_p)
+        if impl is None:
+            continue
+        try:
+            result = impl(**kwargs)
+        except Exception as exc:  # defensive — provider modules already never raise
+            logger.warning("llm: select_story_model provider=%s raised %s", _p, exc)
+            result = None
+        if result is not None:
+            if _p != primary:
+                logger.info("llm: story fallback succeeded provider=%s (primary=%s None)", _p, primary)
+            return result
+    return None
+
+
 def select_recap_plan(
     *,
     provider: str = DEFAULT_PROVIDER,
@@ -80,6 +141,19 @@ def select_recap_plan(
     chain = [primary]
     if _LLM_FALLBACK_ENABLED:
         chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    # R7 pass-1: build the Story Model first (best-effort). None → single-pass,
+    # so a flaky pass-1 never blocks a render (Sacred Contract #3).
+    story_model = None
+    if _RECAP_TWO_PASS:
+        try:
+            story_model = select_story_model(
+                provider=primary, srt_content=srt_content, video_duration=video_duration,
+                target_language=target_language, tone=tone, api_key=api_key, model=model,
+            )
+        except Exception as exc:
+            logger.warning("llm: pass-1 story model raised %s — single-pass", exc)
+            story_model = None
+        logger.info("llm: recap two-pass enabled story_model=%s", story_model is not None)
     kwargs = dict(
         srt_content=srt_content,
         video_duration=video_duration,
@@ -87,6 +161,7 @@ def select_recap_plan(
         tone=tone,
         api_key=api_key,
         model=model,
+        story_model=story_model,
     )
     for _p in chain:
         try:

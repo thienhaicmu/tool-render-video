@@ -45,7 +45,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
-SCHEMA_VERSION = 2  # R6: episode layer + scene.audio_mode
+SCHEMA_VERSION = 3  # R7: nested StoryModel (two-pass story understanding)
 
 # Allowed per-scene audio modes. "narrate" = TTS the AI narration over the clip
 # (default, conservative — the recap default behaviour). "original" = drop the
@@ -97,13 +97,36 @@ class Episode:
 
 
 @dataclass
+class StoryModel:
+    """R7 — the recap's whole-film understanding, produced by the pass-1 "Story
+    Understanding" LLM call BEFORE any scene selection. Pass-2 editorial planning
+    is conditioned on it, and it is persisted for UI / future re-edit. Every field
+    defaults empty so a partial/legacy blob never errors (Sacred Contract #3 spirit)."""
+    summary: str = ""                                      # 3-6 sentence whole-film synopsis
+    characters: list[str] = field(default_factory=list)   # principal characters (name — role/want)
+    beats: list[str] = field(default_factory=list)         # key plot turns, chronological
+    climax: str = ""                                       # the peak/turning point, one line
+    ending: str = ""                                       # how the film resolves, one line
+
+
+@dataclass
 class RecapPlan:
     """AI-emitted plan for an act-structured recap, split into 1..N episodes."""
     schema_version: int = SCHEMA_VERSION
     total_target_sec: float = 0.0
+    # R7: nested Story Model (pass-1 understanding). Replaces the v1 flat
+    # ``story_summary`` field — back-compat preserved via the ``story_summary``
+    # property + defensive ``_from_dict`` (a v1 blob's flat string is wrapped).
+    story: "StoryModel" = field(default_factory=StoryModel)
     episodes: list[Episode] = field(default_factory=list)
 
     # ── Convenience ──────────────────────────────────────────────────────
+
+    @property
+    def story_summary(self) -> str:
+        """Back-compat alias for the v1 flat field. Read-only — ``asdict``/
+        ``to_json`` serialise the nested ``story`` object, not this property."""
+        return self.story.summary
 
     @property
     def acts(self) -> list[Act]:
@@ -162,9 +185,17 @@ class RecapPlan:
                 acts = [_act_from_dict(a) for a in raw_acts if isinstance(a, dict)]
                 if acts:
                     episodes.append(Episode(title="", acts=acts))
+        # Story Model: prefer the R7 nested "story" object; fall back to the v1
+        # flat "story_summary" string (wrap into a summary-only StoryModel).
+        raw_story = data.get("story")
+        if isinstance(raw_story, dict):
+            story = story_model_from_dict(raw_story)
+        else:
+            story = StoryModel(summary=str(data.get("story_summary", "") or "").strip())
         return cls(
             schema_version=_coerce_int(data.get("schema_version"), SCHEMA_VERSION),
             total_target_sec=_coerce_float(data.get("total_target_sec"), 0.0),
+            story=story,
             episodes=episodes,
         )
 
@@ -198,6 +229,39 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
         if v in ("false", "0", "no", "off", ""):
             return False
     return default
+
+
+def _coerce_str_list(value: Any, max_items: int = 24) -> list[str]:
+    """Coerce an arbitrary value into a clean list[str] — drops blanks, caps the
+    count, accepts a single string. Never raises."""
+    out: list[str] = []
+    if isinstance(value, str):
+        value = [value]
+    if isinstance(value, (list, tuple)):
+        for v in value:
+            try:
+                s = str(v or "").strip()
+            except Exception:
+                continue
+            if s:
+                out.append(s)
+            if len(out) >= max_items:
+                break
+    return out
+
+
+def story_model_from_dict(d: Any) -> "StoryModel":
+    """Defensive StoryModel from a dict. Unknown keys dropped, missing keys
+    default-empty. Never raises."""
+    if not isinstance(d, dict):
+        return StoryModel()
+    return StoryModel(
+        summary=str(d.get("summary", "") or "").strip(),
+        characters=_coerce_str_list(d.get("characters")),
+        beats=_coerce_str_list(d.get("beats")),
+        climax=str(d.get("climax", "") or "").strip(),
+        ending=str(d.get("ending", "") or "").strip(),
+    )
 
 
 def _coerce_audio_mode(value: Any) -> str:

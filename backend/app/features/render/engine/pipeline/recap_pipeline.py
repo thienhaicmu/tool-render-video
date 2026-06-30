@@ -310,6 +310,15 @@ def run_recap(
                 "scene_modes": [b["mode"] for b in _scene_blocks],
                 "original_audio_scenes": _n_original,
                 "total_target_sec": recap_plan.total_target_sec,
+                # Story Model — what the AI understood before it edited (R7 two-pass).
+                "story_summary": recap_plan.story_summary,
+                "story_model": {
+                    "summary": recap_plan.story.summary,
+                    "characters": recap_plan.story.characters,
+                    "beats": recap_plan.story.beats,
+                    "climax": recap_plan.story.climax,
+                    "ending": recap_plan.story.ending,
+                },
             },
         )
 
@@ -462,6 +471,14 @@ def run_recap(
         _result = {
             "outputs": _output_entries,
             "render_format": "recap",
+            "story_summary": recap_plan.story_summary,
+            "story_model": {
+                "summary": recap_plan.story.summary,
+                "characters": recap_plan.story.characters,
+                "beats": recap_plan.story.beats,
+                "climax": recap_plan.story.climax,
+                "ending": recap_plan.story.ending,
+            },
             "recap_plan": recap_plan.to_json(),
             "recap_episodes_count": len(_output_entries),
             "output_ranking": [dict(e, output_rank=i) for i, e in enumerate(_output_entries, start=1)],

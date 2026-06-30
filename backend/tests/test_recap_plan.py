@@ -10,9 +10,9 @@ import sqlite3
 
 import pytest
 
-from app.domain.recap_plan import RecapPlan
-from app.features.render.ai.llm.recap_parser import parse_recap_response
-from app.features.render.ai.llm.recap_prompts import build_recap_prompt
+from app.domain.recap_plan import RecapPlan, StoryModel, story_model_from_dict
+from app.features.render.ai.llm.recap_parser import parse_recap_response, parse_story_model_response
+from app.features.render.ai.llm.recap_prompts import build_recap_prompt, build_story_model_prompt
 
 
 # ── Domain ───────────────────────────────────────────────────────────────────
@@ -367,6 +367,148 @@ def test_recap_parser_salvages_truncated_json():
     assert plan is not None
     assert plan.scene_count() >= 2
     assert plan.scenes()[0].narration == "Mở đầu phim."
+
+
+# ── v1: Story Model (story_summary) capture + persistence ────────────────────
+
+def test_recapplan_story_summary_roundtrips():
+    raw = json.dumps({
+        "story_summary": "Nam điều tra cái chết của em gái và lần ra một âm mưu.",
+        "total_target_sec": 120,
+        "acts": [{"scenes": [{"start": 0, "end": 30, "narration": "x"}]}],
+    })
+    p = RecapPlan.from_json(raw)
+    assert p is not None and p.story_summary.startswith("Nam điều tra")
+    assert RecapPlan.from_json(p.to_json()).story_summary == p.story_summary
+
+
+def test_recapplan_story_summary_defaults_empty_for_legacy():
+    legacy = json.dumps({"acts": [{"scenes": [{"start": 0, "end": 30}]}]})
+    p = RecapPlan.from_json(legacy)
+    assert p is not None and p.story_summary == ""
+
+
+def test_recap_parser_captures_story_summary():
+    raw = json.dumps({
+        "story_summary": "Một vụ án mạng kéo theo chuỗi bí mật.",
+        "episodes": [{"title": "Tập 1", "acts": [{"scenes": [
+            {"start": 0, "end": 30, "narration": "mở đầu"}]}]}],
+    })
+    plan = parse_recap_response(raw, 300.0)
+    assert plan is not None
+    assert plan.story_summary == "Một vụ án mạng kéo theo chuỗi bí mật."
+
+
+def test_recap_parser_story_summary_absent_is_empty():
+    raw = json.dumps({"acts": [{"scenes": [{"start": 0, "end": 30, "narration": "x"}]}]})
+    plan = parse_recap_response(raw, 300.0)
+    assert plan is not None and plan.story_summary == ""
+
+
+# ── v2/R7: nested StoryModel (two-pass story understanding) ──────────────────
+
+def test_story_model_from_dict_defensive():
+    sm = story_model_from_dict({
+        "summary": "  Nam tìm sự thật.  ",
+        "characters": ["Nam — thám tử", "", "Lan — nghi phạm", None],
+        "beats": "a single string becomes one beat",
+        "climax": "Đối mặt", "ending": "Công lý",
+    })
+    assert sm.summary == "Nam tìm sự thật."
+    assert sm.characters == ["Nam — thám tử", "Lan — nghi phạm"]   # blanks/None dropped
+    assert sm.beats == ["a single string becomes one beat"]
+    # garbage in → empty model, never raises
+    assert story_model_from_dict(None) == StoryModel()
+    assert story_model_from_dict("nope") == StoryModel()
+
+
+def test_recapplan_nested_story_roundtrips():
+    raw = json.dumps({
+        "total_target_sec": 120,
+        "story": {"summary": "S", "characters": ["A", "B"], "beats": ["x", "y"],
+                  "climax": "C", "ending": "E"},
+        "acts": [{"scenes": [{"start": 0, "end": 30, "narration": "n"}]}],
+    })
+    p = RecapPlan.from_json(raw)
+    assert p is not None
+    assert p.story.summary == "S" and p.story.characters == ["A", "B"]
+    assert p.story.beats == ["x", "y"] and p.story.climax == "C" and p.story.ending == "E"
+    assert p.story_summary == "S"                       # back-compat property
+    # deterministic round-trip preserves the nested story
+    assert RecapPlan.from_json(p.to_json()).story.beats == ["x", "y"]
+
+
+def test_recapplan_v1_flat_story_summary_wraps_into_story():
+    # A v1 blob persisted a FLAT story_summary string — must load into story.summary.
+    v1 = json.dumps({"story_summary": "Tóm tắt cũ", "acts": [{"scenes": [{"start": 0, "end": 30}]}]})
+    p = RecapPlan.from_json(v1)
+    assert p is not None
+    assert p.story.summary == "Tóm tắt cũ" and p.story_summary == "Tóm tắt cũ"
+    assert p.story.characters == []                     # other fields default-empty
+
+
+def test_parse_story_model_response_ok():
+    raw = json.dumps({
+        "summary": "Một vụ án mạng.", "characters": ["Nam", "Lan"],
+        "beats": ["mở đầu", "cao trào"], "climax": "đối mặt", "ending": "kết thúc",
+    })
+    sm = parse_story_model_response(raw)
+    assert sm is not None and sm.summary == "Một vụ án mạng."
+    assert sm.characters == ["Nam", "Lan"] and len(sm.beats) == 2
+
+
+def test_parse_story_model_response_salvages_truncated():
+    trunc = '{"summary":"Một câu chuyện dài.","characters":["Nam","Lan"],"beats":["mở đầu khi'
+    sm = parse_story_model_response(trunc)
+    assert sm is not None and sm.summary.startswith("Một câu chuyện")
+
+
+def test_parse_story_model_response_none_safe():
+    assert parse_story_model_response("") is None
+    assert parse_story_model_response("no json") is None
+    assert parse_story_model_response("{}") is None          # nothing usable
+
+
+def test_build_story_model_prompt_shape():
+    system, user = build_story_model_prompt("[0-30] xin chào", 1800.0, "vi-VN")
+    assert "analyst" in system.lower()
+    assert '"summary"' in user and '"characters"' in user and '"beats"' in user
+    assert "1800" in user                                    # duration injected
+    assert "xin chào" in user                                # transcript injected
+    assert "{{" not in user and "}}" not in user             # no format-brace leak
+
+
+def test_build_recap_prompt_injects_story_model_format_safe():
+    # Story text containing braces must NOT break str.format or leak into the prompt.
+    sm = StoryModel(summary="Nam {opens} a case", characters=["Lan }evil{"],
+                    beats=["b1"], climax="c", ending="e")
+    _, u = build_recap_prompt("[0-30] x", 1800.0, "vi-VN", story_model=sm)
+    assert "STORY MODEL" in u
+    assert "Nam (opens) a case" in u                         # braces neutralised
+    assert "Lan )evil(" in u
+    # no story block when none supplied
+    _, u2 = build_recap_prompt("[0-30] x", 1800.0, "vi-VN")
+    assert "STORY MODEL" not in u2
+
+
+def test_select_story_model_dispatch_none_safe_without_key():
+    from app.features.render.ai.llm import select_story_model, _get_story_impl
+    # All three providers expose a pass-1 impl after Stage B.
+    for p in ("gemini", "openai", "claude"):
+        assert _get_story_impl(p) is not None
+    # No API key → every provider returns None → dispatcher returns None (no network).
+    assert select_story_model(provider="gemini", srt_content="[0-5] x",
+                              video_duration=5.0, api_key="") is None
+    assert select_story_model(provider="openai", srt_content="[0-5] x",
+                              video_duration=5.0, api_key="") is None
+
+
+def test_claude_cached_user_content_block():
+    # R7 Stage C — Anthropic prompt-cache marker on the recap/story user block.
+    from app.features.render.ai.llm.providers.claude import _cached_user_content
+    block = _cached_user_content("hello world")
+    assert isinstance(block, list) and block[0]["text"] == "hello world"
+    assert block[0].get("cache_control") == {"type": "ephemeral"}
 
 
 # ── R6: episodes + per-scene audio_mode ──────────────────────────────────────

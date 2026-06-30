@@ -12,7 +12,7 @@ import logging
 import re
 from typing import Optional
 
-from app.domain.recap_plan import RecapPlan
+from app.domain.recap_plan import RecapPlan, StoryModel, story_model_from_dict
 
 logger = logging.getLogger("app.render.llm_recap_parser")
 
@@ -262,8 +262,68 @@ def _clean(data: dict, video_duration: float) -> Optional[RecapPlan]:
 
     return RecapPlan.from_json(json.dumps({
         "total_target_sec": round(total, 3),
+        # Carry the AI's whole-film understanding through (was silently dropped).
+        # Works for both the episode shape and the legacy top-level-acts shape —
+        # `data` is the raw top-level dict in both cases.
+        "story_summary": str(data.get("story_summary", "") or "").strip(),
         "episodes": episodes_out,
     }))
+
+
+def _salvage_story(raw: str) -> Optional[dict]:
+    """Recover a Story Model dict from a TRUNCATED pass-1 response. Balance-close
+    the prefix, progressively trimming to earlier '}' boundaries. Returns the
+    first dict carrying any StoryModel key. Never raises."""
+    try:
+        i = raw.find("{")
+        if i < 0:
+            return None
+        s = raw[i:]
+        candidates = [_balance_close(s)]
+        pos = len(s)
+        for _ in range(8):
+            j = s.rfind("}", 0, pos)
+            if j < 0:
+                break
+            candidates.append(_balance_close(s[: j + 1]))
+            pos = j
+        for cand in candidates:
+            try:
+                d = json.loads(cand)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(d, dict) and any(
+                k in d for k in ("summary", "characters", "beats", "climax", "ending")
+            ):
+                return d
+        return None
+    except Exception:
+        return None
+
+
+def parse_story_model_response(raw: str) -> Optional[StoryModel]:
+    """Parse the pass-1 Story Model LLM response into a StoryModel. Returns None on
+    any failure or when nothing usable was produced (Sacred Contract #3)."""
+    try:
+        if not raw or not str(raw).strip():
+            return None
+        text = _strip_wrappers(str(raw).strip())
+        data = _extract_json_object(text)
+        if not isinstance(data, dict):
+            data = _salvage_story(text)
+            if isinstance(data, dict):
+                logger.warning("recap_parser: story model response was truncated — salvaged")
+        if not isinstance(data, dict):
+            logger.warning("recap_parser: no story model JSON found")
+            return None
+        sm = story_model_from_dict(data)
+        if not (sm.summary or sm.characters or sm.beats or sm.climax or sm.ending):
+            logger.warning("recap_parser: story model empty after cleaning")
+            return None
+        return sm
+    except Exception as exc:
+        logger.warning("recap_parser: story model parse error %s", exc, exc_info=True)
+        return None
 
 
 def parse_recap_response(raw: str, video_duration: float) -> Optional[RecapPlan]:

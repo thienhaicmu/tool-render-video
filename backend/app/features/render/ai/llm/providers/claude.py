@@ -25,8 +25,8 @@ from app.features.render.ai.llm.prompts import build_render_plan_prompt
 from app.features.render.ai.llm.retry import call_with_retry
 from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
-from app.features.render.ai.llm.recap_prompts import build_recap_prompt
-from app.features.render.ai.llm.recap_parser import parse_recap_response
+from app.features.render.ai.llm.recap_prompts import build_recap_prompt, build_story_model_prompt
+from app.features.render.ai.llm.recap_parser import parse_recap_response, parse_story_model_response
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.claude_client")
@@ -382,6 +382,17 @@ _RECAP_MAX_TOKENS = int(os.getenv("CLAUDE_RECAP_MAX_TOKENS", "8192"))
 _RECAP_TEMPERATURE = float(os.getenv("CLAUDE_RECAP_TEMPERATURE", "0.4"))
 
 
+def _cached_user_content(user_prompt: str) -> list:
+    """R7 Stage C — user content as one text block marked for Anthropic prompt
+    caching (ephemeral). The transcript-first recap/story prompts make this the
+    large cacheable chunk; below the model's min cacheable size the marker is
+    silently ignored (no error). Recap/story path only — the clips path is
+    untouched. Set CLAUDE_RECAP_CACHE=0 to disable."""
+    if os.getenv("CLAUDE_RECAP_CACHE", "1") != "1":
+        return [{"type": "text", "text": user_prompt}]
+    return [{"type": "text", "text": user_prompt, "cache_control": {"type": "ephemeral"}}]
+
+
 def select_recap_plan(
     srt_content: str,
     video_duration: float,
@@ -389,8 +400,10 @@ def select_recap_plan(
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
+    story_model=None,
 ) -> Optional["RecapPlan"]:
-    """Select scenes + act structure for a recap. None on any failure (Sacred #3)."""
+    """Select scenes + act structure for a recap. None on any failure (Sacred #3).
+    R7: pass-2 plans FROM ``story_model`` when supplied (pass-1 by the dispatcher)."""
     try:
         if not _ANTHROPIC_SDK:
             logger.warning("claude_client: anthropic SDK not installed (recap path)")
@@ -398,13 +411,17 @@ def select_recap_plan(
         if not api_key or not srt_content or not srt_content.strip():
             return None
         resolved_model = model or _DEFAULT_MODEL
-        system_prompt, user_prompt = build_recap_prompt(srt_content, video_duration, target_language, tone)
-        logger.info("claude_client: calling recap model=%s film_dur=%.0fs", resolved_model, video_duration)
+        system_prompt, user_prompt = build_recap_prompt(
+            srt_content, video_duration, target_language, tone, story_model=story_model)
+        logger.info("claude_client: calling recap model=%s film_dur=%.0fs two_pass=%s",
+                    resolved_model, video_duration, story_model is not None)
         raw = _call_claude_recap(api_key, resolved_model, system_prompt, user_prompt)
         if not raw:
             return None
         plan = parse_recap_response(raw, video_duration)
         if plan is not None:
+            if story_model is not None:
+                plan.story = story_model
             logger.info("claude_client: recap OK acts=%d scenes=%d", len(plan.acts), plan.scene_count())
         return plan
     except Exception as exc:
@@ -419,7 +436,7 @@ def _call_claude_recap_once(api_key: str, model: str, system_prompt: str, user_p
         max_tokens=_RECAP_MAX_TOKENS,
         temperature=_RECAP_TEMPERATURE,
         system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
+        messages=[{"role": "user", "content": _cached_user_content(user_prompt)}],
     )
     if not resp.content:
         return None
@@ -438,4 +455,71 @@ def _call_claude_recap(api_key: str, model: str, system_prompt: str, user_prompt
     )
     if result is not None:
         llm_cache_put("claude-recap", model, system_prompt, user_prompt, result)
+    return result
+
+
+# ── R7 pass-1: Story Model (whole-film understanding) ────────────────────────
+_STORY_MAX_TOKENS = int(os.getenv("CLAUDE_STORY_MAX_TOKENS", "4096"))
+_STORY_TEMPERATURE = float(os.getenv("CLAUDE_STORY_TEMPERATURE", "0.4"))
+# Extended thinking is OPT-IN (budget>0). When enabled, the Anthropic API requires
+# temperature=1 and max_tokens > budget — both handled below. Default 0 = plain call.
+_STORY_THINKING_BUDGET = int(os.getenv("CLAUDE_STORY_THINKING_BUDGET", "0"))
+
+
+def select_story_model(
+    srt_content: str,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["StoryModel"]:
+    """R7 pass-1 — whole-film Story Model. Returns StoryModel or None (Sacred #3)."""
+    try:
+        if not _ANTHROPIC_SDK or not api_key or not srt_content or not srt_content.strip():
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        system_prompt, user_prompt = build_story_model_prompt(srt_content, video_duration, target_language, tone)
+        logger.info("claude_client: calling story model=%s film_dur=%.0fs", resolved_model, video_duration)
+        raw = _call_claude_story(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            return None
+        return parse_story_model_response(raw)
+    except Exception as exc:
+        logger.warning("claude_client: select_story_model unexpected error %s", exc, exc_info=True)
+        return None
+
+
+def _call_claude_story_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _AnthClient(api_key=api_key, timeout=60)
+    kwargs = dict(
+        model=model,
+        max_tokens=_STORY_MAX_TOKENS,
+        temperature=_STORY_TEMPERATURE,
+        system=system_prompt,
+        messages=[{"role": "user", "content": _cached_user_content(user_prompt)}],
+    )
+    if _STORY_THINKING_BUDGET > 0:
+        # Extended thinking: temperature must be 1, max_tokens must exceed the budget.
+        kwargs["temperature"] = 1.0
+        kwargs["max_tokens"] = _STORY_THINKING_BUDGET + _STORY_MAX_TOKENS
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": _STORY_THINKING_BUDGET}
+    resp = client.messages.create(**kwargs)
+    if not resp.content:
+        return None
+    parts = [block.text for block in resp.content if getattr(block, "type", "") == "text"]
+    return "\n".join(parts) if parts else None
+
+
+def _call_claude_story(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    cached = llm_cache_get("claude-story", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("claude_client: story cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
+        lambda: _call_claude_story_once(api_key, model, system_prompt, user_prompt),
+        label="claude-story",
+    )
+    if result is not None:
+        llm_cache_put("claude-story", model, system_prompt, user_prompt, result)
     return result

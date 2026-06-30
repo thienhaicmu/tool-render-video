@@ -19,8 +19,8 @@ from app.features.render.ai.llm.prompts import build_render_plan_prompt
 from app.features.render.ai.llm.retry import call_with_retry
 from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
-from app.features.render.ai.llm.recap_prompts import build_recap_prompt
-from app.features.render.ai.llm.recap_parser import parse_recap_response
+from app.features.render.ai.llm.recap_prompts import build_recap_prompt, build_story_model_prompt
+from app.features.render.ai.llm.recap_parser import parse_recap_response, parse_story_model_response
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.openai_client")
@@ -381,8 +381,10 @@ def select_recap_plan(
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
+    story_model=None,
 ) -> Optional["RecapPlan"]:
-    """Select scenes + act structure for a recap. None on any failure (Sacred #3)."""
+    """Select scenes + act structure for a recap. None on any failure (Sacred #3).
+    R7: pass-2 plans FROM ``story_model`` when supplied (pass-1 by the dispatcher)."""
     try:
         if not _OPENAI_SDK:
             logger.warning("openai_client: openai SDK not installed (recap path)")
@@ -390,13 +392,17 @@ def select_recap_plan(
         if not api_key or not srt_content or not srt_content.strip():
             return None
         resolved_model = model or _DEFAULT_MODEL
-        system_prompt, user_prompt = build_recap_prompt(srt_content, video_duration, target_language, tone)
-        logger.info("openai_client: calling recap model=%s film_dur=%.0fs", resolved_model, video_duration)
+        system_prompt, user_prompt = build_recap_prompt(
+            srt_content, video_duration, target_language, tone, story_model=story_model)
+        logger.info("openai_client: calling recap model=%s film_dur=%.0fs two_pass=%s",
+                    resolved_model, video_duration, story_model is not None)
         raw = _call_openai_recap(api_key, resolved_model, system_prompt, user_prompt)
         if not raw:
             return None
         plan = parse_recap_response(raw, video_duration)
         if plan is not None:
+            if story_model is not None:
+                plan.story = story_model
             logger.info("openai_client: recap OK acts=%d scenes=%d", len(plan.acts), plan.scene_count())
         return plan
     except Exception as exc:
@@ -430,4 +436,77 @@ def _call_openai_recap(api_key: str, model: str, system_prompt: str, user_prompt
     )
     if result is not None:
         llm_cache_put("openai-recap", model, system_prompt, user_prompt, result)
+    return result
+
+
+# ── R7 pass-1: Story Model (whole-film understanding) ────────────────────────
+_STORY_MAX_TOKENS = int(os.getenv("OPENAI_STORY_MAX_TOKENS", "4096"))
+_STORY_TEMPERATURE = float(os.getenv("OPENAI_STORY_TEMPERATURE", "0.4"))
+# reasoning_effort only applies to reasoning models (o-series / gpt-5). Empty = off.
+_STORY_REASONING_EFFORT = os.getenv("OPENAI_STORY_REASONING_EFFORT", "").strip().lower()
+
+
+def _is_reasoning_model(model: str) -> bool:
+    """True for OpenAI reasoning models (o1/o3/o4/gpt-5*), which reject
+    ``temperature``/``max_tokens`` and use ``max_completion_tokens`` instead."""
+    m = (model or "").strip().lower()
+    return m.startswith(("o1", "o3", "o4", "gpt-5"))
+
+
+def select_story_model(
+    srt_content: str,
+    video_duration: float,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["StoryModel"]:
+    """R7 pass-1 — whole-film Story Model. Returns StoryModel or None (Sacred #3)."""
+    try:
+        if not _OPENAI_SDK or not api_key or not srt_content or not srt_content.strip():
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        system_prompt, user_prompt = build_story_model_prompt(srt_content, video_duration, target_language, tone)
+        logger.info("openai_client: calling story model=%s film_dur=%.0fs", resolved_model, video_duration)
+        raw = _call_openai_story(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            return None
+        return parse_story_model_response(raw)
+    except Exception as exc:
+        logger.warning("openai_client: select_story_model unexpected error %s", exc, exc_info=True)
+        return None
+
+
+def _call_openai_story_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _openai.OpenAI(api_key=api_key, timeout=60)
+    kwargs = dict(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        response_format={"type": "json_object"},
+    )
+    if _is_reasoning_model(model):
+        kwargs["max_completion_tokens"] = _STORY_MAX_TOKENS
+        if _STORY_REASONING_EFFORT in ("minimal", "low", "medium", "high"):
+            kwargs["reasoning_effort"] = _STORY_REASONING_EFFORT
+    else:
+        kwargs["max_tokens"] = _STORY_MAX_TOKENS
+        kwargs["temperature"] = _STORY_TEMPERATURE
+    resp = client.chat.completions.create(**kwargs)
+    return resp.choices[0].message.content
+
+
+def _call_openai_story(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    cached = llm_cache_get("openai-story", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("openai_client: story cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
+        lambda: _call_openai_story_once(api_key, model, system_prompt, user_prompt),
+        label="openai-story",
+    )
+    if result is not None:
+        llm_cache_put("openai-story", model, system_prompt, user_prompt, result)
     return result
