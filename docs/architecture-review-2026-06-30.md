@@ -1,12 +1,12 @@
 # Architecture Review — Closure Record (2026-06-30)
 
 > One-session response to a CTO-board architecture review of the Story
-> Intelligence pipeline + Recap/Clip rendering surface. Six substrate
-> batches shipped; foundational gaps closed; consumer wiring deferred to
-> follow-up sprints.
+> Intelligence pipeline + Recap/Clip rendering surface. Seven batches
+> shipped; substrate + first consumer in place; remaining consumer
+> wiring (CRITICAL tier) deferred to follow-up sprints.
 >
-> **Final HEAD:** `0caf895` · **Range:** `eebcfe0..0caf895` · **6 commits**
-> · **+180 tests** · **0 regression** · **0 Sacred Contract violations**
+> **Final HEAD:** `13cfb6d` · **Range:** `eebcfe0..13cfb6d` · **7 commits**
+> · **+197 tests** · **0 regression** · **0 Sacred Contract violations**
 
 When this doc and code conflict: **trust code.** This is a snapshot of
 the session's outcome, not a living spec.
@@ -23,6 +23,7 @@ the session's outcome, not a living spec.
 | D-1 | [`0c8caa0`](#) | Edge-TTS content-addressable cache (the #2 perf gap flagged in the review) | 31 |
 | D-3 | [`a3b555c`](#) | `LLM_MAX_SRT_CHARS` parity knob + Anthropic prompt-cache extension to clips + rewrite paths | 30 |
 | D-2-thin | [`0caf895`](#) | **SceneMap substrate** — `scene_detector.detect_scenes()` revived from dead code | 48 |
+| D-2-snap | [`13cfb6d`](#) | **Pass-3 snap-to-shot reconciler** — `RecapPlan.snap_scenes_to_shots()` consumes D-2-thin SceneMap | 17 |
 
 ---
 
@@ -45,16 +46,16 @@ the session's outcome, not a living spec.
 | Anthropic prompt-cache on clips + rewrite paths | D-3b |
 | SceneMap substrate (`jobs.scene_map_json`, stage, domain) | D-2-thin |
 | `scene_detector.py` dead-code revival | D-2-thin |
+| **Pass-3 picks snap to nearest shot boundary** (Recap quality win) | **D-2-snap** |
 
 ### ⏳ Deferred (consumer-wiring follow-ups)
 
 | Item | Priority | Risk | Effort | Notes |
 |------|----------|------|--------|-------|
 | **C.1** — Clip pipeline consumes StoryModel via Comprehension stage | #1 strategic | **CRITICAL** (`render_pipeline.py`) | 1.5-2 days | Substrate ready (Batch C); needs prompt update + 3 provider sigs + `use_story_intelligence: bool = False` on RenderRequest. PROMPT_VERSION bump → cache flush. |
-| **D-2-snap** — Pass-3 picks snap to nearest shot boundary | Quality | MEDIUM (`recap_pipeline.py`) | 1 day | Substrate ready (Batch D-2-thin); reconciler is deterministic via `SceneMap.nearest_boundary()` — no prompt change, no cache flush. |
 | **D-2-motion** — `motion/crop.py` reads persisted SceneMap | Correctness + perf | **CRITICAL** | 3-5 days | Needs full pytest baseline + Render Edit Protocol. Own sprint. |
 
-**Recommended next-sprint order:** C.1 → D-2-snap together (1 week). D-2-motion on a separate sprint with full attention.
+**Recommended next-sprint order:** D-2-motion (own sprint, CRITICAL) → C.1 (own sprint, CRITICAL).
 
 ---
 
@@ -68,6 +69,8 @@ All defaults preserve historical behaviour — **Sacred Contract #2 spirit**.
 |---------|---------|--------|
 | `STORY_INTELLIGENCE_HOIST_ENABLED` | `1` | `0` → Comprehension stage no-op; `select_recap_plan` runs legacy internal pass-1 (Batch A behaviour bit-identical). |
 | `SCENE_MAP_ENABLED` | `1` | `0` → `scene_map_stage.run_scene_map()` no-op; recap proceeds without a SceneMap. |
+| `RECAP_SNAP_TO_SHOTS_ENABLED` | `1` | `0` → `RecapPlan.snap_scenes_to_shots()` is not called; scenes keep their AI-emitted timestamps. |
+| `RECAP_SNAP_TOLERANCE_SEC` | `0.5` | In-tolerance window for the snap reconciler. Matches scene_detector's `_TV2_MERGE_GAP_SEC` by design. |
 | `TTS_CACHE_ENABLED` | `1` | `0` → Edge-TTS hits the network on every call (legacy). |
 
 ### Claude prompt-cache gates (all default `1` = ON)
@@ -188,6 +191,7 @@ Every batch in this session honoured all 8 Sacred Contracts. Notes:
 | D-1 | 1479 | 1510 | +31 |
 | D-3 | 1510 | 1540 | +30 |
 | D-2-thin | 1540 | 1588 | +48 |
+| D-2-snap | 1588 | 1605 | +17 |
 
 Pre-existing failures (159 failed + 99 collection errors) — **unchanged across all 6 batches**. Causes documented above.
 
@@ -197,12 +201,11 @@ Pre-existing failures (159 failed + 99 collection errors) — **unchanged across
 
 ### Sprint 1 (~1 week)
 
-1. **C.1** (CRITICAL, ~1.5-2 days) — Clip pipeline calls Comprehension stage; `select_render_plan` accepts `story_model` kwarg; clips prompt injects StoryModel block; `PROMPT_VERSION = 2` bump.
-2. **D-2-snap** (MEDIUM, ~1 day) — Recap reconciler snaps each `RecapScene.start/end` to `SceneMap.nearest_boundary()`. Deterministic, no prompt change.
+1. **D-2-motion** (CRITICAL, ~3-5 days) — `motion/crop.py` consumes persisted SceneMap. Own sprint, full pytest baseline, Render Edit Protocol.
 
-### Sprint 2+ (~1-2 weeks)
+### Sprint 2+ (~1 week)
 
-3. **D-2-motion** (CRITICAL, ~3-5 days) — `motion/crop.py` consumes persisted SceneMap. Own sprint, full pytest baseline, Render Edit Protocol.
+2. **C.1** (CRITICAL, ~1.5-2 days) — Clip pipeline calls Comprehension stage; `select_render_plan` accepts `story_model` kwarg; clips prompt injects StoryModel block; `PROMPT_VERSION = 2` bump.
 
 ### Skip / nice-to-have
 
@@ -245,9 +248,10 @@ backend/tests/
   test_scene_map_stage.py                             NEW (D-2-thin)
   test_migration_0014_scene_map_json.py               NEW (D-2-thin)
   test_jobs_repo_scene_map.py                         NEW (D-2-thin)
+  test_recap_scene_snapping.py                        NEW (D-2-snap)
 ```
 
-Total: 5 new app modules + 2 new migrations + 15 new test files + ~10 modified files.
+Total: 5 new app modules + 2 new migrations + 16 new test files + ~12 modified files.
 
 ---
 
