@@ -256,16 +256,17 @@ def run_recap(
             raise RuntimeError("Recap: transcript empty — cannot select scenes")
 
         # 2b. SceneMap substrate (architecture-review Batch D-2-thin,
-        # 2026-06-30). Pre-compute the shot-boundary map so future consumers
-        # (D-2-snap pass-3 snap-to-shot reconciler; D-2-motion crop subject
-        # path) can read it from the persisted blob without re-detecting.
-        # D-2-thin is observation-only — no current consumer; failure here is
-        # informational and never blocks the render. Sacred Contract #3 spirit.
+        # 2026-06-30). Pre-compute the shot-boundary map so consumers
+        # (D-2-snap pass-3 snap-to-shot reconciler — wired below;
+        # D-2-motion crop subject path — future) can read it without
+        # re-detecting. Failure here is informational and never blocks
+        # the render. Sacred Contract #3 spirit.
+        _scene_map = None
         try:
             from app.features.render.engine.pipeline.scene_map_stage import (
                 run_scene_map as _run_scene_map,
             )
-            _run_scene_map(
+            _scene_map = _run_scene_map(
                 job_id=job_id, channel_code=effective_channel,
                 video_path=source_path,
                 emit_fn=_emit_render_event,
@@ -273,7 +274,7 @@ def run_recap(
         except Exception:
             # Defensive — stage already guards, but the recap render must
             # never abort on a substrate/observability concern.
-            pass
+            _scene_map = None
 
         # 3. Recap scene selection (AI) --------------------------------------
         _set_stage(JobStage.SEGMENT_BUILDING, 30, "AI selecting recap scenes + acts")
@@ -379,6 +380,32 @@ def run_recap(
         except Exception:
             # Defensive — domain method already guards, but the recap render
             # must never abort on a binding/observability concern.
+            pass
+
+        # Architecture-review Batch D-2-snap (2026-06-30): snap each scene's
+        # start/end to the nearest shot boundary from the SceneMap produced
+        # by D-2-thin earlier in this pipeline run. Deterministic — no LLM
+        # trust, no prompt change. Closes the "AI picks dialog boundaries
+        # not shot boundaries" gap flagged in the architecture review.
+        # ``RECAP_SNAP_TO_SHOTS_ENABLED=0`` is the kill switch; default ON.
+        # ``RECAP_SNAP_TOLERANCE_SEC`` (default 0.5) governs the in-tolerance
+        # window — matches scene_detector's _TV2_MERGE_GAP_SEC by design.
+        try:
+            import os as _os
+            if _os.getenv("RECAP_SNAP_TO_SHOTS_ENABLED", "1") == "1" and _scene_map is not None:
+                try:
+                    _tol = float(_os.getenv("RECAP_SNAP_TOLERANCE_SEC", "0.5"))
+                except (TypeError, ValueError):
+                    _tol = 0.5
+                _snap_count = recap_plan.snap_scenes_to_shots(_scene_map, tolerance_sec=_tol)
+                _job_log(
+                    effective_channel, job_id,
+                    f"Recap: snap-to-shots applied — {_snap_count} timestamp(s) shifted "
+                    f"(tolerance={_tol:.2f}s)"
+                )
+        except Exception:
+            # Defensive — domain method already guards, but the recap render
+            # must never abort on a snap concern.
             pass
         update_recap_plan(job_id, recap_plan.to_json())
         # Build the chronological scene list now (pure) so the plan.ready event

@@ -377,6 +377,69 @@ class RecapPlan:
         except Exception:
             return 0
 
+    # ── D-2-snap reconciler (Batch D-2-snap, 2026-06-30) ─────────────────
+
+    def snap_scenes_to_shots(self, scene_map: Any, tolerance_sec: float = 0.5) -> int:
+        """Snap each ``RecapScene.start``/``end`` to the nearest shot boundary
+        from ``scene_map`` IF the boundary is within ``tolerance_sec``.
+
+        Mirrors ``bind_story_beats_to_scenes`` in spirit: deterministic,
+        no LLM trust, no prompt change. Closes the architecture-review's
+        "AI picks dialog boundaries instead of shot boundaries" gap by
+        snapping cuts to the actual visual transitions detected upstream
+        by the scene_map stage (D-2-thin).
+
+        Rules:
+          - ``scene_map`` None / empty → return 0 (legacy behaviour
+            preserved when SceneMap stage was disabled or auto-degraded).
+          - A snap is APPLIED iff the candidate boundary is within
+            ``tolerance_sec`` of the original timestamp.
+          - Post-snap inversion (``end <= start``) is REJECTED — the
+            scene reverts to its original timestamps. Never produces a
+            zero-or-negative-duration scene.
+          - Returns the count of individual timestamp changes applied
+            (start_snap + end_snap, max 2 per scene).
+
+        Defensive: any internal failure returns 0. Never raises
+        (Sacred Contract #3 spirit)."""
+        try:
+            if scene_map is None:
+                return 0
+            # Duck-typed — scene_map is a SceneMap dataclass but the import
+            # would create a cycle if pulled in at module load.
+            if hasattr(scene_map, "is_empty") and scene_map.is_empty():
+                return 0
+            try:
+                tol = max(0.0, float(tolerance_sec))
+            except (TypeError, ValueError):
+                tol = 0.5
+            snaps = 0
+            for scene in self.scenes():
+                try:
+                    new_start = float(scene_map.nearest_boundary(scene.start))
+                    new_end = float(scene_map.nearest_boundary(scene.end))
+                except Exception:
+                    continue
+                # Only consider in-tolerance shifts. Out-of-tolerance →
+                # leave that boundary unchanged.
+                if abs(new_start - scene.start) > tol:
+                    new_start = scene.start
+                if abs(new_end - scene.end) > tol:
+                    new_end = scene.end
+                # Inversion guard — reject the whole snap if it would
+                # produce a zero-or-negative-duration scene.
+                if new_end <= new_start:
+                    continue
+                if new_start != scene.start:
+                    scene.start = new_start
+                    snaps += 1
+                if new_end != scene.end:
+                    scene.end = new_end
+                    snaps += 1
+            return snaps
+        except Exception:
+            return 0
+
     # ── Serialisation ────────────────────────────────────────────────────
 
     def to_json(self) -> str:
