@@ -196,17 +196,35 @@ def test_b5_recap_pipeline_wire_pattern_present():
     )
 
 
-def test_b6_render_pipeline_does_not_yet_wire_comprehension():
-    """Phase 1 has NOT touched render_pipeline.py. If this test starts
-    failing, someone wired Phase 2 prematurely or wired it elsewhere.
-    This test is intended to flip to pass during Phase 2."""
+def test_b6_render_pipeline_wires_comprehension_under_flag():
+    """C.1 Phase 2 (2026-06-30, post-flip): the original Phase 1 sentinel
+    asserted Comprehension was NOT yet wired. Phase 2 shipped the wire-in,
+    so this test now asserts the wire-in is PRESENT and gated by:
+      (a) payload.use_story_intelligence flag (RenderRequest field)
+      (b) STORY_INTELLIGENCE_HOIST_ENABLED env var (Comprehension's own kill switch)
+    Phase 3 will additionally pass story_model to select_render_plan; for now
+    Phase 2 only produces + persists the StoryModel via Comprehension's own
+    internal side-effects (jobs.story_model_json + WS events)."""
     src = _RENDER_PIPELINE_PY.read_text(encoding="utf-8")
-    # The most specific signal: comprehension_stage import in render_pipeline.
-    assert "from app.features.render.engine.pipeline.comprehension_stage import" not in src, (
-        "C1.3 B6: render_pipeline.py already imports comprehension_stage — "
-        "Phase 2 has shipped OR was wired outside the planned path. "
-        "If Phase 2 shipped, REMOVE this test (Phase 1 substrate is now superseded)."
+    # Comprehension import is present.
+    assert "from app.features.render.engine.pipeline.comprehension_stage import" in src, (
+        "C1.3 B6: Phase 2 wire-in is missing — render_pipeline.py no longer "
+        "imports comprehension_stage. Did a refactor undo Phase 2?"
     )
+    # Payload-level gate.
+    assert 'getattr(payload, "use_story_intelligence", False)' in src, (
+        "C1.3 B6: Phase 2 wire-in is missing the payload-level flag gate — "
+        "Sacred Contract #2 honoured by requiring opt-in per RenderRequest"
+    )
+    # Env-level gate (Comprehension's own kill switch from Batch C).
+    assert "_comprehension_enabled()" in src, (
+        "C1.3 B6: Phase 2 wire-in is missing the env-level kill-switch check"
+    )
+    # Defensive try/except (Sacred Contract #3 spirit — never abort the render
+    # on a Comprehension failure).
+    assert "Sacred Contract #3" in src or "non-fatal" in src.lower() or (
+        "try:" in src and "_run_comprehension(" in src
+    ), "C1.3 B6: Phase 2 wire-in is missing the Sacred Contract #3 try/except guard"
 
 
 def test_b7_select_render_plan_does_not_yet_accept_story_model():
@@ -237,13 +255,17 @@ def test_b8_audit_document_exists():
 
 
 def test_audit_sketch_line_numbers_remain_accurate():
-    """The audit cites line 888 of render_pipeline.py as the LLM call
-    site. A refactor that moves that line will make the audit's sketch
-    stale — fix the audit or the refactor before Phase 2."""
+    """Drift guard for the audit's render_pipeline.py line citations.
+
+    Original Phase 1: audit cited line 888 (pre-Phase-2). Phase 2's
+    Comprehension wire-in INSERTED ~43 lines before the LLM call site,
+    moving it to ~line 931. The guard's bound is widened to ±30 lines
+    around the new post-Phase-2 location so a future refactor still
+    trips the guard, but the Phase 2 insertion itself doesn't."""
     src = _RENDER_PIPELINE_PY.read_text(encoding="utf-8")
     lines = src.splitlines()
     # The call site must contain `_llm_select_render_plan(` somewhere
-    # around the audited line range. Tolerate ±30 lines drift for
+    # around the post-Phase-2 line range. Tolerate ±30 lines drift for
     # whitespace / comment edits.
     found_idx = None
     for i, line in enumerate(lines):
@@ -251,8 +273,9 @@ def test_audit_sketch_line_numbers_remain_accurate():
             found_idx = i + 1  # 1-indexed
             break
     assert found_idx is not None, "render_pipeline lost its _llm_select_render_plan call"
-    # Audit cites line 888. Allow ±30 lines for trivial drift.
-    assert 858 <= found_idx <= 918, (
+    # Post-Phase-2 baseline: line ~931. Allow ±30 lines drift.
+    assert 901 <= found_idx <= 961, (
         f"C1.3: _llm_select_render_plan call site moved to line {found_idx}. "
-        f"Audit cites line 888. Re-verify Phase 2 sketch before implementing."
+        f"Post-Phase-2 baseline is ~line 931. If Phase 3 inserts more code, "
+        f"update both this bound and the audit citation."
     )

@@ -881,6 +881,49 @@ def run_render_pipeline(
                         )
 
                     if _render_plan is None:
+                        # Architecture-review C.1 Phase 2 (2026-06-30): when the
+                        # payload opts in to Story Intelligence on the Clip
+                        # path, run the Comprehension stage (Batch C) on the
+                        # Whisper transcript so a StoryModel is produced +
+                        # persisted to jobs.story_model_json BEFORE the LLM
+                        # plan call. Phase 2 only produces the StoryModel;
+                        # Phase 3 wires it into select_render_plan and bumps
+                        # PROMPT_VERSION. The flag is operator-gated via
+                        # use_story_intelligence (RenderRequest, default False)
+                        # AND env-gated via STORY_INTELLIGENCE_HOIST_ENABLED
+                        # (Comprehension stage's own kill switch from Batch C).
+                        # Failure is non-fatal: try/except swallows any error
+                        # so a flaky Comprehension call NEVER blocks the
+                        # render — the legacy LLM call proceeds unchanged
+                        # (Sacred Contract #3 spirit).
+                        if getattr(payload, "use_story_intelligence", False):
+                            try:
+                                from app.features.render.engine.pipeline.comprehension_stage import (
+                                    run_comprehension as _run_comprehension,
+                                    is_hoist_enabled as _comprehension_enabled,
+                                )
+                                if _comprehension_enabled():
+                                    _run_comprehension(
+                                        job_id=job_id,
+                                        channel_code=effective_channel,
+                                        srt_content=_ai_srt_content,
+                                        video_duration=_ai_video_duration,
+                                        provider=_ai_provider,
+                                        api_key=_ai_api_key,
+                                        model=getattr(payload, "llm_model", None),
+                                        target_language=(
+                                            getattr(payload, "voice_language", "")
+                                            or "vi-VN"
+                                        ),
+                                        tone=getattr(payload, "rewrite_tone", "") or "",
+                                        emit_fn=_emit_render_event,
+                                    )
+                            except Exception as _comp_exc:
+                                logger.warning(
+                                    "render_plan: C.1 Phase 2 Comprehension stage "
+                                    "raised — proceeding without StoryModel: %s",
+                                    _comp_exc,
+                                )
                         logger.info(
                             "render_plan: LLM_EMIT_RENDER_PLAN=1 — attempting AI emission (provider=%s)",
                             _ai_provider,
