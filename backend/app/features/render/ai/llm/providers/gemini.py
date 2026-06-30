@@ -143,6 +143,7 @@ def _run_render_plan(
     model: Optional[str],
     language: str,
     editorial_hint: str,
+    reaction_intensity: str = "",
     target_duration: int = 0,
     clip_lock: list[dict] | None = None,
     clip_exclude: list[dict] | None = None,
