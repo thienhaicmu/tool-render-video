@@ -317,6 +317,17 @@ def run_recap(
         )
         if recap_plan is None or not recap_plan.acts:
             raise RuntimeError("Recap: AI returned no usable plan")
+        # Architecture-review Batch B (2026-06-30): bind each StoryBeat (plot
+        # turn) to the RecapScene that executes it BEFORE the plan is
+        # persisted, so the link is part of the durable record. Deterministic
+        # — no LLM trust, no prompt change. Re-edit UI and "did pass-3 cover
+        # every plot turn?" diagnostics consume bound_scene_index from here.
+        try:
+            recap_plan.bind_story_beats_to_scenes()
+        except Exception:
+            # Defensive — domain method already guards, but the recap render
+            # must never abort on a binding/observability concern.
+            pass
         update_recap_plan(job_id, recap_plan.to_json())
         # Build the chronological scene list now (pure) so the plan.ready event
         # can ship full per-scene timing for the editor-style timeline view.

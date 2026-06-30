@@ -128,10 +128,15 @@ class Episode:
         return sum(len(a.scenes) for a in self.acts)
 
 
-# StoryModel's OWN schema version (independent of RecapPlan.SCHEMA_VERSION). v1 =
-# flat str characters/beats; v2 = Character/StoryBeat entities + theme/genre/
-# conflict/resolution/emotional_curve. Bumped here, read defensively everywhere.
-STORY_SCHEMA_VERSION = 2
+# StoryModel's OWN schema version (independent of RecapPlan.SCHEMA_VERSION).
+#   v1 — flat ``str`` characters / beats.
+#   v2 — ``Character`` / ``StoryBeat`` entities + theme / genre / conflict /
+#        resolution / emotional_curve.
+#   v3 — architecture-review Batch B (2026-06-30). ``StoryBeat.bound_scene_index``
+#        — every plot turn declares which RecapScene executed it (deterministic
+#        post-Pass-3 reconciler, NOT LLM-emitted). -1 = unbound (legacy default).
+# Bumped here, read defensively everywhere.
+STORY_SCHEMA_VERSION = 3
 
 
 @dataclass
@@ -153,12 +158,25 @@ class Character:
 
 @dataclass
 class StoryBeat:
-    """A key plot turn (v2). Replaces the v1 free-string beat. ``t`` is an
+    """A key plot turn (v2+). Replaces the v1 free-string beat. ``t`` is an
     OPTIONAL source-second anchor (-1 = unanchored) so beats can later be tied
-    to scenes; ``kind`` is a free tag (setup|turn|reveal|climax|resolution|…)."""
+    to scenes; ``kind`` is a free tag (setup|turn|reveal|climax|resolution|…).
+
+    v3 (architecture-review Batch B, 2026-06-30): ``bound_scene_index`` is the
+    zero-based index into ``RecapPlan.scenes()`` of the RecapScene that EXECUTED
+    this beat. Populated by ``RecapPlan.bind_story_beats_to_scenes()`` AFTER the
+    AI returns the plan — never trusted from the LLM. -1 = unbound (no anchor,
+    or anchor fell outside every selected scene)."""
     text: str = ""
     t: float = -1.0
     kind: str = ""
+    bound_scene_index: int = -1   # v3: -1 = unbound; >= 0 indexes RecapPlan.scenes()
+
+    @property
+    def is_bound(self) -> bool:
+        """True iff this beat was bound to a concrete RecapScene by the
+        post-Pass-3 reconciler."""
+        return self.bound_scene_index >= 0
 
     def __str__(self) -> str:
         txt = self.text.strip()
@@ -212,6 +230,26 @@ class StoryModel:
             or self.ending or self.theme or self.genre or self.conflict
             or self.resolution or self.emotional_curve
         )
+
+    # ── v3 binding observability (architecture-review Batch B, 2026-06-30) ──
+
+    def bound_count(self) -> int:
+        """How many plot turns were bound to a concrete RecapScene by the
+        post-Pass-3 reconciler. 0 on a StoryModel that was never bound (legacy
+        v2 blob, or pass-1 ran but pass-3 reconciler hasn't run yet)."""
+        return sum(1 for b in self.beats if b.is_bound)
+
+    def unbound_count(self) -> int:
+        """How many plot turns have no RecapScene executor. A non-zero value
+        means pass-3 left part of the story untold."""
+        return sum(1 for b in self.beats if not b.is_bound)
+
+    def coverage_pct(self) -> float:
+        """Fraction (0.0–1.0) of plot turns that were bound. 1.0 when every
+        beat got executed; 0.0 on an empty model OR a model never bound."""
+        if not self.beats:
+            return 0.0
+        return self.bound_count() / float(len(self.beats))
 
     def to_public_dict(self) -> dict[str, Any]:
         """JSON-safe nested dict (entities → dicts) for result_json / events / UI.
@@ -297,6 +335,47 @@ class RecapPlan:
 
     def episode_count(self) -> int:
         return len(self.episodes)
+
+    # ── v3 story↔scene reconciler (Batch B, 2026-06-30) ──────────────────
+
+    def bind_story_beats_to_scenes(self) -> int:
+        """Bind each ``StoryBeat`` to the RecapScene that executes it. Returns
+        the count of beats freshly bound.
+
+        Rule: a beat is bound to scene ``i`` iff ``scene.start <= beat.t <= scene.end``.
+        Beats with ``t < 0`` (unanchored) stay unbound. Beats whose anchor falls
+        outside EVERY selected scene also stay unbound — that's the signal that
+        pass-3 omitted the region that beat lives in.
+
+        Deterministic — no LLM trust, no prompt change. Pure mutation on
+        ``self.story.beats``. Safe to call repeatedly (idempotent on the same
+        ``episodes`` shape). Never raises (Sacred Contract #3 spirit).
+        """
+        try:
+            scenes = self.scenes()
+            if not scenes or not self.story.beats:
+                # Reset any stale bindings — the structure may have shrunk on
+                # a re-edit so stored indices could now point at gone scenes.
+                for b in self.story.beats:
+                    b.bound_scene_index = -1
+                return 0
+            freshly_bound = 0
+            for beat in self.story.beats:
+                if beat.t is None or beat.t < 0:
+                    if beat.bound_scene_index != -1:
+                        beat.bound_scene_index = -1
+                    continue
+                new_idx = -1
+                for i, scene in enumerate(scenes):
+                    if scene.start <= beat.t <= scene.end:
+                        new_idx = i
+                        break
+                if new_idx != beat.bound_scene_index:
+                    freshly_bound += 1
+                beat.bound_scene_index = new_idx
+            return freshly_bound
+        except Exception:
+            return 0
 
     # ── Serialisation ────────────────────────────────────────────────────
 
@@ -431,7 +510,11 @@ def _coerce_character(v: Any) -> Optional["Character"]:
 
 
 def _coerce_beat(v: Any) -> Optional["StoryBeat"]:
-    """One StoryBeat from a StoryBeat / v1 string / v2 dict. None if empty."""
+    """One StoryBeat from a StoryBeat / v1 string / v2 dict. None if empty.
+
+    v3 (Batch B): ``bound_scene_index`` is read defensively from v3 blobs;
+    on v1/v2 blobs (where the field is absent) it defaults to -1 — the
+    reconciler will bind it on the next ``RecapPlan.bind_story_beats_to_scenes()``."""
     if isinstance(v, StoryBeat):
         return v if v.text else None
     if isinstance(v, str):
@@ -445,6 +528,7 @@ def _coerce_beat(v: Any) -> Optional["StoryBeat"]:
             text=text,
             t=_coerce_float(v.get("t", v.get("time", -1.0)), -1.0),
             kind=str(v.get("kind", "") or "").strip(),
+            bound_scene_index=_coerce_int(v.get("bound_scene_index", -1), -1),
         )
     return None
 
