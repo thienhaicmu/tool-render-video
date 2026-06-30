@@ -1,4 +1,5 @@
-﻿import time
+﻿import os
+import time
 import logging
 from pathlib import Path
 
@@ -53,6 +54,29 @@ def _add_nvdec(args: list) -> list:
     try:
         idx = args.index("-i")
         return args[:idx] + ["-hwaccel", "cuda"] + args[idx:]
+    except ValueError:
+        return args
+
+
+def _hwdecode_enabled() -> bool:
+    """P3 (perf): offload SOURCE decode to the iGPU/GPU. OFF by default — the
+    source film here is AV1, which is heavy to decode in software; opt in via
+    ENABLE_HWDECODE=1. Quality-neutral (decoding is lossless); the encode side
+    is unaffected. Falls back to software decode if the hwaccel run fails."""
+    return os.getenv("ENABLE_HWDECODE", "0").strip() == "1"
+
+
+def _add_hwaccel_decode(args: list) -> list:
+    """Insert `-hwaccel <method>` (default 'auto') right before the FIRST -i so
+    ffmpeg decodes the source on hardware, then hands frames back to system
+    memory for the existing CPU filters (no -hwaccel_output_format → filters keep
+    working). Method override via HWDECODE_METHOD (auto|qsv|d3d11va|dxva2).
+    No-op if -i is absent. Caller must fall back to the un-accelerated argv on
+    failure."""
+    method = (os.getenv("HWDECODE_METHOD", "auto") or "auto").strip() or "auto"
+    try:
+        idx = args.index("-i")
+        return args[:idx] + ["-hwaccel", method] + args[idx:]
     except ValueError:
         return args
 
@@ -273,6 +297,17 @@ def render_base_clip(
                 ]
                 cpu_cmd = _build_base_clip_cmd(cpu_flags)
                 _run_ffmpeg_with_retry(cpu_cmd, retry_count=retry_count)
+        elif _hwdecode_enabled():
+            # P3: try hardware-accelerated SOURCE decode (iGPU) first; on any
+            # failure fall back to the un-accelerated argv (software decode).
+            try:
+                _run_ffmpeg_with_retry(_add_hwaccel_decode(cmd), retry_count=retry_count)
+            except Exception as _hw_err:
+                logger.warning(
+                    "hwaccel decode failed (%s) — retrying base_clip %s with software decode",
+                    _hw_err, Path(output_path).name,
+                )
+                _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
         else:
             _run_ffmpeg_with_retry(cmd, retry_count=retry_count)
 
