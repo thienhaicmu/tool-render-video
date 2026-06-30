@@ -79,15 +79,20 @@ def get_output_thumbnail(
     Results are cached by (output_file, mtime) — repeated calls for the
     same unmodified file are served instantly from disk.
     """
-    if not get_job(job_id):
+    _job = get_job(job_id)
+    if not _job:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
-    parts = list_job_parts(job_id)
-    part = next((p for p in parts if int(p.get("part_no") or -1) == part_no), None)
-    if part is None:
-        raise HTTPException(status_code=404, detail=f"Part {part_no} not found for job {job_id}")
-
-    output_file = str(part.get("output_file") or "").strip()
+    # Recap: serve the assembled EPISODE thumbnail (per-scene parts are internal
+    # intermediates in a cleaned-up temp dir). Clips fall through to job_parts.
+    from app.routes.outputs import recap_output_file_for_part
+    output_file = (recap_output_file_for_part(_job, part_no) or "").strip()
+    if not output_file:
+        parts = list_job_parts(job_id)
+        part = next((p for p in parts if int(p.get("part_no") or -1) == part_no), None)
+        if part is None:
+            raise HTTPException(status_code=404, detail=f"Part {part_no} not found for job {job_id}")
+        output_file = str(part.get("output_file") or "").strip()
     if not output_file:
         raise HTTPException(status_code=404, detail="Part has no output file")
 

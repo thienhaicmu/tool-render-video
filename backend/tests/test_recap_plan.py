@@ -508,3 +508,24 @@ def test_recap_episode_filename_is_fs_safe():
     assert f("trailing dots...") == "trailing dots"     # Windows trailing-dot trim
     assert f("") == "" and f("::::") == ""              # nothing usable → empty
     assert len(f("x" * 500)) <= 120                     # length cap
+
+
+# ── R6 fix: recap thumbnails resolve to the EPISODE mp4, not a scene part ─────
+
+def test_recap_thumbnail_resolves_to_episode_file():
+    """The thumbnail routes must map a recap part_no to its EPISODE mp4
+    (result_json.outputs), since per-scene parts live in a cleaned-up temp dir."""
+    from app.routes.outputs import recap_output_file_for_part as g
+    job = {
+        "payload_json": json.dumps({"render_format": "recap"}),
+        "result_json": json.dumps({"render_format": "recap", "outputs": [
+            {"part_no": 1, "episode_no": 1, "output_file": "/x/Tập 1.mp4"},
+            {"part_no": 2, "episode_no": 2, "output_file": "/x/Tập 2.mp4"},
+        ]}),
+    }
+    assert g(job, 1) == "/x/Tập 1.mp4"
+    assert g(job, 2) == "/x/Tập 2.mp4"
+    assert g(job, 99) is None
+    # clips job → None (routes fall back to job_parts, unchanged)
+    clip = {"payload_json": json.dumps({"render_format": "clips"}), "result_json": "{}"}
+    assert g(clip, 1) is None

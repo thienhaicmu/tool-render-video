@@ -94,11 +94,22 @@ def get_render_part_thumbnail(job_id: str, part_no: int, t: float = 0.5, w: int 
     Security: file path is resolved from DB, never from user input.
     """
     from app.features.render.engine.encoder.ffmpeg_helpers import extract_thumbnail_frame
-    parts = list_job_parts(job_id)
-    part = next((p for p in parts if int(p.get("part_no", -1)) == part_no), None)
-    if not part or not part.get("output_file"):
-        raise HTTPException(status_code=404, detail="Part not found")
-    path = Path(part["output_file"])
+    # Recap: the deliverables are assembled EPISODES (result_json.outputs); the
+    # per-scene parts are internal intermediates whose files live in a temp dir
+    # that is cleaned up after assembly. Resolve part_no → episode mp4 first, so
+    # the thumbnail is extracted from the real episode video. Clips fall through.
+    from app.db.jobs_repo import get_job
+    from app.routes.outputs import recap_output_file_for_part
+    _job = get_job(job_id)
+    _recap_file = recap_output_file_for_part(_job, part_no) if _job else None
+    if _recap_file:
+        path = Path(_recap_file)
+    else:
+        parts = list_job_parts(job_id)
+        part = next((p for p in parts if int(p.get("part_no", -1)) == part_no), None)
+        if not part or not part.get("output_file"):
+            raise HTTPException(status_code=404, detail="Part not found")
+        path = Path(part["output_file"])
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail="Output file not found on disk")
     jpeg = extract_thumbnail_frame(str(path), offset_sec=max(0.0, t), width=max(32, min(640, w)))

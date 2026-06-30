@@ -125,6 +125,22 @@ def _recap_episode_items(job: dict) -> "list[dict] | None":
     return items or None
 
 
+def recap_output_file_for_part(job: dict, part_no: int) -> "str | None":
+    """Map a part_no to the recap EPISODE mp4 path (from result_json.outputs) so
+    the thumbnail/media routes can serve the assembled episode instead of an
+    internal scene part (whose file now lives in a cleaned-up temp dir). Returns
+    None for non-recap jobs or no match — callers fall back to job_parts."""
+    items = _recap_episode_items(job)
+    if not items:
+        return None
+    for it in items:
+        if int(it.get("part_no") or 0) == int(part_no):
+            return (it.get("output_file") or "") or None
+    if 1 <= int(part_no) <= len(items):   # rank-based fallback (1-based)
+        return (items[int(part_no) - 1].get("output_file") or "") or None
+    return None
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/{job_id}/outputs")
