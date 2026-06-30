@@ -307,12 +307,44 @@ def run_recap(
                 },
             )
 
+        # Architecture-review Batch C (2026-06-30): hoist Story Intelligence
+        # (pass-1) out of the dispatcher into a named pipeline stage. When the
+        # hoist is enabled, the Comprehension stage produces the StoryModel
+        # externally (and owns the recap.pass1.done WS event); the dispatcher
+        # then skips its internal pass-1. When the hoist is disabled via
+        # ``STORY_INTELLIGENCE_HOIST_ENABLED=0``, behaviour falls back to the
+        # bit-identical Batch-A path (legacy lambda fires on_pass1_done from
+        # inside the dispatcher).
+        from app.features.render.engine.pipeline.comprehension_stage import (
+            run_comprehension as _run_comprehension,
+            is_hoist_enabled as _comprehension_enabled,
+        )
+        _hoist_on = _comprehension_enabled()
+        _external_story = None
+        if _hoist_on:
+            _external_story = _run_comprehension(
+                job_id=job_id, channel_code=effective_channel,
+                srt_content=_ai_srt, video_duration=video_duration,
+                provider=_provider, api_key=_api_key,
+                model=getattr(payload, "llm_model", None),
+                target_language=(getattr(payload, "voice_language", "") or "vi-VN"),
+                tone=(getattr(payload, "rewrite_tone", "") or ""),
+                emit_fn=_emit_render_event,
+            )
+        # Pass-1 callback wiring: only the kill-switch path forwards the Batch A
+        # lambda. With the hoist enabled the Comprehension stage already owns
+        # the recap.pass1.done event (success AND failure). When Comprehension
+        # failed, the dispatcher's internal pass-1 still runs as a quality
+        # fallback but emits no extra WS event (no double-fire).
+        _pass1_callback = None if _hoist_on else _on_pass1_done
+
         recap_plan = select_recap_plan(
             provider=_provider, srt_content=_ai_srt, video_duration=video_duration,
             target_language=(getattr(payload, "voice_language", "") or "vi-VN"),
             tone=(getattr(payload, "rewrite_tone", "") or ""),
             api_key=_api_key, model=getattr(payload, "llm_model", None),
-            on_pass1_done=_on_pass1_done,
+            story_model=_external_story,
+            on_pass1_done=_pass1_callback,
             on_pass2_done=_on_pass2_done,
         )
         if recap_plan is None or not recap_plan.acts:

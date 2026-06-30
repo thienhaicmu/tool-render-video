@@ -234,6 +234,7 @@ def select_recap_plan(
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
+    story_model: Optional[Any] = None,
     on_pass1_done: Optional[Callable[[Any], None]] = None,
     on_pass2_done: Optional[Callable[[Any], None]] = None,
 ) -> Optional["RecapPlan"]:
@@ -250,6 +251,14 @@ def select_recap_plan(
     invoked with the produced model (StoryModel / EditorialBlueprint) on
     success or ``None`` on failure; failures inside the callback are
     swallowed and never break the LLM dispatch.
+
+    Architecture-review Batch C — ``story_model`` is an OPTIONAL externally
+    produced StoryModel (built by the Comprehension pipeline stage). When
+    provided, the internal pass-1 is skipped entirely AND ``on_pass1_done``
+    is NOT fired (the caller already observed it through the Comprehension
+    stage's own WS events). When ``None`` (every pre-Batch-C caller),
+    behaviour is bit-identical to Batch A: the internal pass-1 runs under
+    the ``RECAP_TWO_PASS`` flag and ``on_pass1_done`` fires as before.
     """
     primary = (provider or DEFAULT_PROVIDER).strip().lower()
     if primary not in SUPPORTED_PROVIDERS:
@@ -257,10 +266,18 @@ def select_recap_plan(
     chain = [primary]
     if _LLM_FALLBACK_ENABLED:
         chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
-    # Pass 1 — Story Understanding. Best-effort: None → single-pass, so a
-    # flaky pass-1 never blocks a render (Sacred Contract #3).
-    story_model = None
-    if _RECAP_TWO_PASS:
+    # Pass 1 — Story Understanding. Two code paths:
+    #   (a) External story_model provided (Batch C, recap_pipeline → Comprehension
+    #       stage already produced one) → skip internal pass-1; do NOT fire
+    #       on_pass1_done (caller has its own observation).
+    #   (b) story_model is None (every pre-Batch-C caller; Batch C kill-switch
+    #       path) → run the internal pass-1 under RECAP_TWO_PASS exactly like
+    #       Batch A. Behaviour bit-identical for existing consumers.
+    if story_model is not None:
+        logger.info(
+            "llm: recap pass-1 (story) externally provided — internal pass-1 skipped"
+        )
+    elif _RECAP_TWO_PASS:
         try:
             story_model = select_story_model(
                 provider=primary, srt_content=srt_content, video_duration=video_duration,
