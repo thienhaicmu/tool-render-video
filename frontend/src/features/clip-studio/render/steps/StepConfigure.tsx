@@ -888,6 +888,17 @@ function StepConfigureBase({
               </div>
             </div>
 
+            {cfg.renderFormat === 'recap' ? (
+            <div className="cfg-section">
+              <div className="cfg-sec-hd">
+                <span>SOURCE</span>
+                <span className="cfg-sec-api">voice_source</span>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-3)', fontFamily: 'var(--fb)', lineHeight: 1.5, padding: '6px 2px' }}>
+                {t.cfgVoiceSrcRecapNote}
+              </div>
+            </div>
+            ) : (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>SOURCE</span>
@@ -961,6 +972,7 @@ function StepConfigureBase({
                 </div>
               )}
             </div>
+            )}
 
           </div>
 
