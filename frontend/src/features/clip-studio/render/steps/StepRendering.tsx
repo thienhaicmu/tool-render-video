@@ -295,7 +295,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
 
 // Sprint 5.7: wrapped in React.memo at export below. See StepConfigure for rationale.
 function StepRenderingBase({
-  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, liveEvents, wsError, wsReconnecting, wsPolling, t, aspectRatio,
+  jobId, stage, jobStatus, progress, jobMessage, isTerminal, liveParts, liveEvents, recapPlan, wsError, wsReconnecting, wsPolling, t, aspectRatio,
   aiAnalysisMode, aiCloudProvider,
 }: {
   jobId: string | null; stage: string; jobStatus: string
@@ -304,6 +304,9 @@ function StepRenderingBase({
   /** S4.5 — bridged event stream from backend `_emit_render_event`.
    *  Optional so older mount sites without the wiring still compile. */
   liveEvents?: WsLogEvent[]
+  /** Latched recap.plan.ready event — stable for the whole render (survives the
+   *  bounded liveEvents buffer). Drives recap-mode detection + the timeline. */
+  recapPlan?: WsLogEvent | null
   wsError: string | null
   wsReconnecting?: boolean
   // N5 (2026-06-15): true while the WebSocket has exhausted its reconnect
@@ -403,13 +406,15 @@ function StepRenderingBase({
   // Recap mode: once the plan is ready, the per-part "clip pile" (a clips-mode
   // visual) is misleading — scenes aren't deliverable clips. Show ONLY the
   // recap live-build view instead, so the screen isn't two stacked timelines.
-  const isRecap = (liveEvents || []).some((e) => e.event === 'recap.plan.ready')
-  // Recap counts are different from clips: 23 internal scenes ("parts") get
-  // assembled into a few EPISODES (the real deliverables). Pull the authoritative
-  // scene + episode counts from the plan so the chrome stops saying "8 clips".
-  const recapPlanEv = isRecap ? [...(liveEvents || [])].reverse().find((e) => e.event === 'recap.plan.ready') : undefined
-  const recapScenes = (recapPlanEv?.context?.scenes as unknown[] | undefined)?.length ?? 0
-  const recapEpisodes = (recapPlanEv?.context?.episodes as unknown[] | undefined)?.length ?? 0
+  // Recap detection uses the LATCHED plan event (survives the whole render),
+  // not the bounded liveEvents buffer — otherwise the plan ages out after
+  // LIVE_EVENTS_CAP events and the view flips back to the clips pile mid-render.
+  const isRecap = !!recapPlan
+  // Recap counts differ from clips: N internal scenes ("parts") get assembled
+  // into a few EPISODES (the real deliverables). Pull the authoritative scene +
+  // episode counts from the plan so the chrome stops saying "N clips".
+  const recapScenes = (recapPlan?.context?.scenes as unknown[] | undefined)?.length ?? 0
+  const recapEpisodes = (recapPlan?.context?.episodes as unknown[] | undefined)?.length ?? 0
   const effTotal = isRecap && recapScenes > 0 ? recapScenes : totalCount
 
   function getStatusLabel(s: string): string {
@@ -653,7 +658,7 @@ function StepRenderingBase({
 
       {/* R5 — recap live-build view (renders only when a recap.plan.ready event
           has arrived; null otherwise so clips mode is unaffected). */}
-      <RecapLiveView liveEvents={liveEvents || []} liveParts={liveParts} />
+      <RecapLiveView recapPlan={recapPlan ?? null} liveEvents={liveEvents || []} liveParts={liveParts} />
 
       {/* S4.5 — event log tail panel */}
       <EventLogPanel events={liveEvents || []} t={t} />

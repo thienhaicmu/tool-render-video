@@ -47,13 +47,18 @@ function _fmt(sec: number): string {
 }
 
 export function RecapLiveView({
+  recapPlan,
   liveEvents,
   liveParts,
 }: {
+  // Latched plan event from useRenderSocket — survives the bounded liveEvents
+  // buffer so the timeline doesn't vanish mid-render on long jobs. Falls back to
+  // scanning liveEvents for older mount sites that don't pass it.
+  recapPlan?: WsLogEvent | null
   liveEvents: WsLogEvent[]
   liveParts: JobPart[]
 }) {
-  const planEv = [...liveEvents].reverse().find((e) => e.event === 'recap.plan.ready')
+  const planEv = recapPlan ?? [...liveEvents].reverse().find((e) => e.event === 'recap.plan.ready')
   if (!planEv) return null
 
   const scenes = ((planEv.context?.scenes as SceneBlock[]) || []).filter(Boolean)

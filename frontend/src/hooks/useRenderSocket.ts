@@ -87,6 +87,11 @@ export interface RenderSocketState {
   // stream. Newest event at index 0; older events drop off the end
   // when the buffer reaches LIVE_EVENTS_CAP.
   liveEvents: WsLogEvent[]
+  // Latched recap.plan.ready event. The plan is emitted ONCE, early (planning
+  // stage), so on a long render it drops off the tail of the bounded liveEvents
+  // buffer — which used to make the recap timeline vanish and the clips-mode
+  // pile reappear mid-render. Held separately so it survives the whole job.
+  recapPlan: WsLogEvent | null
 }
 
 export function useRenderSocket(jobId: string | null, wsPathOverride?: string): RenderSocketState {
@@ -110,8 +115,13 @@ export function useRenderSocket(jobId: string | null, wsPathOverride?: string): 
   const [errorKind, setErrorKind]           = useState<JobErrorKind | null>(null)
   // T3.1 — live events bridged from backend EVENT_BROADCASTER.
   const [liveEvents, setLiveEvents] = useState<WsLogEvent[]>([])
+  // Latched recap plan (see RenderSocketState.recapPlan) — never aged out.
+  const [recapPlan, setRecapPlan] = useState<WsLogEvent | null>(null)
 
   const updateJobStatus = useRenderStore((s) => s.updateJobStatus)
+
+  // Reset the latched recap plan whenever the watched job changes.
+  useEffect(() => { setRecapPlan(null) }, [jobId])
 
   useEffect(() => {
     if (!jobId) return
@@ -231,6 +241,8 @@ export function useRenderSocket(jobId: string | null, wsPathOverride?: string): 
     // the cap is reached. Use functional setState so concurrent
     // pushes don't lose entries between re-renders.
     client.onLogEvent((evt) => {
+      // Latch the recap plan so it outlives the bounded event buffer.
+      if (evt.event === 'recap.plan.ready') setRecapPlan(evt)
       setLiveEvents((prev) => {
         const next = [evt, ...prev]
         return next.length > LIVE_EVENTS_CAP ? next.slice(0, LIVE_EVENTS_CAP) : next
@@ -272,5 +284,6 @@ export function useRenderSocket(jobId: string | null, wsPathOverride?: string): 
     error,
     errorKind,
     liveEvents,
+    recapPlan,
   }
 }
