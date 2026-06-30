@@ -400,6 +400,10 @@ function StepRenderingBase({
   const activePhaseIdx = getActivePhaseIdx(stage, jobStatus)
   const clipSlots      = buildClipSlots(liveParts, progress)
   const thumbRatio     = aspectRatio.replace(':', '/')
+  // Recap mode: once the plan is ready, the per-part "clip pile" (a clips-mode
+  // visual) is misleading — scenes aren't deliverable clips. Show ONLY the
+  // recap live-build view instead, so the screen isn't two stacked timelines.
+  const isRecap = (liveEvents || []).some((e) => e.event === 'recap.plan.ready')
 
   function getStatusLabel(s: string): string {
     const sl = s.toLowerCase()
@@ -619,7 +623,7 @@ function StepRenderingBase({
             {jobMessage && <span style={{ display: 'block', fontSize: '10px', opacity: .55, marginTop: 2 }}>{jobMessage}</span>}
           </span>
         </div>
-      ) : (
+      ) : isRecap ? null : (
         <div className="rd-queue-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 12px' }}>
           {clipSlots.map(slot => (
             <ClipRow

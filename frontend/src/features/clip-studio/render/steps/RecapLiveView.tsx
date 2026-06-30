@@ -87,9 +87,9 @@ export function RecapLiveView({
     }
   }
   const concatDone = liveEvents.some((e) => e.event === 'recap.concat.done')
-  const concatMethod = String(
-    [...liveEvents].reverse().find((e) => e.event === 'recap.concat.done')?.context?.method || '',
-  )
+  // Overall scene progress (X/Y done) for the header.
+  const totalScenes = acts.reduce((n, a) => n + Math.max(0, a.scenes | 0), 0)
+  const doneScenes = liveParts.filter((p) => (p.status || '').toLowerCase() === 'done').length
 
   // Flatten scenes → global part_no (1-based, in act order).
   let partNo = 0
@@ -102,10 +102,26 @@ export function RecapLiveView({
           🎬 RECAP — LIVE BUILD
         </span>
         <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
-          {multiEpisode ? `${episodes.length} tập · ` : ''}{acts.length} acts
+          {doneScenes}/{totalScenes} cảnh
+          {multiEpisode ? ` · ${episodes.length} tập` : ''}
           {totalTarget > 0 ? ` · ~${Math.round(totalTarget)}s` : ''}
-          {concatDone ? ` · assembled (${concatMethod})` : ''}
+          {concatDone ? ` · ✓ ghép xong` : ''}
         </span>
+      </div>
+
+      {/* Status legend — what the scene colours mean */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10, fontSize: 9, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
+        {([
+          ['var(--border, #444)', 'chờ'],
+          ['#f59e0b', 'đang dựng'],
+          ['var(--accent, #10b981)', 'xong'],
+          ['#ef4444', 'lỗi'],
+        ] as const).map(([c, lbl]) => (
+          <span key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: c, display: 'inline-block' }} />
+            {lbl}
+          </span>
+        ))}
       </div>
 
       {/* Episode → act → scene timeline */}
@@ -138,20 +154,21 @@ export function RecapLiveView({
                         const preview = previews.get(pn)
                         const isOriginal = sceneModes[pn - 1] === 'original'
                         if (preview) scriptLines.push({ pn, act: act.title || `Act ${actStart + ai + 1}`, text: preview })
+                        const mark = frozen.has(pn) ? '⏸' : isOriginal ? '🔊' : ''
                         return (
                           <div
                             key={si}
-                            title={`Scene ${pn}${isOriginal ? ' · original audio' : ' · narrated'}${part ? ' · ' + part.status : ''}`}
+                            title={`Cảnh ${pn}${isOriginal ? ' · tiếng gốc' : ' · thuyết minh'}${part ? ' · ' + part.status : ' · chờ'}`}
                             style={{
                               position: 'relative',
-                              width: 22, height: 14, borderRadius: 3,
+                              minWidth: 30, height: 20, borderRadius: 4, padding: '0 5px',
                               background: _sceneColor(part?.status),
-                              border: isOriginal ? '1.5px solid #a855f7' : 'none',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 8, color: '#fff', fontFamily: 'var(--fb)',
+                              border: isOriginal ? '1.5px solid #a855f7' : '1px solid transparent',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2,
+                              fontSize: 10, fontWeight: 600, color: '#fff', fontFamily: 'var(--fb)',
                             }}
                           >
-                            {frozen.has(pn) ? '⏸' : isOriginal ? '🔊' : ''}
+                            {pn}{mark}
                           </div>
                         )
                       })}
