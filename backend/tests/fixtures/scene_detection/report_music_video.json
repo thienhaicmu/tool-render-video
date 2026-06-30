@@ -1,0 +1,109 @@
+{
+  "video": {
+    "path": "backend/tests/fixtures/scene_detection/music_video_fast_cuts.mp4",
+    "duration_sec": 12.0,
+    "fps": 30.0
+  },
+  "pixel_diff": {
+    "available": true,
+    "wall_time_sec": 0.041,
+    "scene_count": 6,
+    "ranges": [
+      [
+        0.0,
+        2.0
+      ],
+      [
+        2.0,
+        4.0
+      ],
+      [
+        4.0,
+        6.0
+      ],
+      [
+        6.0,
+        8.0
+      ],
+      [
+        8.0,
+        10.0
+      ],
+      [
+        10.0,
+        12.0
+      ]
+    ],
+    "config": {
+      "threshold": 30.0,
+      "sample_every_frames": 5,
+      "downsample_size": [
+        160,
+        90
+      ],
+      "debounce_sec": 0.35,
+      "fps_detected": 30.0,
+      "duration_sec": 12.0
+    }
+  },
+  "scene_map": {
+    "available": true,
+    "wall_time_sec": 0.533,
+    "scene_count": 6,
+    "ranges": [
+      [
+        0.0,
+        2.0
+      ],
+      [
+        2.0,
+        4.0
+      ],
+      [
+        4.0,
+        6.0
+      ],
+      [
+        6.0,
+        8.0
+      ],
+      [
+        8.0,
+        10.0
+      ],
+      [
+        10.0,
+        12.0
+      ]
+    ],
+    "config": {
+      "threshold": 28.0,
+      "adaptive": true,
+      "transnetv2": false,
+      "duration_sec": 12.0
+    }
+  },
+  "diff": {
+    "computable": true,
+    "boundary_count_ratio": 1.0,
+    "common_boundary_count": 5,
+    "common_boundary_drift_sec": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "mean_drift_sec": 0.0,
+    "pixel_diff_only_boundaries": [],
+    "scene_map_only_boundaries": [],
+    "verdict": {
+      "go_criteria_met": true,
+      "go_criteria": {
+        "boundary_count_ratio_ok": "0.5 <= 1.0 <= 2.0 = True",
+        "mean_drift_ok": "0.0 <= 0.3 = True"
+      },
+      "recommendation": "GO — SceneMap can replace pixel-diff for this fixture"
+    }
+  }
+}

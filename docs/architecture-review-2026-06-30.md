@@ -24,7 +24,8 @@ the session's outcome, not a living spec.
 | D-3 | [`a3b555c`](#) | `LLM_MAX_SRT_CHARS` parity knob + Anthropic prompt-cache extension to clips + rewrite paths | 30 |
 | D-2-thin | [`0caf895`](#) | **SceneMap substrate** — `scene_detector.detect_scenes()` revived from dead code | 48 |
 | D-2-snap | [`13cfb6d`](#) | **Pass-3 snap-to-shot reconciler** — `RecapPlan.snap_scenes_to_shots()` consumes D-2-thin SceneMap | 17 |
-| D-2-motion Phase 1 | (this commit) | **Audit + scaffolding** — architecture audit doc, `SceneMap.slice()` helper, mock-based motion dispatch tests, A/B benchmark script + 3 synthetic fixtures. NO motion/crop.py touch. | 31 |
+| D-2-motion Phase 1 | [`7301db0`](#) | **Audit + scaffolding** — architecture audit doc, `SceneMap.slice()` helper, mock-based motion dispatch tests, A/B benchmark script + 3 synthetic fixtures. NO motion/crop.py touch. | 31 |
+| D-2-motion Phase 2 | (this commit) | **A/B benchmark verdict** — ran benchmark on 3 synthetic fixtures using `backend/.venv` (cv2 4.11.0 + scenedetect 0.6.4 already installed). Verdict: ✅ CONDITIONAL GO with Policy A fallback. Phase 3 unblocked. | — (verdict doc only) |
 
 ---
 
@@ -49,16 +50,16 @@ the session's outcome, not a living spec.
 | `scene_detector.py` dead-code revival | D-2-thin |
 | **Pass-3 picks snap to nearest shot boundary** (Recap quality win) | **D-2-snap** |
 | **D-2-motion Phase 1** (audit + scaffolding + helper) | **D-2-motion Phase 1** |
+| **D-2-motion Phase 2** (A/B benchmark verdict — CONDITIONAL GO) | **D-2-motion Phase 2** |
 
 ### ⏳ Deferred (consumer-wiring follow-ups)
 
 | Item | Priority | Risk | Effort | Notes |
 |------|----------|------|--------|-------|
-| **D-2-motion Phase 2** — Install cv2 + run A/B benchmark on fixtures | Operator side | LOW | ~1h | Use `scripts/benchmark_scene_detection.py` against `backend/tests/fixtures/scene_detection/`. GO/NO-GO determines whether Phase 3 ships. |
-| **D-2-motion Phase 3** — Actual `motion/crop.py` swap (gated by Phase 2 GO) | Quality | **CRITICAL** | 1-2 days | Phase 1 audit + tests + helper ready. Needs cv2 in venv + Render Edit Protocol. See [audit](audit-d-2-motion-2026-06-30.md) §11. |
+| **D-2-motion Phase 3** — Actual `motion/crop.py` swap (Phase 2 GO unlocks this) | Quality | **CRITICAL** | 1-2 days | Phase 1 audit + tests + helper ready. Phase 2 verdict approves Policy A. Needs Render Edit Protocol with `backend/.venv` pytest baseline. See [verdict §6.3](verdict-d-2-motion-phase-2-2026-06-30.md#63-phase-3-minimal-edit-sketch) for the minimal-edit sketch. |
 | **C.1** — Clip pipeline consumes StoryModel via Comprehension stage | #1 strategic | **CRITICAL** (`render_pipeline.py`) | 1.5-2 days | Substrate ready (Batch C); needs prompt update + 3 provider sigs + `use_story_intelligence: bool = False` on RenderRequest. PROMPT_VERSION bump → cache flush. |
 
-**Recommended next-sprint order:** D-2-motion Phase 2+3 (~1 sprint when cv2 + fixtures available) → C.1 (own sprint, CRITICAL).
+**Recommended next-sprint order:** D-2-motion Phase 3 (~1 day with verdict already in hand) → C.1 (own sprint, CRITICAL).
 
 ---
 

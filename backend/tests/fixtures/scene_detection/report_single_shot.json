@@ -1,0 +1,58 @@
+{
+  "video": {
+    "path": "backend/tests/fixtures/scene_detection/single_shot_static.mp4",
+    "duration_sec": 10.0,
+    "fps": 30.0
+  },
+  "pixel_diff": {
+    "available": true,
+    "wall_time_sec": 0.05,
+    "scene_count": 1,
+    "ranges": [
+      [
+        0.0,
+        10.0
+      ]
+    ],
+    "config": {
+      "threshold": 30.0,
+      "sample_every_frames": 5,
+      "downsample_size": [
+        160,
+        90
+      ],
+      "debounce_sec": 0.35,
+      "fps_detected": 30.0,
+      "duration_sec": 10.0
+    }
+  },
+  "scene_map": {
+    "available": true,
+    "wall_time_sec": 0.464,
+    "scene_count": 0,
+    "ranges": [],
+    "config": {
+      "threshold": 28.0,
+      "adaptive": true,
+      "transnetv2": false,
+      "duration_sec": 0.0
+    }
+  },
+  "diff": {
+    "computable": true,
+    "boundary_count_ratio": 0.0,
+    "common_boundary_count": 0,
+    "common_boundary_drift_sec": [],
+    "mean_drift_sec": 0.0,
+    "pixel_diff_only_boundaries": [],
+    "scene_map_only_boundaries": [],
+    "verdict": {
+      "go_criteria_met": false,
+      "go_criteria": {
+        "boundary_count_ratio_ok": "0.5 <= 0.0 <= 2.0 = False",
+        "mean_drift_ok": "0.0 <= 0.3 = True"
+      },
+      "recommendation": "NO-GO — keep pixel-diff for this fixture (or tune SceneMap thresholds)"
+    }
+  }
+}
