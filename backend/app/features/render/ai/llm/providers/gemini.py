@@ -645,11 +645,17 @@ def _call_gemini_recap(api_key: str, model: str, system_prompt: str, user_prompt
     return result
 
 
-# Pass-1 (Story Model) — a short synopsis, so a smaller answer budget, but a real
-# thinking budget (understanding is the reasoning-heavy step). Override GEMINI_STORY_*.
-_STORY_MAX_TOKENS = int(os.getenv("GEMINI_STORY_MAX_TOKENS", "8192"))
+# Pass-1 (Story Model) — reconstructs the whole-film understanding (characters,
+# plot beats, emotional curve). For Gemini 2.5 Flash the thinking budget and
+# max_output_tokens draw from one ceiling: at the old 8192/8192 the thinking step
+# consumed the budget and the JSON answer was truncated to near-empty — the
+# StoryModel came back with 0 characters / 0 beats (measured 2026-07 on a 91-min
+# film; 16384/2048 restored 10 characters / 13 beats). Give the answer real
+# headroom and cap thinking well below it so output can never be starved.
+# Override GEMINI_STORY_*.
+_STORY_MAX_TOKENS = int(os.getenv("GEMINI_STORY_MAX_TOKENS", "16384"))
 _STORY_TEMPERATURE = float(os.getenv("GEMINI_STORY_TEMPERATURE", "0.4"))
-_STORY_THINKING_BUDGET = int(os.getenv("GEMINI_STORY_THINKING_BUDGET", "8192"))
+_STORY_THINKING_BUDGET = int(os.getenv("GEMINI_STORY_THINKING_BUDGET", "2048"))
 
 
 def _call_gemini_story_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
