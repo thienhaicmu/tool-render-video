@@ -132,6 +132,16 @@ _FEATURE_LLM_EMIT_RENDER_PLAN: bool = os.getenv("LLM_EMIT_RENDER_PLAN", "1") == 
 # (STORY_INTELLIGENCE_HOIST_ENABLED) still applies on top of this.
 _CLIP_STORY_INTEL_DEFAULT: bool = os.getenv("CLIP_STORY_INTELLIGENCE_DEFAULT", "0") == "1"
 
+# P1-1' — replace the AI-path's LLM-self-reported speech_density ranking signal
+# with a deterministic value measured from the transcript (chars/sec, relative
+# min-max across the job's clips — see pipeline_ranking.deterministic_speech_
+# density_scores). Default "0" (OFF) → ranking is byte-identical to the prior
+# behaviour; the whole block below is a no-op. Set to "1" to A/B once a reliable
+# eval is available. Only the speech_density_score (ranking weight 0.10) changes.
+_RANKING_DETERMINISTIC_SPEECH_DENSITY: bool = (
+    os.getenv("RANKING_DETERMINISTIC_SPEECH_DENSITY", "0") == "1"
+)
+
 logger = logging.getLogger("app.render")
 
 
@@ -1591,6 +1601,34 @@ def run_render_pipeline(
             for _i, _s in enumerate(scored)
             if "mv_viral_score" in _s
         ]
+
+        # P1-1' — deterministic speech_density (env-gated, default OFF → no-op).
+        # When ON and a transcript is available, overwrite each clip's
+        # speech_density_score with a chars/sec relative-density measure before
+        # ranking. Never fatal (Sacred Contract #3 spirit): any failure leaves
+        # the existing (LLM-reported) values untouched.
+        if _RANKING_DETERMINISTIC_SPEECH_DENSITY and full_srt_available:
+            try:
+                from app.features.render.engine.subtitle.generator.srt import parse_srt_blocks
+                from app.features.render.engine.pipeline.pipeline_ranking import (
+                    deterministic_speech_density_scores,
+                )
+                _sd_blocks = parse_srt_blocks(str(full_srt))
+                _sd_windows = [
+                    (i, float(s.get("start", 0) or 0), float(s.get("end", 0) or 0))
+                    for i, s in enumerate(scored, start=1)
+                ]
+                _sd_scores = deterministic_speech_density_scores(_sd_windows, _sd_blocks)
+                for _sd_i, _sd_seg in enumerate(scored, start=1):
+                    if _sd_i in _sd_scores:
+                        _sd_seg["speech_density_score"] = _sd_scores[_sd_i]
+                if _sd_scores:
+                    _job_log(
+                        effective_channel, job_id,
+                        f"ranking: deterministic speech_density applied to {len(_sd_scores)} clip(s)",
+                    )
+            except Exception as _sd_exc:
+                logger.warning("deterministic speech_density failed (non-fatal): %s", _sd_exc)
 
         # ── P5-1 Output Ranking ───────────────────────────────────────────────
         _failed_idx_set = {int(f.get("part_no", 0)) for f in failed_parts}
