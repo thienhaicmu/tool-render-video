@@ -173,6 +173,64 @@ def test_ok_when_best_clip_present_with_story_only(_client):
     assert body["ai_status"] == "ok"
 
 
+def test_story_model_present_when_column_set(_client):
+    """R3 (architecture-review, 2026-06-30): a job that ran with
+    ``use_story_intelligence`` persists ``story_model_json``; ai-summary
+    surfaces it under the additive ``story_model`` key — distinct from the
+    legacy result_json ``story`` field, which stays independent."""
+    from app.db.jobs_repo import update_story_model
+    client, db = _client
+    _seed_job(db, "job-sm", result={
+        "output_ranking": [{"part_no": 1, "output_rank": 1, "output_rank_score": 80.0,
+                            "is_best_clip": True}],
+        "best_clip": {"part_no": 1, "output_rank_score": 80.0},
+        "story": {"description": "legacy story"},
+        "ai_director": {"enabled": True},
+    })
+    update_story_model("job-sm", json.dumps({
+        "schema_version": 3, "summary": "Whole-film synopsis", "theme": "redemption",
+        "characters": [{"name": "A", "role": "hero", "want": "peace"}],
+    }))
+
+    body = client.get("/api/jobs/job-sm/ai-summary").json()
+    assert body["story_model"] is not None
+    assert body["story_model"]["summary"] == "Whole-film synopsis"
+    assert body["story_model"]["theme"] == "redemption"
+    # Legacy `story` stays independent and unchanged.
+    assert body["story"] == {"description": "legacy story"}
+
+
+def test_story_model_none_when_column_absent(_client):
+    """Legacy job (never ran Story Intelligence) → story_model is None so the FE
+    can hide the StoryModel card. The rest of the payload is unaffected."""
+    client, db = _client
+    _seed_job(db, "job-nosm", result={
+        "output_ranking": [{"part_no": 1, "output_rank": 1, "output_rank_score": 70.0}],
+        "best_clip": {"part_no": 1, "output_rank_score": 70.0},
+        "story": {"description": "s"},
+        "ai_director": {"enabled": True},
+    })
+    body = client.get("/api/jobs/job-nosm/ai-summary").json()
+    assert body["story_model"] is None
+
+
+def test_story_model_none_on_malformed_json(_client):
+    """Defensive: a corrupt story_model_json must not 500 — _parse_json returns
+    {} which the endpoint surfaces as None."""
+    from app.db.jobs_repo import update_story_model
+    client, db = _client
+    _seed_job(db, "job-badsm", result={
+        "output_ranking": [{"part_no": 1, "output_rank": 1, "output_rank_score": 70.0}],
+        "best_clip": {"part_no": 1, "output_rank_score": 70.0},
+        "story": {"description": "s"},
+        "ai_director": {"enabled": True},
+    })
+    update_story_model("job-badsm", "{not valid json")
+    resp = client.get("/api/jobs/job-badsm/ai-summary")
+    assert resp.status_code == 200
+    assert resp.json()["story_model"] is None
+
+
 def test_unknown_job_returns_404(_client):
     """Audit FINDING-BR11 only touches the available-but-empty cases.
     Unknown-job behaviour must remain a 404 — we pin it here so a future

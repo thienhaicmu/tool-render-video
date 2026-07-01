@@ -9,7 +9,9 @@ import type {
   QualityReport,
   QualitySummary,
   PartRankResult,
+  StoryModel,
 } from '../types/api'
+import type { RecapPlanReadyContext } from '../websocket/events'
 
 /**
  * Get a single job by ID.
@@ -243,6 +245,9 @@ export interface JobAiSummary {
   status_message?: string
   director_enabled: boolean
   story: Record<string, unknown>
+  /** C.1 whole-film StoryModel from the jobs.story_model_json column. Null when
+   *  the job never ran with use_story_intelligence enabled (R3, 2026-06-30). */
+  story_model?: StoryModel | null
   ai_ux: Record<string, unknown>
   output_count: number
   best_part_no: number | null
@@ -259,6 +264,24 @@ export interface JobAiSummary {
 
 export async function getJobAiSummary(jobId: string): Promise<JobAiSummary> {
   return apiFetch<JobAiSummary>(`/api/jobs/${encodeURIComponent(jobId)}/ai-summary`)
+}
+
+/**
+ * R4 — polling fallback for the recap.plan.ready WS event.
+ * GET /api/jobs/{jobId}/recap-plan
+ *
+ * Returns the persisted RecapPlan re-projected into the SAME shape the WS
+ * event ships (episodes + scenes[...]), so RecapLiveView can render its
+ * timeline when WebSocket is unavailable. `available` is false for non-recap
+ * jobs, or when the plan hasn't been produced yet.
+ */
+export interface RecapPlanResponse extends RecapPlanReadyContext {
+  job_id: string
+  available: boolean
+}
+
+export async function getRecapPlan(jobId: string): Promise<RecapPlanResponse> {
+  return apiFetch<RecapPlanResponse>(`/api/jobs/${encodeURIComponent(jobId)}/recap-plan`)
 }
 
 /**

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import type { JobPart, QualityReport, PartRankResult } from '@/types/api'
 import { getJobAiSummary, deletePartOutput } from '@/api/jobs'
+import { StoryModelCard } from '@/features/jobs/StoryModelCard'
 import type { JobAiSummary, HybridAnalysis } from '@/api/jobs'
 import {
   submitClipFeedback,
@@ -387,6 +388,10 @@ function StepResultsBase({
                     {String((aiSummary.story as Record<string,unknown>)['description'])}
                   </div>
                 )}
+
+                {/* R2/Phase 3b — whole-film StoryModel (Story Intelligence).
+                    Renders nothing when the job didn't run with it enabled. */}
+                <StoryModelCard storyModel={aiSummary.story_model} />
 
                 {aiSummary.ranking_summary.length > 0 && (
                   <div>

@@ -22,7 +22,7 @@ import { RenderSocketClient } from '../websocket/RenderSocketClient'
 import type { WsLogEvent } from '../websocket/events'
 import { isTerminalStatus, type JobPartStageEnum } from '../types/enums'
 import { useRenderStore } from '../stores/renderStore'
-import { getJob, getJobParts } from '../api/jobs'
+import { getJob, getJobParts, getRecapPlan } from '../api/jobs'
 import type { JobStatus, WsProgressSummary, JobPart, JobErrorKind } from '../types/api'
 
 const POLLING_FALLBACK_INTERVAL_MS = 5_000
@@ -102,6 +102,9 @@ export function useRenderSocket(jobId: string | null, wsPathOverride?: string): 
   // re-running the useEffect when polling state changes).
   const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollingActiveRef = useRef<boolean>(false)
+  // R4 — latch once the recap plan has been fetched over polling (or the job
+  // is confirmed non-recap), so we stop re-fetching /recap-plan every tick.
+  const recapPlanFetchedRef = useRef<boolean>(false)
 
   const [stage, setStage]           = useState<string | null>(null)
   const [jobStatus, setJobStatus]   = useState<string | null>(null)
@@ -167,6 +170,24 @@ export function useRenderSocket(jobId: string | null, wsPathOverride?: string): 
         if (partsKey !== partsRef.current) {
           partsRef.current = partsKey
           setLiveParts(parts)
+        }
+        // R4 — the recap.plan.ready WS event never arrives over polling. For a
+        // recap job, fetch the persisted plan once so RecapLiveView can render
+        // its timeline; retry each tick until it's produced. Clips jobs latch
+        // immediately (no recap plan to wait for) so we don't waste fetches.
+        if (!recapPlanFetchedRef.current) {
+          try {
+            const rf = (JSON.parse(job.payload_json || '{}') as { render_format?: string }).render_format
+            if (rf === 'recap') {
+              const resp = await getRecapPlan(jobId)
+              if (resp.available) {
+                recapPlanFetchedRef.current = true
+                setRecapPlan({ timestamp: new Date().toISOString(), level: 'INFO', event: 'recap.plan.ready', context: resp as unknown as Record<string, unknown> })
+              }
+            } else {
+              recapPlanFetchedRef.current = true
+            }
+          } catch { /* malformed payload / plan not ready — retry next tick */ }
         }
         // Terminal handling — same effect as WS onComplete.
         if (isTerminalStatus(job.status)) {

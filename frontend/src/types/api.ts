@@ -363,6 +363,40 @@ export interface PartRankResult {
   score_margin?: number
 }
 
+// ── Story Intelligence (StoryModel) ──────────────────────────────────────────
+// Surfaced two ways: GET /jobs/{id}/ai-summary → `story_model` (clips path,
+// C.1) and the `recap.plan.ready` WS event context.story_model (recap path).
+// Mirrors backend domain/recap_plan.py StoryModel (STORY_SCHEMA_VERSION = 3).
+// All fields may be empty — a partial/legacy blob is valid; consumers must
+// render defensively.
+
+export interface StoryCharacter {
+  name: string
+  role: string
+  want: string
+}
+
+export interface StoryBeat {
+  text: string
+  t: number                 // source-second anchor; -1 = unanchored
+  kind: string              // setup|turn|reveal|climax|resolution|…
+  bound_scene_index: number // -1 = unbound (no RecapScene executed this beat)
+}
+
+export interface StoryModel {
+  schema_version: number
+  summary: string
+  characters: StoryCharacter[]
+  beats: StoryBeat[]
+  climax: string
+  ending: string
+  theme: string
+  genre: string
+  conflict: string
+  resolution: string
+  emotional_curve: string[]
+}
+
 // ── WebSocket event (from docs/ui/UI_BACKEND_CONTRACT.md §11) ─────────────────
 
 export interface WsProgressSummary {

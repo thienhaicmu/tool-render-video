@@ -18,14 +18,14 @@
  */
 import { useState } from 'react'
 import type { JobPart } from '@/types/api'
-import type { WsLogEvent } from '@/websocket/events'
+import type {
+  WsLogEvent,
+  RecapPlanReadyContext,
+  RecapSceneBlock as SceneBlock,
+  RecapEpisodeInfo as EpisodeInfo,
+} from '@/websocket/events'
+import { StoryModelCard } from '@/features/jobs/StoryModelCard'
 
-interface EpisodeInfo { title: string; acts: number; scenes: number }
-interface SceneBlock {
-  n: number; ep: number; act: number
-  start: number; end: number; dur: number
-  title: string; mode: string; climax: boolean
-}
 type EpState = 'done' | 'active' | 'pending'
 
 function _norm(status: string | undefined): string { return (status || '').toLowerCase() }
@@ -73,8 +73,15 @@ export function RecapLiveView({
   const planEv = recapPlan ?? [...liveEvents].reverse().find((e) => e.event === 'recap.plan.ready')
   if (!planEv) return null
 
-  const scenes = ((planEv.context?.scenes as SceneBlock[]) || []).filter(Boolean)
-  const episodes = ((planEv.context?.episodes as EpisodeInfo[]) || []).filter(Boolean)
+  // Single typed cast at the WS boundary — WsLogEvent.context is Record<
+  // string, unknown> by design; RecapPlanReadyContext pins the recap.plan.ready
+  // shape (backend/tests/test_recap_plan_ready_ws_shape.py keeps it in sync).
+  const ctx = (planEv.context ?? {}) as RecapPlanReadyContext
+  const scenes: SceneBlock[] = (ctx.scenes ?? []).filter(Boolean)
+  const episodes: EpisodeInfo[] = (ctx.episodes ?? []).filter(Boolean)
+  // Story Intelligence — what the AI understood before it edited (recap pass-1).
+  // Shipped in the recap.plan.ready context; rendered in the left column.
+  const storyModel = ctx.story_model ?? null
 
   const partByNo = new Map<number, JobPart>(liveParts.map((p) => [p.part_no, p]))
   const previews = new Map<number, string>()
@@ -129,6 +136,7 @@ export function RecapLiveView({
           {allDone ? '✓ ĐÃ DỰNG XONG · ĐANG GHÉP TẬP' : '● ĐANG DỰNG'}
         </div>
         {focus && <FocusCard sc={focus} part={partByNo.get(focus.n)} preview={previews.get(focus.n)} epTitle={episodes[focus.ep]?.title || `Tập ${focus.ep + 1}`} />}
+        <StoryModelCard storyModel={storyModel} />
       </div>
 
       {/* ── RIGHT: grouped, collapsible queue ───────────────────────────── */}

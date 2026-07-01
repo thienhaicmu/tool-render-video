@@ -53,6 +53,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     outputDir: '',
     renderProfile: 'balanced',
     renderFormat: 'clips',
+    useStoryIntelligence: false,
     targetDuration: 90, outputCount: 1, focusMode: 'auto',
     llmEnabled:   true,
     aiProvider:   (localStorage.getItem('rw_ai_provider') as 'gemini' | 'openai' | 'claude') ?? 'gemini',
@@ -511,6 +512,10 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       render_profile:      cfg.renderProfile,
       whisper_model:       cfg.whisperModel !== 'auto' ? cfg.whisperModel : undefined,
       render_format:       cfg.renderFormat,
+      // Story Intelligence is a clips-path feature; the recap path runs its own
+      // two-pass Story/Editorial stages unconditionally, so only forward the
+      // flag for clips. undefined when off → stays off on the wire (Contract #2).
+      use_story_intelligence: cfg.renderFormat === 'clips' ? (cfg.useStoryIntelligence || undefined) : undefined,
       target_duration:     cfg.targetDuration,
       // Recap = one long video; the AI picks scenes, so output_count is forced to 1.
       output_count:        cfg.renderFormat === 'recap' ? 1 : cfg.outputCount,

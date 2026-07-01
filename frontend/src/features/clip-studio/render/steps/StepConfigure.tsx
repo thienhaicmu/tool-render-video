@@ -391,6 +391,21 @@ function StepConfigureBase({
           </div>
         </div>
 
+        {/* Story Intelligence — clips-path only. Recap runs its own two-pass
+            Story/Editorial stages unconditionally, so this toggle is hidden in
+            recap mode. Off by default (Sacred Contract #2). */}
+        {cfg.renderFormat === 'clips' && (
+          <div className="cfg-section">
+            <div className="tog-row">
+              <span className="tog-lbl">{t.cfgStoryIntel}</span>
+              <Tog checked={cfg.useStoryIntelligence} onChange={(v) => setCfgKey('useStoryIntelligence', v)} />
+            </div>
+            <div style={{ fontSize: '9px', color: 'var(--text-3)', marginTop: '4px', fontFamily: 'var(--fb)', lineHeight: 1.3 }}>
+              {t.cfgStoryIntelDesc}
+            </div>
+          </div>
+        )}
+
         {/* Pha 5.7 — trim the source (In/Out) before render. Only meaningful
             once the source is prepared and we know its duration. */}
         {prepareResult && prepareResult.duration > 0 && (

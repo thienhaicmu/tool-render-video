@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from app.db.jobs_repo import clear_part_output, delete_job, get_job, list_job_parts, list_job_parts_bulk, list_jobs_page, save_error_kind
+from app.db.jobs_repo import clear_part_output, delete_job, get_job, get_recap_plan, get_story_model, list_job_parts, list_job_parts_bulk, list_jobs_page, save_error_kind
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
 from app.models.schemas import JobStatusResponse
@@ -294,6 +294,13 @@ def api_get_job_ai_summary(job_id: str):
     ranking summary, and segment-level context for all evaluated clips (including
     those not selected as final outputs).
 
+    R3 (architecture-review, 2026-06-30): the response also carries
+    ``story_model`` — the C.1 whole-film Comprehension StoryModel read from the
+    ``jobs.story_model_json`` column. This is DISTINCT from the legacy ``story``
+    key (which comes from result_json). ``story_model`` is None for jobs that
+    never ran with ``use_story_intelligence`` enabled. Additive — existing
+    callers are unaffected.
+
     Audit FINDING-BR11 closure (Batch 10C 2026-06-06): the response now
     carries an explicit ``ai_status`` enum plus a human ``status_message``
     so the FE can distinguish four cases and stop rendering an empty card:
@@ -327,6 +334,12 @@ def api_get_job_ai_summary(job_id: str):
     ai_director: dict          = result.get("ai_director") or {}
     ai_ux: dict                = result.get("ai_ux") or {}
     story: dict                = result.get("story") or {}
+    # C.1 StoryModel (architecture-review, 2026-06-30). Distinct from the legacy
+    # ``story`` above: this is the whole-film Comprehension StoryModel persisted
+    # to the ``jobs.story_model_json`` column when ``use_story_intelligence`` was
+    # on. Read defensively — _parse_json returns {} on None/empty/malformed, so
+    # this never raises and stays empty for legacy jobs.
+    story_model: dict          = _parse_json(get_story_model(job_id))
 
     selected_part_nos = {int(e.get("part_no", 0)) for e in output_ranking}
     rejected_segments = [
@@ -385,6 +398,10 @@ def api_get_job_ai_summary(job_id: str):
         "status_message":   status_message,
         "director_enabled": bool(ai_director.get("enabled")),
         "story":            story,
+        # Additive (Phase 2 / R3): the C.1 StoryModel from the dedicated column.
+        # None when the job never ran Story Intelligence, so the FE can hide the
+        # StoryModel card without conflating it with the legacy ``story`` field.
+        "story_model":      story_model or None,
         "ai_ux":            ai_ux,
         "output_count":     len(output_ranking),
         "best_part_no":     int(best_clip.get("part_no", 0)) if best_clip else None,
@@ -398,6 +415,73 @@ def api_get_job_ai_summary(job_id: str):
         "output_ranking_warning": result.get("output_ranking_warning") or "",
         "hybrid_analysis":  hybrid_analysis,
     }
+
+
+@router.get("/{job_id}/recap-plan")
+def api_get_job_recap_plan(job_id: str):
+    """Polling fallback for the ``recap.plan.ready`` WS event (R4, 2026-06-30).
+
+    RecapLiveView normally builds its timeline from the ``recap.plan.ready``
+    WebSocket event. On a WS→HTTP-polling downgrade (offline-first networks
+    that block WebSocket upgrades) that event never arrives and the recap view
+    stays blank. This endpoint re-projects the PERSISTED RecapPlan into the
+    SAME ``{episodes, scenes[...]}`` shape the WS event ships, so the FE can
+    render the timeline over polling.
+
+    The scene-block projection MIRRORS ``recap_pipeline.py`` (it reuses the
+    shared ``_scored_from_recap_plan`` core, then maps the same keys). Both
+    key sets are pinned to the FE ``RecapSceneBlock`` interface by
+    ``test_recap_plan_ready_ws_shape.py`` + ``test_recap_plan_endpoint.py``.
+
+    Never raises — returns ``{available: False}`` for a missing / legacy /
+    malformed / non-recap plan so the FE hides the view instead of erroring.
+    """
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _empty = {"job_id": job_id, "available": False, "episodes": [], "scenes": []}
+    try:
+        # Lazy import — recap_pipeline pulls the render engine; keep it off the
+        # route-import path so mounting jobs.py never drags engine deps in.
+        from app.domain.recap_plan import RecapPlan
+        from app.features.render.engine.pipeline.recap_pipeline import (
+            _scored_from_recap_plan,
+        )
+
+        recap_plan = RecapPlan.from_json(get_recap_plan(job_id))
+        if recap_plan is None:
+            return _empty
+        scored = _scored_from_recap_plan(recap_plan)
+        # Mirror of the recap_pipeline.py `_scene_blocks` projection — keep the
+        # key set in lockstep with FE RecapSceneBlock (pinned by tests).
+        scene_blocks = [
+            {
+                "n": i, "ep": int(s.get("episode_index", 0)), "act": int(s.get("act_index", 0)),
+                "start": round(float(s.get("start", 0.0)), 1), "end": round(float(s.get("end", 0.0)), 1),
+                "dur": round(float(s.get("duration", 0.0)), 1),
+                "title": str(s.get("ai_title", "") or ""),
+                "mode": str(s.get("audio_mode", "narrate")),
+                "climax": bool(s.get("is_climax", False)),
+            }
+            for i, s in enumerate(scored, start=1)
+        ]
+        return {
+            "job_id": job_id,
+            "available": bool(scene_blocks),
+            "episodes": [
+                {"title": ep.title, "acts": len(ep.acts), "scenes": ep.scene_count()}
+                for ep in recap_plan.episodes
+            ],
+            "scenes": scene_blocks,
+            "scene_modes": [b["mode"] for b in scene_blocks],
+            "total_target_sec": recap_plan.total_target_sec,
+            "story_summary": recap_plan.story_summary,
+            "story_model": recap_plan.story.to_public_dict(),
+            "editorial": recap_plan.editorial.to_public_dict(),
+        }
+    except Exception:
+        # Defensive — a corrupt recap_plan_json must not 500 the polling path.
+        return _empty
 
 
 @router.get("/{job_id}/logs")

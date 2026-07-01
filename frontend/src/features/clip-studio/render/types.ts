@@ -49,6 +49,11 @@ export interface ConfigState {
   // Render mode: 'clips' = N short clips (default) | 'recap' = one long,
   // act-structured recap/review video (AI picks scenes + length).
   renderFormat:    'clips' | 'recap'
+  // Story Intelligence (clips-path only): run whole-film Comprehension on the
+  // Whisper transcript to produce a StoryModel that grounds clip selection.
+  // Default off — Sacred Contract #2 conservative. Only sent when renderFormat
+  // === 'clips' (see RenderWorkflow.buildPayload).
+  useStoryIntelligence: boolean
   targetDuration:  number
   outputCount:     number
   focusMode:       'auto' | 'face' | 'object' | 'center'

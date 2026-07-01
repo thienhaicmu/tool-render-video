@@ -2,9 +2,47 @@
  * Typed WebSocket event interfaces for /api/jobs/{jobId}/ws
  * Contract: docs/ui/UI_BACKEND_CONTRACT.md §11
  */
-import type { WebSocketEvent, WebSocketErrorEvent } from '../types/api'
+import type { WebSocketEvent, WebSocketErrorEvent, StoryModel } from '../types/api'
 
 export type { WebSocketEvent, WebSocketErrorEvent }
+
+// ── recap.plan.ready event context (Sacred Contract #6 additive event) ────────
+// Typed shape of the `context` block on the recap.plan.ready WsLogEvent, mirror
+// of the backend projection in recap_pipeline.py (the `_scene_blocks` list +
+// the episodes/story_model payload). All fields optional — consumers render
+// defensively. Pinned by backend/tests/test_recap_plan_ready_ws_shape.py.
+
+/** One scene block — mirrors the `_scene_blocks` dict in recap_pipeline.py.
+ *  part_no === n (render order). */
+export interface RecapSceneBlock {
+  n: number
+  ep: number
+  act: number
+  start: number
+  end: number
+  dur: number
+  title: string
+  mode: string
+  climax: boolean
+}
+
+export interface RecapEpisodeInfo {
+  title: string
+  acts: number
+  scenes: number
+}
+
+export interface RecapPlanReadyContext {
+  episodes?: RecapEpisodeInfo[]
+  acts?: Array<{ title: string; beat: string; scenes: number }>
+  scenes?: RecapSceneBlock[]
+  scene_modes?: string[]
+  original_audio_scenes?: number
+  total_target_sec?: number
+  story_summary?: string
+  story_model?: StoryModel
+  editorial?: Record<string, unknown>
+}
 
 /**
  * Render pipeline stage values sent in job.stage.
