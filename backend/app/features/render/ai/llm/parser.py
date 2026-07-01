@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Optional
 
@@ -18,6 +19,56 @@ from app.domain.render_plan import (
 logger = logging.getLogger("app.render.llm_parser")
 
 _INVALID_FS_CHARS = re.compile(r'[/\\:*?"<>|\t\n\r]')
+
+# P1-3: near-duplicate clip removal. The clip-selection prompt instructs the
+# model to drop clips that "convey the same idea or differ only in a few
+# seconds", but the model doesn't reliably comply. This filter enforces it
+# deterministically. Conservative default (0.7) so partial-overlap clips
+# anchored on DIFFERENT hooks survive — only a near-identical span counts as a
+# duplicate. Set CLIP_DEDUP_IOU=0 to disable. Override for a tighter/looser gate.
+try:
+    _CLIP_DEDUP_IOU = float(os.getenv("CLIP_DEDUP_IOU", "0.7") or 0.7)
+except (TypeError, ValueError):
+    _CLIP_DEDUP_IOU = 0.7
+
+
+def _interval_iou(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
+    """Intersection-over-union of two time intervals. 0.0 when disjoint or
+    degenerate."""
+    inter = max(0.0, min(a_end, b_end) - max(a_start, b_start))
+    if inter <= 0.0:
+        return 0.0
+    union = (a_end - a_start) + (b_end - b_start) - inter
+    return inter / union if union > 0.0 else 0.0
+
+
+def _dedup_overlapping_clips(clips: list[dict], iou_threshold: float) -> list[dict]:
+    """Drop near-duplicate clips. Expects ``clips`` sorted best-first so the
+    survivor of each overlapping pair is the stronger clip. A clip is dropped
+    only when it overlaps an already-kept clip by >= ``iou_threshold`` (heavy
+    span overlap); partial overlaps are kept. Malformed coords are kept (the
+    rest of the pipeline already tolerates them). Never raises."""
+    if iou_threshold <= 0.0:
+        return clips
+    kept: list[dict] = []
+    for c in clips:
+        try:
+            cs, ce = float(c.get("start", 0.0)), float(c.get("end", 0.0))
+        except (TypeError, ValueError):
+            kept.append(c)
+            continue
+        is_dup = False
+        for k in kept:
+            try:
+                ks, ke = float(k.get("start", 0.0)), float(k.get("end", 0.0))
+            except (TypeError, ValueError):
+                continue
+            if _interval_iou(cs, ce, ks, ke) >= iou_threshold:
+                is_dup = True
+                break
+        if not is_dup:
+            kept.append(c)
+    return kept
 
 
 def sanitize_clip_name(raw: str) -> str:
@@ -130,6 +181,18 @@ def parse_render_plan_response(
         # count (this is the rank source consumed by pipeline_ranking.py
         # via _resolve_rank_from_plan).
         valid_clip_dicts.sort(key=lambda c: c.get("score", 0.0), reverse=True)
+        # P1-3: enforce the near-duplicate removal the prompt requests but the
+        # model doesn't reliably do. Runs after the score sort so the higher-
+        # scored clip of each overlapping pair survives; before truncate so
+        # duplicates don't consume output slots. Partial-overlap (different-
+        # hook) clips are kept — only IoU >= threshold is a duplicate.
+        _pre_dedup = len(valid_clip_dicts)
+        valid_clip_dicts = _dedup_overlapping_clips(valid_clip_dicts, _CLIP_DEDUP_IOU)
+        if len(valid_clip_dicts) < _pre_dedup:
+            logger.info(
+                "llm_parser: dropped %d near-duplicate clip(s) (IoU>=%.2f)",
+                _pre_dedup - len(valid_clip_dicts), _CLIP_DEDUP_IOU,
+            )
         valid_clip_dicts = valid_clip_dicts[: max(1, int(output_count))]
 
         # Re-tag ranks AFTER sort/truncate so they are 1..N and stable.
