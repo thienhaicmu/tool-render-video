@@ -122,6 +122,16 @@ from app.db.jobs_repo import get_render_plan, update_render_plan
 # See docs/review/SPRINT_7_6a_LLM_FLAG_FLIP_2026-06-05.md.
 _FEATURE_LLM_EMIT_RENDER_PLAN: bool = os.getenv("LLM_EMIT_RENDER_PLAN", "1") == "1"
 
+# 0C — env-level default for clip-path Story Intelligence (Comprehension stage).
+# Sacred Contract #2 stays intact: the per-job ``use_story_intelligence`` field
+# default is UNCHANGED (False). This env only provides a fallback when the
+# payload didn't opt in. Default "0" → byte-identical to the pre-0C baseline for
+# every stored/replayed job (Comprehension skipped). Set to "1" to run clip
+# Story Intelligence globally — same env-gate pattern as LLM_EMIT_RENDER_PLAN /
+# RECAP_EDITORIAL_PASS. The Comprehension stage's own kill switch
+# (STORY_INTELLIGENCE_HOIST_ENABLED) still applies on top of this.
+_CLIP_STORY_INTEL_DEFAULT: bool = os.getenv("CLIP_STORY_INTELLIGENCE_DEFAULT", "0") == "1"
+
 logger = logging.getLogger("app.render")
 
 
@@ -903,7 +913,7 @@ def run_render_pipeline(
                         # (Phase 2 substrate only); Phase 3 wires the
                         # producer↔consumer connection.
                         _clip_story_model = None
-                        if getattr(payload, "use_story_intelligence", False):
+                        if getattr(payload, "use_story_intelligence", False) or _CLIP_STORY_INTEL_DEFAULT:
                             try:
                                 from app.features.render.engine.pipeline.comprehension_stage import (
                                     run_comprehension as _run_comprehension,
