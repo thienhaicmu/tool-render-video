@@ -16,13 +16,16 @@ from app.features.render.ai.llm.cache import llm_cache_get, llm_cache_put
 from app.features.render.ai.llm.parser import parse_render_plan_response
 from app.features.render.ai.llm.prompts import build_render_plan_prompt
 from app.features.render.ai.llm.retry import call_with_retry
+from app.features.render.ai.llm.key_pool import call_gemini_with_rotation
 from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
 from app.features.render.ai.llm.recap_prompts import (
     build_recap_prompt, build_story_model_prompt, build_editorial_prompt,
+    build_episode_narration_prompt,
 )
 from app.features.render.ai.llm.recap_parser import (
     parse_recap_response, parse_story_model_response, parse_editorial_response,
+    parse_episode_narration_response,
 )
 from app.domain.render_plan import RenderPlan
 
@@ -286,9 +289,9 @@ def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str)
     if cached is not None:
         logger.info("gemini_client: cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_once(api_key, model, system_prompt, user_prompt),
-        label="gemini",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_once(_k, model, system_prompt, user_prompt),
+        label="gemini", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini", model, system_prompt, user_prompt, result)
@@ -434,9 +437,9 @@ def _call_gemini_rewrite(api_key: str, model: str, system_prompt: str, user_prom
     if cached is not None:
         logger.info("gemini_client: rewrite cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_rewrite_once(api_key, model, system_prompt, user_prompt),
-        label="gemini-rewrite",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_rewrite_once(_k, model, system_prompt, user_prompt),
+        label="gemini-rewrite", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini-rewrite", model, system_prompt, user_prompt, result)
@@ -545,6 +548,70 @@ def select_recap_plan(
         return None
 
 
+# ── P1-2: per-episode narration refiner ──────────────────────────────────────
+_EPISODE_NARRATION_MAX_TOKENS = int(os.getenv("GEMINI_EPISODE_NARRATION_MAX_TOKENS", "4096"))
+
+
+def _call_gemini_episode_narration_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _genai.Client(api_key=api_key, http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000})
+    resp = client.models.generate_content(
+        model=model, contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "response_mime_type": "application/json",
+            "temperature": _RECAP_TEMPERATURE,
+            "max_output_tokens": _EPISODE_NARRATION_MAX_TOKENS,
+            # Narration authoring is creative, not reasoning-heavy; no thinking so
+            # the answer budget can't be starved (same failure class as the story
+            # call). Override via GEMINI_RECAP_THINKING if ever needed.
+            "thinking_config": {"thinking_budget": 0},
+        },
+    )
+    return resp.text
+
+
+def _call_gemini_episode_narration(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    cached = llm_cache_get("gemini-episode-narration", model, system_prompt, user_prompt)
+    if cached is not None:
+        return cached
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_episode_narration_once(_k, model, system_prompt, user_prompt),
+        label="gemini-episode-narration", seed_key=api_key,
+    )
+    if result is not None:
+        llm_cache_put("gemini-episode-narration", model, system_prompt, user_prompt, result)
+    return result
+
+
+def select_episode_narration(
+    episode_scenes: list,
+    story_model=None,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+    episode_title: str = "",
+) -> Optional[dict]:
+    """P1-2 — author narration for ONE episode's scenes. Returns ``{index: text}``
+    or None (Sacred Contract #3 — never raises). None / empty leaves the caller's
+    original narration untouched."""
+    try:
+        if not _GENAI_SDK or not api_key or not episode_scenes:
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        system_prompt, user_prompt = build_episode_narration_prompt(
+            episode_scenes, story_model=story_model, target_language=target_language,
+            tone=tone, episode_title=episode_title,
+        )
+        raw = _call_gemini_episode_narration(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            return None
+        return parse_episode_narration_response(raw) or None
+    except Exception as exc:
+        logger.warning("gemini_client: select_episode_narration error %s", exc, exc_info=True)
+        return None
+
+
 # ── R7.3 pass-2: Editorial Blueprint (cheap — StoryModel input, no transcript) ──
 _EDITORIAL_MAX_TOKENS = int(os.getenv("GEMINI_EDITORIAL_MAX_TOKENS", "8192"))
 _EDITORIAL_TEMPERATURE = float(os.getenv("GEMINI_EDITORIAL_TEMPERATURE", "0.4"))
@@ -573,9 +640,9 @@ def _call_gemini_editorial(api_key: str, model: str, system_prompt: str, user_pr
     if cached is not None:
         logger.info("gemini_client: editorial cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_editorial_once(api_key, model, system_prompt, user_prompt),
-        label="gemini-editorial",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_editorial_once(_k, model, system_prompt, user_prompt),
+        label="gemini-editorial", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini-editorial", model, system_prompt, user_prompt, result)
@@ -636,20 +703,26 @@ def _call_gemini_recap(api_key: str, model: str, system_prompt: str, user_prompt
     if cached is not None:
         logger.info("gemini_client: recap cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_recap_once(api_key, model, system_prompt, user_prompt),
-        label="gemini-recap",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_recap_once(_k, model, system_prompt, user_prompt),
+        label="gemini-recap", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini-recap", model, system_prompt, user_prompt, result)
     return result
 
 
-# Pass-1 (Story Model) — a short synopsis, so a smaller answer budget, but a real
-# thinking budget (understanding is the reasoning-heavy step). Override GEMINI_STORY_*.
-_STORY_MAX_TOKENS = int(os.getenv("GEMINI_STORY_MAX_TOKENS", "8192"))
+# Pass-1 (Story Model) — reconstructs the whole-film understanding (characters,
+# plot beats, emotional curve). For Gemini 2.5 Flash the thinking budget and
+# max_output_tokens draw from one ceiling: at the old 8192/8192 the thinking step
+# consumed the budget and the JSON answer was truncated to near-empty — the
+# StoryModel came back with 0 characters / 0 beats (measured 2026-07 on a 91-min
+# film; 16384/2048 restored 10 characters / 13 beats). Give the answer real
+# headroom and cap thinking well below it so output can never be starved.
+# Override GEMINI_STORY_*.
+_STORY_MAX_TOKENS = int(os.getenv("GEMINI_STORY_MAX_TOKENS", "16384"))
 _STORY_TEMPERATURE = float(os.getenv("GEMINI_STORY_TEMPERATURE", "0.4"))
-_STORY_THINKING_BUDGET = int(os.getenv("GEMINI_STORY_THINKING_BUDGET", "8192"))
+_STORY_THINKING_BUDGET = int(os.getenv("GEMINI_STORY_THINKING_BUDGET", "2048"))
 
 
 def _call_gemini_story_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
@@ -674,9 +747,9 @@ def _call_gemini_story(api_key: str, model: str, system_prompt: str, user_prompt
     if cached is not None:
         logger.info("gemini_client: story cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_story_once(api_key, model, system_prompt, user_prompt),
-        label="gemini-story",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_story_once(_k, model, system_prompt, user_prompt),
+        label="gemini-story", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini-story", model, system_prompt, user_prompt, result)

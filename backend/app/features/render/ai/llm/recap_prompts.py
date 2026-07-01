@@ -505,3 +505,85 @@ def build_editorial_prompt(
         episode_max=ep_hi,
     )
     return _SYSTEM_EDITORIAL, user
+
+
+# ── P1-2: per-episode narration refiner ──────────────────────────────────────
+# The whole-film recap call authors narration for EVERY scene at once, so later
+# scenes degrade (output-length pressure). This re-authors narration for ONE
+# episode's scenes in a focused call — fewer scenes → sharper, non-degrading
+# lines. Scene SELECTION is unchanged; only narration text is refined.
+_SYSTEM_EPISODE_NARRATION = (
+    "You are an expert film-recap narrator. You are given ONE episode's "
+    "already-selected scenes (in play order) plus the whole-film story "
+    "understanding. You WRITE the voice-over narration for each scene as ONE "
+    "cohesive script that flows scene->scene. Retell faithfully — never invent "
+    "events, names, or numbers. Keep EVERY scene's line strong: do NOT let later "
+    "scenes get thinner than the first. Output ONLY valid JSON — no prose, no "
+    "markdown, no code fences."
+)
+
+_USER_TEMPLATE_EPISODE_NARRATION = """{story_block}═══ EPISODE ═══
+{episode_title}
+NARRATION LANGUAGE: {lang_name}
+TONE: {tone_clause}
+
+═══ SCENES (in play order) ═══
+{scenes_block}
+
+═══ HOW TO WRITE ═══
+- Write narration for each scene, keyed by its index above.
+- Each scene: 1-3 sentences, speakable within its (end-start) seconds at a
+  natural pace — concise, no paragraphs.
+- Flow scene->scene as ONE story (connective phrasing). Keep the SAME quality
+  from the first scene to the LAST — later scenes must not get thinner.
+- audio_mode=original scenes: their "text" MUST be an empty string "".
+- Preserve every key fact, name, and number. Keep the scenes' chronology.
+
+═══ OUTPUT (return ONLY this JSON) ═══
+{{"narration": [ {{"index": <int>, "text": "<narration in {lang_name}; empty if original>"}} ]}}
+"""
+
+
+def build_episode_narration_prompt(
+    episode_scenes: list,
+    story_model=None,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    episode_title: str = "",
+) -> tuple[str, str]:
+    """P1-2 — return (system, user) to author narration for ONE episode's scenes.
+
+    ``episode_scenes`` is a list of dicts
+    ``{index, start, end, title, intent, audio_mode}`` (built by the caller from
+    RecapScene). The story block is injected for continuity. Format-safe: the
+    scene fields + story block are passed as ``.format`` VALUES (not re-scanned),
+    and the only literal braces in the template are the doubled JSON example."""
+    lang_name = _LANG_NAMES.get(target_language, target_language or "the target language")
+    tone_clause = (tone or "").strip() or "engaging / cinematic"
+    story_block = _story_block(story_model)
+    lines: list[str] = []
+    for sc in episode_scenes or []:
+        try:
+            idx = int(sc.get("index"))
+            s = float(sc.get("start", 0.0))
+            e = float(sc.get("end", 0.0))
+        except (TypeError, ValueError):
+            continue
+        mode = str(sc.get("audio_mode", "narrate") or "narrate")
+        seg = f"[{idx}] {s:.0f}-{e:.0f}s ({max(0.0, e - s):.0f}s, {mode})"
+        title = str(sc.get("title", "") or "").strip()
+        if title:
+            seg += f" — {title}"
+        intent = str(sc.get("intent", "") or "").strip()
+        if intent:
+            seg += f" | intent: {intent}"
+        lines.append(seg)
+    scenes_block = "\n".join(lines)
+    user = _USER_TEMPLATE_EPISODE_NARRATION.format(
+        story_block=(story_block + "\n") if story_block else "",
+        episode_title=(episode_title or "(untitled episode)"),
+        lang_name=lang_name,
+        tone_clause=tone_clause,
+        scenes_block=scenes_block,
+    )
+    return _SYSTEM_EPISODE_NARRATION, user

@@ -22,6 +22,39 @@ from app.domain.recap_plan import (
 
 logger = logging.getLogger("app.render.llm_recap_parser")
 
+
+def parse_episode_narration_response(raw: str) -> dict:
+    """P1-2 — parse a per-episode narration response ``{"narration":[{index,text}]}``
+    into ``{int index: str text}``. Defensive: returns ``{}`` on any failure so a
+    flaky refiner call leaves the original narration untouched. Never raises."""
+    try:
+        if not raw or not str(raw).strip():
+            return {}
+        text = str(raw).strip()
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            m = re.search(r"\{.*\}", text, re.DOTALL)
+            data = json.loads(m.group(0)) if m else None
+        if not isinstance(data, dict):
+            return {}
+        arr = data.get("narration")
+        if not isinstance(arr, list):
+            return {}
+        out: dict = {}
+        for item in arr:
+            if not isinstance(item, dict):
+                continue
+            try:
+                idx = int(item.get("index"))
+            except (TypeError, ValueError):
+                continue
+            out[idx] = str(item.get("text", "") or "").strip()
+        return out
+    except Exception:
+        return {}
+
+
 # Minimum recap scene length — safety net against the AI emitting subtitle-line
 # fragments (2–5s) that make a choppy montage. Short scenes are MERGED into a
 # neighbour. Override via RECAP_MIN_SCENE_SEC.

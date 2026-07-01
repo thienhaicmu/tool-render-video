@@ -96,6 +96,17 @@ GEMINI_API_KEY       : str  = os.getenv("GEMINI_API_KEY", "")
 OPENAI_API_KEY       : str  = os.getenv("OPENAI_API_KEY", "")
 CLAUDE_API_KEY       : str  = os.getenv("CLAUDE_API_KEY", "")
 
+# Gemini key POOL for quota rotation. Comma-separated in GEMINI_API_KEYS; each
+# free-tier key is ~20 requests/day, so a pool multiplies daily headroom. The
+# rotation logic lives in app/features/render/ai/llm/key_pool.py. When
+# GEMINI_API_KEYS is empty the pool falls back to [GEMINI_API_KEY] (single-key
+# behaviour unchanged). GEMINI_API_KEY (if unset) defaults to the first pool key.
+GEMINI_API_KEYS      : "list[str]" = [
+    k.strip() for k in os.getenv("GEMINI_API_KEYS", "").split(",") if k.strip()
+]
+if not GEMINI_API_KEY and GEMINI_API_KEYS:
+    GEMINI_API_KEY = GEMINI_API_KEYS[0]
+
 # SQLite connection timeout in seconds. Desktop renders on slow SSD/NAS may
 # need a larger value. The startup write-check uses timeout=5 (uncontended)
 # and is intentionally excluded from this setting.

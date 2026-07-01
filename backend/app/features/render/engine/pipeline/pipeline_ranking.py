@@ -160,6 +160,63 @@ def resolve_combined_score_weights(
     }
 
 
+# ── P1-1' — deterministic speech-density signal ─────────────────────────────
+# The AI-path ``speech_density_score`` is LLM self-reported (clip.speech_density
+# in _scored_from_render_plan). This computes it deterministically from the
+# transcript instead. Word counts are unreliable across languages (CJK has no
+# spaces), so we use NON-WHITESPACE CHARACTERS per second and normalise
+# RELATIVELY within the job's clip set (min-max → 0-100) — language-neutral, and
+# exactly what ranking needs (which clip is denser than the others here). Pure
+# + never-raise; the orchestrator only applies the result behind an env gate.
+
+
+def _clip_chars_per_second(clip_start: float, clip_end: float, srt_blocks: list) -> float:
+    """Non-whitespace chars per second of transcript overlapping [start, end].
+
+    Each block contributes its char count weighted by the fraction of the block
+    that lies inside the clip window, so a clip boundary mid-block is handled
+    proportionally. Returns 0.0 for a degenerate window."""
+    dur = clip_end - clip_start
+    if dur <= 0:
+        return 0.0
+    chars = 0.0
+    for b in srt_blocks or []:
+        try:
+            bs, be = float(b["start"]), float(b["end"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        overlap = min(be, clip_end) - max(bs, clip_start)
+        if overlap <= 0:
+            continue
+        blen = be - bs
+        frac = (overlap / blen) if blen > 0 else 0.0
+        n = sum(1 for ch in str(b.get("text", "")) if not ch.isspace())
+        chars += n * frac
+    return chars / dur
+
+
+def deterministic_speech_density_scores(clip_windows: list, srt_blocks: list) -> dict:
+    """Map ``(part_no, start, end)`` windows to a 0-100 relative speech-density
+    score using chars-per-second min-max normalised across the given clips.
+
+    Returns ``{}`` (caller keeps the existing values) when it cannot
+    differentiate: no transcript blocks, fewer than 2 clips, or every clip has
+    the same density. Never raises."""
+    try:
+        if not srt_blocks or not clip_windows:
+            return {}
+        cps: dict = {}
+        for pn, s, e in clip_windows:
+            cps[pn] = _clip_chars_per_second(float(s), float(e), srt_blocks)
+        vals = list(cps.values())
+        lo, hi = min(vals), max(vals)
+        if hi - lo <= 1e-9:
+            return {}
+        return {pn: round((v - lo) / (hi - lo) * 100.0, 1) for pn, v in cps.items()}
+    except Exception:
+        return {}
+
+
 def _score_component(value, default: float = 50.0) -> float:
     """Return a clamped 0-100 score, using neutral default only when missing."""
     if value is None or value == "":
