@@ -22,8 +22,10 @@ several films to build confidence.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
+import time
 
 import app.core.config  # noqa: F401 — loads .env (API keys) before anything reads them
 import app.features.render.ai.llm as llm
@@ -122,7 +124,75 @@ def _one_ab(provider, judge, srt, dur, language, api_key, story, excerpt, run_id
     return res_off, res_on, plan_off, plan_on
 
 
+def _append_sample(store_path: str, record: dict) -> None:
+    """Append one sample to the accumulation store (JSONL) — one line per run,
+    so samples gathered across days/runs build one growing distribution."""
+    try:
+        with open(store_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        print(f"    [warn] store append failed: {exc}")
+
+
+def _load_samples(store_path: str) -> list:
+    out = []
+    try:
+        with open(store_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    out.append(json.loads(line))
+                except Exception:
+                    pass
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def _print_grand_aggregate(store_path: str, rubric) -> None:
+    """Aggregate ALL accumulated samples in the store (across every run/day)."""
+    rows = _load_samples(store_path)
+    n = len(rows)
+    if n == 0:
+        print(f"\n[ab] store {store_path} has no samples yet.")
+        return
+
+    def _mean(xs):
+        return sum(xs) / len(xs) if xs else 0.0
+
+    deltas = [float(r.get("delta", 0)) for r in rows]
+    off = [float(r.get("off_weighted", 0)) for r in rows]
+    on = [float(r.get("on_weighted", 0)) for r in rows]
+    print(f"\n=== GRAND AGGREGATE (accumulated) — {n} sample(s) · {store_path} ===")
+    print(f"{'criterion':<22}{'mean Δ':>9}")
+    for c in rubric.criteria:
+        cds = [float(r.get("crit_deltas", {}).get(c.key, 0)) for r in rows]
+        print(f"{c.key:<22}{_mean(cds):>+9.3f}")
+    print(f"{'-'*31}")
+    print(f"{'OFF weighted mean':<22}{_mean(off):>9.3f}")
+    print(f"{'ON  weighted mean':<22}{_mean(on):>9.3f}")
+    print(f"{'Δ weighted (mean)':<22}{_mean(deltas):>+9.3f}")
+    print(f"{'Δ weighted (min..max)':<22}{min(deltas):>+.3f} .. {max(deltas):+.3f}")
+    wins = sum(1 for d in deltas if d > 0)
+    print(f"{'ON wins / samples':<22}{wins}/{n}")
+    if n >= 2:
+        import statistics as _st
+        se = _st.pstdev(deltas) / (n ** 0.5)
+        verdict = ("inconclusive (|mean| < 2·SE)" if abs(_mean(deltas)) < 2 * se
+                   else ("ON better" if _mean(deltas) > 0 else "ON worse"))
+        print(f"{'Δ mean ± SE':<22}{_mean(deltas):+.3f} ± {se:.3f}  → {verdict}")
+    print("(accumulate more samples over days for a trustworthy verdict.)")
+
+
 def main(argv=None) -> int:
+    # Output uses Δ / — etc.; force UTF-8 so a bare Windows console (cp1252)
+    # doesn't crash the aggregate print.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
     ap = argparse.ArgumentParser(description="A/B measure recap Editorial Blueprint (P0-2)")
     ap.add_argument("--srt", required=True, nargs="+",
                     help="one or more full-film SRT transcripts (each = a film)")
@@ -132,7 +202,19 @@ def main(argv=None) -> int:
     ap.add_argument("--provider", default="gemini", help="recap generation provider")
     ap.add_argument("--judge", default="gemini", help="judge provider (ideally != --provider)")
     ap.add_argument("--language", default="vi-VN", help="narration target language")
+    ap.add_argument("--store", default=None,
+                    help="JSONL file to append each sample to (accumulate across days)")
+    ap.add_argument("--aggregate-only", action="store_true",
+                    help="print the accumulated aggregate from --store and exit (uses no quota)")
     args = ap.parse_args(argv)
+
+    # 0-quota path: just summarise whatever has accumulated in the store.
+    if args.aggregate_only:
+        if not args.store:
+            print("[ab] --aggregate-only requires --store")
+            return 3
+        _print_grand_aggregate(args.store, get_rubric("recap"))
+        return 0
 
     from ai_eval.llm_client import resolve_api_key
     api_key = resolve_api_key(args.provider)
@@ -169,19 +251,38 @@ def main(argv=None) -> int:
         for run_i in range(1, args.runs + 1):
             print(f"  run {run_i}/{args.runs}:")
             _clear_llm_cache()  # force fresh recap generation each run
-            res_off, res_on, _, _ = _one_ab(
+            res_off, res_on, plan_off, plan_on = _one_ab(
                 args.provider, args.judge, srt, dur, args.language, api_key,
                 story, excerpt, f"{film_i}_{run_i}")
             if not (res_off and res_on and res_off.ok and res_on.ok):
                 print("    [skip] generation or judge failed this run.")
                 continue
+            # A valid 0B sample REQUIRES pass-2 to have actually run on the ON
+            # arm. If the editorial call failed (503/429), ON degrades to OFF
+            # (Sacred Contract #3) → a degenerate Δ≈0 that would pollute the
+            # accumulation with a false "no effect". Reject it.
+            if not (plan_on.editorial.beats or plan_on.editorial.episode_count):
+                print("    [skip] editorial pass did NOT run on ON arm "
+                      "(503/quota) — degenerate ON==OFF, not recorded.")
+                continue
             d = round(res_on.weighted - res_off.weighted, 3)
             deltas.append(d)
             off_w.append(res_off.weighted)
             on_w.append(res_on.weighted)
+            _crit = {c.key: res_on.scores.get(c.key, 0) - res_off.scores.get(c.key, 0)
+                     for c in rubric.criteria}
             for c in rubric.criteria:
-                crit_deltas[c.key].append(res_on.scores.get(c.key, 0) - res_off.scores.get(c.key, 0))
+                crit_deltas[c.key].append(_crit[c.key])
             print(f"    weighted OFF={res_off.weighted:g} ON={res_on.weighted:g} Δ={d:+g}")
+            if args.store:
+                _append_sample(args.store, {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "film": srt_path, "provider": args.provider, "judge": args.judge,
+                    "off_weighted": res_off.weighted, "on_weighted": res_on.weighted, "delta": d,
+                    "off_scenes": plan_off.scene_count(), "on_scenes": plan_on.scene_count(),
+                    "on_editorial_beats": len(plan_on.editorial.beats),
+                    "crit_deltas": _crit,
+                })
 
     # ── Aggregate ────────────────────────────────────────────────────────────
     n = len(deltas)
@@ -202,6 +303,10 @@ def main(argv=None) -> int:
     print(f"{'Δ weighted (min..max)':<22}{min(deltas):>+.3f} .. {max(deltas):+.3f}")
     wins = sum(1 for d in deltas if d > 0)
     print(f"{'ON wins / samples':<22}{wins}/{n}")
+
+    # Grand aggregate over ALL accumulated samples (this run + prior days).
+    if args.store:
+        _print_grand_aggregate(args.store, rubric)
     return 0
 
 
