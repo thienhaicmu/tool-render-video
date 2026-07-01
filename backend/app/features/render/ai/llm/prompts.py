@@ -373,6 +373,132 @@ FIELD RULES:
 Quality over quantity. Fewer strong clips beat many weak ones.
 Return up to {output_count} clips. Never invent moments not in the transcript.
 """
+
+
+# ── P1-4: focused clip prompt (CLIP_PROMPT_FOCUSED=1) ─────────────────────────
+# The fused prompt above asks the model to do FIVE jobs at once (select clips +
+# subtitle_policy + camera_strategy + audio_plan + overlays). This variant
+# un-fuses that: it asks ONLY for a reasoning field + clips, so the model spends
+# its attention on selection. The top-level subtitle/camera/audio/overlay plans
+# are dropped — the parser leaves them at their defaults and the backend stage
+# resolvers decide (the same fallback already used when the AI leaves them
+# empty). Per-clip fields (hook_type, subtitle_style, scores, …) are kept.
+# Gated OFF by default; the fused template above stays byte-identical.
+_SYSTEM_RP_FOCUSED = (
+    "You are a viral video editor AI. Your ONLY job is to select the best short "
+    "clips from a transcript and briefly explain your reasoning. Return one JSON "
+    "object with a \"reasoning\" string followed by a \"clips\" array — no prose "
+    "outside the JSON, no markdown fences. Do NOT emit subtitle, camera, audio, or "
+    "overlay plans; the render engine decides those."
+)
+
+_USER_TEMPLATE_RP_FOCUSED = """Select up to {output_count} clips from this transcript ({language}).
+Every clip MUST be {min_sec}–{max_sec} seconds long; clips outside that range are invalid.
+
+─── THINK FIRST (reasoning field) ───
+
+Before the clips, reason briefly (2–4 sentences) about which moments are the
+strongest viral opportunities and why. Put this in a top-level "reasoning" field,
+then select the clips that follow from that reasoning.
+
+─── CLIP SELECTION ───
+
+Read the ENTIRE transcript. Identify every moment that is:
+  • A hook, reveal, or surprising statement that grabs attention immediately
+  • An emotional peak, confrontational moment, or strong opinion
+  • A contrarian or counterintuitive insight
+  • A curiosity gap ("here's why X is wrong / here's what most people don't know")
+  • A complete standalone thought that works without prior context
+
+Rank ALL found hook moments by viral + retention potential.
+Remove near-duplicates — keep only the strongest version when two cover the same idea.
+
+For each top-ranked hook:
+  1. The hook moment itself is typically just 2–10 seconds. It is your anchor — NOT the clip.
+  2. BACK UP the start timestamp: add 5–15 seconds of lead-in so the hook lands in the
+     first 3 seconds of the clip.
+  3. EXTEND the end timestamp: keep going until the thought is complete and the payoff lands.
+  4. Target clip duration: {min_sec}–{max_sec} seconds (spans MANY transcript lines).
+  5. Check: if ({{end}} - {{start}}) < {min_sec} → extend further; do not return it.
+  6. Check: if ({{end}} - {{start}}) > {max_sec} → trim to the core complete thought.
+
+⛔ NEVER return a raw 2–10s hook as a clip. NEVER copy [x - y] boundaries as start/end.
+✔ Two clips MAY overlap if anchored on DIFFERENT hooks.
+✗ Do NOT return two clips that convey the same idea or differ only in a few seconds.
+
+Prioritise the absolute strongest viral moments wherever they appear — do NOT spread
+clips evenly across the timeline. Avoid intros, sponsors, outros, long silences,
+mid-sentence cuts.{video_meta_section}{clip_lock_section}{clip_exclude_section}{creator_preferences_section}{story_block_section}
+
+─── TRANSCRIPT ───
+
+Each [start_sec - end_sec] line is followed by spoken text:
+{srt_content}
+
+─── HARD CONSTRAINTS ───
+
+1. ({{end}} - {{start}}) MUST be in [{min_sec}, {max_sec}] for every clip.
+2. start >= 0 and end <= video duration.
+3. clip_name <= 60 chars; letters (incl. Vietnamese/CJK), digits, spaces, hyphens only.
+4. All numeric scores in [0.0, 1.0].
+
+─── OUTPUT JSON SHAPE ───
+
+Return EXACTLY this JSON object. No extra top-level keys, no markdown fences:
+
+{{
+  "reasoning": "2-4 sentences naming the strongest moments and why they were picked",
+  "clips": [
+    {{
+      "start": 42.0,
+      "end": {example_end},
+      "score": 0.92,
+      "clip_name": "Hook reveal moment",
+      "title": "The hook everyone missed",
+      "reason": "Hook at 44s grabs immediately; extended to payoff at {example_end}s",
+      "hook_type": "reveal",
+      "content_type": "interview",
+      "subtitle_style": "viral",
+      "viral_score": 0.88,
+      "hook_score": 0.92,
+      "retention_score": 0.78,
+      "speech_density": 0.85,
+      "duration_fit": 0.90,
+      "cover_offset_ratio": 0.15,
+      "pacing": "fast",
+      "hook_intensity": 0.92,
+      "rank": 1
+    }}
+  ]
+}}
+
+FIELD RULES:
+- reasoning: 2-4 sentences in {language}.
+- clip_name, title, reason: FREE-TEXT in {language}. Enum values
+  (subtitle_style, hook_type, content_type, pacing) stay in English.
+- hook_type: question | reveal | contrast | humor | emotion | statement
+- content_type: interview | vlog | tutorial | commentary | montage | gaming
+- subtitle_style (per clip): viral | clean | story | gaming
+- viral_score: shareability — surprising, relatable, emotional peak
+- hook_score: how hard the first 3 seconds grab attention
+- retention_score: predicted fraction watching to the end
+- speech_density: 1.0=dense dialogue, 0.0=pure visuals or long silence
+- duration_fit: 1.0=ideal clip length, 0.0=stretched/cramped
+- cover_offset_ratio: best thumbnail moment as fraction of clip (0.1=early, 0.5=mid)
+- pacing (per clip): fast | medium | slow | "" = unset
+- hook_intensity (per clip): 0.0–1.0 — how aggressively to punch the opening
+- rank: quality rank among returned clips; 1 = strongest. Unique integer in [1, N].{editorial_section}{target_duration_section}{target_platform_section}
+
+⚠️ FINAL VERIFICATION — before responding, check EVERY clip:
+   • {min_sec} ≤ (end - start) ≤ {max_sec}  →  fix or remove any clip that fails
+   • start lands 5–15s before the hook moment
+   • the clip ends after the payoff, not mid-thought
+
+Quality over quantity. Fewer strong clips beat many weak ones.
+Return up to {output_count} clips. Never invent moments not in the transcript.
+"""
+
+
 def check_srt_truncation(srt_content: str, max_srt_chars: int | None = None) -> dict:
     """Return truncation metadata without modifying input or building the prompt.
 
@@ -610,8 +736,13 @@ def build_render_plan_prompt(
     # at/under the cap pass through unchanged (byte-identical to prior behaviour).
     truncated = _fit_seconds_transcript(converted, cap)
 
+    # P1-4 — focused clip prompt. Read at call time so tests / operators can
+    # toggle without a reload. Default OFF → the fused template below is used
+    # (byte-identical to the prior behaviour).
+    _focused = _os.getenv("CLIP_PROMPT_FOCUSED", "0") == "1"
+
     hint = editorial_hint.strip()
-    system = _SYSTEM_RP + (f" {hint}" if hint else "")
+    system = (_SYSTEM_RP_FOCUSED if _focused else _SYSTEM_RP) + (f" {hint}" if hint else "")
     editorial_section = f"\n\nEDITORIAL GUIDANCE: {hint}" if hint else ""
 
     # T2.4 — soft target. When target_duration is set and positive, the
@@ -700,7 +831,8 @@ def build_render_plan_prompt(
     # for legacy callers (Sacred Contract #2 spirit at the prompt level).
     story_block_section = _story_block_clips(story_model)
 
-    user = _USER_TEMPLATE_RP.format(
+    _user_template = _USER_TEMPLATE_RP_FOCUSED if _focused else _USER_TEMPLATE_RP
+    user = _user_template.format(
         language=language,
         srt_content=truncated,
         output_count=output_count,
