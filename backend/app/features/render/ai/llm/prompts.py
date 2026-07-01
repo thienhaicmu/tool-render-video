@@ -129,6 +129,38 @@ def _srt_to_seconds_format(srt_content: str) -> str:
     return "\n".join(out)
 
 
+def _fit_seconds_transcript(text: str, max_chars: int) -> str:
+    """Fit an over-length (seconds-format) transcript into ``max_chars`` WITHOUT
+    losing the back half.
+
+    The previous hard head-slice (``text[:max_chars]``) made the clip selector
+    blind to everything after ~30 min of a long source — its strongest clips in
+    the back half simply did not exist to the model. Instead, when over budget,
+    DOWNSAMPLE: keep evenly-spaced lines across the WHOLE runtime so the model
+    sees start→end (coarser, but complete). Mirrors recap_prompts._fit_transcript.
+
+    Sources at/under the cap are returned unchanged (byte-identical to the old
+    behaviour). Never raises — falls back to a head-slice on any error.
+    """
+    try:
+        if not text or len(text) <= max_chars:
+            return text
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        if not lines:
+            return text[:max_chars]
+        avg = max(1, len(text) // max(1, len(lines)))
+        keep = max(50, int(max_chars / avg * 0.95))
+        if keep >= len(lines):
+            return "\n".join(lines)
+        step = len(lines) / keep
+        sampled = [lines[int(i * step)] for i in range(keep)]
+        out = "\n".join(sampled)
+        out = out[:max_chars] if len(out) > max_chars else out
+        return out + "\n... [transcript downsampled to fit — full runtime represented]"
+    except Exception:
+        return text[:max_chars]
+
+
 _SYSTEM_RP = (
     "You are a viral video editor AI. Your job is to emit a complete RenderPlan "
     "as a single JSON object describing both WHICH clips to extract and HOW each "
@@ -573,9 +605,10 @@ def build_render_plan_prompt(
     converted = _srt_to_seconds_format(srt_content)
 
     cap = max_srt_chars if max_srt_chars is not None else MAX_SRT_CHARS
-    truncated = converted[:cap]
-    if len(converted) > cap:
-        truncated += "\n... [transcript truncated]"
+    # 0D: downsample across the whole runtime instead of a head-slice, so clips
+    # from the back half of a long source stay visible to the selector. Sources
+    # at/under the cap pass through unchanged (byte-identical to prior behaviour).
+    truncated = _fit_seconds_transcript(converted, cap)
 
     hint = editorial_hint.strip()
     system = _SYSTEM_RP + (f" {hint}" if hint else "")
