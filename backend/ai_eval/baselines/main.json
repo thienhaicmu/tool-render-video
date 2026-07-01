@@ -1,0 +1,21 @@
+[
+  {
+    "case_id": "example_clip_talkinghead_01",
+    "feature": "clip",
+    "ok": true,
+    "scores": {
+      "hook_strength": 5.0,
+      "standalone": 5.0,
+      "payoff_completeness": 5.0,
+      "virality": 5.0,
+      "dedup_distinctness": 5.0,
+      "faithfulness": 5.0
+    },
+    "weighted": 5.0,
+    "passed": true,
+    "gate_failures": [],
+    "rationale": "This clip is exceptionally strong, opening with a relatable contrarian hook about saving money and immediately identifying a common, overlooked financial leak. It provides a concrete personal example and concludes with a clear, actionable payoff, making it highly standalone and shareable. There are no discernible weaknesses in its construction or faithfulness to the source.",
+    "flags": [],
+    "error": ""
+  }
+]

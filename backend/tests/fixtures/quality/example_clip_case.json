@@ -1,0 +1,19 @@
+{
+  "id": "example_clip_talkinghead_01",
+  "feature": "clip",
+  "source": {"kind": "talking_head", "duration_sec": 620, "language": "en-US"},
+  "inputs": {
+    "transcript_excerpt": "[41.0 - 44.0] Most people think saving money means cutting the fun stuff. [44.0 - 52.0] But the real leak is the subscriptions you forgot you have. [52.0 - 63.0] I audited mine and found forty-one dollars a month bleeding out for apps I never open. [63.0 - 74.0] So here's the three-minute audit that got me almost five hundred dollars a year back."
+  },
+  "output": {
+    "clips": [
+      {
+        "start": 41.0,
+        "end": 74.0,
+        "title": "The $41/month leak you forgot about",
+        "reason": "Hook (contrarian 'saving isn't cutting fun') at 41s lands in the first 3s; extends to the payoff (the three-minute audit + $500/yr) at 74s — complete standalone thought."
+      }
+    ],
+    "transcript_excerpt": "see inputs.transcript_excerpt"
+  }
+}
