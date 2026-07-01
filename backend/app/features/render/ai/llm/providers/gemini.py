@@ -16,6 +16,7 @@ from app.features.render.ai.llm.cache import llm_cache_get, llm_cache_put
 from app.features.render.ai.llm.parser import parse_render_plan_response
 from app.features.render.ai.llm.prompts import build_render_plan_prompt
 from app.features.render.ai.llm.retry import call_with_retry
+from app.features.render.ai.llm.key_pool import call_gemini_with_rotation
 from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
 from app.features.render.ai.llm.recap_prompts import (
@@ -288,9 +289,9 @@ def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str)
     if cached is not None:
         logger.info("gemini_client: cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_once(api_key, model, system_prompt, user_prompt),
-        label="gemini",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_once(_k, model, system_prompt, user_prompt),
+        label="gemini", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini", model, system_prompt, user_prompt, result)
@@ -436,9 +437,9 @@ def _call_gemini_rewrite(api_key: str, model: str, system_prompt: str, user_prom
     if cached is not None:
         logger.info("gemini_client: rewrite cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_rewrite_once(api_key, model, system_prompt, user_prompt),
-        label="gemini-rewrite",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_rewrite_once(_k, model, system_prompt, user_prompt),
+        label="gemini-rewrite", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini-rewrite", model, system_prompt, user_prompt, result)
@@ -573,9 +574,9 @@ def _call_gemini_episode_narration(api_key: str, model: str, system_prompt: str,
     cached = llm_cache_get("gemini-episode-narration", model, system_prompt, user_prompt)
     if cached is not None:
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_episode_narration_once(api_key, model, system_prompt, user_prompt),
-        label="gemini-episode-narration",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_episode_narration_once(_k, model, system_prompt, user_prompt),
+        label="gemini-episode-narration", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini-episode-narration", model, system_prompt, user_prompt, result)
@@ -639,9 +640,9 @@ def _call_gemini_editorial(api_key: str, model: str, system_prompt: str, user_pr
     if cached is not None:
         logger.info("gemini_client: editorial cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_editorial_once(api_key, model, system_prompt, user_prompt),
-        label="gemini-editorial",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_editorial_once(_k, model, system_prompt, user_prompt),
+        label="gemini-editorial", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini-editorial", model, system_prompt, user_prompt, result)
@@ -702,9 +703,9 @@ def _call_gemini_recap(api_key: str, model: str, system_prompt: str, user_prompt
     if cached is not None:
         logger.info("gemini_client: recap cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_recap_once(api_key, model, system_prompt, user_prompt),
-        label="gemini-recap",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_recap_once(_k, model, system_prompt, user_prompt),
+        label="gemini-recap", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini-recap", model, system_prompt, user_prompt, result)
@@ -746,9 +747,9 @@ def _call_gemini_story(api_key: str, model: str, system_prompt: str, user_prompt
     if cached is not None:
         logger.info("gemini_client: story cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_gemini_story_once(api_key, model, system_prompt, user_prompt),
-        label="gemini-story",
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_story_once(_k, model, system_prompt, user_prompt),
+        label="gemini-story", seed_key=api_key,
     )
     if result is not None:
         llm_cache_put("gemini-story", model, system_prompt, user_prompt, result)

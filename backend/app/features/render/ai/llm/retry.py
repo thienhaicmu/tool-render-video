@@ -166,6 +166,20 @@ def _extract_retry_after(exc: Exception) -> Optional[float]:
     return None
 
 
+def _is_rate_limit(exc: BaseException) -> bool:
+    """Best-effort detection of a provider rate-limit / quota-exhausted error.
+    Used by the key-pool rotation hook. A structured Retry-After / RetryInfo is a
+    strong signal; otherwise fall back to the error text."""
+    try:
+        if _extract_retry_after(exc) is not None:
+            return True
+    except Exception:
+        pass
+    s = str(exc).lower()
+    return ("429" in s or "resource_exhausted" in s or "quota" in s
+            or "rate limit" in s or "rate-limit" in s)
+
+
 def call_with_retry(
     fn: Callable[[], T],
     *,
@@ -173,6 +187,7 @@ def call_with_retry(
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     base_backoff_sec: float = DEFAULT_BACKOFF_SEC,
     retry_after_cap_sec: float = DEFAULT_RETRY_AFTER_CAP_SEC,
+    on_rate_limit: "Optional[Callable[[BaseException], None]]" = None,
 ) -> Optional[T]:
     """Run ``fn`` up to ``max_attempts`` times, honouring Retry-After.
 
@@ -190,6 +205,13 @@ def call_with_retry(
             result = fn()
         except BaseException as exc:  # noqa: BLE001 — broad on purpose
             last_exc = exc
+            # Key-pool rotation hook: signal a rate-limit so the caller can cool
+            # the current key and rotate. Fires on every attempt (incl. the last).
+            if on_rate_limit is not None and _is_rate_limit(exc):
+                try:
+                    on_rate_limit(exc)
+                except Exception:
+                    pass
             if attempt >= max_attempts:
                 # Match the pre-existing pattern: swallow and return None.
                 logger.warning(

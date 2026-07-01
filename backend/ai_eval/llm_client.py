@@ -36,8 +36,18 @@ _TIMEOUT_SEC = int(os.getenv("EVAL_JUDGE_TIMEOUT", "60"))
 
 def resolve_api_key(provider: str) -> str:
     """Resolve the server-side API key for a provider from app config / env.
-    Never raises — returns '' when unset (caller treats as skip)."""
+    Never raises — returns '' when unset (caller treats as skip). For gemini this
+    returns a non-cooled key from the rotation pool so measurement runs fan out
+    across all configured keys."""
     p = (provider or "").strip().lower()
+    if p == "gemini":
+        try:
+            from app.features.render.ai.llm.key_pool import active_key
+            _k = active_key()
+            if _k:
+                return _k
+        except Exception:
+            pass
     try:
         from app.core import config as _cfg
         return {
@@ -73,8 +83,9 @@ def _call_with_retry(fn, *, label: str):
 
 def _complete_gemini(system: str, user: str, api_key: str, model: str) -> Optional[str]:
     from google import genai as _genai  # lazy
-    def _once():
-        client = _genai.Client(api_key=api_key, http_options={"timeout": _TIMEOUT_SEC * 1000})
+
+    def _once(key: str):
+        client = _genai.Client(api_key=key, http_options={"timeout": _TIMEOUT_SEC * 1000})
         resp = client.models.generate_content(
             model=model, contents=user,
             config={
@@ -90,7 +101,13 @@ def _complete_gemini(system: str, user: str, api_key: str, model: str) -> Option
             },
         )
         return resp.text
-    return _call_with_retry(_once, label="gemini_judge")
+
+    # Rotate across the Gemini key pool on 429 so judging survives per-key quota.
+    try:
+        from app.features.render.ai.llm.key_pool import call_gemini_with_rotation
+        return call_gemini_with_rotation(_once, label="gemini_judge", seed_key=api_key)
+    except Exception:
+        return _call_with_retry(lambda: _once(api_key), label="gemini_judge")
 
 
 def _complete_openai(system: str, user: str, api_key: str, model: str) -> Optional[str]:
