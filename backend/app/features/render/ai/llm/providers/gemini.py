@@ -20,9 +20,11 @@ from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _co
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
 from app.features.render.ai.llm.recap_prompts import (
     build_recap_prompt, build_story_model_prompt, build_editorial_prompt,
+    build_episode_narration_prompt,
 )
 from app.features.render.ai.llm.recap_parser import (
     parse_recap_response, parse_story_model_response, parse_editorial_response,
+    parse_episode_narration_response,
 )
 from app.domain.render_plan import RenderPlan
 
@@ -542,6 +544,70 @@ def select_recap_plan(
         return plan
     except Exception as exc:
         logger.warning("gemini_client: select_recap_plan unexpected error %s", exc, exc_info=True)
+        return None
+
+
+# ── P1-2: per-episode narration refiner ──────────────────────────────────────
+_EPISODE_NARRATION_MAX_TOKENS = int(os.getenv("GEMINI_EPISODE_NARRATION_MAX_TOKENS", "4096"))
+
+
+def _call_gemini_episode_narration_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _genai.Client(api_key=api_key, http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000})
+    resp = client.models.generate_content(
+        model=model, contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "response_mime_type": "application/json",
+            "temperature": _RECAP_TEMPERATURE,
+            "max_output_tokens": _EPISODE_NARRATION_MAX_TOKENS,
+            # Narration authoring is creative, not reasoning-heavy; no thinking so
+            # the answer budget can't be starved (same failure class as the story
+            # call). Override via GEMINI_RECAP_THINKING if ever needed.
+            "thinking_config": {"thinking_budget": 0},
+        },
+    )
+    return resp.text
+
+
+def _call_gemini_episode_narration(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    cached = llm_cache_get("gemini-episode-narration", model, system_prompt, user_prompt)
+    if cached is not None:
+        return cached
+    result = call_with_retry(
+        lambda: _call_gemini_episode_narration_once(api_key, model, system_prompt, user_prompt),
+        label="gemini-episode-narration",
+    )
+    if result is not None:
+        llm_cache_put("gemini-episode-narration", model, system_prompt, user_prompt, result)
+    return result
+
+
+def select_episode_narration(
+    episode_scenes: list,
+    story_model=None,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+    episode_title: str = "",
+) -> Optional[dict]:
+    """P1-2 — author narration for ONE episode's scenes. Returns ``{index: text}``
+    or None (Sacred Contract #3 — never raises). None / empty leaves the caller's
+    original narration untouched."""
+    try:
+        if not _GENAI_SDK or not api_key or not episode_scenes:
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        system_prompt, user_prompt = build_episode_narration_prompt(
+            episode_scenes, story_model=story_model, target_language=target_language,
+            tone=tone, episode_title=episode_title,
+        )
+        raw = _call_gemini_episode_narration(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            return None
+        return parse_episode_narration_response(raw) or None
+    except Exception as exc:
+        logger.warning("gemini_client: select_episode_narration error %s", exc, exc_info=True)
         return None
 
 

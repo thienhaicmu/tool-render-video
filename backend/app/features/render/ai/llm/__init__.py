@@ -225,6 +225,55 @@ def select_editorial_blueprint(
     return None
 
 
+def _get_episode_narration_impl(provider_name: str):
+    """Return the select_episode_narration callable for a provider, or None when
+    that provider has no per-episode narration impl. Defensive — never raises."""
+    try:
+        if provider_name == "openai":
+            from app.features.render.ai.llm.providers import openai as _mod
+        elif provider_name == "claude":
+            from app.features.render.ai.llm.providers import claude as _mod
+        else:
+            from app.features.render.ai.llm.providers import gemini as _mod
+        return getattr(_mod, "select_episode_narration", None)
+    except Exception as exc:
+        logger.warning("llm: _get_episode_narration_impl(%s) import failed %s", provider_name, exc)
+        return None
+
+
+def select_episode_narration(
+    *,
+    provider: str = DEFAULT_PROVIDER,
+    episode_scenes: list,
+    story_model=None,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+    episode_title: str = "",
+) -> Optional[dict]:
+    """P1-2 — dispatch per-episode narration authoring to the named provider.
+
+    Returns ``{index: text}`` or None (the caller keeps its original narration).
+    No cross-provider fallback — this is an OPTIONAL refinement; a provider
+    without an impl simply yields None. Never raises (Sacred Contract #3)."""
+    primary = (provider or DEFAULT_PROVIDER).strip().lower()
+    if primary not in SUPPORTED_PROVIDERS:
+        primary = "gemini"
+    impl = _get_episode_narration_impl(primary)
+    if impl is None:
+        return None
+    try:
+        return impl(
+            episode_scenes=episode_scenes, story_model=story_model,
+            target_language=target_language, tone=tone, api_key=api_key,
+            model=model, episode_title=episode_title,
+        )
+    except Exception as exc:
+        logger.warning("llm: select_episode_narration provider=%s raised %s", primary, exc)
+        return None
+
+
 def select_recap_plan(
     *,
     provider: str = DEFAULT_PROVIDER,

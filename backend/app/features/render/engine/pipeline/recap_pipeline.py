@@ -29,6 +29,7 @@ stage = JobStage.DONE); #7 (only DB writers are the shared repo helpers);
 from __future__ import annotations
 
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -64,6 +65,12 @@ from app.features.render.engine.stages.recap_assembler import concat_clips
 from app.features.render.engine.stages.recap_title_card import make_act_title_card
 
 logger = logging.getLogger("app.render.recap")
+
+# P1-2 — per-episode narration refinement. The whole-film recap call authors
+# narration for every scene at once, so later scenes degrade. When ON, re-author
+# each episode's narration in a focused call. Default OFF → recap is
+# byte-identical; the wiring below is a no-op. Costs +1 LLM call per episode.
+_RECAP_PER_EPISODE_NARRATION: bool = os.getenv("RECAP_PER_EPISODE_NARRATION", "0") == "1"
 
 # Windows-illegal filename chars (+ control chars). Episode titles come from the
 # AI (e.g. "Tập 1: Mở màn án mạng") and may contain ':' '/' etc.
@@ -407,6 +414,60 @@ def run_recap(
             # Defensive — domain method already guards, but the recap render
             # must never abort on a snap concern.
             pass
+
+        # P1-2 — per-episode narration refinement (env-gated, default OFF → no-op).
+        # Re-author each episode's narration in a focused call so later scenes
+        # don't degrade. Best-effort: any failure keeps the original narration.
+        # Never fatal (Sacred Contract #3 spirit).
+        if _RECAP_PER_EPISODE_NARRATION:
+            try:
+                from app.features.render.ai.llm import select_episode_narration as _sel_ep_narr
+                _refined_total = 0
+                for _ep in recap_plan.episodes:
+                    _ep_scenes = _ep.scenes()
+                    if not _ep_scenes:
+                        continue
+                    _payload = [
+                        {
+                            "index": _i, "start": _sc.start, "end": _sc.end,
+                            "title": _sc.title, "intent": _sc.narration_intent,
+                            "audio_mode": _sc.audio_mode,
+                        }
+                        for _i, _sc in enumerate(_ep_scenes)
+                    ]
+                    _narr = _sel_ep_narr(
+                        provider=_provider, episode_scenes=_payload,
+                        story_model=recap_plan.story,
+                        target_language=(getattr(payload, "voice_language", "") or "vi-VN"),
+                        tone=(getattr(payload, "rewrite_tone", "") or ""),
+                        api_key=_api_key, model=getattr(payload, "llm_model", None),
+                        episode_title=_ep.title,
+                    )
+                    if not _narr:
+                        continue
+                    for _i, _sc in enumerate(_ep_scenes):
+                        if str(_sc.audio_mode) == "original":
+                            continue  # keep source-audio scenes silent
+                        _txt = _narr.get(_i)
+                        if _txt and _txt.strip():
+                            _sc.narration = _txt.strip()
+                            _refined_total += 1
+                if _refined_total:
+                    _job_log(
+                        effective_channel, job_id,
+                        f"Recap: per-episode narration refined ({_refined_total} scene(s))",
+                    )
+                    _emit_render_event(
+                        channel_code=effective_channel, job_id=job_id,
+                        event="recap.narration.refined", level="INFO",
+                        message=f"Per-episode narration refined ({_refined_total} scene(s))",
+                        step="render.recap", context={"scenes_refined": _refined_total},
+                    )
+            except Exception as _pen_exc:
+                logger.warning(
+                    "recap: per-episode narration refinement failed (non-fatal): %s", _pen_exc,
+                )
+
         update_recap_plan(job_id, recap_plan.to_json())
         # Build the chronological scene list now (pure) so the plan.ready event
         # can ship full per-scene timing for the editor-style timeline view.
