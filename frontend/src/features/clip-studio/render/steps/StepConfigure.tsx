@@ -256,6 +256,80 @@ function SourceTrim({ duration, trimIn, trimOut, setCfgKey, t }: {
 // re-renders when its props actually change. RenderWorkflow always-mounts
 // all 4 steps and toggles `.active` via class, so without memo every state
 // tick in step 3 (progress) re-renders steps 1, 2, 4 unnecessarily.
+// P4.C — named presets v2. The 2026-06-28 cleanup removed the old Presets
+// section for duplicating the explicit knobs; v2 is one compact row that
+// snapshots/applies the WHOLE ConfigState (localStorage, FE-only).
+const PRESETS_V2_KEY = 'rw_presets_v2'
+
+interface SavedPreset { name: string; cfg: Partial<ConfigState> }
+
+function loadPresetsV2(): SavedPreset[] {
+  try {
+    const raw = localStorage.getItem(PRESETS_V2_KEY)
+    const arr = raw ? JSON.parse(raw) : []
+    return Array.isArray(arr) ? arr : []
+  } catch { return [] }
+}
+
+function PresetRow({ cfg, setCfgKey }: {
+  cfg: ConfigState
+  setCfgKey: <K extends keyof ConfigState>(k: K, v: ConfigState[K]) => void
+}) {
+  const [presets, setPresets] = React.useState<SavedPreset[]>(loadPresetsV2)
+  const [name, setName] = React.useState('')
+
+  function persist(next: SavedPreset[]) {
+    setPresets(next)
+    try { localStorage.setItem(PRESETS_V2_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+  }
+  function apply(preset: SavedPreset) {
+    for (const [k, v] of Object.entries(preset.cfg)) {
+      // outputDir is machine/source-specific — don't restore it from presets.
+      if (k === 'outputDir') continue
+      setCfgKey(k as keyof ConfigState, v as ConfigState[keyof ConfigState])
+    }
+  }
+  function saveCurrent() {
+    const n = name.trim()
+    if (!n) return
+    const { outputDir: _o, ...rest } = cfg
+    const next = [...presets.filter((pr) => pr.name !== n), { name: n, cfg: rest }]
+    persist(next)
+    setName('')
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 12 }}>
+      <select
+        value=""
+        onChange={(e) => {
+          const pr = presets.find((x) => x.name === e.target.value)
+          if (pr) apply(pr)
+        }}
+        style={{
+          flex: 1, minWidth: 0, padding: '4px 6px', borderRadius: 6, fontSize: 11,
+          border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-1)',
+        }}
+      >
+        <option value="" disabled>Preset…</option>
+        {presets.map((pr) => <option key={pr.name} value={pr.name}>{pr.name}</option>)}
+      </select>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && saveCurrent()}
+        placeholder="Save as…"
+        style={{
+          width: 90, padding: '4px 6px', borderRadius: 6, fontSize: 11,
+          border: '1px solid var(--border)', background: 'var(--surface-input)', color: 'var(--text-1)',
+          outline: 'none',
+        }}
+      />
+      <button className="btn-xs" onClick={saveCurrent} disabled={!name.trim()}>+</button>
+    </div>
+  )
+}
+
 function StepConfigureBase({
   cfg, cfgTab, setCfgTab, setCfgKey, applyPreset,
   sources, prepareResult, pickOutputDir, onChangeSource, t,
@@ -337,6 +411,8 @@ function StepConfigureBase({
             ))}
           </div>
         </div>
+
+        <PresetRow cfg={cfg} setCfgKey={setCfgKey} />
 
         {/* F2 — Smart Presets: pick a curated backend preset. Reflects its
             FE-facing params into the form (WYSIWYG) and sends

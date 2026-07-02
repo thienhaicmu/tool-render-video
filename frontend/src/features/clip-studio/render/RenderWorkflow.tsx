@@ -50,7 +50,11 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const [isSubmitting, setIsSubmitting]   = useState(false)
 
   const [cfgTab, setCfgTab] = useState<CfgTab>('ai')
-  const [cfg, setCfg] = useState<ConfigState>(() => ({
+  // P4.C — the Configure draft survives reloads. Only ai_provider used to
+  // persist; a reload threw away everything else the user had dialed in.
+  const CFG_DRAFT_KEY = 'rw_cfg_draft_v1'
+  const hadDraftRef = useRef(false)
+  const cfgDefaults: ConfigState = {
     ratio: 'r916', minSec: 30, maxSec: 60, trimIn: 0, trimOut: 0,
     style: 'slay_soft_01', platform: 'tiktok',
     multiVariant: false, ctaEnabled: false, ctaType: 'auto',
@@ -71,7 +75,25 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     aiProvider:   (localStorage.getItem('rw_ai_provider') as 'gemini' | 'openai' | 'claude') ?? 'gemini',
     llmModel:     '',
     llmLanguage:  'auto',
-  }))
+  }
+  const [cfg, setCfg] = useState<ConfigState>(() => {
+    try {
+      const raw = localStorage.getItem(CFG_DRAFT_KEY)
+      if (raw) {
+        hadDraftRef.current = true
+        return { ...cfgDefaults, ...(JSON.parse(raw) as Partial<ConfigState>) }
+      }
+    } catch { /* corrupt draft — fall back to defaults */ }
+    return cfgDefaults
+  })
+
+  // Debounced draft save.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try { localStorage.setItem(CFG_DRAFT_KEY, JSON.stringify(cfg)) } catch { /* ignore */ }
+    }, 800)
+    return () => clearTimeout(id)
+  }, [cfg])
 
   const [jobId, setJobId]               = useState<string | null>(null)
   const [submitError, setSubmitError]   = useState<string | null>(null)
@@ -84,6 +106,9 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   // Runs once — user edits to cfg after mount are NOT overwritten.
   useEffect(() => {
     let cancelled = false
+    // P4.C — a restored draft is the user's explicit prior state; don't let
+    // server-side defaults overwrite it on mount.
+    if (hadDraftRef.current) return
     ;(async () => {
       try {
         const env = await getRenderDefaults()
