@@ -13,6 +13,7 @@ import {
   OVERLAY_HIGHLIGHT_COLORS,
 } from '../subtitle-styles'
 import { fmtDuration, Tog } from '../utils'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { IconFilm } from '@/components/icons'
 
 // ── Subtitle preview — visual approximation of each style ────────────────────
@@ -452,10 +453,24 @@ function StepConfigureBase({
                 key={v}
                 className={`seg-b${cfg.renderFormat === v ? ' on' : ''}`}
                 style={{ flex: 1, textAlign: 'center', padding: '8px 6px' }}
-                onClick={() => {
-                  setCfgKey('renderFormat', v)
-                  if (v === 'recap') {
-                    // Recap defaults: 16:9 film framing + narrated review.
+                onClick={async () => {
+                  if (v !== 'recap' || cfg.renderFormat === 'recap') {
+                    setCfgKey('renderFormat', v)
+                    return
+                  }
+                  // A1 — recap used to силently force 16:9 + narration.
+                  // Now the change is explicit and declinable.
+                  const choice = await confirmDialog({
+                    title: t.cfgRecapPromptTitle,
+                    message: t.cfgRecapPromptMsg,
+                    buttons: [
+                      { id: 'apply', label: t.cfgRecapApply, variant: 'primary' },
+                      { id: 'keep', label: t.cfgRecapKeep },
+                    ],
+                  })
+                  if (choice === null) return  // dismissed — stay on clips
+                  setCfgKey('renderFormat', 'recap')
+                  if (choice === 'apply') {
                     setCfgKey('ratio', 'r169')
                     setCfgKey('narrEnabled', true)
                     setCfgKey('voiceSource', 'ai_rewrite')
@@ -706,6 +721,9 @@ function StepConfigureBase({
 
       {/* ── RIGHT ─────────────────────────────────────────────────────────── */}
       <div className="cfg-right">
+        {/* A2 — Quick mode: no tab chrome; only subtitle essentials show.
+            Advanced restores the full AI / SUB / NARR tab set. */}
+        {adv && (
         <div className="cfg-tabs">
           {([
             { id: 'ai'     as CfgTab, label: t.cfgTabAI     },
@@ -717,11 +735,12 @@ function StepConfigureBase({
             </button>
           ))}
         </div>
+        )}
 
         <div className="cfg-tab-body">
 
           {/* ── AI tab ── */}
-          <div className={`cfg-tab-pane${cfgTab === 'ai' ? ' active' : ''}`}>
+          <div className={`cfg-tab-pane${adv && cfgTab === 'ai' ? ' active' : ''}`}>
 
             {/* UI cleanup 2026-06-28: removed 5 creator-preference sections
                 (VIDEO TYPE / MARKET / HOOK / STRUCTURE BIAS / SUBTITLE EMPHASIS).
@@ -833,7 +852,7 @@ function StepConfigureBase({
           </div>
 
           {/* ── SUB tab ── */}
-          <div className={`cfg-tab-pane${cfgTab === 'sub' ? ' active' : ''}`}>
+          <div className={`cfg-tab-pane${!adv || cfgTab === 'sub' ? ' active' : ''}`}>
 
             <div className="cfg-section">
               <div className="tog-row">
@@ -910,7 +929,7 @@ function StepConfigureBase({
           </div>
 
           {/* ── NARR tab ── */}
-          <div className={`cfg-tab-pane${cfgTab === 'narr' ? ' active' : ''}`}>
+          <div className={`cfg-tab-pane${adv && cfgTab === 'narr' ? ' active' : ''}`}>
 
             <div className="cfg-section">
               <div className="tog-row">

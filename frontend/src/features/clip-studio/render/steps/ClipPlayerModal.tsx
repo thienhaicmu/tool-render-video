@@ -10,6 +10,7 @@ import { useEffect } from 'react'
 import type { JobPart, PartRankResult } from '@/types/api'
 import type { Strings } from '../i18n'
 import { getPartMediaUrl } from '../utils'
+import { scoreColor } from '../scoring'
 
 export function ClipPlayerModal({
   jobId, parts, index, onNavigate, onClose,
@@ -44,8 +45,7 @@ export function ClipPlayerModal({
 
   const rank = partRanks[part.part_no]
   const score = rank?.output_rank_score ?? partScores[part.part_no]
-  const scoreCol = score === undefined ? 'var(--text-3)'
-    : score >= 70 ? 'var(--ok)' : score >= 40 ? 'var(--warn)' : 'var(--fail)'
+  const scoreCol = score === undefined ? 'var(--text-3)' : scoreColor(score)
   const rating = feedbackRatings[part.part_no]
   const title = part.ai_title
     || (part.clip_name ? part.clip_name.replace(/\.mp4$/i, '') : `Clip ${String(part.part_no).padStart(2, '0')}`)

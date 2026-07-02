@@ -46,6 +46,8 @@ export function HistoryScreen() {
   // user shift-selected from so subsequent shift-clicks select ranges.
   const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set())
   const [batchBusy, setBatchBusy] = useState(false)
+  // A5 — live "i/N" counter while a batch delete/re-run walks its jobs.
+  const [batchProgress, setBatchProgress] = useState<string | null>(null)
   const lastShiftAnchorRef = useRef<string | null>(null)
 
   const { t, lang } = useI18n()
@@ -261,6 +263,7 @@ export function HistoryScreen() {
     let okCount = 0
     let failCount = 0
     for (const id of ids) {
+      setBatchProgress(`${okCount + failCount + 1}/${ids.length}`)
       try {
         await deleteJob(id, true)
         okCount++
@@ -275,6 +278,7 @@ export function HistoryScreen() {
     })
     clearBatch()
     setBatchBusy(false)
+    setBatchProgress(null)
     await refreshJobs()
   }
 
@@ -285,6 +289,7 @@ export function HistoryScreen() {
     let okCount = 0
     let failCount = 0
     for (const id of ids) {
+      setBatchProgress(`${okCount + failCount + 1}/${ids.length}`)
       try {
         await resumeRender(id)
         okCount++
@@ -299,6 +304,7 @@ export function HistoryScreen() {
     })
     clearBatch()
     setBatchBusy(false)
+    setBatchProgress(null)
     await refreshJobs()
   }
 
@@ -389,7 +395,7 @@ export function HistoryScreen() {
               opacity: batchBusy ? .5 : 1,
             }}
           >
-            {batchBusy ? '…' : t('history_rerun')}
+            {batchBusy ? (batchProgress ?? '…') : t('history_rerun')}
           </button>
           <button
             onClick={handleBatchDelete}
@@ -402,7 +408,7 @@ export function HistoryScreen() {
               opacity: batchBusy ? .5 : 1,
             }}
           >
-            {batchBusy ? '…' : t('history_delete')}
+            {batchBusy ? (batchProgress ?? '…') : t('history_delete')}
           </button>
           <button
             onClick={clearBatch}

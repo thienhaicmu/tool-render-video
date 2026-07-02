@@ -56,6 +56,7 @@ export function JobListItem({
   return (
     <div
       data-testid={`job-list-item-${item.job_id}`}
+      role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }}
       onClick={(e) => {
         if (inBatchMode && onToggleBatch) {
           onToggleBatch(item.job_id, e.shiftKey)

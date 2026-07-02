@@ -12,6 +12,7 @@ import {
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
+import { TIER_VIRAL, TIER_HIGH, TIER_GOOD, scoreColor } from '../scoring'
 import { useEditorStore } from '@/stores/editorStore'
 import { useUIStore } from '@/stores/uiStore'
 import { ClipActionsMenu } from './ClipActionsMenu'
@@ -21,9 +22,9 @@ import type { ClipMenuItem } from './ClipActionsMenu'
 
 // P2.3 - tier label comes from the Strings table (creator-voiced, both locales).
 function aiTier(score: number, t: Strings): { label: string; cls: string } {
-  if (score >= 85) return { label: t.tierViral, cls: 'tier-viral' }
-  if (score >= 70) return { label: t.tierHigh, cls: 'tier-high' }
-  if (score >= 55) return { label: t.tierGood, cls: 'tier-good' }
+  if (score >= TIER_VIRAL) return { label: t.tierViral, cls: 'tier-viral' }
+  if (score >= TIER_HIGH) return { label: t.tierHigh, cls: 'tier-high' }
+  if (score >= TIER_GOOD) return { label: t.tierGood, cls: 'tier-good' }
   return { label: t.tierReview, cls: 'tier-review' }
 }
 
@@ -34,7 +35,7 @@ function confLabel(tier: string, t: Strings): string {
 function ScoreRingSm({ score }: { score: number }) {
   const r = 13, circ = 2 * Math.PI * r
   const fill = (score / 100) * circ
-  const col = score >= 70 ? 'var(--ok)' : score >= 40 ? 'var(--warn)' : 'var(--fail)'
+  const col = scoreColor(score)
   return (
     <div className="sr-wrap">
       <svg width="34" height="34" viewBox="0 0 34 34" style={{ transform: 'rotate(-90deg)' }}>
@@ -50,7 +51,7 @@ function ScoreRingSm({ score }: { score: number }) {
 function ScoreRingLg({ score, t }: { score: number; t: Strings }) {
   const r = 28, circ = 2 * Math.PI * r
   const fill = (score / 100) * circ
-  const col = score >= 70 ? 'var(--ok)' : score >= 40 ? 'var(--warn)' : 'var(--fail)'
+  const col = scoreColor(score)
   const tier = aiTier(score, t)
   return (
     <div className="srl-wrap">
@@ -656,14 +657,13 @@ function StepResultsBase({
               const isSelected = selectedPart?.part_no === part.part_no
               const tier       = dispScore !== undefined ? aiTier(dispScore, t) : null
               const durFmt     = fmtDur(part.duration)
-              const scoreCol   = dispScore !== undefined
-                ? (dispScore >= 70 ? 'var(--ok)' : dispScore >= 50 ? 'var(--warn)' : 'var(--fail)')
-                : ''
+              const scoreCol   = dispScore !== undefined ? scoreColor(dispScore) : ''
               const isBest     = rank?.is_best_clip === true
 
               return (
                 <div
                   key={part.part_no}
+                  role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }}
                   className={`clip-card2${isBest ? ' is-top' : ''}${isSelected ? ' selected' : ''}`}
                   onClick={() => setSelectedPart(isSelected ? null : part)}
                 >

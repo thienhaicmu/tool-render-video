@@ -76,6 +76,7 @@ function ClipCard({ part, isBest, onPlay }: { part: JobPart; isBest: boolean; jo
 
   return (
     <div
+      role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }}
       onClick={part.status === 'done' && onPlay ? onPlay : undefined}
       style={{
       borderRadius: 8, overflow: 'hidden',
