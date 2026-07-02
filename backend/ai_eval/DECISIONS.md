@@ -82,6 +82,20 @@ scene length; verify before/after with `duration_ratio_score` +
 Editorial's one measured defect is now governed the same way as shot
 boundaries (snap) and beat bindings: prompt guides, determinism guarantees.
 
+**ADDENDUM 2026-07-02 (final, post model-switch) — D-1 rationale UPDATED at
+3.5-cell n=7.** On gemini-3.5-flash BOTH arms are structurally near-perfect
+(OFF: 18.7 scenes, frag 0, discipline 100, ratio 0.21 in-band; ON: 18.4 /
+0 / 100 / 0.18). The OFF-sprawl that motivated "keep for structural
+discipline" was largely a **2.5-flash weakness**, not an intrinsic pipeline
+need. Editorial's remaining measured edge on the production stack is modest:
+beat_coverage +0.09, episode_balance +11; judge +0.125 ± 0.230 (inconclusive,
+ON 2/7). **Decision stands: KEEP ON** (small positive, no measured harm,
+cheap — and only one 91-min film tested; longer/harder sources may still
+sprawl where editorial matters). But the strong discipline rationale is now
+historical; re-evaluate if a future model change or cost pressure makes the
+extra pass worth questioning. This addendum exists because the harness's job
+is to UPDATE conclusions when evidence changes.
+
 ---
 
 ## D-2 — GEMINI_DEFAULT_MODEL 2.5→3.5 Flash · Decision: **RECOMMEND SWITCH** (2026-07-02)
