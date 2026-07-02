@@ -120,11 +120,14 @@ export async function resumeJob(jobId: string): Promise<{ job_id: string; held: 
 export async function getJobHistory(
   limit = 20,
   offset = 0,
+  status?: string,
 ): Promise<JobsHistoryResponse> {
   const params = new URLSearchParams({
     limit: String(Math.max(1, Math.min(100, limit))),
     offset: String(Math.max(0, offset)),
   })
+  // P3.E — server-side status filter (running|completed|failed|cancelled).
+  if (status) params.set('status', status)
   return apiFetch<JobsHistoryResponse>(`/api/jobs/history?${params}`)
 }
 

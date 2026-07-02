@@ -455,6 +455,10 @@ export interface HistoryItem {
   progress_percent: number
   /** Latest stage message (e.g. "Whisper transcribing… 120s elapsed"). */
   message: string
+  /** P3.E (additive) — best clip's AI rank score / part number; null for
+   *  downloads and jobs that predate output ranking. */
+  best_score?: number | null
+  best_part_no?: number | null
 }
 
 export interface JobsHistoryResponse {

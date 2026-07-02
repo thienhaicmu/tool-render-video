@@ -145,22 +145,69 @@ def api_list_jobs(
     return {"items": items, "limit": limit, "offset": offset}
 
 
+# P3.E — server-side status filter groups. Values mirror the History UI's
+# filter semantics over the NORMALIZED status (the one this endpoint returns).
+_HISTORY_STATUS_GROUPS = {
+    "running":   {"running", "queued", "cancelling", "starting"},
+    "completed": {"completed", "partial", "completed_with_errors"},
+    "failed":    {"failed"},
+    "cancelled": {"cancelled", "canceled", "interrupted"},
+}
+
+
 @router.get("/history")
-def api_jobs_history(limit: int = 20, offset: int = 0):
+def api_jobs_history(limit: int = 20, offset: int = 0, status: str | None = None):
     safe_limit  = max(1, min(100, int(limit  or 20)))
     safe_offset = max(0,          int(offset or 0))
 
-    # Fetch one extra row to detect has_more without a COUNT(*) round-trip.
-    rows = list_jobs_page(safe_limit + 1, safe_offset)
-    has_more = len(rows) > safe_limit
-    rows = rows[:safe_limit]
+    group = _HISTORY_STATUS_GROUPS.get((status or "").strip().lower())
+    if group is None:
+        # Unfiltered path — unchanged (this is the 4s poll hot path; an
+        # unknown/absent status value falls through here on purpose).
+        # Fetch one extra row to detect has_more without a COUNT(*) round-trip.
+        rows = list_jobs_page(safe_limit + 1, safe_offset)
+        has_more = len(rows) > safe_limit
+        rows = rows[:safe_limit]
 
-    # Batch-fetch all parts in one query (eliminates N+1 — was one query per row).
-    job_ids      = [r["job_id"] for r in rows]
-    parts_lookup = list_job_parts_bulk(job_ids)
+        # Batch-fetch all parts in one query (eliminates N+1 — was one query per row).
+        job_ids      = [r["job_id"] for r in rows]
+        parts_lookup = list_job_parts_bulk(job_ids)
+
+        return {
+            "items":    [_normalize_history_item(r, parts_lookup=parts_lookup) for r in rows],
+            "limit":    safe_limit,
+            "offset":   safe_offset,
+            "has_more": has_more,
+        }
+
+    # P3.E — filtered path (additive; deliberately route-level so the repo's
+    # SQL surface stays untouched). The filter applies to the normalized
+    # status, which only exists post-normalization — so scan pages of rows,
+    # normalize, and collect matches. Scan is bounded to keep worst-case
+    # work predictable on huge histories.
+    _CHUNK = 100
+    _MAX_SCAN = 500
+    matched: list[dict] = []
+    has_more = False
+    scan_offset = 0
+    while scan_offset < _MAX_SCAN:
+        rows = list_jobs_page(_CHUNK, scan_offset)
+        if not rows:
+            break
+        parts_lookup = list_job_parts_bulk([r["job_id"] for r in rows])
+        for r in rows:
+            item = _normalize_history_item(r, parts_lookup=parts_lookup)
+            if item["status"] in group:
+                matched.append(item)
+                if len(matched) > safe_offset + safe_limit:
+                    has_more = True
+                    break
+        if has_more or len(rows) < _CHUNK:
+            break
+        scan_offset += _CHUNK
 
     return {
-        "items":    [_normalize_history_item(r, parts_lookup=parts_lookup) for r in rows],
+        "items":    matched[safe_offset : safe_offset + safe_limit],
         "limit":    safe_limit,
         "offset":   safe_offset,
         "has_more": has_more,

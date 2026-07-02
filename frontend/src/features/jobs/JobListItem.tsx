@@ -160,6 +160,19 @@ export function JobListItem({
               {isActive ? `${item.completed_count}/${item.total_count}` : `${item.completed_count}`} clip
             </span>
           )}
+          {item.best_score != null && (
+            <span
+              title="Best clip · AI score"
+              style={{
+                fontSize: 10, padding: '1px 5px', borderRadius: 4, fontWeight: 700,
+                background: item.best_score >= 70 ? 'rgba(34,197,94,.12)' : 'rgba(234,179,8,.10)',
+                color: item.best_score >= 70 ? 'var(--ok)' : 'var(--warn)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              ★ {Math.round(item.best_score)}
+            </span>
+          )}
           {item.failed_count > 0 && (
             <span style={{
               fontSize: 10, padding: '1px 5px', borderRadius: 4,

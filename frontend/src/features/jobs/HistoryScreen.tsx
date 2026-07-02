@@ -58,7 +58,13 @@ export function HistoryScreen() {
     setLoading(true)
     setFetchError(null)
     try {
-      const result = await getJobHistory(PAGE_SIZE, newOffset)
+      // P3.E — status filter applies server-side over the FULL history,
+      // not just the fetched page (the old client-side filter made the
+      // header counts lie about anything beyond the current 20 rows).
+      const result = await getJobHistory(
+        PAGE_SIZE, newOffset,
+        statusFilter !== 'all' ? statusFilter : undefined,
+      )
       setItems(result.items)
       setHasMore(result.has_more)
       setOffset(newOffset)
@@ -68,9 +74,9 @@ export function HistoryScreen() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [statusFilter])
 
-  // Initial fetch
+  // Initial fetch + refetch from page 0 whenever the status filter changes.
   useEffect(() => {
     fetchPage(0)
   }, [fetchPage])
@@ -88,17 +94,10 @@ export function HistoryScreen() {
   }, [liveJobs])
 
   // ── Filtered items ────────────────────────────────────────────────────────
+  // P3.E — status filtering moved server-side (fetchPage); only the text
+  // search stays client-side over the fetched page.
   const filteredItems = useMemo(() => {
     let result = items
-    if (statusFilter !== 'all') {
-      result = result.filter((item) => {
-        if (statusFilter === 'running')   return isActiveStatus(item.status)
-        if (statusFilter === 'completed') return item.status === 'completed' || item.status === 'partial'
-        if (statusFilter === 'failed')    return item.status === 'failed'
-        if (statusFilter === 'cancelled') return item.status === 'cancelled' || item.status === 'interrupted'
-        return true
-      })
-    }
     if (search.trim()) {
       const q = search.toLowerCase()
       result = result.filter(

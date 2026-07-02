@@ -192,6 +192,24 @@ def _normalize_history_item(row: dict, *, parts_lookup: "dict[str, list] | None"
         title, source_hint = _render_title_and_hint(payload, result)
         status, summary_text = _render_status_and_summary(base_status, completed, failed)
 
+    # P3.E (additive, 2026-07-02) — best clip's rank score + part number so
+    # the History UI can show quality at a glance without a per-row fetch.
+    # `best_clip` carries the Sacred Contract #1 keys; it is absent for
+    # downloads and for jobs that predate output ranking → None. Defensive
+    # casts: this additive field must never be able to 500 the endpoint.
+    best_score = None
+    best_part_no = None
+    _best = result.get("best_clip")
+    if isinstance(_best, dict):
+        try:
+            if _best.get("output_rank_score") is not None:
+                best_score = float(_best["output_rank_score"])
+            if _best.get("part_no") is not None:
+                best_part_no = int(_best["part_no"])
+        except (TypeError, ValueError):
+            best_score = None
+            best_part_no = None
+
     return {
         "job_id": row["job_id"],
         "kind": "download" if kind == "download" else "render",
@@ -217,6 +235,9 @@ def _normalize_history_item(row: dict, *, parts_lookup: "dict[str, list] | None"
         # second round-trip per row.
         "progress_percent": int(row.get("progress_percent") or 0),
         "message": str(row.get("message") or ""),
+        # P3.E additive fields — see comment above.
+        "best_score": best_score,
+        "best_part_no": best_part_no,
     }
 
 
