@@ -28,6 +28,10 @@ _lock = threading.Lock()
 _cooldown_until: dict[str, float] = {}   # key -> unix ts it is skippable until
 _rr_index = [0]                          # round-robin cursor (guarded by _lock)
 
+# Short pause before retrying a TRANSIENT (503/504) failure on the next key —
+# gives the overloaded backend a beat, mirroring the old backoff behaviour.
+_TRANSIENT_BACKOFF_SEC: float = max(0.0, float(os.getenv("GEMINI_TRANSIENT_BACKOFF_SEC", "2") or 2))
+
 
 def _cooldown_sec() -> int:
     try:
@@ -123,16 +127,23 @@ def call_gemini_with_rotation(
 
     ``once_factory`` builds+runs one SDK call for a given key and may raise.
     Each key is tried once (no per-key backoff sleep — rotation IS the retry).
-    On a rate-limit error the key is cooled and the next key is tried. On a
-    NON-rate-limit failure we stop and return None (a different key won't fix a
-    bad prompt). Returns the first non-None result, or None. Never raises."""
-    from app.features.render.ai.llm.retry import call_with_retry
+    Failure handling by class:
+      - RATE-LIMIT (429/quota): cool the key, try the next one.
+      - TRANSIENT (503 overload / 504 timeout / 5xx): the key is NOT at fault —
+        do not cool it; sleep briefly and try the next key (time passes +
+        different routing). Restores the resilience the pre-rotation
+        max_attempts=2 backoff used to provide.
+      - anything else (bad prompt / parse / auth): fail fast — a different key
+        won't fix it.
+    Returns the first non-None result, or None. Never raises."""
+    from app.features.render.ai.llm.retry import _is_transient, call_with_retry
 
     seq = rotation_sequence(seed_key)
     if not seq:
         return None
-    for key in seq:
+    for idx, key in enumerate(seq):
         _rl = {"hit": False}
+        _last: dict = {"exc": None}
 
         def _on_rl(_exc, _k=key):
             _rl["hit"] = True
@@ -141,13 +152,21 @@ def call_gemini_with_rotation(
         result = call_with_retry(
             lambda _k=key: once_factory(_k),
             label=label, max_attempts=1, on_rate_limit=_on_rl,
+            on_error=lambda _e: _last.__setitem__("exc", _e),
         )
         if result is not None:
             return result
-        if not _rl["hit"]:
-            # Non-rate-limit failure (empty response / bad request / network) —
-            # another key won't help; fail fast like the pre-rotation behaviour.
-            return None
-        if len(seq) > 1:
-            logger.info("key_pool: %s rate-limited on key …%s — rotating", label, key[-6:])
+        if _rl["hit"]:
+            if len(seq) > 1:
+                logger.info("key_pool: %s rate-limited on key …%s — rotating", label, key[-6:])
+            continue
+        if _last["exc"] is not None and _is_transient(_last["exc"]):
+            logger.info("key_pool: %s transient error on key …%s (%s) — retrying on next key",
+                        label, key[-6:], type(_last["exc"]).__name__)
+            if idx < len(seq) - 1:
+                time.sleep(_TRANSIENT_BACKOFF_SEC)
+            continue
+        # Non-retryable failure (empty response / bad request / auth) —
+        # another key won't help; fail fast like the pre-rotation behaviour.
+        return None
     return None

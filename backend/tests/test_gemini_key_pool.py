@@ -87,6 +87,51 @@ def test_non_rate_limit_does_not_rotate(monkeypatch):
     assert out is None and calls == ["k1"]           # no key wasted
 
 
+def test_transient_503_rotates_without_cooling(monkeypatch):
+    # 503 model-overload is NOT the key's fault: rotate to the next key but do
+    # NOT cool the failing key. (Regression guard: before this fix, 503 was
+    # classified non-retryable and failed the whole call instantly.)
+    _set_pool(monkeypatch, ["k1", "k2"])
+    monkeypatch.setattr(key_pool, "_TRANSIENT_BACKOFF_SEC", 0.0)  # no sleep in tests
+    calls = []
+
+    def factory(k):
+        calls.append(k)
+        if k == "k1":
+            raise RuntimeError("503 UNAVAILABLE: model is experiencing high demand")
+        return "ok"
+
+    out = key_pool.call_gemini_with_rotation(factory, label="t", seed_key="k1")
+    assert out == "ok" and calls == ["k1", "k2"]
+    assert "k1" not in key_pool._cooldown_until     # transient → no cooldown
+
+
+def test_transient_504_timeout_rotates(monkeypatch):
+    _set_pool(monkeypatch, ["k1", "k2"])
+    monkeypatch.setattr(key_pool, "_TRANSIENT_BACKOFF_SEC", 0.0)
+    calls = []
+
+    def factory(k):
+        calls.append(k)
+        if k == "k1":
+            raise RuntimeError("504 DEADLINE_EXCEEDED. The request timed out.")
+        return "ok"
+
+    assert key_pool.call_gemini_with_rotation(factory, label="t", seed_key="k1") == "ok"
+    assert calls == ["k1", "k2"]
+
+
+def test_all_transient_returns_none_no_cooldowns(monkeypatch):
+    _set_pool(monkeypatch, ["k1", "k2"])
+    monkeypatch.setattr(key_pool, "_TRANSIENT_BACKOFF_SEC", 0.0)
+
+    def factory(k):
+        raise RuntimeError("503 UNAVAILABLE")
+
+    assert key_pool.call_gemini_with_rotation(factory, label="t", seed_key="k1") is None
+    assert key_pool._cooldown_until == {}           # nothing cooled
+
+
 def test_all_keys_exhausted_returns_none(monkeypatch):
     _set_pool(monkeypatch, ["k1", "k2"])
 

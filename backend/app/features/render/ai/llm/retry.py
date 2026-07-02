@@ -180,6 +180,17 @@ def _is_rate_limit(exc: BaseException) -> bool:
             or "rate limit" in s or "rate-limit" in s)
 
 
+def _is_transient(exc: BaseException) -> bool:
+    """Best-effort detection of a transient server-side failure (overload /
+    timeout) that is NOT the key's fault: 503 UNAVAILABLE "high demand",
+    504 DEADLINE_EXCEEDED, generic 500s. The key-pool rotation retries these on
+    the next key (time passes + different routing) WITHOUT cooling the key."""
+    s = str(exc).lower()
+    return ("503" in s or "unavailable" in s or "overloaded" in s
+            or "high demand" in s or "504" in s or "deadline" in s
+            or "timed out" in s or "timeout" in s or "500 " in s)
+
+
 def call_with_retry(
     fn: Callable[[], T],
     *,
@@ -188,6 +199,7 @@ def call_with_retry(
     base_backoff_sec: float = DEFAULT_BACKOFF_SEC,
     retry_after_cap_sec: float = DEFAULT_RETRY_AFTER_CAP_SEC,
     on_rate_limit: "Optional[Callable[[BaseException], None]]" = None,
+    on_error: "Optional[Callable[[BaseException], None]]" = None,
 ) -> Optional[T]:
     """Run ``fn`` up to ``max_attempts`` times, honouring Retry-After.
 
@@ -205,8 +217,15 @@ def call_with_retry(
             result = fn()
         except BaseException as exc:  # noqa: BLE001 — broad on purpose
             last_exc = exc
-            # Key-pool rotation hook: signal a rate-limit so the caller can cool
-            # the current key and rotate. Fires on every attempt (incl. the last).
+            # Key-pool rotation hooks. on_error fires on EVERY exception so the
+            # caller can classify (transient vs fatal); on_rate_limit only on
+            # rate-limits so it can cool the key. Both fire on every attempt
+            # (incl. the last) and must never break the retry loop.
+            if on_error is not None:
+                try:
+                    on_error(exc)
+                except Exception:
+                    pass
             if on_rate_limit is not None and _is_rate_limit(exc):
                 try:
                     on_rate_limit(exc)
