@@ -33,6 +33,8 @@ from app.features.render.ai.llm import select_recap_plan, select_story_model
 from app.features.render.ai.llm.recap_prompts import _fit_transcript
 from ai_eval.judge import score_case
 from ai_eval.rubrics import get_rubric
+from ai_eval.runmeta import config_vector
+from ai_eval.structural import structural_report, summarize_structural
 
 _TS = re.compile(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})")
 
@@ -183,6 +185,36 @@ def _print_grand_aggregate(store_path: str, rubric) -> None:
         verdict = ("inconclusive (|mean| < 2·SE)" if abs(_mean(deltas)) < 2 * se
                    else ("ON better" if _mean(deltas) > 0 else "ON worse"))
         print(f"{'Δ mean ± SE':<22}{_mean(deltas):+.3f} ± {se:.3f}  → {verdict}")
+
+    # Sprint-1A — STRUCTURAL aggregate (judge-free, construct-valid for
+    # editorial). Only rows recorded after 1A carry these fields; older rows
+    # are skipped so the two eras stay comparable within themselves.
+    def _pick(rows_, arm, *path):
+        vals = []
+        for r in rows_:
+            node = r.get(f"{arm}_structural")
+            for key in path:
+                node = node.get(key) if isinstance(node, dict) else None
+            if isinstance(node, (int, float)):
+                vals.append(float(node))
+        return vals
+
+    s_off_d = _pick(rows, "off", "fatigue", "discipline_score")
+    if s_off_d:
+        print(f"\n--- STRUCTURAL (deterministic, {len(s_off_d)} sample(s)) ---")
+        print(f"{'metric':<26}{'OFF':>8}{'ON':>8}")
+        for label, path in (
+            ("discipline_score", ("fatigue", "discipline_score")),
+            ("fragment_rate", ("fatigue", "fragment_rate")),
+            ("scene_count", ("fatigue", "scene_count")),
+            ("hold_precision", ("holds", "hold_precision")),
+            ("beat_coverage", ("beats", "coverage_pct")),
+            ("episode_balance", ("episodes", "balance_score")),
+        ):
+            a, b = _pick(rows, "off", *path), _pick(rows, "on", *path)
+            fa = f"{_mean(a):.2f}" if a else "-"
+            fb = f"{_mean(b):.2f}" if b else "-"
+            print(f"{label:<26}{fa:>8}{fb:>8}")
     print("(accumulate more samples over days for a trustworthy verdict.)")
 
 
@@ -274,6 +306,12 @@ def main(argv=None) -> int:
             for c in rubric.criteria:
                 crit_deltas[c.key].append(_crit[c.key])
             print(f"    weighted OFF={res_off.weighted:g} ON={res_on.weighted:g} Δ={d:+g}")
+            # Sprint-1A — deterministic structural metrics (judge-free, the
+            # construct-valid instrument for editorial's actual output).
+            _struct_off = structural_report(plan_off)
+            _struct_on = structural_report(plan_on)
+            print(f"    struct OFF: {summarize_structural(_struct_off)}")
+            print(f"    struct ON : {summarize_structural(_struct_on)}")
             if args.store:
                 _append_sample(args.store, {
                     "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -282,6 +320,11 @@ def main(argv=None) -> int:
                     "off_scenes": plan_off.scene_count(), "on_scenes": plan_on.scene_count(),
                     "on_editorial_beats": len(plan_on.editorial.beats),
                     "crit_deltas": _crit,
+                    # Sprint-1A/1B — structural metrics + full config vector so
+                    # the store doubles as an ablation database.
+                    "off_structural": _struct_off,
+                    "on_structural": _struct_on,
+                    "config": config_vector(ab_variable="RECAP_EDITORIAL_PASS"),
                 })
 
     # ── Aggregate ────────────────────────────────────────────────────────────
