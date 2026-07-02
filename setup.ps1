@@ -1,5 +1,9 @@
 param(
-    [switch]$SkipPlaywright
+    [switch]$SkipPlaywright,
+    # Cài thêm requirements-ai.txt: faster-whisper + wheel DLL CUDA
+    # (nvidia-*-cu12) + Piper TTS + SDK LLM. Máy khách có GPU NVIDIA
+    # BẮT BUỘC cần bộ này để Whisper chạy CUDA (nhanh 4-8x) thay vì CPU.
+    [switch]$WithAI
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,6 +53,12 @@ Push-Location $BackendDir
 try {
     & $VenvPy -m pip install --upgrade pip
     & $VenvPy -m pip install -r $Requirements
+    if ($WithAI) {
+        Write-Host "==> Installing AI extras (faster-whisper + CUDA DLLs + TTS + LLM SDKs)"
+        & $VenvPy -m pip install -r (Join-Path $BackendDir "requirements-ai.txt")
+    } else {
+        Write-Host "TIP: máy có GPU NVIDIA nên chạy 'setup.ps1 -WithAI' để Whisper dùng CUDA (nhanh 4-8x)."
+    }
     if (-not $SkipPlaywright) {
         & $VenvPy -m playwright install chromium
     }

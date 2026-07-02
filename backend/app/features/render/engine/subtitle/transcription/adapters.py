@@ -85,6 +85,81 @@ class SubtitleTranscriptionAdapter(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# Windows CUDA DLL bootstrap cho ctranslate2 / faster-whisper
+# ---------------------------------------------------------------------------
+
+_CUDA_DLL_BOOTSTRAP_DONE = False
+_CUDA_DLL_DIRS_FOUND: list[str] = []
+
+
+def _cuda_dll_bin_dirs(roots) -> list[Path]:
+    """Liệt kê các thư mục ``<root>/<pkg>/bin`` có chứa ``.dll`` bên dưới
+    danh sách root của namespace package ``nvidia`` (nơi pip wheel
+    ``nvidia-*-cu12`` cài cublas/cudnn/nvrtc). Hàm thuần — test được,
+    không đụng loader/os. Never raises."""
+    out: list[Path] = []
+    for root in roots or []:
+        try:
+            base = Path(root)
+            if not base.is_dir():
+                continue
+            for child in sorted(base.iterdir()):
+                bin_dir = child / "bin"
+                if bin_dir.is_dir() and any(bin_dir.glob("*.dll")):
+                    out.append(bin_dir)
+        except Exception:
+            continue
+    return out
+
+
+def _ensure_cuda_dll_dirs() -> list[str]:
+    """Đăng ký thư mục DLL CUDA từ pip wheel vào loader search path (Windows).
+
+    Wheel ``nvidia-*-cu12`` (đã liệt kê trong requirements-ai.txt) cài
+    cublas/cudnn/nvrtc vào ``site-packages/nvidia/<pkg>/bin`` — KHÔNG nằm
+    trên search path của Windows loader. Thiếu bước này, ctranslate2 báo
+    "Library cublas64_12.dll is not found" lúc load model và Whisper âm
+    thầm rơi về CPU int8 dù máy khách có GPU NVIDIA (chậm 4-8x). Đăng ký
+    qua ``os.add_dll_directory`` + prepend PATH (DLL nạp dây chuyền dùng
+    search path cổ điển).
+
+    Idempotent; never raises; no-op trên non-Windows hoặc khi wheel chưa
+    cài. Trả về danh sách thư mục đã đăng ký để diagnostics hiển thị.
+    """
+    global _CUDA_DLL_BOOTSTRAP_DONE, _CUDA_DLL_DIRS_FOUND
+    if _CUDA_DLL_BOOTSTRAP_DONE:
+        return list(_CUDA_DLL_DIRS_FOUND)
+    _CUDA_DLL_BOOTSTRAP_DONE = True
+    try:
+        if os.name != "nt":
+            return []
+        import importlib.util
+        spec = importlib.util.find_spec("nvidia")
+        roots = list(spec.submodule_search_locations) if (
+            spec is not None and spec.submodule_search_locations
+        ) else []
+        dirs = _cuda_dll_bin_dirs(roots)
+        for d in dirs:
+            try:
+                os.add_dll_directory(str(d))
+            except Exception:
+                pass
+        if dirs:
+            os.environ["PATH"] = os.pathsep.join(
+                [str(d) for d in dirs] + [os.environ.get("PATH", "")]
+            )
+            logger.info(
+                "cuda_dll_bootstrap registered %d dir(s): %s",
+                len(dirs), "; ".join(f"{d.parent.name}/bin" for d in dirs),
+            )
+        _CUDA_DLL_DIRS_FOUND = [str(d) for d in dirs]
+        return list(_CUDA_DLL_DIRS_FOUND)
+    except Exception as exc:
+        logger.debug("cuda_dll_bootstrap_failed: %s", exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Shared CUDA detection helper
 # ---------------------------------------------------------------------------
 
@@ -95,6 +170,7 @@ def _detect_fw_device_compute() -> tuple[str, str]:
     for the faster-whisper path.  Falls back to CPU int8 if CUDA is absent
     or ctranslate2 is not installed.
     """
+    _ensure_cuda_dll_dirs()
     try:
         import ctranslate2  # noqa: PLC0415
         if ctranslate2.get_cuda_device_count() > 0:
@@ -145,6 +221,9 @@ def _get_fw_model(model_name: str, device: str, compute_type: str):
         if cache_key in _FW_MODEL_CACHE:
             _FW_MODEL_CACHE.move_to_end(cache_key)
             return _FW_MODEL_CACHE[cache_key]
+        # DLL CUDA phải được đăng ký TRƯỚC khi load model — caller có thể
+        # tới đây với device đã cache mà chưa qua _detect_fw_device_compute.
+        _ensure_cuda_dll_dirs()
         from faster_whisper import WhisperModel  # noqa: PLC0415
         try:
             model = WhisperModel(model_name, device=device, compute_type=compute_type)
