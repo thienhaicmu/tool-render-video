@@ -26,6 +26,7 @@ import { isTerminalStatus } from '../types/enums'
 import { cancelRender } from '../api/render'
 import { holdJob, resumeJob } from '../api/jobs'
 import { useI18n } from '../i18n/useI18n'
+import { confirmDialog } from './ui/ConfirmDialog'
 import type { TranslationKey } from '../i18n/translations'
 
 interface CommandAction {
@@ -101,6 +102,13 @@ export function CommandPalette() {
     const runningRender = jobsItems.find((j) => j.kind === 'render' && j.status === 'running')
     const firstQueued = queueOrder[0]   // pending render at the front of the queue
     const firstHeld = heldIds[0]        // a paused render
+    // P4.D — all active (running/queued) renders + last output dir.
+    const activeRenders = jobsItems.filter(
+      (j) => j.kind === 'render' && (j.status === 'running' || j.status === 'queued'),
+    )
+    const lastOutputDir = jobsItems.find(
+      (j) => j.kind === 'render' && j.output_dir && (j.status === 'completed' || j.status === 'partial' || j.status === 'completed_with_errors'),
+    )?.output_dir ?? null
 
     return [
       // Navigation
@@ -163,6 +171,42 @@ export function CommandPalette() {
           } catch {
             addNotification({ title: t('cmd_toast_cancel_failed'), type: 'error' })
           }
+        },
+      },
+      {
+        id: 'render-cancel-all',
+        label: t('cmd_cancel_all'),
+        keywords: 'cancel all stop everything hủy tất cả',
+        section: 'render',
+        available: activeRenders.length >= 2,
+        run: async () => {
+          const choice = await confirmDialog({
+            title: t('cmd_cancel_all'),
+            message: `${activeRenders.length} jobs`,
+            buttons: [
+              { id: 'yes', label: t('cmd_render_cancel'), variant: 'danger' },
+              { id: 'no', label: t('dock_cancel') },
+            ],
+          })
+          if (choice !== 'yes') return
+          const results = await Promise.allSettled(
+            activeRenders.map((j) => cancelRender(j.job_id)),
+          )
+          const failed = results.filter((r) => r.status === 'rejected').length
+          addNotification({
+            title: t('cmd_toast_cancel_all'),
+            type: failed > 0 ? 'warning' : 'info',
+          })
+        },
+      },
+      {
+        id: 'open-last-output',
+        label: t('cmd_open_output'),
+        keywords: 'open folder output thư mục kết quả explorer',
+        section: 'render',
+        available: !!lastOutputDir,
+        run: () => {
+          if (lastOutputDir) void window.electronAPI?.openPath?.(lastOutputDir)
         },
       },
       {
