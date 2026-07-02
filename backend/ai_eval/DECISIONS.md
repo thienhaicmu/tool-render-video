@@ -55,6 +55,21 @@ factual drift, revisit immediately.
 
 Accumulation store: `ai_eval/measurements/recap_editorial.jsonl` (n=9).
 
+**ADDENDUM 2026-07-02 — structural evidence at n=5 (deterministic scorers,
+`ai_eval/structural.py`) REINFORCES the KEEP-ON decision and localises the
+defect.** Editorial ON is better on 5/7 judge-free metrics (scene_count
+48→24, hold_precision 0.17→0.59, beat_coverage 0.38→0.49, discipline 75→82,
+episode_balance 61→69) and broken on exactly two: **total-duration control**
+(recap/film ratio ranged 0.04–0.96 across samples; ratio_score 81→42 vs the
+prompt's own 10–25% band) and **fragment_rate** (0.08→0.18). The LLM judge
+remains unreliable for this construct — it gave its highest-ever delta
+(+0.937, faithfulness +2) to a "recap" covering 96% of the film's runtime.
+
+**Next action (replaces "flip OFF" consideration):** prompt fix in the
+editorial-ON path (pass-2/3) anchoring the 10–25% duration band + minimum
+scene length; verify before/after with `duration_ratio_score` +
+`fragment_rate` on ≥3 samples. Judge n=14: +0.165 ± 0.160 (inconclusive).
+
 ---
 
 ## Status of the other AI-quality flags
