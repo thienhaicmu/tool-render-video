@@ -6,11 +6,11 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 .cs-root {
-  position: fixed;
-  inset: 0;
-  /* Reserve room for the fixed ActiveJobsDock so it doesn't overlap the
-     workflow footer / status bar. Var is 0px when the dock is hidden. */
-  bottom: var(--active-jobs-dock-h, 0px);
+  /* P2.1 single-shell: no longer a fixed fullscreen overlay — fills the
+     AppShell content area (which reserves dock space via padding). */
+  position: relative;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -38,45 +38,11 @@
   flex-shrink: 0;
 }
 
-.cs-brand {
-  font-family: var(--font-family-base);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  color: var(--text-primary);
-  margin-right: var(--space-6);
-  white-space: nowrap;
-  user-select: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  -webkit-background-clip: initial;
-  -webkit-text-fill-color: initial;
-  background: none;
-}
 
-.cs-brand-mark {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  background: var(--brand-gradient);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.30) inset,
-    0 2px 8px rgba(139, 92, 246, 0.35);
-}
 
 /* Legacy pulsing dot — hide it. Kept the element so existing JSX still
    renders without modification; the redesigned wordmark uses .cs-brand-mark
    instead. */
-.cs-brand-pulse { display: none; }
 
 .cs-nav {
   display: flex;
@@ -134,63 +100,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.cs-topbar-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
 
-.cs-lang-sw {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 2px;
-  gap: 2px;
-  background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-}
-.cs-lang-btn {
-  font-family: var(--font-family-base);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0;
-  padding: 0 8px;
-  height: 22px;
-  min-width: 28px;
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  border-radius: var(--radius-sm);
-  transition: all 0.12s var(--ease-default);
-}
-.cs-lang-btn:hover { color: var(--text-primary); }
-.cs-lang-btn.active {
-  background: var(--surface-base);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
-}
 
-.cs-top-icon {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-  cursor: pointer;
-  color: var(--text-tertiary);
-  border-radius: var(--radius-md);
-  transition: all 0.12s var(--ease-default);
-}
-.cs-top-icon:hover {
-  background: var(--surface-card-hover);
-  border-color: var(--border-default);
-  color: var(--text-primary);
-}
 
 /* ── Content ─────────────────────────────────────────────────────────────── */
 .cs-content {

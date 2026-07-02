@@ -37,9 +37,6 @@ function saveDismissed(ids: Set<string>) {
   try { sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids])) } catch { /* ignore */ }
 }
 
-// Mirror of App.tsx FULLSCREEN_PANELS — panels that hide the sidebar so the
-// dock must extend all the way to the left edge.
-const FULLSCREEN_PANELS = ['clip-studio']
 
 export function ActiveJobsDock() {
   const { items, refresh } = useActiveJobs()
@@ -48,8 +45,6 @@ export function ActiveJobsDock() {
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const setQueueDrawerOpen = useUIStore((s) => s.setQueueDrawerOpen)
   const setMonitorJobId = useUIStore((s) => s.setMonitorJobId)
-  const activePanel = useUIStore((s) => s.activePanel)
-  const isFullscreen = FULLSCREEN_PANELS.includes(activePanel)
 
   // P1.4 — session-scoped dismissals for the attention section.
   const [dismissed, setDismissed] = useState<Set<string>>(loadDismissed)
@@ -163,7 +158,9 @@ export function ActiveJobsDock() {
     <div
       style={{
         ...styles.dock,
-        left: isFullscreen ? 0 : 'var(--sidebar-width, 0px)',
+        // P2.1 single-shell: the slim rail is always visible, so the dock
+        // always starts at its right edge.
+        left: 'var(--sidebar-width, 0px)',
       }}
       role="region"
       aria-label="Active jobs"

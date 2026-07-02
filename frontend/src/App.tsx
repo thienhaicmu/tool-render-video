@@ -8,11 +8,9 @@
  */
 import React, { Suspense, lazy } from 'react'
 import { AppShell } from './layouts/AppShell'
-import { ActiveJobsDock } from './layouts/ActiveJobsDock'
 import { QueueDrawer } from './layouts/QueueDrawer'
 import { useUIStore } from './stores/uiStore'
 import type { ActivePanel } from './stores/uiStore'
-import { Notifications } from './components/ui/Notifications'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { useJobCompletionNotifier } from './hooks/useJobCompletionNotifier'
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts'
@@ -62,8 +60,6 @@ const PANEL_MAP: Record<ActivePanel, React.ComponentType> = {
   editor:        EditorScreen,
 }
 
-const FULLSCREEN_PANELS: ActivePanel[] = ['clip-studio']
-
 function ScreenFallback() {
   return (
     <div className="screen-fallback">
@@ -103,23 +99,9 @@ export function App() {
     }
   }, [])
 
-  if (FULLSCREEN_PANELS.includes(activePanel)) {
-    return (
-      <ErrorBoundary>
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100 }}>
-          <Suspense fallback={<ScreenFallback />}>
-            <ActiveScreen />
-          </Suspense>
-          <ActiveJobsDock />
-          <QueueDrawer />
-          <CommandPalette />
-          <ConfirmDialogHost />
-          <Notifications />
-        </div>
-      </ErrorBoundary>
-    )
-  }
-
+  // P2.1 single-shell: every panel — including Clip Studio — renders inside
+  // AppShell (slim nav rail + shared topbar). The old fullscreen branch that
+  // hid the primary navigation while the user was in Studio is gone.
   return (
     <ErrorBoundary>
       <AppShell>
@@ -127,6 +109,7 @@ export function App() {
           <ActiveScreen />
         </Suspense>
       </AppShell>
+      <QueueDrawer />
       <CommandPalette />
       <ConfirmDialogHost />
     </ErrorBoundary>

@@ -1,11 +1,55 @@
 /**
- * Topbar — product wordmark, theme toggle, AI warmup status, connection.
+ * Topbar — P2.1 single-shell: the ONE topbar for the whole app.
+ * Wordmark, active-job badge, notifications, theme, language, health.
+ * The Studio's private topbar chrome (its own brand/theme/lang/bell/gear
+ * cluster) was merged in here.
  */
 import React from 'react'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { NotificationCenter } from '../components/NotificationCenter'
+import { ActiveJobBadge } from '../features/clip-studio/ActiveJobBadge'
 import { useUIStore } from '../stores/uiStore'
 import { useBackendHealth } from '../hooks/useBackendHealth'
+
+// ── Language toggle (single instance app-wide since P1.2) ────────────────────
+
+function LangToggle() {
+  const lang = useUIStore((s) => s.lang)
+  const setLang = useUIStore((s) => s.setLang)
+  const btn = (code: 'en' | 'vi', label: string) => (
+    <button
+      onClick={() => setLang(code)}
+      style={{
+        height: '100%',
+        padding: '0 8px',
+        border: 'none',
+        backgroundColor: lang === code ? 'var(--accent-subtle)' : 'transparent',
+        color: lang === code ? 'var(--accent-primary)' : 'var(--text-tertiary)',
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: '0.04em',
+        cursor: 'pointer',
+        transition: 'color 0.12s ease, background-color 0.12s ease',
+      }}
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'stretch',
+      height: 24,
+      backgroundColor: 'var(--surface-card)',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: 6,
+      overflow: 'hidden',
+    }}>
+      {btn('en', 'EN')}
+      {btn('vi', 'VI')}
+    </div>
+  )
+}
 
 // ── Topbar ───────────────────────────────────────────────────────────────────
 
@@ -13,9 +57,6 @@ export function Topbar() {
   // P0.1 — shared refcounted health poll (also drives the Studio status bar).
   const { apiOk, whisperReady, warmupStatus } = useBackendHealth()
   const isConnected = apiOk === true
-  // #9 Dual-shell consistency (audit 2026-06-15): brand mark click jumps
-  // back to clip-studio so users who landed on Settings (via the cs-shell
-  // gear icon) have an obvious way back without needing the Sidebar.
   const setActivePanel = useUIStore((s) => s.setActivePanel)
 
   return (
@@ -33,8 +74,11 @@ export function Topbar() {
       </div>
 
       <div style={styles.right}>
+        {/* Pulsing pill while a render runs — click opens its monitor. */}
+        <ActiveJobBadge onClick={() => setActivePanel('clip-studio')} />
         <NotificationCenter />
         <ThemeToggle />
+        <LangToggle />
 
         {warmupStatus && (
           <span

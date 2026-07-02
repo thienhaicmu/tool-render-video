@@ -1,13 +1,22 @@
+/**
+ * Sidebar — P2.1 single-shell: slim 56px icon-only nav rail, visible on
+ * EVERY screen including Clip Studio. The old 220px labeled sidebar was
+ * invisible while the user was in Studio (fullscreen shell), which hid
+ * the app's primary navigation from its primary workflow.
+ *
+ * Labels surface via title tooltips + aria-labels; the active item gets
+ * an accent background and a left accent bar.
+ */
 import React, { useState } from 'react'
 import { useUIStore } from '../stores/uiStore'
 import { useI18n } from '../i18n/useI18n'
 import type { ActivePanel } from '../stores/uiStore'
 
-// ── SVG Icon set (CapCut-style line icons 20x20) ───────────────────────────────
+// ── SVG Icon set (CapCut-style line icons) ─────────────────────────────────────
 
 function IconScissors() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
       <circle cx="6" cy="6" r="3"/>
       <circle cx="6" cy="18" r="3"/>
       <path d="M8.46 7.54L20 19M8.46 16.46L14 12L20 5"/>
@@ -17,7 +26,7 @@ function IconScissors() {
 
 function IconGrid() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="7" height="7" rx="1.5"/>
       <rect x="14" y="3" width="7" height="7" rx="1.5"/>
       <rect x="3" y="14" width="7" height="7" rx="1.5"/>
@@ -28,7 +37,7 @@ function IconGrid() {
 
 function IconDownload() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 3V16"/>
       <path d="M7 12L12 17L17 12"/>
       <path d="M3 20H21"/>
@@ -38,7 +47,7 @@ function IconDownload() {
 
 function IconSettings() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
       <path d="M4 6H20M4 12H20M4 18H20"/>
       <circle cx="8" cy="6" r="2" fill="currentColor" stroke="none"/>
       <circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/>
@@ -51,22 +60,10 @@ function IconSettings() {
 
 interface NavItem {
   panel: ActivePanel
-  labelKey: 'nav_studio' | 'nav_library' | 'nav_download' | 'nav_publish' | 'nav_settings'
+  labelKey: 'nav_studio' | 'nav_library' | 'nav_download' | 'nav_settings'
   icon: React.ReactNode
 }
 
-// Sprint 5.6 follow-up: the Studio nav item used to route to features/studio/
-// (retired in commit e7771e4); now routes to the canonical clip-studio panel.
-//
-// S2.6: removed the standalone "Home" entry. "Library" is now the only
-// canonical jobs/history surface — previously Home and Library both
-// pointed at HistoryScreen which doubled the IA for no benefit. The
-// `home` ActivePanel value remains in uiStore for deep-link backward
-// compatibility but is no longer surfaced in the sidebar nav.
-// P0.2 (frontend redesign): removed the "Publish" entry — it routed to a
-// "coming soon" placeholder. A dead top-level nav item erodes trust in the
-// rest of the nav. The `publish` ActivePanel value + PANEL_MAP entry remain
-// for backward compat; re-add the nav item when the feature ships.
 const MAIN_NAV: NavItem[] = [
   { panel: 'clip-studio', labelKey: 'nav_studio',   icon: <IconScissors /> },
   { panel: 'library',     labelKey: 'nav_library',  icon: <IconGrid /> },
@@ -77,107 +74,82 @@ const BOTTOM_NAV: NavItem[] = [
   { panel: 'settings', labelKey: 'nav_settings', icon: <IconSettings /> },
 ]
 
-// ── NavGroup ──────────────────────────────────────────────────────────────────
+// ── Rail button ────────────────────────────────────────────────────────────────
 
-function NavGroup({ items, activePanel, hoveredItem, setHoveredItem, setActivePanel }: {
-  items: NavItem[]
+function RailButton({ item, activePanel, hoveredItem, setHoveredItem, setActivePanel }: {
+  item: NavItem
   activePanel: ActivePanel
   hoveredItem: string | null
   setHoveredItem: (panel: string | null) => void
   setActivePanel: (panel: ActivePanel) => void
 }) {
   const { t } = useI18n()
+  const isActive  = activePanel === item.panel
+  const isHovered = hoveredItem === item.panel
 
   return (
-    <>
-      {items.map((item) => {
-        const isActive  = activePanel === item.panel
-        const isHovered = hoveredItem === item.panel
-
-        const bgColor   = isActive ? 'var(--accent-subtle)' : isHovered ? 'var(--surface-card-hover)' : 'transparent'
-        const textColor = isActive ? 'var(--accent-primary)' : isHovered ? 'var(--text-primary)' : 'var(--text-secondary)'
-
-        return (
-          <button
-            key={item.panel}
-            style={{
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              height: '38px',
-              padding: '0 var(--space-3)',
-              width: '100%',
-              backgroundColor: bgColor,
-              color: textColor,
-              fontSize: 'var(--text-sm)',
-              fontWeight: isActive
-                ? ('var(--weight-semibold)' as unknown as number)
-                : ('var(--weight-regular)' as unknown as number),
-              cursor: 'pointer',
-              border: 'none',
-              textAlign: 'left',
-              borderRadius: '8px',
-              transition: 'background-color 0.12s ease, color 0.12s ease',
-            }}
-            onClick={() => setActivePanel(item.panel)}
-            onMouseEnter={() => setHoveredItem(item.panel)}
-            onMouseLeave={() => setHoveredItem(null)}
-            aria-current={isActive ? 'page' : undefined}
-            title={t(item.labelKey)}
-          >
-            {/* Left accent bar */}
-            {isActive && (
-              <span style={{
-                position: 'absolute',
-                left: 0,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                width: '3px',
-                height: '20px',
-                background: 'linear-gradient(180deg, var(--ai-active), var(--accent-primary))',
-                borderRadius: '0 2px 2px 0',
-              }} />
-            )}
-            {/* Icon */}
-            <span style={{ flexShrink: 0, width: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {item.icon}
-            </span>
-            {/* Label */}
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {t(item.labelKey)}
-            </span>
-          </button>
-        )
-      })}
-    </>
+    <button
+      style={{
+        position: 'relative',
+        width: 40,
+        height: 40,
+        margin: '0 auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: isActive
+          ? 'var(--accent-subtle)'
+          : isHovered ? 'var(--surface-card-hover)' : 'transparent',
+        color: isActive ? 'var(--accent-primary)' : isHovered ? 'var(--text-primary)' : 'var(--text-secondary)',
+        cursor: 'pointer',
+        border: 'none',
+        borderRadius: 10,
+        transition: 'background-color 0.12s ease, color 0.12s ease',
+      }}
+      onClick={() => setActivePanel(item.panel)}
+      onMouseEnter={() => setHoveredItem(item.panel)}
+      onMouseLeave={() => setHoveredItem(null)}
+      aria-current={isActive ? 'page' : undefined}
+      aria-label={t(item.labelKey)}
+      title={t(item.labelKey)}
+    >
+      {/* Left accent bar */}
+      {isActive && (
+        <span style={{
+          position: 'absolute',
+          left: -8,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          width: 3,
+          height: 20,
+          background: 'linear-gradient(180deg, var(--ai-active), var(--accent-primary))',
+          borderRadius: '0 2px 2px 0',
+        }} />
+      )}
+      {item.icon}
+    </button>
   )
 }
 
-// ── Sidebar ────────────────────────────────────────────────────────────────────
+// ── Sidebar (slim rail) ────────────────────────────────────────────────────────
 
 export function Sidebar() {
   const { activePanel, setActivePanel } = useUIStore()
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
 
-  const sharedProps = { activePanel, hoveredItem, setHoveredItem, setActivePanel }
+  const shared = { activePanel, hoveredItem, setHoveredItem, setActivePanel }
 
   return (
     <aside style={styles.sidebar}>
-      {/* Wordmark */}
+      {/* Logo mark (wordmark lives in the Topbar) */}
       <div style={styles.header}>
-        <span style={styles.logoMark}>✦</span>
-        <span style={styles.wordmark}>AI Clip Studio</span>
+        <span style={styles.logoMark} title="AI Clip Studio">✦</span>
       </div>
 
-      {/* P1.2 — the EN/VI toggle was duplicated here and in the Studio
-          topbar, both writing uiStore.lang. One control now lives in the
-          Studio topbar (where the user spends most time). */}
       <nav style={styles.nav}>
-        <NavGroup items={MAIN_NAV} {...sharedProps} />
+        {MAIN_NAV.map((item) => <RailButton key={item.panel} item={item} {...shared} />)}
         <div style={{ flex: 1 }} />
-        <hr style={styles.separator} />
-        <NavGroup items={BOTTOM_NAV} {...sharedProps} />
+        {BOTTOM_NAV.map((item) => <RailButton key={item.panel} item={item} {...shared} />)}
       </nav>
     </aside>
   )
@@ -200,16 +172,15 @@ const styles: Record<string, React.CSSProperties> = {
   header: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: 'var(--space-4) var(--space-4)',
-    borderBottom: '1px solid var(--border-subtle)',
+    justifyContent: 'center',
     height: 'var(--topbar-height)',
+    borderBottom: '1px solid var(--border-subtle)',
     flexShrink: 0,
   },
   logoMark: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     background: 'var(--brand-gradient)',
     display: 'inline-flex',
     alignItems: 'center',
@@ -217,31 +188,18 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#fff',
     fontSize: 14,
     fontWeight: 700,
-    letterSpacing: '-0.04em',
     lineHeight: 1,
     boxShadow:
       '0 1px 0 rgba(255, 255, 255, 0.30) inset, 0 2px 8px rgba(139, 92, 246, 0.35)',
     flexShrink: 0,
-  },
-  wordmark: {
-    fontSize: 'var(--text-sm)',
-    fontWeight: 'var(--weight-semibold)' as unknown as number,
-    color: 'var(--text-primary)',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    letterSpacing: '-0.01em',
+    userSelect: 'none',
   },
   nav: {
     display: 'flex',
     flexDirection: 'column',
-    padding: 'var(--space-3) var(--space-2)',
+    padding: 'var(--space-3) 0',
     flex: 1,
-    gap: '2px',
+    gap: 6,
     overflow: 'hidden',
-  },
-  separator: {
-    margin: 'var(--space-2) var(--space-2)',
-    border: 'none',
-    borderTop: '1px solid var(--border-subtle)',
   },
 }

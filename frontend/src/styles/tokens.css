@@ -103,7 +103,10 @@
   --ease-spring:      cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* ── Layout ───────────────────────────────────────────────────────────── */
-  --sidebar-width:           220px;
+  /* P2.1 single-shell: the nav rail is slim (icon-only) everywhere —
+     including Studio — so the primary navigation is never hidden. The
+     old 220px labeled sidebar is gone. */
+  --sidebar-width:           56px;
   --sidebar-collapsed-width: 56px;
   --inspector-width:         320px;
   --topbar-height:           48px;
