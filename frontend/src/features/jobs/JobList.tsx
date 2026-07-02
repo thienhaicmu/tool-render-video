@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { JobListItem } from './JobListItem'
+import { useI18n } from '@/i18n/useI18n'
 import { JobLoadingState } from './JobLoadingState'
 import { JobErrorState } from './JobErrorState'
 import { JobEmptyState } from './JobEmptyState'
@@ -37,6 +38,19 @@ export function JobList({
   batchSelected, onToggleBatch,
   onRetryFetch, onPrevPage, onNextPage,
 }: JobListProps) {
+  const { t } = useI18n()
+  // P3.C - "session v1": older runs of the same source collapse under the
+  // newest run. Key = source_hint (falls back to title / job_id so unknown
+  // sources never merge incorrectly across different videos).
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const groupKeyOf = (it: HistoryItem) => it.source_hint || it.title || it.job_id
+  const groupCounts = new Map<string, number>()
+  for (const it of items) {
+    const k = groupKeyOf(it)
+    groupCounts.set(k, (groupCounts.get(k) ?? 0) + 1)
+  }
+  const seenGroups = new Set<string>()
+
   if (loading) return <JobLoadingState />
   if (error)   return <JobErrorState error={error} onRetry={onRetryFetch} />
   if (items.length === 0 && !hasFilters) return <JobEmptyState />
@@ -50,12 +64,19 @@ export function JobList({
             padding: '32px 16px', textAlign: 'center',
             color: 'var(--text-3)', fontSize: 11,
           }}>
-            Không tìm thấy kết quả.
+            {t('history_no_results')}
           </div>
         ) : (() => {
           const nodes: React.ReactNode[] = []
           let lastGroup = ''
           items.forEach(item => {
+            const srcKey = groupKeyOf(item)
+            const runCount = groupCounts.get(srcKey) ?? 1
+            const isFirstOfGroup = !seenGroups.has(srcKey)
+            if (isFirstOfGroup) seenGroups.add(srcKey)
+            const groupExpanded = expandedGroups.has(srcKey)
+            // Older run of a collapsed multi-run group -> hidden.
+            if (!isFirstOfGroup && runCount > 1 && !groupExpanded) return
             const group = dateGroup(item.created_at)
             if (group !== lastGroup) {
               lastGroup = group
@@ -88,6 +109,31 @@ export function JobList({
                 onToggleBatch={onToggleBatch}
               />
             )
+            if (isFirstOfGroup && runCount > 1) {
+              nodes.push(
+                <button
+                  key={`runs-${srcKey}`}
+                  onClick={() => setExpandedGroups(prev => {
+                    const next = new Set(prev)
+                    if (next.has(srcKey)) next.delete(srcKey)
+                    else next.add(srcKey)
+                    return next
+                  })}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    padding: '4px 10px 4px 24px',
+                    fontSize: 10, fontWeight: 600,
+                    color: 'var(--accent)', background: 'var(--bg-panel)',
+                    border: 'none', borderBottom: '1px solid var(--border)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {groupExpanded
+                    ? `▾ ${t('history_runs_collapse')}`
+                    : `▸ ${runCount - 1} ${t('history_runs_more')}`}
+                </button>
+              )
+            }
           })
           return nodes
         })()}
@@ -110,7 +156,7 @@ export function JobList({
               color: offset === 0 ? 'var(--text-3)' : 'var(--text-2)',
               cursor: offset === 0 ? 'not-allowed' : 'pointer', fontWeight: 600,
             }}
-          >← Trước</button>
+          >{t('history_prev')}</button>
           <span style={{ fontSize: 9, color: 'var(--text-3)' }}>
             {offset + 1}–{offset + items.length}
           </span>
@@ -124,7 +170,7 @@ export function JobList({
               color: !hasMore ? 'var(--text-3)' : 'var(--text-2)',
               cursor: !hasMore ? 'not-allowed' : 'pointer', fontWeight: 600,
             }}
-          >Sau →</button>
+          >{t('history_next')}</button>
         </div>
       )}
     </div>

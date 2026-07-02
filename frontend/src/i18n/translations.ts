@@ -262,6 +262,11 @@ export const translations = {
     history_cancel: 'Cancel',
     history_dup_title: 'Settings copied',
     history_dup_msg: 'Configure step pre-filled from the old job',
+    history_no_results: 'No results found.',
+    history_prev: '← Prev',
+    history_next: 'Next →',
+    history_runs_more: 'previous runs of this video',
+    history_runs_collapse: 'Collapse',
 
     // P1.4 — dock "needs attention" section
     dock_failed: 'Failed',
@@ -526,6 +531,11 @@ export const translations = {
     history_cancel: 'Hủy',
     history_dup_title: 'Đã copy settings',
     history_dup_msg: 'Bước Configure đã pre-fill từ job cũ',
+    history_no_results: 'Không tìm thấy kết quả.',
+    history_prev: '← Trước',
+    history_next: 'Sau →',
+    history_runs_more: 'lần render trước của video này',
+    history_runs_collapse: 'Thu gọn',
 
     // P1.4 — dock "cần chú ý"
     dock_failed: 'Thất bại',
