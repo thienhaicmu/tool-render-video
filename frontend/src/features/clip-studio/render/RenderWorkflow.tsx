@@ -10,10 +10,12 @@ import { getRenderDefaults } from '@/api/renderDefaults'
 import { getJob } from '@/api/jobs'
 import type { PrepareSourceResponse } from '@/api/render'
 import { getJobParts, getJobQualitySummary, getJobRanking } from '@/api/jobs'
-import type { RenderRequest, JobPart, QualityReport, PartRankResult } from '@/types/api'
+import type { JobPart, QualityReport, PartRankResult } from '@/types/api'
 import { useT, ERROR_KIND_KEY, ERROR_FIX_STEPS, inferErrorKind } from './i18n'
 import type { CfgTab, ConfigState, Source } from './types'
 import { PRESETS, RATIO_INFO } from './constants'
+import { buildRenderPayload } from './buildRenderPayload'
+import { CreateHero } from './steps/CreateHero'
 import { StepConfigure } from './steps/StepConfigure'
 import { StepRendering } from './steps/StepRendering'
 import { StepResults } from './steps/StepResults'
@@ -462,94 +464,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
 
   // ── Render actions ──────────────────────────────────────────────────────────
 
-  // S3.4 — payload builder factored out so the multi-source batch loop
-  // can call it once per source. Behaviour is identical to the
-  // single-source path: every field comes from cfg + the source path
-  // passed in.
-  function buildPayloadForSource(srcValue: string): RenderRequest {
-    return {
-      source_mode:       'local',
-      source_video_path: srcValue,
-      output_dir:          cfg.outputDir || 'output',
-      aspect_ratio:        RATIO_INFO[cfg.ratio].api,
-      min_part_sec:        cfg.minSec,
-      max_part_sec:        cfg.maxSec,
-      // Pha 5.7 — source trim (omitted when 0 = whole source). Pipeline
-      // clips the source in pipeline_source_prep before segmentation.
-      edit_trim_in:        cfg.trimIn > 0 ? cfg.trimIn : undefined,
-      edit_trim_out:       cfg.trimOut > 0 ? cfg.trimOut : undefined,
-      // T1.4 follow-up — Audit 2026-06-08: removed `max_export_parts:
-      // cfg.outputCount` from the wire (engine reads `output_count`
-      // instead via render_pipeline.py:576). Sending both was wire-
-      // duplication; only output_count survives.
-      add_subtitle:                cfg.subEnabled,
-      subtitle_style:              cfg.subStyle,
-      highlight_per_word:          cfg.subHighlight,
-      sub_font_size:               cfg.subFontSize,
-      // P2 (2026-06-20): subtitle translation is independent of narration —
-      // the narration self-translates to the voice language server-side
-      // (part_voice_mix), so these drive only the on-screen subtitle.
-      subtitle_translate_enabled:  cfg.subTranslate || undefined,
-      subtitle_target_language:    cfg.subTranslate ? cfg.subTranslateLang : undefined,
-      // T1.4 follow-up — Audit 2026-06-08: removed `part_order:
-      // cfg.partOrder`. The BE validator at models/render.py:451-463
-      // coerces the value to "viral" then no engine consumer reads it
-      // (FINDING-C01 closure). Pure UI deceit on the wire.
-      voice_enabled:               cfg.narrEnabled,
-      voice_source:        cfg.narrEnabled ? cfg.voiceSource : undefined,
-      voice_text:          cfg.narrEnabled && cfg.voiceSource === 'manual' ? cfg.voiceText : undefined,
-      rewrite_tone:        cfg.narrEnabled && cfg.voiceSource === 'ai_rewrite' ? (cfg.rewriteTone || '') : undefined,
-      narration_mode:      cfg.narrEnabled && cfg.voiceSource === 'ai_rewrite' ? (cfg.narrationMode || '') : undefined,
-      reaction_intensity:  cfg.narrEnabled && cfg.voiceSource === 'ai_rewrite' && cfg.narrationMode === 'reaction' ? (cfg.reactionIntensity || '') : undefined,
-      voice_language:      cfg.narrEnabled ? cfg.voiceLang as 'vi-VN' | 'ja-JP' | 'ko-KR' | 'en-US' | 'en-GB' : undefined,
-      voice_gender:        cfg.narrEnabled ? cfg.voiceGender : undefined,
-      tts_engine:          cfg.narrEnabled ? cfg.ttsEngine : undefined,
-      voice_mix_mode:      cfg.narrEnabled ? cfg.voiceMixMode : undefined,
-      // LLM segment selection — canonical llm_* fields. API keys from server .env.
-      llm_enabled:  cfg.llmEnabled || undefined,
-      ai_provider:  cfg.llmEnabled ? cfg.aiProvider : undefined,
-      llm_model:    cfg.llmEnabled && cfg.llmModel ? cfg.llmModel : undefined,
-      llm_language: cfg.llmEnabled && cfg.llmLanguage !== 'auto' ? cfg.llmLanguage : undefined,
-      multi_variant:       cfg.multiVariant || undefined,
-      cta_enabled:         cfg.ctaEnabled || undefined,
-      cta_type:            cfg.ctaEnabled ? cfg.ctaType : undefined,
-      hook_apply_enabled:  cfg.hookApplyEnabled || undefined,
-      hook_overlay_enabled: cfg.hookOverlayEnabled || undefined,
-      // T1.4 — Audit 2026-06-08 closure: removed `ai_auto_cut`,
-      // `ai_use_semantic_hooks`, `ai_render_influence_enabled`,
-      // `ai_beat_pulse_enabled` from the wire (Phase-G zombies — gated
-      // by ctx.ai_edit_plan which is hardcoded None at
-      // render_pipeline.py:931, so setting these `true` had zero
-      // behavioural effect). Sprint 3 3E Subset B's rationale for
-      // sending them was to keep new jobs aligned with the BE defaults;
-      // now that they're outside the Public surface they can't even
-      // reach the BE, so the alignment is automatic.
-      motion_aware_crop:   cfg.focusMode === 'face' || cfg.focusMode === 'object',
-      target_platform:     cfg.platform,
-      effect_preset:       cfg.style,
-      render_profile:      cfg.renderProfile,
-      whisper_model:       cfg.whisperModel !== 'auto' ? cfg.whisperModel : undefined,
-      render_format:       cfg.renderFormat,
-      // Story Intelligence is a clips-path feature; the recap path runs its own
-      // two-pass Story/Editorial stages unconditionally, so only forward the
-      // flag for clips. undefined when off → stays off on the wire (Contract #2).
-      use_story_intelligence: cfg.renderFormat === 'clips' ? (cfg.useStoryIntelligence || undefined) : undefined,
-      target_duration:     cfg.targetDuration,
-      // Recap = one long video; the AI picks scenes, so output_count is forced to 1.
-      output_count:        cfg.renderFormat === 'recap' ? 1 : cfg.outputCount,
-      reframe_mode:        cfg.focusMode,
-      // T1.4 — Audit 2026-06-08 closure: removed `energy_style`,
-      // `output_language`, `narration_style` (v2 vision dead — never
-      // consumed by the render engine) and `asset_music_profile`
-      // (UP27 — never wired). The dead form widgets + ConfigState for
-      // energy_style / output_language / narration_style were removed
-      // 2026-06-20 (#3 + A/B/C cleanup), along with assetMusicProfile and
-      // the legacy aiCloud* cluster (badge rewired to the real llm* config).
-      asset_logo_path:     cfg.assetLogoPath ?? undefined,
-      asset_intro_path:    cfg.assetIntroPath ?? undefined,
-      asset_outro_path:    cfg.assetOutroPath ?? undefined,
-    }
-  }
+  const buildPayloadForSource = (srcValue: string) => buildRenderPayload(cfg, srcValue)
 
   async function handleStartRender() {
     if (isSubmitting) return  // hard guard against double-submit
@@ -831,196 +746,19 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     <div className="rw-root">
       {/* ── CREATE — empty state: hero drop zone ─────────────────────────── */}
       {view === 'create' && sources.length === 0 && (
-        <div className="step-screen active">
-            <div className="src-screen">
-              {/* Atmospheric background — violet/pink blobs + grid */}
-              <div className="src-bg" aria-hidden="true">
-                <div className="src-bg-blob src-bg-blob-1" />
-                <div className="src-bg-blob src-bg-blob-2" />
-                <div className="src-bg-grid" />
-              </div>
-
-              <div className="src-content">
-                {/* Eyebrow chip + hero */}
-                <div className="src-hero">
-                  <span className="src-eyebrow">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/>
-                    </svg>
-                    {lang === 'VI' ? 'AI sẵn sàng' : 'AI ready to clip'}
-                  </span>
-                  <h1 className="src-hero-title">
-                    {lang === 'VI'
-                      ? <>Cắt video dài thành <span className="src-grad-word">clip viral</span>.</>
-                      : <>Turn long videos into <span className="src-grad-word">viral clips</span>.</>}
-                  </h1>
-                  <p className="src-hero-sub">
-                    {lang === 'VI'
-                      ? 'Thả file lên đây — AI sẽ phân tích, chọn khoảnh khắc hay nhất và xuất clip sẵn sàng cho TikTok, Reels và Shorts.'
-                      : 'Drop a file and let AI pick the best moments. Ready for TikTok, Reels and Shorts in minutes.'}
-                  </p>
-                </div>
-
-                {/* Drop zone — illustrated · S3.4 multi-file drag-drop */}
-                <div
-                  className="src-cards"
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    e.dataTransfer.dropEffect = 'copy'
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    const files = Array.from(e.dataTransfer.files || [])
-                    if (files.length === 0) return
-                    // Electron exposes the absolute path on File.path; pure-
-                    // web browsers don't, so we fall back to the filename
-                    // (which the backend will reject — instructive for the
-                    // user). dragData.files cannot supply a Vietnamese
-                    // localised error here because we don't know lang at
-                    // closure time; the validator inside handleStartRender
-                    // surfaces it on submit.
-                    const paths = files
-                      .map((f) => (f as File & { path?: string }).path || f.name)
-                      .filter((p) => p && p.length > 0)
-                    addSourcePaths(paths)
-                  }}
-                >
-                  <button
-                    type="button"
-                    className={`src-card highlight${sources.length > 0 ? ' has-file' : ''}`}
-                    onClick={async () => {
-                      const picked = await window.electronAPI?.pickVideoFile?.()
-                      if (picked) addSourcePaths([picked])
-                      else fileInputRef.current?.click()
-                    }}
-                  >
-                    <div className="src-illu" aria-hidden="true">
-                      <svg width="120" height="96" viewBox="0 0 120 96" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                          <linearGradient id="gradFrame" x1="0" y1="0" x2="1" y2="1">
-                            <stop offset="0" stopColor="#8b5cf6"/>
-                            <stop offset="1" stopColor="#ec4899"/>
-                          </linearGradient>
-                          <linearGradient id="gradPlay" x1="0" y1="0" x2="1" y2="0">
-                            <stop offset="0" stopColor="#ffffff" stopOpacity="0.95"/>
-                            <stop offset="1" stopColor="#ffffff" stopOpacity="0.85"/>
-                          </linearGradient>
-                          <filter id="dropGlow" x="-20%" y="-20%" width="140%" height="140%">
-                            <feGaussianBlur stdDeviation="2"/>
-                          </filter>
-                        </defs>
-                        {/* Back frame */}
-                        <rect x="14" y="20" width="68" height="50" rx="10" fill="url(#gradFrame)" opacity="0.30" transform="rotate(-8 48 45)"/>
-                        {/* Middle frame */}
-                        <rect x="22" y="14" width="72" height="56" rx="11" fill="url(#gradFrame)" opacity="0.55" transform="rotate(-3 58 42)"/>
-                        {/* Top frame with play */}
-                        <rect x="30" y="10" width="78" height="62" rx="12" fill="url(#gradFrame)"/>
-                        <circle cx="69" cy="41" r="18" fill="rgba(255,255,255,0.16)"/>
-                        <path d="M64 33l14 8-14 8z" fill="url(#gradPlay)"/>
-                        {/* Sparkles */}
-                        <g fill="#fff" opacity="0.9">
-                          <path d="M104 18l1.5 3.5L109 23l-3.5 1.5L104 28l-1.5-3.5L99 23l3.5-1.5z"/>
-                          <path d="M16 70l1 2.4L19.4 73.4l-2.4 1L16 76.8l-1-2.4L12.6 73.4l2.4-1z"/>
-                          <circle cx="110" cy="50" r="1.6"/>
-                          <circle cx="8" cy="32" r="1.4"/>
-                        </g>
-                      </svg>
-                    </div>
-                    <div className="src-card-body">
-                      <div className="src-card-title">
-                        {lang === 'VI' ? 'Thả file vào đây' : 'Drop your video here'}
-                      </div>
-                      <div className="src-card-desc">
-                        {lang === 'VI' ? 'hoặc bấm để chọn từ máy' : 'or click to browse your computer'}
-                      </div>
-                    </div>
-                    <div className="src-card-meta">
-                      <span className="src-card-badge">MP4 · MOV · MKV · WEBM</span>
-                      <span className="src-card-dot" aria-hidden="true">·</span>
-                      <span className="src-card-hint">{lang === 'VI' ? 'Khuyến nghị ≤ 4K · 2 GB' : 'Recommended ≤ 4K · 2 GB'}</span>
-                    </div>
-                    <div className="src-card-shine" aria-hidden="true" />
-                  </button>
-                </div>
-
-                {/* Platform support row */}
-                <div className="src-platforms">
-                  <span className="src-platforms-label">
-                    {lang === 'VI' ? 'Sẵn sàng đăng lên' : 'Ready to publish on'}
-                  </span>
-                  <div className="src-platforms-list">
-                    <span className="src-platform" data-p="youtube">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M23 12s0-3.7-.5-5.5c-.3-1-1-1.8-2-2C18.7 4 12 4 12 4s-6.7 0-8.5.5c-1 .2-1.7 1-2 2C1 8.3 1 12 1 12s0 3.7.5 5.5c.3 1 1 1.8 2 2 1.8.5 8.5.5 8.5.5s6.7 0 8.5-.5c1-.2 1.7-1 2-2 .5-1.8.5-5.5.5-5.5zM10 15.5v-7l6 3.5-6 3.5z"/></svg>
-                      YouTube
-                    </span>
-                    <span className="src-platform" data-p="tiktok">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3v3.4a5 5 0 0 0 4 3.4v3.6a8.6 8.6 0 0 1-4-1.2v7c0 3.5-2.7 5.8-6 5.8-3 0-5.5-2.4-5.5-5.4S7 14 10 14c.5 0 1 .1 1.5.2v3.5c-.5-.2-1-.3-1.5-.3-1.2 0-2.2 1-2.2 2.2 0 1.2 1 2.2 2.2 2.2 1.3 0 2.5-.9 2.5-2.4V3H16z"/></svg>
-                      TikTok
-                    </span>
-                    <span className="src-platform" data-p="instagram">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c2.7 0 3 0 4.1.1 1 0 1.6.2 2 .3.5.2.9.4 1.3.8.4.4.6.8.8 1.3.1.4.3 1 .3 2C20.6 7.6 20.6 8 20.6 12s0 4.4-.1 5.5c0 1-.2 1.6-.3 2-.2.5-.4.9-.8 1.3-.4.4-.8.6-1.3.8-.4.1-1 .3-2 .3-1.1.1-1.4.1-4.1.1s-3 0-4.1-.1c-1 0-1.6-.2-2-.3-.5-.2-.9-.4-1.3-.8-.4-.4-.6-.8-.8-1.3-.1-.4-.3-1-.3-2-.1-1.1-.1-1.4-.1-5.4s0-4.4.1-5.5c0-1 .2-1.6.3-2 .2-.5.4-.9.8-1.3.4-.4.8-.6 1.3-.8.4-.1 1-.3 2-.3C8.6 2 9 2 12 2zm0 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm6.4-.3a1.2 1.2 0 1 0-2.4 0 1.2 1.2 0 0 0 2.4 0zM12 9.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6z"/></svg>
-                      Instagram
-                    </span>
-                    <span className="src-platform" data-p="facebook">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12a10 10 0 1 0-11.6 9.9V15h-2.5v-3h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.5 3h-2.3v6.9A10 10 0 0 0 22 12z"/></svg>
-                      Facebook
-                    </span>
-                  </div>
-                </div>
-
-                {/* What happens next — visual step preview */}
-                <div className="src-next">
-                  <div className="src-next-head">{lang === 'VI' ? 'Các bước tiếp theo' : 'What happens next'}</div>
-                  <ol className="src-next-list">
-                    <li className="src-next-item">
-                      <span className="src-next-num">2</span>
-                      <div className="src-next-text">
-                        <div className="src-next-title">{lang === 'VI' ? 'Thiết lập' : 'Configure'}</div>
-                        <div className="src-next-desc">{lang === 'VI' ? 'Chọn preset, tỷ lệ, kiểu phụ đề' : 'Pick preset, ratio, subtitle style'}</div>
-                      </div>
-                    </li>
-                    <li className="src-next-sep" aria-hidden="true">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9 6l6 6-6 6"/>
-                      </svg>
-                    </li>
-                    <li className="src-next-item">
-                      <span className="src-next-num">3</span>
-                      <div className="src-next-text">
-                        <div className="src-next-title">{lang === 'VI' ? 'AI render' : 'AI render'}</div>
-                        <div className="src-next-desc">{lang === 'VI' ? 'AI phân tích & cắt clip' : 'AI analyzes & cuts clips'}</div>
-                      </div>
-                    </li>
-                    <li className="src-next-sep" aria-hidden="true">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9 6l6 6-6 6"/>
-                      </svg>
-                    </li>
-                    <li className="src-next-item">
-                      <span className="src-next-num">4</span>
-                      <div className="src-next-text">
-                        <div className="src-next-title">{lang === 'VI' ? 'Kết quả' : 'Results'}</div>
-                        <div className="src-next-desc">{lang === 'VI' ? 'Tải clip về để đăng' : 'Export & publish-ready'}</div>
-                      </div>
-                    </li>
-                  </ol>
-                </div>
-
-                {prepareError && (
-                  <div className="src-error">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10"/>
-                      <path d="M12 8v4M12 16h.01"/>
-                    </svg>
-                    <span>{prepareError}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="screen-footer">
-              <div className="screen-footer-info">{queuedInfo}</div>
-            </div>
-        </div>
+        <CreateHero
+          lang={lang}
+          prepareError={prepareError}
+          queuedInfo={queuedInfo}
+          onAddPaths={addSourcePaths}
+          onBrowse={() => {
+            void (async () => {
+              const picked = await window.electronAPI?.pickVideoFile?.()
+              if (picked) addSourcePaths([picked])
+              else fileInputRef.current?.click()
+            })()
+          }}
+        />
       )}
 
       {/* ── CREATE — configure state (source added) ──────────────────────── */}
