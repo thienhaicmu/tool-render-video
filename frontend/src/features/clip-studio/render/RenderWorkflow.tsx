@@ -12,7 +12,7 @@ import type { PrepareSourceResponse } from '@/api/render'
 import { getJobParts, getJobQualitySummary, getJobRanking } from '@/api/jobs'
 import type { RenderRequest, JobPart, QualityReport, PartRankResult } from '@/types/api'
 import { useT, ERROR_KIND_KEY, ERROR_FIX_STEPS, inferErrorKind } from './i18n'
-import type { Step, CfgTab, ConfigState, Source } from './types'
+import type { CfgTab, ConfigState, Source } from './types'
 import { PRESETS, RATIO_INFO } from './constants'
 import { StepConfigure } from './steps/StepConfigure'
 import { StepRendering } from './steps/StepRendering'
@@ -23,8 +23,16 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog'
 // ── Root component ────────────────────────────────────────────────────────────
 export function RenderWorkflow({ lang }: { lang: Lang }) {
   const t = useT(lang)
-  const [step, setStep]       = useState<Step>(1)
+  // P2.2 - Create/Jobs model. The 4-step wizard is gone: 'create' merges the
+  // old Source + Configure steps (hero drop zone when no source, Configure
+  // once a file is added); 'monitor' and 'results' are job-centric views
+  // reached from the queue dock / drawer / notifications / footer buttons.
+  type View = 'create' | 'monitor' | 'results'
+  const [view, setView]       = useState<View>('create')
   const [sources, setSources] = useState<Source[]>([])
+  // Set after a successful submit - drives the "added to queue" banner on
+  // the Create screen with a one-click jump to the job's monitor.
+  const [lastQueuedJobId, setLastQueuedJobId] = useState<string | null>(null)
 
   const [prepareResult, setPrepareResult] = useState<PrepareSourceResponse | null>(null)
   const [isPreparing, setIsPreparing]     = useState(false)
@@ -165,7 +173,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   useEffect(() => {
     if (!monitorJobId) return
     setJobId(monitorJobId)
-    setStep(3)
+    setView('monitor')
     setMonitorJobId(null)
   }, [monitorJobId, setMonitorJobId])
 
@@ -189,7 +197,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     setPartRanks({})
     setQualityReports({})
     setQualityLoadFailed(false)
-    setStep(1)
+    setView('create')
     // Release the lock on the next microtask so future activeJob
     // updates can resume auto-reattach behaviour.
     queueMicrotask(() => { newRenderInProgressRef.current = false })
@@ -249,8 +257,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
           setSources([{ value: srcPath }])
         }
 
-        // Land on Configure so the user reviews settings before submit.
-        setStep(2)
+        // Land on Create (Configure state - sources are pre-filled).
+        setView('create')
       } catch {
         // Silent fallback: stay on Step 1 with whatever was already
         // pre-filled. Duplicate UX failures must not block the screen.
@@ -284,7 +292,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     setQualityLoadFailed(false)
     setIsSubmitting(false)
     setSources([{ value: path }])
-    setStep(1)
+    setView('create')
     queueMicrotask(() => { sendToRenderInProgressRef.current = false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sendToRenderSourcePath])
@@ -326,13 +334,13 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   // Auto-advance to results after completion (success + partial success).
   // Gated on allDataLoaded so parts/quality/ranking are ready before the step change.
   useEffect(() => {
-    if (!isTerminal || step !== 3 || !allDataLoaded) return
+    if (!isTerminal || view !== 'monitor' || !allDataLoaded) return
     const s = jobStatus ?? ''
     const skipAdvance = s === 'failed' || s === 'interrupted' || s === 'cancelled'
     if (skipAdvance) return
-    const timer = setTimeout(() => setStep(4), 300)
+    const timer = setTimeout(() => setView('results'), 300)
     return () => clearTimeout(timer)
-  }, [isTerminal, jobStatus, step, allDataLoaded])
+  }, [isTerminal, jobStatus, view, allDataLoaded])
 
   // E-2 — toast notification on job terminal
   useEffect(() => {
@@ -353,7 +361,6 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   }, [isTerminal])
 
   // ── Source actions ──────────────────────────────────────────────────────────
-  function removeSource(i: number) { setSources((p) => p.filter((_, idx) => idx !== i)) }
 
   // S3.4 — drag-drop / picker callback that accepts multiple files and
   // appends them to the source list (deduping by path).
@@ -369,65 +376,74 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     })
   }
 
-  async function goToConfigure() {
-    if (sources.length === 0) return
-    // Validate ALL picked sources still exist (S3.4 — multi-file
-    // support). Using prepareSource on the FIRST source is sufficient
-    // to derive output_dir + Whisper preview; subsequent sources will
-    // each get their own render job at submit time.
+  // P2.2 - auto-prepare: the old "Configure ->" click is gone. As soon as a
+  // source is added, probe it in the background (preview video, duration,
+  // export dir). Configure renders immediately; prepareResult streams in.
+  const preparedForRef = useRef<string | null>(null)
+  useEffect(() => {
     const src = sources[0]
-    if (window.electronAPI?.pathExists) {
-      for (const s of sources) {
-        const exists = await window.electronAPI.pathExists(s.value)
-        if (exists === false) {
-          setPrepareError(
-            lang === 'VI'
-              ? `File không tìm thấy: "${s.value}". Có thể bị đổi tên hoặc xoá.`
-              : `File not found: "${s.value}". It may have been moved or deleted.`,
-          )
-          return
-        }
-      }
+    if (!src) {
+      preparedForRef.current = null
+      setPrepareResult(null)
+      setPrepareError(null)
+      return
     }
+    if (preparedForRef.current === src.value) return
+    preparedForRef.current = src.value
     prepareCancelledRef.current = false
     const abort = new AbortController()
     prepareAbortRef.current = abort
     setIsPreparing(true)
     setPrepareError(null)
-    try {
-      const result = await prepareSource({
-        source_mode: 'local',
-        source_video_path: src.value,
-      }, abort.signal)
-      if (prepareCancelledRef.current) {
-        cancelPrepareSource(result.session_id).catch(() => {})
-        return
+    setPrepareResult(null)
+    ;(async () => {
+      if (window.electronAPI?.pathExists) {
+        const exists = await window.electronAPI.pathExists(src.value)
+        if (exists === false) {
+          setPrepareError(
+            lang === 'VI'
+              ? `File không tìm thấy: "${src.value}". Có thể bị đổi tên hoặc xoá.`
+              : `File not found: "${src.value}". It may have been moved or deleted.`,
+          )
+          setIsPreparing(false)
+          return
+        }
       }
-      setPrepareResult(result)
-      // UI cleanup (2026-06-28): default SAVE FOLDER = parent of source video,
-      // NOT the backend temp folder (`result.export_dir = work_dir/exports`).
-      // Preserves user-typed value when they've manually overridden.
-      const _srcPath = src.value || ''
-      const _lastSep = Math.max(_srcPath.lastIndexOf('\\'), _srcPath.lastIndexOf('/'))
-      const _parentDir = _lastSep > 0 ? _srcPath.slice(0, _lastSep) : ''
-      setCfg((prev) => ({
-        ...prev,
-        outputDir: prev.outputDir?.trim() ? prev.outputDir : (_parentDir || result.export_dir || ''),
-      }))
-      setStep(2)
-    } catch (e) {
-      if (!prepareCancelledRef.current) {
-        setPrepareError(e instanceof Error ? e.message : 'Failed to prepare source')
+      try {
+        const result = await prepareSource({
+          source_mode: 'local',
+          source_video_path: src.value,
+        }, abort.signal)
+        if (prepareCancelledRef.current) {
+          cancelPrepareSource(result.session_id).catch(() => {})
+          return
+        }
+        setPrepareResult(result)
+        // Default SAVE FOLDER = parent of source video, NOT the backend temp
+        // folder. Preserves user-typed value when manually overridden.
+        const _srcPath = src.value || ''
+        const _lastSep = Math.max(_srcPath.lastIndexOf('\\'), _srcPath.lastIndexOf('/'))
+        const _parentDir = _lastSep > 0 ? _srcPath.slice(0, _lastSep) : ''
+        setCfg((prev) => ({
+          ...prev,
+          outputDir: prev.outputDir?.trim() ? prev.outputDir : (_parentDir || result.export_dir || ''),
+        }))
+      } catch (e) {
+        if (!prepareCancelledRef.current) {
+          setPrepareError(e instanceof Error ? e.message : 'Failed to prepare source')
+        }
+      } finally {
+        setIsPreparing(false)
       }
-    } finally {
-      setIsPreparing(false)
-    }
-  }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sources])
 
   function handleChangeSource() {
+    prepareCancelledRef.current = true
+    prepareAbortRef.current?.abort()
     setSources([])
     setPrepareResult(null)
-    setStep(1)
   }
 
   function setCfgKey<K extends keyof ConfigState>(k: K, v: ConfigState[K]) {
@@ -581,6 +597,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     }
     setIsSubmitting(true)
     setSubmitError(null)
+    setLastQueuedJobId(null)
 
     // ── S3.4 multi-source batch path. For len > 1, submit each source
     //    sequentially with the same cfg. First success becomes the
@@ -617,7 +634,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
         setParts([]); setPartScores({}); setPartRanks({})
         setQualityReports({}); setQualityLoadFailed(false)
         setJobId(null)
-        setStep(1)
+        setLastQueuedJobId(submitted[0])
       }
       setIsSubmitting(false)
       return
@@ -627,7 +644,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     const src = sources[0]
     const payload = buildPayloadForSource(src.value)
     try {
-      await submitRender(payload)
+      const newJobId = await submitRender(payload)
       // Pha 4 — "Add to Queue": the job runs in the background (visible in
       // the queue dock); return Compose to a clean Step 1 so the user can
       // start the next render immediately instead of being pinned to the
@@ -644,7 +661,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       setParts([]); setPartScores({}); setPartRanks({})
       setQualityReports({}); setQualityLoadFailed(false)
       setJobId(null)
-      setStep(1)
+      setLastQueuedJobId(newJobId)
       setIsSubmitting(false)
     } catch (e) {
       // Extract a user-friendly message. Backend dedup (409) returns a
@@ -672,7 +689,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       }
       if (dupJobId) {
         setJobId(dupJobId)
-        setStep(3)
+        setView('monitor')
         setIsSubmitting(false)
         addNotification({
           type: 'info',
@@ -705,8 +722,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       const res = await retryRender(jobId)
       setJobId(res.job_id)
       setParts([]); setPartScores({}); setQualityReports({}); setQualityLoadFailed(false)
-      setStep(3)
-    } catch { /* stay on current step */ }
+      setView('monitor')
+    } catch { /* stay on current view */ }
     finally { setIsRetrying(false) }
   }
 
@@ -717,8 +734,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       const res = await resumeRender(jobId)
       setJobId(res.job_id)
       setParts([]); setPartScores({}); setQualityReports({}); setQualityLoadFailed(false)
-      setStep(3)
-    } catch { /* stay on current step */ }
+      setView('monitor')
+    } catch { /* stay on current view */ }
     finally { setIsRetrying(false) }
   }
 
@@ -730,7 +747,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   // file pick + prepare-source from the original flow already validated
   // the same source.
   function handleRerenderSameConfig() {
-    setStep(2)
+    setView('create')
     setJobId(null)
     setParts([])
     setPartScores({})
@@ -770,7 +787,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
         })
         if (choice === 'monitor') {
           setJobId(active.job_id)
-          setStep(3)
+          setView('monitor')
           return
         }
         if (choice !== 'new') return  // dismissed / cancel — do nothing
@@ -782,7 +799,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       // backend unreachable — proceed with reset; user will discover the
       // issue when they try to submit.
     }
-    setStep(1); setSources([]); setJobId(null)
+    setView('create'); setSources([]); setJobId(null)
     setPrepareResult(null); setParts([]); setPartScores({}); setQualityReports({})
     // Reset submit guard so the next Start-Render click is accepted.
     // Without this the button stays disabled after returning from Result.
@@ -790,65 +807,31 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     setSubmitError(null)
   }
 
-  const stepMeta = [
-    { label: t.stepSrc, sub: t.stepSrcSub },
-    { label: t.stepCfg, sub: t.stepCfgSub },
-    { label: t.stepRnd, sub: t.stepRndSub },
-    { label: t.stepRes, sub: t.stepResSub },
-  ]
   const doneParts = parts.filter(p => p.status === 'done')
 
-  // ── Step strip ──────────────────────────────────────────────────────────────
+  // P2.2 - "added to queue" banner shown on the Create screen after submit.
+  const queuedInfo = lastQueuedJobId ? (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ color: 'var(--ok)' }}>{'\u2713'} {t.rwQueued}</span>
+      <button
+        className="btn-xs"
+        onClick={() => {
+          const id = lastQueuedJobId
+          setLastQueuedJobId(null)
+          setJobId(id)
+          setView('monitor')
+        }}
+      >
+        {t.rwQueuedView}
+      </button>
+    </span>
+  ) : null
+
   return (
     <div className="rw-root">
-      <div className="step-nav">
-        {stepMeta.map(({ label, sub }, i) => {
-          const n = (i + 1) as Step
-          const cls = n === step ? 'active' : n < step ? 'done' : ''
-          return (
-            <div key={i} style={{ display: 'contents' }}>
-              {i > 0 && <div className="rw-step-sep" />}
-              <div className={`rw-step ${cls}`} onClick={() => {
-                if (n === step) return
-                if (n < step) { setStep(n); return }
-                // forward navigation: allow returning to step already reached
-                if (n === 3 && jobId) setStep(3)
-                else if (n === 4 && jobId && isTerminal) setStep(4)
-              }}>
-                <span className="rw-step-num">{n < step ? '✓' : n}</span>
-                <div className="rw-step-info">
-                  <div className="rw-step-label">{label}</div>
-                  <div className="rw-step-sub">{sub}</div>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Preparing overlay */}
-      {isPreparing && (
-        <div className="step-screen active" style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '20px', background: 'radial-gradient(ellipse at 50% 50%, rgba(123,97,255,.05) 0%, transparent 70%)' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', maxWidth: '480px', textAlign: 'center' }}>
-            <div style={{ width: '48px', height: '48px', border: '3px solid var(--border-hi)', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'rw-spin 0.8s linear infinite' }} />
-            <div style={{ fontFamily: 'var(--fh)', fontSize: '16px', fontWeight: 700, letterSpacing: '1px', background: 'var(--grad)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              {lang === 'VI' ? 'ĐANG CHUẨN BỊ NGUỒN' : 'PREPARING SOURCE'}
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-3)', lineHeight: 1.6 }}>
-              {lang === 'VI' ? 'Đang phân tích file video…' : 'Probing local video file…'}
-            </div>
-            <button className="btn-back" onClick={() => { prepareCancelledRef.current = true; prepareAbortRef.current?.abort(); setIsPreparing(false) }}>
-              {lang === 'VI' ? 'HỦY' : 'CANCEL'}
-            </button>
-          </div>
-          <style>{`@keyframes rw-spin { to { transform: rotate(360deg) } }`}</style>
-        </div>
-      )}
-
-      {!isPreparing && (
-        <>
-          {/* STEP 1 */}
-          <div className={`step-screen${step === 1 ? ' active' : ''}`}>
+      {/* ── CREATE — empty state: hero drop zone ─────────────────────────── */}
+      {view === 'create' && sources.length === 0 && (
+        <div className="step-screen active">
             <div className="src-screen">
               {/* Atmospheric background — violet/pink blobs + grid */}
               <div className="src-bg" aria-hidden="true">
@@ -985,49 +968,6 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                   </div>
                 </div>
 
-                {/* Added file list */}
-                {sources.length > 0 && (
-                  <div className="src-list">
-                    <div className="src-list-head">
-                      <span className="src-list-count">{sources.length}</span>
-                      <span>{t.srcAdded}</span>
-                      <span className="src-list-ok" aria-hidden="true">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M5 12l5 5L20 7"/>
-                        </svg>
-                        {lang === 'VI' ? 'Sẵn sàng' : 'Ready'}
-                      </span>
-                    </div>
-                    {sources.map((s, i) => {
-                      const filename = s.value.split(/[\\/]/).pop() || s.value
-                      const folder = s.value.slice(0, s.value.length - filename.length).replace(/[\\/]+$/, '')
-                      const ext = (filename.split('.').pop() || '').toUpperCase().slice(0, 4)
-                      return (
-                        <div key={i} className="src-item">
-                          <span className="src-item-thumb" aria-hidden="true">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                              <rect x="2" y="6" width="14" height="12" rx="2"/>
-                              <path d="M16 10l6-3v10l-6-3z"/>
-                            </svg>
-                          </span>
-                          <div className="src-item-info">
-                            <div className="src-item-url" title={s.value}>{filename}</div>
-                            <div className="src-item-meta">
-                              {ext && <span className="src-item-tag">{ext}</span>}
-                              <span className="src-item-folder" title={folder}>{folder || (lang === 'VI' ? 'File trên máy' : 'Local file')}</span>
-                            </div>
-                          </div>
-                          <button className="src-item-del" onClick={() => removeSource(i)} aria-label="Remove" title={lang === 'VI' ? 'Xoá' : 'Remove'}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M18 6 6 18M6 6l12 12"/>
-                            </svg>
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
                 {/* What happens next — visual step preview */}
                 <div className="src-next">
                   <div className="src-next-head">{lang === 'VI' ? 'Các bước tiếp theo' : 'What happens next'}</div>
@@ -1078,13 +1018,14 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               </div>
             </div>
             <div className="screen-footer">
-              <div className="screen-footer-info">{t.stepOf(1)}</div>
-              <button className="btn-next" disabled={sources.length === 0} onClick={goToConfigure}>{t.btnConfigure}</button>
+              <div className="screen-footer-info">{queuedInfo}</div>
             </div>
-          </div>
+        </div>
+      )}
 
-          {/* STEP 2 */}
-          <div className={`step-screen${step === 2 ? ' active' : ''}`}>
+      {/* ── CREATE — configure state (source added) ──────────────────────── */}
+      {view === 'create' && sources.length > 0 && (
+        <div className="step-screen active">
             {/* Sprint 5.7 per-step ErrorBoundary: a render error inside Step 2
                 no longer takes down the whole workflow. User stays on the
                 page and can navigate to other steps. */}
@@ -1097,11 +1038,15 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               />
             </ErrorBoundary>
             <div className="screen-footer">
-              <button className="btn-back" onClick={() => setStep(1)}>{t.btnBack}</button>
+              <button className="btn-back" onClick={handleChangeSource}>{t.cfgChangeSource}</button>
               <div className="screen-footer-info">
                 {submitError
                   ? <span style={{ color: 'var(--fail)' }}>{submitError}</span>
-                  : <span>{t.stepOf(2)}</span>
+                  : prepareError
+                  ? <span style={{ color: 'var(--fail)' }}>{prepareError}</span>
+                  : isPreparing
+                  ? <span style={{ color: 'var(--text-3)' }}>{t.rwProbing}</span>
+                  : queuedInfo
                 }
               </div>
               <button
@@ -1112,10 +1057,12 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 {isSubmitting ? (lang === 'VI' ? 'Đang gửi…' : 'Starting…') : t.btnStartRender}
               </button>
             </div>
-          </div>
+        </div>
+      )}
 
-          {/* STEP 3 */}
-          <div className={`step-screen${step === 3 ? ' active' : ''}`}>
+      {/* ── MONITOR — job-centric live view ──────────────────────────────── */}
+      {view === 'monitor' && (
+        <div className="step-screen active">
             <ErrorBoundary>
               <StepRendering
                 jobId={jobId}
@@ -1137,7 +1084,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               />
             </ErrorBoundary>
             <div className="screen-footer">
-              <button className="btn-back" onClick={() => setStep(2)}>{t.btnConfig}</button>
+              <button className="btn-back" onClick={() => setView('create')}>{t.btnConfig}</button>
               <div className="screen-footer-info" style={{ gap: '12px' }}>
                 {isTerminal ? (() => {
                   const s = jobStatus ?? ''
@@ -1211,7 +1158,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                         {isRetrying ? '…' : t.btnResume}
                       </button>
                     )}
-                    <button className="btn-next" onClick={() => setStep(4)}>{t.btnViewResults}</button>
+                    <button className="btn-next" onClick={() => setView('results')}>{t.btnViewResults}</button>
                   </div>
                 </>
                   )
@@ -1226,10 +1173,12 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 </button>
               )}
             </div>
-          </div>
+        </div>
+      )}
 
-          {/* STEP 4 */}
-          <div className={`step-screen${step === 4 ? ' active' : ''}`}>
+      {/* ── RESULTS — job-centric results view ───────────────────────────── */}
+      {view === 'results' && (
+        <div className="step-screen active">
             <ErrorBoundary>
               <StepResults
                 jobId={jobId} parts={parts} partScores={partScores} partRanks={partRanks}
@@ -1245,7 +1194,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
               />
             </ErrorBoundary>
             <div className="screen-footer">
-              <button className="btn-back" onClick={() => setStep(3)}>{t.btnBackRendering}</button>
+              <button className="btn-back" onClick={() => setView('monitor')}>{t.btnBackRendering}</button>
               <div className="screen-footer-info" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 {doneParts.length > 0
                   ? <><span style={{ color: 'var(--ok)' }}>✓ </span><span>{t.resClipsReady(doneParts.length)}</span></>
@@ -1289,8 +1238,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                 <button className="btn-next" onClick={handleNewRender}>{t.btnNewRender}</button>
               </div>
             </div>
-          </div>
-        </>
+        </div>
       )}
 
       <input

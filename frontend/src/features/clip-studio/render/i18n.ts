@@ -95,6 +95,10 @@ const T = {
     cfgPreviewHint: 'Preview updates as you configure',
     cfgNoSource: 'No source',
     btnBack: '← BACK', btnStartRender: 'START RENDER ▶',
+    // P2.2 - Create/Jobs model
+    rwQueued: 'Added to queue',
+    rwQueuedView: 'View progress →',
+    rwProbing: 'Analyzing source…',
     // Rendering
     rndWaiting: 'Waiting for job…', rndInProgress: 'Rendering in progress…', rndComplete: '✓ Render complete',
     rndFailed: '✗ Render failed', rndCancelled: '✗ Render cancelled',
@@ -272,6 +276,10 @@ const T = {
     cfgPreviewHint: 'Preview cập nhật theo cấu hình',
     cfgNoSource: 'Chưa có nguồn',
     btnBack: '← QUAY LẠI', btnStartRender: 'BẮT ĐẦU RENDER ▶',
+    // P2.2 - Create/Jobs model
+    rwQueued: 'Đã vào hàng đợi',
+    rwQueuedView: 'Xem tiến trình →',
+    rwProbing: 'Đang phân tích nguồn…',
     rndWaiting: 'Đang chờ job…', rndInProgress: 'Đang render…', rndComplete: '✓ Hoàn thành',
     rndFailed: '✗ Render thất bại', rndCancelled: '✗ Đã hủy',
     rndPartial: '⚠ Hoàn thành một phần', rndInterrupted: '✗ Bị gián đoạn',
