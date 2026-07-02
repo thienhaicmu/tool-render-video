@@ -168,7 +168,7 @@ class RenderRequest(BaseModel):
     effect_preset: str = "slay_soft_01"
     loudnorm_enabled: bool = True
     audio_cleanup_engine: Literal["none", "deepfilternet"] = "none"
-    tts_engine: Literal["edge", "xtts"] = "edge"
+    tts_engine: Literal["edge", "xtts", "gemini"] = "edge"
     remotion_hook_intro: bool = False
 
     # Reup mode

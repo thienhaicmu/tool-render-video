@@ -68,6 +68,20 @@ Cache dir cũng nhận: `XDG_CACHE_HOME`, `TORCH_HOME`, `HF_HOME`,
 | `LLM_WHISPER_MODEL` / `LLM_WHISPER_AUTO_SELECT` / `LLM_WHISPER_TIMEOUT_MULT` | — | Whisper trong nhánh LLM |
 | `TIMED_NARRATION_TTS_CONCURRENCY` | — | Số luồng TTS narration |
 
+### TTS / Lồng tiếng (Gemini TTS — engine opt-in, 2026-07-02)
+
+`tts_engine="gemini"` (RenderRequest) bật engine Gemini TTS (online, model
+preview, audio có watermark SynthID). Mọi lỗi tự fallback về chuỗi
+Edge → Piper → XTTS — không bao giờ mất narration. Cache synthesis theo
+hash tại `TEMP_DIR/gemini_tts_cache/` (cùng text không tốn quota lần 2).
+
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `GEMINI_TTS_MODEL` | `gemini-3.1-flash-tts-preview` | Model TTS |
+| `GEMINI_TTS_VOICE` | theo gender (`Kore`/`Charon`) | Ghi đè prebuilt voice |
+| `GEMINI_TTS_STYLE` | theo ngôn ngữ + content_type | Ghi đè câu chỉ dẫn giọng đọc (mặc định: bảng vi/en có tempo; `rate` ±3% trở lên thêm hint nhanh/chậm) |
+| `GEMINI_TTS_TIMEOUT_SEC` | `120` | Timeout một lời gọi TTS |
+
 ## 6. AI / LLM
 
 Xem bảng đầy đủ trong [AI_INTEGRATION.md](AI_INTEGRATION.md). Chính:

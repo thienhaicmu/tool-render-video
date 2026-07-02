@@ -518,6 +518,10 @@ def generate_narration_audio(
                          Falls back to Edge on any failure.
       "xtts"           — Coqui XTTS v2 (GPU, multilingual incl. ja/ko).
                          Falls back to Edge.
+      "gemini"         — Gemini TTS (online, preview model; expressive
+                         style-directed delivery, SynthID-watermarked).
+                         Opt-in only; falls back to the full Edge →
+                         Piper → XTTS chain on any failure.
     """
     engine = (tts_engine or "edge").strip().lower()
 
@@ -586,6 +590,35 @@ def generate_narration_audio(
                 job_id, xtts_exc,
             )
             return _edge()
+
+    # ── Gemini TTS requested (cloud, expressive — preview model) ─────────
+    # Opt-in only. On ANY failure (SDK/key absent, quota, network) this
+    # falls THROUGH to the default Edge → Piper → XTTS chain below, so a
+    # preview-model outage never loses a render's narration.
+    if engine == "gemini":
+        try:
+            from app.features.render.engine.audio.tts_gemini import (
+                gemini_tts_available,
+                synthesize_gemini,
+            )
+            if gemini_tts_available():
+                # Plain text only — Gemini paces itself from the style
+                # instruction, so no SSML and no humanizer pauses.
+                _clean = _sanitize_plain_tts(str(text or "").strip())
+                return synthesize_gemini(
+                    text=_clean, language=language, gender=gender,
+                    job_id=job_id, content_type=content_type, output_path=output_path,
+                    rate=rate,
+                )
+            logger.warning(
+                "gemini_tts_unavailable_fallback job_id=%s — SDK or API key absent, using edge chain",
+                job_id,
+            )
+        except Exception as gemini_exc:
+            logger.warning(
+                "gemini_tts_failed_fallback job_id=%s: %s — falling back to edge chain",
+                job_id, gemini_exc,
+            )
 
     # ── Default: Edge-TTS, with automatic offline fallback ───────────────
     # Edge needs network. On failure, synthesize offline instead of losing
