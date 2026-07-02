@@ -189,11 +189,24 @@ function StepResultsBase({
   const [deletedOutputs, setDeletedOutputs] = useState<Set<number>>(new Set())
   const [feedbackRatings, setFeedbackRatings] = useState<Record<number, 1 | -1 | null>>({})
 
+  const addNotification = useUIStore((st) => st.addNotification)
+
   const handleFeedback = useCallback(async (partNo: number, rating: 1 | -1, part: JobPart) => {
     if (!jobId) return
     const current = feedbackRatings[partNo]
     const newRating = current === rating ? null : rating
     setFeedbackRatings(prev => ({ ...prev, [partNo]: newRating }))
+    // P4.F — the backend consumes ratings as AI Director training signal,
+    // but users never learned that. Say it once per session on the first
+    // rating so the feedback loop is visible without being naggy.
+    if (newRating !== null) {
+      try {
+        if (sessionStorage.getItem('fb_edu_seen_v1') !== '1') {
+          sessionStorage.setItem('fb_edu_seen_v1', '1')
+          addNotification({ type: 'info', title: t.resFbLearned, duration: 5000 })
+        }
+      } catch { /* sessionStorage unavailable — skip the hint */ }
+    }
     try {
       if (newRating === null) {
         await deleteClipFeedback(jobId, partNo)
@@ -210,7 +223,7 @@ function StepResultsBase({
         })
       }
     } catch { /* fire-and-forget — UI already updated */ }
-  }, [jobId, feedbackRatings, goal])
+  }, [jobId, feedbackRatings, goal, addNotification, t])
 
   // Restore ratings from server when job changes
   useEffect(() => {
