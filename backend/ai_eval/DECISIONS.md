@@ -84,6 +84,41 @@ boundaries (snap) and beat bindings: prompt guides, determinism guarantees.
 
 ---
 
+## D-2 — GEMINI_DEFAULT_MODEL 2.5→3.5 Flash · Decision: **RECOMMEND SWITCH** (2026-07-02)
+
+**Measurement:** `ai_eval/ab_model_upgrade.py` — full-stack recap A/B
+(story + editorial + recap all pinned per arm), judge FIXED at
+`gemini-2.5-flash` for both arms (self-preference bias favours arm A,
+so a B win is conservative). Store:
+`ai_eval/measurements/model_35flash.jsonl` (n=3, 1 film).
+
+**Evidence (n=3, 1 film, judge=2.5-flash):**
+- Δ weighted **+0.416 ± 0.119 SE** → **B better** (|mean| > 2·SE). B wins 3/3.
+- Per-criterion: pacing_suspense **+1.0**, story_coverage **+0.667**,
+  faithfulness **+0.667** (the hard-gate criterion improves — the D-1
+  editorial faithfulness dent does not reproduce on 3.5).
+- Structural (judge-free): scene_count 24.7→16.7 (tighter),
+  beat_coverage 0.67→0.87, episode_balance 77→92, duration ratio in
+  band on both arms. Only regression: hold_precision 0.89→0.61.
+- Compat smoke: 3.5-flash accepts the provider's existing
+  `thinking_config.thinking_budget` + `temperature` config unchanged
+  (backward-compat per Google docs; `thinking_level` migration optional).
+- Quota: free-tier 2.5-flash is now **20 req/day/key**
+  (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`); 3.5-flash quota
+  is per-model → switching also relieves 2.5 quota pressure.
+
+**How to switch:** `GEMINI_DEFAULT_MODEL=gemini-3.5-flash` in `.env`
+(zero code change). Flipping the hardcoded default in
+`providers/gemini.py` is HIGH-tier + requires updating
+`tests/test_gemini_default_model.py`.
+
+**Caveats (same as D-1):** one film, single-provider judge, n=3. Meets
+the directional bar, not the "cross-provider judge + ≥3 films" ship bar.
+Revisit if production recaps regress (esp. hold_precision — 3.5 marks
+fewer hold scenes).
+
+---
+
 ## Status of the other AI-quality flags
 
 | Flag | Default | Status | Verify with |

@@ -28,15 +28,30 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def test_gemini_default_model_is_flash():
-    """Free-tier safe default. If you're flipping this back to ``-pro``,
-    document the paid-tier requirement next to the constant."""
-    from app.features.render.ai.llm.providers import gemini as _g
+def test_gemini_default_model_is_flash(monkeypatch):
+    """Free-tier safe FALLBACK. If you're flipping this back to ``-pro``,
+    document the paid-tier requirement next to the constant.
 
-    assert _g._DEFAULT_MODEL == "gemini-2.5-flash", (
-        f"_DEFAULT_MODEL = {_g._DEFAULT_MODEL!r} — expected gemini-2.5-flash. "
-        "gemini-2.5-pro has limit:0 on free tier and causes 429 RESOURCE_EXHAUSTED."
-    )
+    2026-07-02: assert the hardcoded fallback with the env var CLEARED —
+    deployments legitimately override via GEMINI_DEFAULT_MODEL (D-2 switched
+    the live .env to gemini-3.5-flash), so this test pins the fallback, not
+    the resolved value. Same monkeypatch+reload pattern as the tests below.
+
+    Order subtlety: app.core.config's load_dotenv must run BEFORE the delenv,
+    otherwise the gemini reload triggers the first config import → dotenv
+    re-injects the .env value AFTER we deleted it (single-file runs failed
+    this way while the full suite passed — order-dependent)."""
+    import app.core.config  # noqa: F401 — force dotenv load so delenv sticks
+    monkeypatch.delenv("GEMINI_DEFAULT_MODEL", raising=False)
+    import app.features.render.ai.llm.providers.gemini as _g
+    importlib.reload(_g)
+    try:
+        assert _g._DEFAULT_MODEL == "gemini-2.5-flash", (
+            f"fallback _DEFAULT_MODEL = {_g._DEFAULT_MODEL!r} — expected gemini-2.5-flash. "
+            "gemini-2.5-pro has limit:0 on free tier and causes 429 RESOURCE_EXHAUSTED."
+        )
+    finally:
+        importlib.reload(_g)
 
 
 def test_gemini_default_model_env_override(monkeypatch):
