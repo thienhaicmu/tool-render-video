@@ -415,6 +415,41 @@ def run_recap(
             # must never abort on a snap concern.
             pass
 
+        # Duration-band reconciler (2026-07-02): deterministically enforce the
+        # recap's own 10–25%-of-runtime spec. Structural measurement showed the
+        # LLM ignores even a HARD prompt budget (post-prompt-fix sample still at
+        # 69% of runtime), so — same philosophy as snap-to-shots — the guarantee
+        # is deterministic: cap over-long scenes at 40s, then drop non-essential
+        # scenes (never climax / original-audio holds) globally longest-first.
+        # Runs BEFORE narration refinement so narration is authored for the
+        # final scene set, and before persist. ``RECAP_TRIM_TO_BAND=0`` is the
+        # kill switch; default ON. Never fatal.
+        try:
+            import os as _os_trim
+            if _os_trim.getenv("RECAP_TRIM_TO_BAND", "1") == "1" and video_duration > 0:
+                _trim = recap_plan.trim_to_duration_band(video_duration)
+                if _trim.get("changed"):
+                    _job_log(
+                        effective_channel, job_id,
+                        f"Recap: trimmed to duration band — capped={_trim['capped_scenes']} "
+                        f"dropped={_trim['dropped_scenes']} "
+                        f"ratio {_trim['ratio_before']}→{_trim['ratio_after']} "
+                        f"(in_band={_trim['in_band']})",
+                    )
+                    _emit_render_event(
+                        channel_code=effective_channel, job_id=job_id,
+                        event="recap.trimmed_to_band", level="INFO",
+                        message=(
+                            f"Recap trimmed to length band: {_trim['before_sec']:.0f}s → "
+                            f"{_trim['after_sec']:.0f}s"
+                        ),
+                        step="render.recap", context=_trim,
+                    )
+        except Exception:
+            # Defensive — domain method already guards, but the recap render
+            # must never abort on a length-governance concern.
+            pass
+
         # P1-2 — per-episode narration refinement (env-gated, default OFF → no-op).
         # Re-author each episode's narration in a focused call so later scenes
         # don't degrade. Best-effort: any failure keeps the original narration.

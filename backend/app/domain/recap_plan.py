@@ -440,6 +440,106 @@ class RecapPlan:
         except Exception:
             return 0
 
+    # ── Duration-band reconciler (2026-07-02) ─────────────────────────────
+
+    def trim_to_duration_band(
+        self,
+        film_duration_sec: float,
+        band_lo: float = 0.10,
+        band_hi: float = 0.25,
+        max_scene_sec: float = 40.0,
+    ) -> dict:
+        """Deterministically enforce the recap's own length spec: total recap
+        duration within ``band_lo``–``band_hi`` of the film, scenes at most
+        ``max_scene_sec`` (the prompt's "8–40 seconds" ceiling).
+
+        Structural measurement showed the LLM does not reliably honour even a
+        HARD prompt budget (observed 69% of runtime post-prompt-fix). Mirrors
+        ``snap_scenes_to_shots`` in spirit: deterministic, no LLM trust, pure
+        mutation, never raises.
+
+        TRIM-ONLY by design: an over-band plan is cut down; an under-band plan
+        is reported but never padded (inventing content deterministically is
+        not possible — extending scene ends risks bleeding into unrelated
+        source material).
+
+        Passes, in order, stopping as soon as the total fits under the band
+        ceiling:
+          1. CAP — any scene longer than ``max_scene_sec`` keeps its START
+             (the scene's hook) and trims the end.
+          2. DROP — remove non-essential scenes, longest first (fewest cuts).
+             A scene is essential if it ``is_climax``, plays original audio
+             (a deliberately placed hold), or is the last scene left in its
+             episode (an empty episode would produce no output).
+        Beat bindings are recomputed afterwards (drops shift indices).
+
+        Returns metrics: ``{changed, before_sec, after_sec, ratio_before,
+        ratio_after, in_band, capped_scenes, dropped_scenes}``. No-op result
+        when the film duration is unknown or the plan is empty.
+        """
+        result = {
+            "changed": False, "before_sec": 0.0, "after_sec": 0.0,
+            "ratio_before": None, "ratio_after": None, "in_band": None,
+            "capped_scenes": 0, "dropped_scenes": 0,
+        }
+        try:
+            film = float(film_duration_sec or 0.0)
+            scenes = self.scenes()
+            if film <= 0 or not scenes:
+                return result
+
+            def _total() -> float:
+                return sum(max(0.0, float(s.end) - float(s.start)) for s in self.scenes())
+
+            before = _total()
+            result["before_sec"] = round(before, 1)
+            result["ratio_before"] = round(before / film, 3)
+            ceiling = band_hi * film
+
+            if before > ceiling:
+                # Pass 1 — cap over-long scenes (keep the start = the hook).
+                for s in self.scenes():
+                    dur = float(s.end) - float(s.start)
+                    if dur > max_scene_sec:
+                        s.end = float(s.start) + float(max_scene_sec)
+                        result["capped_scenes"] += 1
+
+                # Pass 2 — drop non-essential scenes, GLOBALLY longest first
+                # (fewest cuts, no bias toward gutting the opening episode).
+                if _total() > ceiling:
+                    candidates = []  # (scene, act, ep) — droppable triples
+                    for ep in self.episodes:
+                        for act in ep.acts:
+                            for s in act.scenes:
+                                if s.is_climax or str(s.audio_mode) == AUDIO_MODE_ORIGINAL:
+                                    continue  # essential — never dropped
+                                candidates.append((s, act, ep))
+                    candidates.sort(
+                        key=lambda t: float(t[0].end) - float(t[0].start), reverse=True,
+                    )
+                    for s, act, ep in candidates:
+                        if _total() <= ceiling:
+                            break
+                        if ep.scene_count() <= 1:
+                            continue  # never empty an episode
+                        act.scenes.remove(s)
+                        result["dropped_scenes"] += 1
+
+            after = _total()
+            result["after_sec"] = round(after, 1)
+            result["ratio_after"] = round(after / film, 3)
+            result["in_band"] = band_lo <= (after / film) <= band_hi
+            result["changed"] = bool(result["capped_scenes"] or result["dropped_scenes"])
+            if result["dropped_scenes"]:
+                # Drops shift flattened-scene indices — recompute beat bindings.
+                self.bind_story_beats_to_scenes()
+            # Recompute the AI-claimed total so the persisted plan is coherent.
+            if result["changed"]:
+                self.total_target_sec = round(after, 1)
+            return result
+        except Exception:
+            return result
+
     # ── Serialisation ────────────────────────────────────────────────────
 
     def to_json(self) -> str:
