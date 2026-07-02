@@ -260,10 +260,16 @@ def synthesize_timed_narration(
     tts_engine: str,
     job_id: str,
     part_idx: int,
+    synthesized_out: Optional[list] = None,
 ) -> Optional[str]:
     """Synthesize a per-clip narration audio file from a list of timed segments.
 
     Returns the final mp3 path, or None on any failure (Sacred #3).
+
+    ``synthesized_out`` (Fix C, 2026-07-02): optional caller-owned list; the
+    (start, end) span of every segment that actually produced audio is
+    appended to it (post-merge units). Callers use it to align captions /
+    freeze windows with the voice that really exists.
     """
     if not segments:
         logger.warning("timed_narration: empty segments")
@@ -373,6 +379,22 @@ def synthesize_timed_narration(
         futures = {pool.submit(_synth_one_segment, i, seg): i for i, seg in enumerate(segments)}
         for fut in futures:
             results[futures[fut]] = fut.result()  # collect in original index order
+    # Fix C (2026-07-02): report which (start, end) spans actually got a
+    # voice, so the caller can drop captions/freezes for spans whose TTS
+    # failed (previously a partially-failed synth still burned the full
+    # caption set — silent text on screen). Optional + append-only: callers
+    # that don't pass the list are byte-identical.
+    if synthesized_out is not None:
+        for _i, _r in enumerate(results):
+            if _r is None:
+                continue
+            try:
+                synthesized_out.append((
+                    float(segments[_i].get("start", 0.0)),
+                    float(segments[_i].get("end", 0.0)),
+                ))
+            except Exception:
+                pass
     placed: list[tuple[float, Path]] = [r for r in results if r is not None]
     placed.sort(key=lambda x: x[0])
 

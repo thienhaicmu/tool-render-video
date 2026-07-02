@@ -197,6 +197,37 @@ def _resolve_voice_provider_from_plan(ctx: PartRenderContext, fallback: str) -> 
     return plan_provider
 
 
+def _filter_voiced_segments(
+    segments: "list[dict] | None",
+    ok_spans: "list[tuple[float, float]]",
+) -> "list[dict] | None":
+    """Fix C (2026-07-02): keep only voice segments whose span overlaps a
+    successfully synthesized span, so the R3b caption burn (and the freeze
+    pass) never covers a stretch whose TTS silently failed. Non-voice
+    entries (reaction "original" windows) pass through untouched — they feed
+    the freeze pass, not the caption burn. Never raises.
+    """
+    if not segments:
+        return segments
+    try:
+        kept: list[dict] = []
+        for s in segments:
+            kind = str(s.get("kind", "voice") or "voice").strip().lower()
+            if kind != "voice":
+                kept.append(s)
+                continue
+            try:
+                s0 = float(s.get("start", 0.0))
+                s1 = float(s.get("end", 0.0))
+            except (TypeError, ValueError):
+                continue
+            if any(s0 < e1 and e0 < s1 for (e0, e1) in ok_spans):
+                kept.append(s)
+        return kept
+    except Exception:
+        return segments
+
+
 def _resolve_voice_enabled_from_plan(ctx: PartRenderContext, fallback: bool) -> bool:
     """Return the effective voice_enabled flag for this part.
 
@@ -345,6 +376,7 @@ def run_part_voice_mix(
                 step="voice.tts",
                 context={"part_no": idx, "language": ctx.payload.voice_language, "source": "authored"},
             )
+            _synth_ok_spans: list = []
             _part_subtitle_voice_path = synthesize_timed_narration(
                 segments=_segments,
                 clip_duration_sec=_clip_dur,
@@ -358,9 +390,12 @@ def run_part_voice_mix(
                 ),
                 job_id=ctx.job_id,
                 part_idx=idx,
+                synthesized_out=_synth_ok_spans,
             )
             if not _part_subtitle_voice_path:
                 raise RuntimeError("synthesize_timed_narration returned None")
+            # Fix C: align captions/freeze with the voice that really exists.
+            _reaction_segments = _filter_voiced_segments(_reaction_segments, _synth_ok_spans)
             _emit_render_event(
                 channel_code=ctx.effective_channel, job_id=ctx.job_id,
                 event="voice_tts_completed", level="INFO",
@@ -868,6 +903,7 @@ def run_part_voice_mix(
                     )
                     # Capture for the freeze-frame post-pass (reaction mode).
                     _reaction_segments = _segments
+                    _synth_ok_spans: list = []
                     _part_subtitle_voice_path = synthesize_timed_narration(
                         segments=_segments,
                         clip_duration_sec=_clip_dur,
@@ -881,9 +917,13 @@ def run_part_voice_mix(
                         ),
                         job_id=ctx.job_id,
                         part_idx=idx,
+                        synthesized_out=_synth_ok_spans,
                     )
                     if not _part_subtitle_voice_path:
                         raise RuntimeError("synthesize_timed_narration returned None")
+                    # Fix C: drop captions/freeze windows for spans whose TTS
+                    # failed (partial-failure synth still returns a path).
+                    _reaction_segments = _filter_voiced_segments(_reaction_segments, _synth_ok_spans)
                     _emit_render_event(
                         channel_code=ctx.effective_channel,
                         job_id=ctx.job_id,

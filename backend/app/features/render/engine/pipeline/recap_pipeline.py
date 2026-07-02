@@ -166,6 +166,58 @@ def _scored_from_recap_plan(recap_plan) -> list[dict]:
     return out
 
 
+def _repoint_scene_parts_to_episodes(
+    job_id: str,
+    scored: list[dict],
+    outputs: list[dict],
+) -> int:
+    """Fix A (2026-07-02): scene files under work_dir/scenes are deleted right
+    after episode QA, but ``job_parts.output_file`` still points at them — so
+    every per-part surface (stream / thumbnail / editor trim / export) on a
+    recap job dead-links. Repoint each scene's part row at the assembled
+    episode file that contains it, so part playback keeps working.
+
+    Only parts belonging to episodes that PASSED QA (``outputs``) are
+    repointed; a failed episode's parts keep their scene paths (pre-existing
+    behaviour — its file failed QA and is not a valid target).
+
+    Returns the number of rows repointed. Never raises (best-effort — a DB
+    hiccup here must not fail a render whose outputs are already delivered).
+    """
+    try:
+        from app.db.jobs_repo import update_part_output_path
+        ep_path_by_index = {int(e["episode_index"]): str(e["path"]) for e in outputs}
+        repointed = 0
+        for idx, seg in enumerate(scored, start=1):
+            ep_path = ep_path_by_index.get(int(seg.get("episode_index", 0) or 0))
+            if ep_path:
+                update_part_output_path(job_id, idx, ep_path)
+                repointed += 1
+        return repointed
+    except Exception as exc:
+        logger.warning("recap: part repoint failed (non-fatal): %s", exc)
+        return 0
+
+
+def _recap_subtitle_map(scored: list[dict]) -> "dict[int, bool]":
+    """Fix B (2026-07-02): per-part source-dialogue subtitle map for recap.
+
+    Narrate scenes NEVER get source-dialogue subtitles — the R3b narration
+    caption burn is the recap's subtitle layer, and burning both stacked two
+    subtitle rows at the bottom of every narrated scene whenever the UI's
+    add_subtitle toggle was on. "Original audio" scenes ALWAYS get the
+    source-dialogue subtitles (unchanged R6 behaviour) so the viewer can
+    follow the raw dialogue the AI chose to let play.
+
+    The UI add_subtitle flag therefore has no effect on the recap path; the
+    clips path is untouched.
+    """
+    return {
+        i: str(scored[i - 1].get("audio_mode", "")) == "original"
+        for i in range(1, len(scored) + 1)
+    }
+
+
 def _check_recap_coverage(recap_plan, video_duration: float) -> dict:
     """N5 — measure how well the selected scenes span the film. Returns metrics
     + a `weak` flag (scenes clustered into a small span, or a large uncovered
@@ -605,13 +657,10 @@ def run_recap(
             pass
 
         # 4. Render each scene as a "part" (reuse the clips render loop) ------
-        # R6: force subtitle ON for "original audio" scenes so the viewer can
-        # follow the raw source dialogue even when global subtitles are off.
-        _add_sub = bool(getattr(payload, "add_subtitle", False))
-        subtitle_enabled_by_idx = {
-            i: (_add_sub or str(scored[i - 1].get("audio_mode", "")) == "original")
-            for i in range(1, total_parts + 1)
-        }
+        # Fix B (2026-07-02): source-dialogue subtitles burn ONLY on
+        # "original audio" scenes; narrate scenes rely on the R3b narration
+        # captions (previously add_subtitle=True double-burned both layers).
+        subtitle_enabled_by_idx = _recap_subtitle_map(scored)
         try:
             _src_stat_for_motion = source_path.stat()
         except Exception:
@@ -710,6 +759,16 @@ def run_recap(
             _outputs.append(_ep)
         if not _outputs:
             raise RuntimeError("Recap: every episode failed QA")
+
+        # Fix A (2026-07-02): repoint job_parts rows BEFORE the scene files are
+        # deleted below, so recap jobs never carry dead output_file links.
+        _repointed = _repoint_scene_parts_to_episodes(job_id, scored, _outputs)
+        if _repointed:
+            _job_log(
+                effective_channel, job_id,
+                f"recap: repointed {_repointed} scene part(s) to episode file(s)",
+                kind="debug",
+            )
 
         # A3: episodes are assembled + validated — the per-scene intermediates in
         # scenes_dir are no longer needed. Remove them so they don't accumulate.
