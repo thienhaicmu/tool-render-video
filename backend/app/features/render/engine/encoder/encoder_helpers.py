@@ -81,9 +81,12 @@ def qsv_runtime_ready(codec_name: str) -> bool:
 
 
 def qsv_enabled() -> bool:
-    """QSV is OFF by default (the CPU/NVENC behaviour is unchanged) — opt in via
-    ENABLE_QSV=1. Read at call time so tests/env toggles take effect."""
-    return os.getenv("ENABLE_QSV", "0").strip() == "1"
+    """QSV mặc định BẬT — chuỗi resolver là card-first: NVENC → QSV → CPU
+    (quyết định chủ dự án 2026-07: "mặc định dùng card, không có thì về
+    CPU"). An toàn: ``qsv_runtime_ready`` probe thật trước khi chọn, máy
+    không có iGPU Intel hoặc driver hỏng tự rơi về libx264. Tắt khẩn cấp
+    bằng ``ENABLE_QSV=0``. Đọc tại call time để test/env toggle có hiệu lực."""
+    return os.getenv("ENABLE_QSV", "1").strip() == "1"
 
 
 def _maybe_qsv(c: str) -> str | None:
@@ -102,7 +105,8 @@ def _maybe_qsv(c: str) -> str | None:
 def resolve_encoder(codec: str, encoder_mode: str = "auto") -> str:
     """Return the best available FFmpeg video encoder for the given codec/mode pair.
 
-    Order: NVENC (if auto/nvenc) → QSV (opt-in) → libx264/libx265 CPU fallback.
+    Order: NVENC (if auto/nvenc) → QSV (default ON, ENABLE_QSV=0 tắt) →
+    libx264/libx265 CPU fallback. Mỗi bậc đều probe runtime thật.
     """
     c = (codec or "h264").lower()
     mode = (encoder_mode or "auto").lower()
@@ -137,16 +141,18 @@ def map_preset_for_encoder(video_preset: str, resolved_codec: str) -> str:
 
 
 def gpu_pacing_flags(video_codec: str, encoder_mode: str = "auto") -> list[str] | None:
-    """Cờ NVENC cho pass re-encode của micro-pacing (mục tiêu chất lượng
-    tương đương legacy libx264 crf17: cq 17, preset p5 ~ medium).
+    """Cờ encoder phần cứng cho pass re-encode của micro-pacing (mục tiêu
+    chất lượng tương đương legacy libx264 crf17: NVENC cq 17 / QSV
+    global_quality 17, preset ~ medium).
 
-    Trả ``None`` khi máy/job không resolve ra NVENC — caller (clip_ops)
-    giữ cờ CPU legacy. Literal codec NVENC sống ở file này (resolver) để
-    clip_ops giữ đúng phân loại false-positive trong
-    tests/test_nvenc_semaphore_external_acquire.py.
+    Trả ``None`` khi máy/job resolve ra encoder CPU — caller (clip_ops)
+    giữ cờ CPU legacy. Nhận cả NVENC lẫn QSV (iGPU Intel) theo luật
+    card-first của resolver; QSV không cần NVENC_SEMAPHORE. Literal codec
+    phần cứng sống ở file này (resolver) để clip_ops giữ đúng phân loại
+    false-positive trong tests/test_nvenc_semaphore_external_acquire.py.
     """
     resolved = resolve_encoder(video_codec or "h264", encoder_mode or "auto")
-    if resolved not in ("h264_nvenc", "hevc_nvenc"):
+    if resolved not in ("h264_nvenc", "hevc_nvenc", "h264_qsv", "hevc_qsv"):
         return None
     return [
         "-c:v", resolved,
