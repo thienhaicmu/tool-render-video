@@ -9,6 +9,7 @@ import logging
 import threading
 from app.db.connection import init_db
 from app.services.maintenance import (
+    prune_gemini_tts_cache,
     prune_job_logs,
     prune_old_jobs,
     prune_preview_dirs,
@@ -267,6 +268,9 @@ def _run_periodic_cleanup():
             result_render = prune_render_temp_dirs(TEMP_DIR)
             # Sprint 6 P0: bound long-running caches that previously had no TTL.
             result_xtts = prune_xtts_cache(TEMP_DIR, max_age_days=30)
+            # O-2 (2026-07-02): Gemini TTS synthesis cache — same unbounded-
+            # growth class as xtts_cache, same 30d TTL.
+            prune_gemini_tts_cache(TEMP_DIR, max_age_days=30)
             from app.services.text_overlay import get_text_overlay_temp_dir
             result_overlay = prune_text_overlay_dir(get_text_overlay_temp_dir(), max_age_days=7)
             # Sprint 6 P1 (closure of CLAUDE.md Issue 3): render cache prune
@@ -353,6 +357,7 @@ def startup():
     # Same scheduler tick handles them periodically; startup prune
     # catches anything that accumulated between restarts.
     prune_xtts_cache(TEMP_DIR, max_age_days=30)
+    prune_gemini_tts_cache(TEMP_DIR, max_age_days=30)  # O-2: same class as xtts_cache
     # Phase 1-18 feature-layer migration moved text_overlay to
     # features/render/engine/overlay/text_overlay.py. The old import path
     # `app.services.text_overlay` no longer exists; using the new location.

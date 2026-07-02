@@ -37,10 +37,23 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_GEMINI_TTS_MODEL = os.environ.get("GEMINI_TTS_MODEL", "gemini-3.1-flash-tts-preview")
+
+def _tts_model() -> str:
+    """Resolve the TTS model at CALL time, not import time — this module can
+    be imported before app.core.config has loaded .env (tools/tests), which
+    would freeze the hardcoded default into the cache key."""
+    return os.environ.get("GEMINI_TTS_MODEL", "gemini-3.1-flash-tts-preview")
+
+
 _GEMINI_TTS_TIMEOUT_SEC = int(os.environ.get("GEMINI_TTS_TIMEOUT_SEC", "120"))
 # API contract for TTS models: raw PCM signed 16-bit LE, 24 kHz, mono.
 _GEMINI_TTS_SAMPLE_RATE = 24000
+
+# O-4: parts render in parallel, so per-part TTS calls would otherwise burst
+# the preview model's low RPM — a burst of 429s (post-O-1) would cool pool
+# keys needlessly. Same remedy as the rewrite path's _REWRITE_SEMAPHORE.
+_GEMINI_TTS_MAX_CONCURRENCY = max(1, int(os.environ.get("GEMINI_TTS_MAX_CONCURRENCY", "2") or 2))
+_GEMINI_TTS_SEMAPHORE = threading.Semaphore(_GEMINI_TTS_MAX_CONCURRENCY)
 
 # gender → prebuilt Gemini voice. GEMINI_TTS_VOICE overrides both.
 _VOICE_BY_GENDER = {
@@ -123,8 +136,9 @@ _TEMPO_HINTS = {
            "Read noticeably slower.", "Read slightly slower."),
 }
 
-# Thread-safe synthesis cache — key → MP3 path.
-_GEMINI_SYNTHESIS_CACHE: dict[str, str] = {}
+# Guards the disk-cache check/copy against parallel parts synthesizing the
+# same text. (O-3: the former in-memory dict here was write-only dead code —
+# the disk file IS the cache.)
 _GEMINI_CACHE_LOCK = threading.Lock()
 
 
@@ -226,8 +240,60 @@ def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
 def _synthesis_cache_key(text: str, language: str, voice: str, style: str) -> str:
     """16-char SHA256 prefix — deterministic key for synthesized audio.
     Model id is part of the key so a model upgrade never serves stale audio."""
-    payload = f"gemini\x00{_GEMINI_TTS_MODEL}\x00{voice}\x00{style}\x00{language}\x00{text}"
+    payload = f"gemini\x00{_tts_model()}\x00{voice}\x00{style}\x00{language}\x00{text}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _generate_pcm(style: str, text: str, voice: str) -> bytes:
+    """Run the Gemini TTS call across the key pool — O-1.
+
+    Routed through ``call_gemini_with_rotation`` exactly like the six LLM
+    wrappers in providers/gemini.py: a 429 cools the key and retries the SAME
+    request on the next key; a transient 503/504 retries on the next key
+    without cooling. Without this, one exhausted key dropped the whole render
+    to the Edge chain mid-video — parts switching voice — while other pool
+    keys still had quota.
+
+    Serialized by ``_GEMINI_TTS_SEMAPHORE`` (O-4) so parallel parts don't
+    burst the preview model's RPM and cool keys needlessly.
+
+    Returns raw PCM bytes; raises RuntimeError when every key is exhausted or
+    the response is empty (caller falls back to the Edge chain).
+    """
+    from app.features.render.ai.llm.key_pool import active_key, call_gemini_with_rotation
+    from google import genai  # lazy — optional dependency
+    from google.genai import types as genai_types
+
+    model = _tts_model()
+
+    def _once(key: str) -> "bytes | None":
+        client = genai.Client(
+            api_key=key,
+            http_options={"timeout": _GEMINI_TTS_TIMEOUT_SEC * 1000},
+        )
+        resp = client.models.generate_content(
+            model=model,
+            contents=f"{style}: {text}",
+            config=genai_types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=genai_types.SpeechConfig(
+                    voice_config=genai_types.VoiceConfig(
+                        prebuilt_voice_config=genai_types.PrebuiltVoiceConfig(voice_name=voice)
+                    )
+                ),
+            ),
+        )
+        try:
+            pcm = resp.candidates[0].content.parts[0].inline_data.data
+        except (AttributeError, IndexError, TypeError):
+            return None  # empty response — non-retryable, rotation fails fast
+        return pcm or None
+
+    with _GEMINI_TTS_SEMAPHORE:
+        pcm = call_gemini_with_rotation(_once, label="gemini-tts", seed_key=active_key())
+    if not pcm:
+        raise RuntimeError("gemini_tts_failed_all_keys_or_empty")
+    return pcm
 
 
 def synthesize_gemini(
@@ -253,8 +319,7 @@ def synthesize_gemini(
     if not clean_text:
         raise RuntimeError("Narration text is empty")
 
-    api_key = _resolve_api_key()
-    if not api_key:
+    if not _resolve_api_key():
         raise RuntimeError("gemini_tts_no_api_key")
 
     voice = _resolve_voice(gender)
@@ -283,35 +348,12 @@ def synthesize_gemini(
     start = time.perf_counter()
     logger.info(
         "gemini_tts_start job_id=%s model=%s voice=%s language=%s content_type=%s chars=%d",
-        job_id, _GEMINI_TTS_MODEL, voice, language, content_type, len(clean_text),
+        job_id, _tts_model(), voice, language, content_type, len(clean_text),
     )
 
-    from google import genai  # lazy — optional dependency
-    from google.genai import types as genai_types
-
-    client = genai.Client(
-        api_key=api_key,
-        http_options={"timeout": _GEMINI_TTS_TIMEOUT_SEC * 1000},
-    )
-    resp = client.models.generate_content(
-        model=_GEMINI_TTS_MODEL,
-        contents=f"{style}: {clean_text}",
-        config=genai_types.GenerateContentConfig(
-            response_modalities=["AUDIO"],
-            speech_config=genai_types.SpeechConfig(
-                voice_config=genai_types.VoiceConfig(
-                    prebuilt_voice_config=genai_types.PrebuiltVoiceConfig(voice_name=voice)
-                )
-            ),
-        ),
-    )
-
-    try:
-        pcm = resp.candidates[0].content.parts[0].inline_data.data
-    except (AttributeError, IndexError, TypeError) as exc:
-        raise RuntimeError(f"gemini_tts_empty_response: {exc}") from exc
-    if not pcm:
-        raise RuntimeError("gemini_tts_empty_audio")
+    # O-1: synthesis rides the key-rotation pool (429 → next key) under the
+    # O-4 concurrency semaphore. Raises when every key is exhausted.
+    pcm = _generate_pcm(style, clean_text, voice)
 
     with wave.open(str(wav_path), "wb") as wf:
         wf.setnchannels(1)
@@ -328,12 +370,10 @@ def synthesize_gemini(
     if not mp3_path.exists() or mp3_path.stat().st_size <= 0:
         raise RuntimeError("Gemini TTS WAV→MP3 conversion produced empty file")
 
-    # Store in shared cache for future reuse.
+    # Store in shared cache for future reuse (the disk file IS the cache).
     try:
         cache_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(mp3_path), str(cached_mp3))
-        with _GEMINI_CACHE_LOCK:
-            _GEMINI_SYNTHESIS_CACHE[cache_key] = str(cached_mp3)
     except Exception as _cache_exc:
         logger.debug("gemini_tts_cache_write_failed key=%s: %s", cache_key, _cache_exc)
 
@@ -341,6 +381,6 @@ def synthesize_gemini(
     elapsed_ms = int((time.perf_counter() - start) * 1000)
     logger.info(
         "gemini_tts_complete job_id=%s model=%s voice=%s audio_sec=%.1f elapsed_ms=%d output=%s",
-        job_id, _GEMINI_TTS_MODEL, voice, audio_sec, elapsed_ms, mp3_path.name,
+        job_id, _tts_model(), voice, audio_sec, elapsed_ms, mp3_path.name,
     )
     return str(mp3_path)

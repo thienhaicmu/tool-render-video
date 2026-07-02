@@ -214,6 +214,45 @@ def prune_xtts_cache(temp_dir: Path, max_age_days: int = 30) -> dict:
     return {"removed": removed, "kept": kept}
 
 
+def prune_gemini_tts_cache(temp_dir: Path, max_age_days: int = 30) -> dict:
+    """Remove stale Gemini TTS synthesis cache MP3s older than max_age_days.
+
+    O-2 (2026-07-02): audio/tts_gemini.py maintains a hash-keyed MP3 cache at
+    ``TEMP_DIR/gemini_tts_cache/`` with no eviction — the same unbounded-growth
+    class prune_xtts_cache closed for XTTS (TEMP_FILE_AUDIT S-5). Same 30d TTL:
+    cache hits save real API quota on a preview model, so keep them a while.
+
+    Per-file try/except so one bad file doesn't abort. Returns {removed, kept}.
+    Idempotent if the dir doesn't exist yet.
+    """
+    cache_root = temp_dir / "gemini_tts_cache"
+    if not cache_root.exists():
+        return {"removed": 0, "kept": 0}
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    removed = kept = 0
+    try:
+        for f in cache_root.iterdir():
+            if not f.is_file():
+                continue
+            try:
+                mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                if mtime < cutoff:
+                    f.unlink(missing_ok=True)
+                    removed += 1
+                else:
+                    kept += 1
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("maintenance: failed to scan gemini_tts_cache: %s", exc)
+    if removed:
+        logger.info(
+            "maintenance: pruned %d stale gemini_tts_cache files (>%dd old) from %s",
+            removed, max_age_days, cache_root,
+        )
+    return {"removed": removed, "kept": kept}
+
+
 def prune_text_overlay_dir(overlay_dir: Path, max_age_days: int = 7) -> dict:
     """Remove stale text-overlay drawtext txt files older than max_age_days.
 

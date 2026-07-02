@@ -81,6 +81,13 @@ hash tại `TEMP_DIR/gemini_tts_cache/` (cùng text không tốn quota lần 2).
 | `GEMINI_TTS_VOICE` | theo gender (`Kore`/`Charon`) | Ghi đè prebuilt voice |
 | `GEMINI_TTS_STYLE` | theo ngôn ngữ + content_type | Ghi đè câu chỉ dẫn giọng đọc (mặc định: bảng vi/en có tempo; `rate` ±3% trở lên thêm hint nhanh/chậm) |
 | `GEMINI_TTS_TIMEOUT_SEC` | `120` | Timeout một lời gọi TTS |
+| `GEMINI_TTS_MAX_CONCURRENCY` | `2` | Số call TTS đồng thời (part chạy song song) — chặn burst RPM làm cool key pool oan |
+
+Ghi chú vận hành (O-1..O-4, 2026-07-02): call TTS đi qua **key rotation pool**
+(429 → xoay key kế, 503/504 → thử key kế không cool) giống 6 wrapper LLM —
+một key cạn quota không còn làm render rớt về giọng Edge giữa video. Cache
+`gemini_tts_cache/` được prune định kỳ (TTL 30 ngày, cùng lớp với
+`xtts_cache`).
 
 ## 6. AI / LLM
 
