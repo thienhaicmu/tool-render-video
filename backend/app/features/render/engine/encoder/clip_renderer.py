@@ -929,6 +929,15 @@ def render_part_from_source(
         _crop_ctx = NVENC_SEMAPHORE if _crop_codec in ("h264_nvenc", "hevc_nvenc") else None
         if _crop_ctx is not None:
             _crop_ctx.acquire()
+        # Forward reframe_mode qua cfg — cùng pattern với render_part_smart.
+        # Thiếu cfg thì render_motion_aware_crop tự dựng config mặc định với
+        # reframe "subject", bỏ qua lựa chọn của RenderPlan (smoke-check
+        # 2026-07: plan chọn "center" nhưng nhánh fuse vẫn chạy subject).
+        _fuse_crop_cfg = MotionCropConfig(
+            scale_x_percent=float(scale_x),
+            scale_y_percent=float(scale_y),
+            reframe_mode=reframe_mode,
+        )
         try:
             try:
                 return render_motion_aware_crop(
@@ -937,6 +946,7 @@ def render_part_from_source(
                     aspect_ratio=aspect_ratio,
                     scale_x_percent=float(scale_x),
                     scale_y_percent=float(scale_y),
+                    cfg=_fuse_crop_cfg,
                     subtitle_file=subtitle_ass if add_subtitle and subtitle_ass and Path(subtitle_ass).exists() else None,
                     title_text=title_text if add_title_overlay else None,
                     effect_preset=effect_preset,

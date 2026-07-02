@@ -233,7 +233,18 @@ def prepare_part_assets(
 
     subtitle_selected_by_rule = ctx.subtitle_enabled_by_idx.get(idx, False)
     part_subtitle_enabled = subtitle_selected_by_rule
-    if part_subtitle_enabled and not raw_part.exists():
+    # Phụ đề có 2 nguồn: fast-path slice từ full SRT (không cần raw_part)
+    # và fallback Whisper trên raw_part. Chỉ tắt phụ đề khi CẢ HAI nguồn
+    # đều bất khả dụng. Guard cũ chỉ kiểm raw_part nên đường fuse
+    # (raw_part không tồn tại theo thiết kế) bị mất phụ đề âm thầm —
+    # bug được smoke-check 2026-07 phát hiện.
+    _full_srt_usable = bool(
+        ctx.full_srt_available
+        and ctx.full_srt
+        and ctx.full_srt.exists()
+        and ctx.full_srt.stat().st_size > 0
+    )
+    if part_subtitle_enabled and not raw_part.exists() and not _full_srt_usable:
         part_subtitle_enabled = False
         _job_log(ctx.effective_channel, ctx.job_id, f"Part {idx} subtitle skipped: raw clip not available for transcription", kind="warning")
     if ctx.payload.add_subtitle and not part_subtitle_enabled and not subtitle_selected_by_rule:
