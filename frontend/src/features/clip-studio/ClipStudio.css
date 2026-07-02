@@ -272,6 +272,7 @@
 }
 .cs-sb-dot.ok   { background: var(--status-success); animation: none; }
 .cs-sb-dot.warn { background: var(--status-warning); }
+.cs-sb-dot.fail { background: var(--status-error); }
 .cs-sb-dot.off  { background: var(--text-disabled); }
 .cs-sb-endpoint {
   margin-left: auto;

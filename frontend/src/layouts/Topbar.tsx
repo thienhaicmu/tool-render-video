@@ -1,60 +1,22 @@
 /**
  * Topbar — product wordmark, theme toggle, AI warmup status, connection.
  */
-import React, { useEffect, useState } from 'react'
-import { apiFetch } from '../api/client'
+import React from 'react'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { NotificationCenter } from '../components/NotificationCenter'
 import { useUIStore } from '../stores/uiStore'
-
-interface WarmupStatus {
-  model?: string
-  status?: string
-  loaded?: boolean
-  ready?: boolean
-}
+import { useBackendHealth } from '../hooks/useBackendHealth'
 
 // ── Topbar ───────────────────────────────────────────────────────────────────
 
 export function Topbar() {
-  const [warmupStatus, setWarmupStatus] = useState<WarmupStatus | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
+  // P0.1 — shared refcounted health poll (also drives the Studio status bar).
+  const { apiOk, whisperReady, warmupStatus } = useBackendHealth()
+  const isConnected = apiOk === true
   // #9 Dual-shell consistency (audit 2026-06-15): brand mark click jumps
   // back to clip-studio so users who landed on Settings (via the cs-shell
   // gear icon) have an obvious way back without needing the Sidebar.
   const setActivePanel = useUIStore((s) => s.setActivePanel)
-
-  useEffect(() => {
-    let cancelled = false
-    const check = async () => {
-      try {
-        await apiFetch('/health')
-        if (!cancelled) setIsConnected(true)
-      } catch {
-        if (!cancelled) setIsConnected(false)
-      }
-    }
-    check()
-    const timer = setInterval(check, 30_000)
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    const fetchWarmup = async () => {
-      try {
-        const data = await apiFetch<WarmupStatus>('/api/warmup/status')
-        if (!cancelled) setWarmupStatus(data)
-      } catch {
-        // warmup status unavailable — not critical
-      }
-    }
-    fetchWarmup()
-    return () => { cancelled = true }
-  }, [])
 
   return (
     <header style={styles.topbar}>
@@ -78,21 +40,19 @@ export function Topbar() {
           <span
             style={{
               ...styles.statusBadge,
-              ...(warmupStatus.loaded || warmupStatus.ready
-                ? styles.statusBadgeReady
-                : styles.statusBadgeLoading),
+              ...(whisperReady ? styles.statusBadgeReady : styles.statusBadgeLoading),
             }}
             title={`AI/Warmup: ${warmupStatus.status ?? 'unknown'}`}
           >
             <span
               style={{
                 ...styles.statusDot,
-                backgroundColor: warmupStatus.loaded || warmupStatus.ready
+                backgroundColor: whisperReady
                   ? 'var(--status-success)'
                   : 'var(--status-warning)',
               }}
             />
-            AI {warmupStatus.loaded || warmupStatus.ready ? 'Ready' : 'Loading'}
+            AI {whisperReady ? 'Ready' : 'Loading'}
           </span>
         )}
 

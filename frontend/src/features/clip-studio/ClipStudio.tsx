@@ -7,6 +7,7 @@ import { ActiveJobBadge } from './ActiveJobBadge'
 import { InterruptedJobsBanner } from './InterruptedJobsBanner'
 import { useUIStore } from '../../stores/uiStore'
 import { useSystemResources } from '../../hooks/useSystemResources'
+import { useBackendHealth } from '../../hooks/useBackendHealth'
 import { NotificationCenter } from '../../components/NotificationCenter'
 
 // S2.6 — collapsed the in-Studio History tab; the sidebar Library is now
@@ -31,6 +32,19 @@ function loadTone(pct: number | null): 'ok' | 'warn' | 'fail' | 'off' {
   if (pct >= 95) return 'fail'
   if (pct >= 80) return 'warn'
   return 'ok'
+}
+
+// P0.1 — health dot (API reachability, Whisper warmup). Previously these
+// dots were hardcoded always-green; now they reflect useBackendHealth.
+function HealthDot({ label, tone, title }: {
+  label: string; tone: 'ok' | 'warn' | 'fail' | 'off'; title?: string
+}) {
+  return (
+    <span className="cs-sb" title={title ?? label}>
+      <span className={`cs-sb-dot ${tone}`} />
+      {label}
+    </span>
+  )
 }
 
 function ResourceDot({
@@ -62,6 +76,8 @@ export function ClipStudio() {
   // 'settings' so AppShell takes over and renders SettingsScreen.
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const { snapshot: sysSnap } = useSystemResources()
+  // P0.1 — real backend health for the status-bar dots (was hardcoded green).
+  const { apiOk, whisperReady, warmupStatus } = useBackendHealth()
 
   // Pha 1.1 — when a finished download is sent to Render, flip to the
   // Render tab so the user lands where the source was just pre-filled.
@@ -133,11 +149,30 @@ export function ClipStudio() {
         </div>
       </div>
 
-      {/* Status bar */}
+      {/* Status bar — P0.1: dots reflect real /health + warmup state.
+          The FFmpeg dot was removed: no backend endpoint reports FFmpeg
+          health, and a hardcoded green dot is worse than no dot. */}
       <footer className="cs-sbar">
-        <span className="cs-sb"><span className="cs-sb-dot ok" />API</span>
-        <span className="cs-sb"><span className="cs-sb-dot ok" />FFmpeg</span>
-        <span className="cs-sb"><span className="cs-sb-dot ok" />Whisper</span>
+        <HealthDot
+          label="API"
+          tone={apiOk === null ? 'off' : apiOk ? 'ok' : 'fail'}
+          title={apiOk === null ? 'API: checking…' : apiOk ? 'Backend connected' : 'Backend unreachable'}
+        />
+        <HealthDot
+          label="Whisper"
+          tone={
+            apiOk === false ? 'fail'
+              : whisperReady === null ? 'off'
+              : whisperReady ? 'ok'
+              : 'warn'
+          }
+          title={
+            apiOk === false ? 'Whisper: backend unreachable'
+              : whisperReady === null ? 'Whisper: status unknown'
+              : whisperReady ? `Whisper ready${warmupStatus?.model ? ` · ${warmupStatus.model}` : ''}`
+              : `Whisper loading${warmupStatus?.status ? ` · ${warmupStatus.status}` : ''}`
+          }
+        />
         <ResourceDot label="CPU" pct={sysSnap?.cpu_percent ?? null} />
         <ResourceDot
           label={sysSnap?.gpu_name ? 'GPU' : 'GPU'}
