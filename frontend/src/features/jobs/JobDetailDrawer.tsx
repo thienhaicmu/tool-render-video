@@ -9,6 +9,10 @@ import { useUIStore } from '@/stores/uiStore'
 import { ApiError } from '@/api/client'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { IconFolder, IconX } from '@/components/icons'
+import { ClipPlayerModal } from '@/features/clip-studio/render/steps/ClipPlayerModal'
+import { useT } from '@/features/clip-studio/render/i18n'
+import { useI18n } from '@/i18n/useI18n'
+import { submitClipFeedback, deleteClipFeedback } from '@/api/feedback'
 import type { JobStatus, JobPart } from '@/types/api'
 
 export interface JobDetailDrawerProps {
@@ -58,7 +62,7 @@ function MetaChip({ label, value }: { label: string; value: string }) {
   )
 }
 
-function ClipCard({ part, isBest }: { part: JobPart; isBest: boolean; jobId: string }) {
+function ClipCard({ part, isBest, onPlay }: { part: JobPart; isBest: boolean; jobId: string; onPlay?: () => void }) {
   const isDone   = part.status === 'done'
   const isFailed = part.status === 'failed'
   const score    = part.viral_score > 0 ? part.viral_score : part.hook_score
@@ -71,11 +75,14 @@ function ClipCard({ part, isBest }: { part: JobPart; isBest: boolean; jobId: str
   }
 
   return (
-    <div style={{
+    <div
+      onClick={part.status === 'done' && onPlay ? onPlay : undefined}
+      style={{
       borderRadius: 8, overflow: 'hidden',
       border: `1px solid ${isBest ? 'rgba(123,97,255,.4)' : 'var(--border)'}`,
       background: 'var(--bg-card)',
       boxShadow: isBest ? '0 0 12px rgba(123,97,255,.15)' : 'none',
+      cursor: part.status === 'done' && onPlay ? 'pointer' : 'default',
     }}>
       {/* Thumbnail placeholder — 9:16 aspect */}
       <div style={{
@@ -148,6 +155,11 @@ function ClipCard({ part, isBest }: { part: JobPart; isBest: boolean; jobId: str
 export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
   const [job, setJob]     = useState<JobStatus | null>(null)
   const [parts, setParts] = useState<JobPart[]>([])
+  // P4.E — in-app player over the drawer's clip gallery.
+  const [playerIdx, setPlayerIdx] = useState<number | null>(null)
+  const [fbRatings, setFbRatings] = useState<Record<number, 1 | -1 | null>>({})
+  const { lang } = useI18n()
+  const tRender = useT(lang === 'vi' ? 'VI' : 'EN')
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
@@ -216,6 +228,20 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
       addNotification({ title: e instanceof ApiError ? e.message : 'Xóa thất bại', type: 'error' })
       setActionLoading(false)
     }
+  }
+
+  async function handlePlayerFeedback(partNo: number, rating: 1 | -1, part: JobPart) {
+    const current = fbRatings[partNo]
+    const newRating = current === rating ? null : rating
+    setFbRatings((prev) => ({ ...prev, [partNo]: newRating }))
+    try {
+      if (newRating === null) await deleteClipFeedback(jobId, partNo)
+      else await submitClipFeedback(jobId, partNo, {
+        rating: newRating, goal: '', channel_code: '', hook_type: 'none',
+        clip_type: 'unknown', start_sec: 0,
+        end_sec: part.duration ?? 0, duration_sec: part.duration ?? 0,
+      })
+    } catch { /* fire-and-forget */ }
   }
 
   if (loading) {
@@ -355,11 +381,30 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
                     part={part}
                     isBest={part.part_no === bestPartNo}
                     jobId={jobId}
+                    onPlay={() => {
+                      const idx = doneParts.findIndex((d) => d.part_no === part.part_no)
+                      if (idx >= 0) setPlayerIdx(idx)
+                    }}
                   />
                 ))
               }
             </div>
           </section>
+        )}
+
+        {playerIdx !== null && doneParts.length > 0 && (
+          <ClipPlayerModal
+            jobId={jobId}
+            parts={doneParts}
+            index={Math.min(playerIdx, doneParts.length - 1)}
+            onNavigate={setPlayerIdx}
+            onClose={() => setPlayerIdx(null)}
+            partScores={{}}
+            partRanks={{}}
+            feedbackRatings={fbRatings}
+            onFeedback={handlePlayerFeedback}
+            t={tRender}
+          />
         )}
 
         {/* Progress bar (non-terminal) */}

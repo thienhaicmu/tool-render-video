@@ -303,6 +303,10 @@ export function HistoryScreen() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+  // P4.E — page-scope aggregate stats (clip total + avg best score).
+  const totalClips = items.reduce((sum, i) => sum + (i.completed_count || 0), 0)
+  const scored = items.map(i => i.best_score).filter((v): v is number => v != null)
+  const avgScore = scored.length > 0 ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : null
   const activeCount    = items.filter(i => isActiveStatus(i.status)).length
   const completedCount = items.filter(i => i.status === 'completed' || i.status === 'partial').length
   const failedCount    = items.filter(i => i.status === 'failed').length
@@ -324,7 +328,7 @@ export function HistoryScreen() {
           </div>
           {items.length > 0 && (
             <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
-              {items.length} job · {completedCount} {t('history_done')}{failedCount > 0 ? ` · ${failedCount} ${t('history_failed')}` : ''}{activeCount > 0 ? ` · ${activeCount} ${t('history_running')}` : ''}
+              {items.length} job · {completedCount} {t('history_done')}{failedCount > 0 ? ` · ${failedCount} ${t('history_failed')}` : ''}{activeCount > 0 ? ` · ${activeCount} ${t('history_running')}` : ''}{totalClips > 0 ? ` · ${totalClips} clip` : ''}{avgScore != null ? ` · ★${avgScore}` : ''}
             </div>
           )}
         </div>
