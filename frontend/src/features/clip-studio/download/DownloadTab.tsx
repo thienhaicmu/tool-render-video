@@ -7,6 +7,7 @@ import {
 import type { DownloadJob } from '@/api/platformDownloader'
 import { getDefaultOutputDir, putDefaultOutputDir } from '@/api/outputDir'
 import { useUIStore } from '@/stores/uiStore'
+import { useI18n } from '@/i18n/useI18n'
 import { IconFolder, IconClipboard } from '@/components/icons'
 import './DownloadTab.css'
 
@@ -86,6 +87,7 @@ const nextKey = () => `s${Date.now()}_${_keySeq++}`
 function DownloadRow({ job, onCancel, onSendToRender }: {
   job: DownloadJob; onCancel: (id: string) => void; onSendToRender: (path: string) => void
 }) {
+  const { t } = useI18n()
   const pColor = platformColor(job.platform)
   const pLabel = platformLabel(job.platform)
   const pFull = PLATFORM_FULL[job.platform] || job.platform
@@ -116,13 +118,13 @@ function DownloadRow({ job, onCancel, onSendToRender }: {
               {job.speed_str && <div>↑ {job.speed_str}</div>}
               {job.eta_str && <div>ETA {job.eta_str}</div>}
             </div>
-            <button className="dlt-row-btn is-danger" onClick={() => onCancel(job.id)}>Cancel</button>
+            <button className="dlt-row-btn is-danger" onClick={() => onCancel(job.id)}>{t('dl_cancel')}</button>
           </>
         )}
         {isQueued && (
           <>
             <span className="dlt-status-badge is-queued" style={statusBadgeStyle('queued')}>QUEUED</span>
-            <button className="dlt-row-btn" onClick={() => onCancel(job.id)}>Cancel</button>
+            <button className="dlt-row-btn" onClick={() => onCancel(job.id)}>{t('dl_cancel')}</button>
           </>
         )}
         {isDone && (
@@ -134,19 +136,19 @@ function DownloadRow({ job, onCancel, onSendToRender }: {
             {job.output_path && (
               <button
                 className="dlt-row-btn is-primary"
-                title="Tạo clip từ video này — chuyển sang tab Render"
+                title={t('dl_send_render_tip')}
                 onClick={() => onSendToRender(job.output_path)}
               >
-                → Render
+                {t('dl_send_render')}
               </button>
             )}
-            {job.output_dir && <button className="dlt-row-btn" title="Open folder" onClick={() => window.electronAPI?.openPath?.(job.output_dir)}>Open</button>}
-            {job.output_path && <button className="dlt-row-btn" title="Copy path" onClick={() => { navigator.clipboard.writeText(job.output_path).catch(() => {}) }}>Copy</button>}
+            {job.output_dir && <button className="dlt-row-btn" title={t('dl_open')} onClick={() => window.electronAPI?.openPath?.(job.output_dir)}>{t('dl_open')}</button>}
+            {job.output_path && <button className="dlt-row-btn" title={t('dl_copy')} onClick={() => { navigator.clipboard.writeText(job.output_path).catch(() => {}) }}>{t('dl_copy')}</button>}
           </>
         )}
         {isFailed && (
           <>
-            <span className="dlt-fail-inline" title={job.error_msg || 'Download failed'}>⚠ {job.error_msg || 'Failed'}</span>
+            <span className="dlt-fail-inline" title={job.error_msg || t('dl_failed')}>⚠ {job.error_msg || t('dl_failed')}</span>
             <span className={`dlt-status-badge ${STATUS_CLASS.failed}`} style={statusBadgeStyle('failed')}>FAILED</span>
           </>
         )}
@@ -156,6 +158,7 @@ function DownloadRow({ job, onCancel, onSendToRender }: {
 }
 
 function EmptyStage() {
+  const { t } = useI18n()
   const chips = [
     { n: 'YouTube', c: '#ff0000' }, { n: 'TikTok', c: '#000' },
     { n: 'Instagram', c: '#e1306c' }, { n: 'Facebook', c: '#1877f2' },
@@ -163,9 +166,9 @@ function EmptyStage() {
     { n: 'Twitch', c: '#9146ff' }, { n: 'Reddit', c: '#ff4500' },
   ]
   const steps = [
-    { t: 'Add links', s: 'Paste one or many URLs into the bar above and click Add.' },
-    { t: 'Pick quality', s: 'Choose a resolution per video — or leave it on Best.' },
-    { t: 'Download', s: 'Set a folder, then download the whole list at once.' },
+    { t: t('dl_step1_t'), s: t('dl_step1_s') },
+    { t: t('dl_step2_t'), s: t('dl_step2_s') },
+    { t: t('dl_step3_t'), s: t('dl_step3_s') },
   ]
   return (
     <div className="dlt-empty">
@@ -175,8 +178,8 @@ function EmptyStage() {
         </svg>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-        <div className="dlt-empty-title">Build your download list</div>
-        <div className="dlt-empty-sub">Grab videos from YouTube, TikTok, Instagram, Facebook and 10+ more — one at a time or in bulk.</div>
+        <div className="dlt-empty-title">{t('dl_empty_title')}</div>
+        <div className="dlt-empty-sub">{t('dl_empty_sub')}</div>
       </div>
       <div className="dlt-steps">
         {steps.map((s, i) => (
@@ -197,6 +200,7 @@ function EmptyStage() {
 type CookieStatus = { present: boolean; age_seconds?: number; cookie_count?: number; has_v20_warning?: boolean; detail?: string }
 
 export function DownloadTab({ lang: _lang }: { lang: Lang }) {
+  const { t } = useI18n()
   const [url, setUrl] = useState('')
   const [staged, setStaged] = useState<StagedItem[]>([])
   const [outputDir, setOutputDir] = useState('')
@@ -253,7 +257,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
   // Add one or more URLs (whitespace/newline separated) to the staging list.
   const addUrls = useCallback((raw: string) => {
     const links = raw.split(/[\s\n]+/).map(s => s.trim()).filter(s => s.startsWith('http'))
-    if (links.length === 0) { setError('Enter a valid http(s) URL'); return }
+    if (links.length === 0) { setError(t('dl_err_url')); return }
     setError(null)
     setStaged(prev => {
       const existing = new Set(prev.map(p => p.url))
@@ -300,7 +304,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
   // quality. Items move into the active downloads list (backend jobs).
   const handleDownloadAll = async () => {
     if (downloading || staged.length === 0) return
-    if (!outputDir.trim()) { setFolderInvalid(true); setError('Choose a folder to save downloads to'); return }
+    if (!outputDir.trim()) { setFolderInvalid(true); setError(t('dl_err_folder')); return }
     setDownloading(true); setError(null)
     const items = [...staged]
     const results = await Promise.allSettled(
@@ -354,8 +358,8 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13" /><path d="M7 11l5 5 5-5" /><path d="M5 21h14" /></svg>
             </span>
             <div className="dlt-titles">
-              <span className="dlt-title">Downloader</span>
-              <span className="dlt-subtitle">Add links, pick a quality per video, then download</span>
+              <span className="dlt-title">{t('dl_title')}</span>
+              <span className="dlt-subtitle">{t('dl_subtitle')}</span>
             </div>
             <button className={`dlt-cookie-chip ${cookieChipClass}`} onClick={() => setShowCookiePanel(p => !p)} title="YouTube cookie settings">
               <span>{cookieStatus?.present ? (cookieStatus.has_v20_warning ? '⚠' : '✓') : '✗'}</span>
@@ -363,10 +367,10 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
               <span style={{ opacity: 0.5, fontSize: 9 }}>{showCookiePanel ? '▲' : '▼'}</span>
             </button>
             <div className="dlt-pills">
-              {activeCount > 0 && <span className="dlt-pill is-active">{activeCount} downloading</span>}
-              {queuedCount > 0 && <span className="dlt-pill is-queued">{queuedCount} queued</span>}
-              {doneCount > 0 && <span className="dlt-pill is-done">{doneCount} done</span>}
-              {failedCount > 0 && <span className="dlt-pill is-failed">{failedCount} failed</span>}
+              {activeCount > 0 && <span className="dlt-pill is-active">{activeCount} {t('dl_pill_downloading')}</span>}
+              {queuedCount > 0 && <span className="dlt-pill is-queued">{queuedCount} {t('dl_pill_queued')}</span>}
+              {doneCount > 0 && <span className="dlt-pill is-done">{doneCount} {t('dl_pill_done')}</span>}
+              {failedCount > 0 && <span className="dlt-pill is-failed">{failedCount} {t('dl_pill_failed')}</span>}
             </div>
           </div>
 
@@ -409,15 +413,15 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
               onChange={(e) => { setUrl(e.target.value); setError(null) }}
               onFocus={handleFocus}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder="Paste one or more video links here…"
+              placeholder={t('dl_paste_placeholder')}
             />
             {!url && <button className="dlt-icon-btn" onClick={handlePaste} title="Paste from clipboard"><IconClipboard size={14} /></button>}
             {url && <button className="dlt-icon-btn" onClick={() => { setUrl(''); setError(null) }} title="Clear">×</button>}
-            <button className="dlt-add-btn" onClick={handleAdd} disabled={!inputValid}>+ Add</button>
+            <button className="dlt-add-btn" onClick={handleAdd} disabled={!inputValid}>{t('dl_add')}</button>
           </div>
           {error
             ? <div className="dlt-error">⚠ {error}</div>
-            : <div className="dlt-hint">Paste several links at once · clicking the box auto-pastes from your clipboard.</div>}
+            : <div className="dlt-hint">{t('dl_hint')}</div>}
         </div>
       </div>
 
@@ -429,16 +433,16 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
           {staged.length > 0 && (
             <>
               <div className="dlt-section-head">
-                <span className="label">To download</span>
+                <span className="label">{t('dl_to_download')}</span>
                 <span className="count">{staged.length}</span>
                 <span className="spacer" />
-                <button className="dlt-link-btn" onClick={clearStaged}>Clear list</button>
+                <button className="dlt-link-btn" onClick={clearStaged}>{t('dl_clear')}</button>
               </div>
               <div className="dlt-list">
                 <div className="dlt-list-head">
                   <div className="col-thumb" />
-                  <div className="col-main">Video</div>
-                  <div className="col-q">Quality</div>
+                  <div className="col-main">{t('dl_col_video')}</div>
+                  <div className="col-q">{t('dl_col_quality')}</div>
                   <div className="col-x" />
                 </div>
                 {staged.map(it => {
@@ -460,7 +464,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
                         </div>
                         <div className="dlt-row-sub">
                           <span className="pf">{pFull}</span>
-                          {it.state === 'error' && <span style={{ color: 'var(--fail)' }}>⚠ info unavailable</span>}
+                          {it.state === 'error' && <span style={{ color: 'var(--fail)' }}>⚠ {t('dl_info_unavailable')}</span>}
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.url}</span>
                         </div>
                       </div>
@@ -478,7 +482,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
           {jobs.length > 0 && (
             <>
               <div className="dlt-section-head" style={{ marginTop: staged.length > 0 ? 22 : 0 }}>
-                <span className="label">Downloads</span>
+                <span className="label">{t('dl_downloads')}</span>
                 <span className="count">{jobs.length}</span>
               </div>
               <div className="dlt-list">
@@ -500,15 +504,15 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
       {staged.length > 0 && (
         <div className="dlt-actionbar">
           <div className="dlt-actionbar-inner">
-            <span className="dlt-opt-label">Save to</span>
+            <span className="dlt-opt-label">{t('dl_save_to')}</span>
             <div className={`dlt-folder${folderInvalid ? ' is-invalid' : ''}`} onClick={pickDir} title={outputDir || 'Choose a folder'}>
               <span style={{ flexShrink: 0, display: 'inline-flex' }}><IconFolder size={14} /></span>
-              <span className={`dlt-folder-path${outputDir ? '' : ' is-empty'}`}>{outputDir ? '‪' + outputDir + '‬' : 'Click to choose a folder…'}</span>
-              <span className="dlt-folder-change">{outputDir ? 'Change' : 'Choose'}</span>
+              <span className={`dlt-folder-path${outputDir ? '' : ' is-empty'}`}>{outputDir ? '‪' + outputDir + '‬' : t('dl_pick_folder')}</span>
+              <span className="dlt-folder-change">{outputDir ? t('dl_change') : t('dl_choose')}</span>
             </div>
             <button className="dlt-dl-btn" onClick={handleDownloadAll} disabled={downloading}>
               {downloading ? <span className="dlt-spin">⟳</span> : '↓'}
-              {downloading ? 'Starting…' : `Download ${staged.length} video${staged.length !== 1 ? 's' : ''}`}
+              {downloading ? t('dl_starting') : `${t('dl_download_btn')} ${staged.length} video`}
             </button>
           </div>
         </div>
