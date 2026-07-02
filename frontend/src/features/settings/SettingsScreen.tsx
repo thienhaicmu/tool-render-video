@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { apiFetch } from '@/api/client'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
+import { useI18n } from '@/i18n/useI18n'
 import {
   BLANK_CREATOR_CONTEXT,
   getCreatorContext,
@@ -119,6 +120,7 @@ const _inputStyle: React.CSSProperties = {
 }
 
 function CreatorContextSection() {
+  const { t } = useI18n()
   const [payload, setPayload] = useState<CreatorContextPayload>(BLANK_CREATOR_CONTEXT)
   const [pillarsCsv, setPillarsCsv] = useState<string>('')
   const [isConfigured, setIsConfigured] = useState<boolean>(false)
@@ -166,9 +168,9 @@ function CreatorContextSection() {
       setPayload(env.creator_context)
       setPillarsCsv(pillarsToCsv(env.creator_context.content_pillars))
       setIsConfigured(env.is_configured)
-      setSaveResult(env.is_configured ? 'Đã lưu' : 'Đã xoá cấu hình')
+      setSaveResult(env.is_configured ? t('st_saved') : t('st_cc_cleared'))
     } catch {
-      setSaveResult('Lưu thất bại')
+      setSaveResult(t('st_save_failed'))
     } finally {
       setSaving(false)
     }
@@ -176,10 +178,10 @@ function CreatorContextSection() {
 
   async function handleClear() {
     const choice = await confirmDialog({
-      title: 'Xoá toàn bộ cấu hình Creator Context?',
+      title: t('st_cc_clear_title'),
       buttons: [
-        { id: 'clear', label: 'Xoá', variant: 'danger' },
-        { id: 'cancel', label: 'Hủy' },
+        { id: 'clear', label: t('st_delete'), variant: 'danger' },
+        { id: 'cancel', label: t('st_cancel') },
       ],
     })
     if (choice !== 'clear') return
@@ -190,9 +192,9 @@ function CreatorContextSection() {
       setPayload(env.creator_context)
       setPillarsCsv('')
       setIsConfigured(env.is_configured)
-      setSaveResult('Đã xoá cấu hình')
+      setSaveResult(t('st_cc_cleared'))
     } catch {
-      setSaveResult('Xoá thất bại')
+      setSaveResult(t('st_clear_failed'))
     } finally {
       setSaving(false)
     }
@@ -222,15 +224,15 @@ function CreatorContextSection() {
             letterSpacing: '.04em',
           }}
         >
-          {isConfigured ? 'ĐÃ CẤU HÌNH' : 'CHƯA CẤU HÌNH'}
+          {isConfigured ? t('st_configured') : t('st_not_configured')}
         </span>
       </SectionTitle>
 
       {loading ? (
-        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Đang tải…</div>
+        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>{t('st_loading')}</div>
       ) : (
         <>
-          <FormRow label="Tên kênh" hint="Tên hiển thị của kênh / creator">
+          <FormRow label={t('st_cc_channel')} hint={t('st_cc_channel_h')}>
             <input
               data-testid="cc-channel-name"
               type="text"
@@ -260,7 +262,7 @@ function CreatorContextSection() {
             />
           </FormRow>
 
-          <FormRow label="Content pillars" hint="Cách nhau bằng dấu phẩy (ví dụ: recipe, tutorial, review)">
+          <FormRow label="Content pillars" hint={t('st_cc_pillars_h')}>
             <input
               data-testid="cc-content-pillars"
               type="text"
@@ -273,7 +275,7 @@ function CreatorContextSection() {
             />
           </FormRow>
 
-          <FormRow label="Market" hint="Mã thị trường — viết tắt (vn / us / ...)">
+          <FormRow label="Market" hint={t('st_cc_market_h')}>
             <input
               data-testid="cc-market"
               type="text"
@@ -293,7 +295,7 @@ function CreatorContextSection() {
             />
           </FormRow>
 
-          <FormRow label="Editorial brief" hint="Mô tả ngắn về phong cách, tông giọng, ưu tiên biên tập">
+          <FormRow label={t('st_cc_brief')} hint={t('st_cc_brief_h')}>
             <textarea
               data-testid="cc-notes"
               value={payload.notes}
@@ -322,7 +324,7 @@ function CreatorContextSection() {
                 opacity: saving ? 0.5 : 1,
               }}
             >
-              {saving ? 'Đang lưu…' : 'Lưu'}
+              {saving ? t('st_saving') : t('st_save')}
             </button>
             <button
               data-testid="cc-clear"
@@ -342,7 +344,7 @@ function CreatorContextSection() {
                 opacity: saving || !isConfigured ? 0.5 : 1,
               }}
             >
-              Xoá cấu hình
+              {t('st_cc_clear_btn')}
             </button>
             {saveResult ? (
               <span data-testid="cc-status" style={{ fontSize: 11, color: 'var(--text-3)' }}>
@@ -352,8 +354,7 @@ function CreatorContextSection() {
           </div>
 
           <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5 }}>
-            AI Director đọc CreatorContext ở mỗi render để bias hướng chọn clip phù hợp với
-            phong cách kênh. Để trống tất cả ô = không cấu hình → AI hoạt động như trước.
+            {t('st_cc_footer')}
           </div>
         </>
       )}
@@ -369,6 +370,7 @@ function CreatorContextSection() {
 // they couldn't pre-configure it. With the gear icon now wired to
 // Settings (N4), this section is the obvious place to add it.
 function OutputDirSection() {
+  const { t } = useI18n()
   const [path, setPath] = useState<string>('')
   const [isConfigured, setIsConfigured] = useState<boolean>(false)
   const [loading, setLoading] = useState<boolean>(true)
@@ -406,9 +408,9 @@ function OutputDirSection() {
       const env = await putDefaultOutputDir(path.trim() || null)
       setPath(env.path || '')
       setIsConfigured(env.is_configured)
-      setSaveResult(env.is_configured ? 'Đã lưu' : 'Đã xoá mặc định')
+      setSaveResult(env.is_configured ? t('st_saved') : t('st_out_cleared'))
     } catch {
-      setSaveResult('Lưu thất bại')
+      setSaveResult(t('st_save_failed'))
     } finally {
       setSaving(false)
     }
@@ -416,10 +418,10 @@ function OutputDirSection() {
 
   async function handleClear() {
     const choice = await confirmDialog({
-      title: 'Xoá thư mục lưu mặc định?',
+      title: t('st_out_clear_title'),
       buttons: [
-        { id: 'clear', label: 'Xoá', variant: 'danger' },
-        { id: 'cancel', label: 'Hủy' },
+        { id: 'clear', label: t('st_delete'), variant: 'danger' },
+        { id: 'cancel', label: t('st_cancel') },
       ],
     })
     if (choice !== 'clear') return
@@ -429,9 +431,9 @@ function OutputDirSection() {
       const env = await putDefaultOutputDir(null)
       setPath('')
       setIsConfigured(env.is_configured)
-      setSaveResult('Đã xoá mặc định')
+      setSaveResult(t('st_out_cleared'))
     } catch {
-      setSaveResult('Xoá thất bại')
+      setSaveResult(t('st_clear_failed'))
     } finally {
       setSaving(false)
     }
@@ -447,7 +449,7 @@ function OutputDirSection() {
       }}
     >
       <SectionTitle>
-        Thư mục lưu mặc định{' '}
+        {t('st_out_title')}{' '}
         <span
           style={{
             marginLeft: 8,
@@ -460,16 +462,16 @@ function OutputDirSection() {
             letterSpacing: '.04em',
           }}
         >
-          {isConfigured ? 'ĐÃ CẤU HÌNH' : 'CHƯA CẤU HÌNH'}
+          {isConfigured ? t('st_configured') : t('st_not_configured')}
         </span>
       </SectionTitle>
       {loading ? (
-        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Đang tải…</div>
+        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>{t('st_loading')}</div>
       ) : (
         <>
           <FormRow
-            label="Thư mục output"
-            hint="Render mới sẽ dùng thư mục này nếu Configure không đặt thư mục riêng."
+            label={t('st_out_label')}
+            hint={t('st_out_hint')}
           >
             <div style={{ display: 'flex', gap: 6 }}>
               <input
@@ -493,7 +495,7 @@ function OutputDirSection() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                Chọn…
+                {t('st_out_pick')}
               </button>
             </div>
           </FormRow>
@@ -516,7 +518,7 @@ function OutputDirSection() {
                 opacity: saving ? 0.5 : 1,
               }}
             >
-              {saving ? 'Đang lưu…' : 'Lưu'}
+              {saving ? t('st_saving') : t('st_save')}
             </button>
             <button
               onClick={handleClear}
@@ -535,7 +537,7 @@ function OutputDirSection() {
                 opacity: saving || !isConfigured ? 0.5 : 1,
               }}
             >
-              Xoá mặc định
+              {t('st_out_clear_btn')}
             </button>
             {saveResult ? (
               <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{saveResult}</span>
@@ -552,6 +554,7 @@ function OutputDirSection() {
 // setting (backend wiring shipped in Batch 10A as ST-12). Keeps the
 // same shape as CreatorContextSection so reviewers can diff them.
 function DataRetentionSection() {
+  const { t, lang } = useI18n()
   const [days, setDays] = useState<number>(0)
   const [isConfigured, setIsConfigured] = useState<boolean>(false)
   const [loading, setLoading] = useState<boolean>(true)
@@ -585,11 +588,13 @@ function DataRetentionSection() {
       setIsConfigured(env.is_configured)
       setSaveResult(
         env.data_retention.job_retention_days === 0
-          ? 'Đã tắt auto-prune'
-          : `Sẽ xóa job cũ hơn ${env.data_retention.job_retention_days} ngày`,
+          ? t('st_dr_off_msg')
+          : (lang === 'vi'
+            ? `Sẽ xóa job cũ hơn ${env.data_retention.job_retention_days} ngày`
+            : `Jobs older than ${env.data_retention.job_retention_days} days will be pruned`),
       )
     } catch {
-      setSaveResult('Lưu thất bại')
+      setSaveResult(t('st_save_failed'))
     } finally {
       setSaving(false)
     }
@@ -621,17 +626,17 @@ function DataRetentionSection() {
             letterSpacing: '.04em',
           }}
         >
-          {isConfigured && days > 0 ? `AUTO-PRUNE ${days}D` : 'TẮT'}
+          {isConfigured && days > 0 ? `AUTO-PRUNE ${days}D` : t('st_dr_off')}
         </span>
       </SectionTitle>
 
       {loading ? (
-        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Đang tải…</div>
+        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>{t('st_loading')}</div>
       ) : (
         <>
           <FormRow
-            label="Số ngày giữ job"
-            hint="0 = không xóa tự động · 1-365 = xóa job hoàn thành/lỗi cũ hơn N ngày"
+            label={t('st_dr_days')}
+            hint={t('st_dr_days_h')}
           >
             <input
               data-testid="dr-job-retention-days"
@@ -668,7 +673,7 @@ function DataRetentionSection() {
                 opacity: saving ? 0.5 : 1,
               }}
             >
-              {saving ? 'Đang lưu…' : 'Lưu'}
+              {saving ? t('st_saving') : t('st_save')}
             </button>
             {saveResult ? (
               <span data-testid="dr-status" style={{ fontSize: 11, color: 'var(--text-3)' }}>
@@ -678,8 +683,7 @@ function DataRetentionSection() {
           </div>
 
           <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5 }}>
-            Job đang chạy / chờ KHÔNG bao giờ bị xóa. Chỉ áp dụng cho các job đã hoàn thành,
-            lỗi, hủy hoặc bị gián đoạn. Kiểm tra mỗi 30 phút (chu kỳ dọn dẹp định kỳ).
+            {t('st_dr_footer')}
           </div>
         </>
       )}
@@ -689,6 +693,7 @@ function DataRetentionSection() {
 
 
 function PerformanceSection() {
+  const { t } = useI18n()
   const [hwdecode, setHwdecode] = useState<boolean>(false)
   const [qsv, setQsv] = useState<boolean>(false)
   const [loading, setLoading] = useState<boolean>(true)
@@ -720,9 +725,9 @@ function PerformanceSection() {
       const env = await putPerformance(next)
       setHwdecode(env.performance.hwdecode)
       setQsv(env.performance.qsv)
-      setSaveResult('Đã lưu — áp dụng cho lần render tới')
+      setSaveResult(t('st_perf_saved'))
     } catch {
-      setSaveResult('Lưu thất bại')
+      setSaveResult(t('st_save_failed'))
       fetch()
     } finally {
       setSaving(false)
@@ -762,20 +767,20 @@ function PerformanceSection() {
 
   return (
     <div data-testid="performance-section" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
-      <SectionTitle>Hiệu năng / Tốc độ render</SectionTitle>
+      <SectionTitle>{t('st_perf_title')}</SectionTitle>
       {loading ? (
-        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Đang tải…</div>
+        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>{t('st_loading')}</div>
       ) : (
         <>
           <Row
-            label="Tăng tốc giải mã (iGPU)"
-            hint="Giải mã video nguồn bằng iGPU thay vì CPU — nhanh hơn, CHẤT LƯỢNG GIỮ NGUYÊN (giải mã không mất mát). Tự rớt về CPU nếu lỗi."
+            label={t('st_perf_hwdec')}
+            hint={t('st_perf_hwdec_h')}
             on={hwdecode}
             onToggle={() => save({ hwdecode: !hwdecode, qsv })}
           />
           <Row
-            label="Encode bằng iGPU — QSV (nhanh nhất)"
-            hint="Encode trên iGPU thay vì CPU x264 — NHANH NHẤT, nhưng chất lượng giảm nhẹ so với x264. Khuyên chỉ bật khi xuất để đăng social/YouTube."
+            label={t('st_perf_qsv')}
+            hint={t('st_perf_qsv_h')}
             on={qsv}
             onToggle={() => save({ hwdecode, qsv: !qsv })}
             warn
@@ -784,7 +789,7 @@ function PerformanceSection() {
             <div data-testid="perf-status" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10 }}>{saveResult}</div>
           ) : null}
           <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5 }}>
-            Render đã tự chạy đa luồng CPU. Hai tùy chọn trên dùng iGPU Intel để nhanh hơn nữa; tắt cả hai = giữ chất lượng x264 tối đa.
+            {t('st_perf_footer')}
           </div>
         </>
       )}
@@ -794,6 +799,7 @@ function PerformanceSection() {
 
 
 export function SettingsScreen() {
+  const { t, lang } = useI18n()
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [clearing, setClearing] = useState(false)
@@ -815,11 +821,11 @@ export function SettingsScreen() {
 
   async function handleClearCache() {
     const choice = await confirmDialog({
-      title: 'Xóa toàn bộ cache render?',
-      message: 'Các render tiếp theo sẽ chậm hơn lần đầu.',
+      title: t('st_cache_clear_title'),
+      message: t('st_cache_clear_msg'),
       buttons: [
-        { id: 'clear', label: 'Xóa cache', variant: 'danger' },
-        { id: 'cancel', label: 'Hủy' },
+        { id: 'clear', label: t('st_cache_clear_btn'), variant: 'danger' },
+        { id: 'cancel', label: t('st_cancel') },
       ],
     })
     if (choice !== 'clear') return
@@ -827,10 +833,12 @@ export function SettingsScreen() {
     setClearResult(null)
     try {
       const res = await apiFetch<{ deleted_files: number; freed_mb: number }>('/api/render/cache/clear', { method: 'POST' })
-      setClearResult(`Đã xóa ${res.deleted_files} file · giải phóng ${res.freed_mb} MB`)
+      setClearResult(lang === 'vi'
+        ? `Đã xóa ${res.deleted_files} file · giải phóng ${res.freed_mb} MB`
+        : `Deleted ${res.deleted_files} files · freed ${res.freed_mb} MB`)
       await fetchInfo()
     } catch {
-      setClearResult('Xóa cache thất bại')
+      setClearResult(t('st_cache_failed'))
     } finally {
       setClearing(false)
     }
@@ -863,10 +871,10 @@ export function SettingsScreen() {
         {/* Header */}
         <div>
           <div style={{ fontFamily: 'var(--font-family-base)', fontSize: 16, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.5px' }}>
-            CÀI ĐẶT
+            {t('st_title')}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
-            Tùy chỉnh creator, defaults render, output, storage và thống kê hệ thống
+            {t('st_subtitle')}
           </div>
         </div>
 
@@ -891,17 +899,17 @@ export function SettingsScreen() {
         </section>
 
       {loading ? (
-        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>Đang tải…</div>
+        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>{t('st_loading')}</div>
       ) : info ? (
         <>
           {/* Cache section */}
           <section id="settings-storage" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
-            <SectionTitle>Render Cache</SectionTitle>
-            <InfoRow label="Tổng dung lượng" value={`${info.cache.total_mb} MB`} />
+            <SectionTitle>{t('st_cache_title')}</SectionTitle>
+            <InfoRow label={t('st_cache_total')} value={`${info.cache.total_mb} MB`} />
             {Object.entries(info.cache.subdirs).map(([name, mb]) => (
               <InfoRow key={name} label={`  ${name}`} value={`${mb} MB`} />
             ))}
-            <InfoRow label="Thư mục" value={info.cache.cache_dir} />
+            <InfoRow label={t('st_cache_dir')} value={info.cache.cache_dir} />
 
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
               <button
@@ -915,7 +923,7 @@ export function SettingsScreen() {
                   opacity: clearing ? .5 : 1,
                 }}
               >
-                {clearing ? 'Đang xóa…' : 'Xóa cache'}
+                {clearing ? t('st_cache_clearing') : t('st_cache_clear_btn')}
               </button>
               {clearResult && (
                 <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{clearResult}</span>
@@ -926,32 +934,32 @@ export function SettingsScreen() {
           {/* Database section */}
           <section id="settings-database" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
             <SectionTitle>Database</SectionTitle>
-            <InfoRow label="Kích thước" value={`${info.database.size_mb} MB`} />
-            <InfoRow label="Đường dẫn" value={info.database.path} />
+            <InfoRow label={t('st_db_size')} value={`${info.database.size_mb} MB`} />
+            <InfoRow label={t('st_db_path')} value={info.database.path} />
           </section>
 
           {/* Jobs section */}
           <section id="settings-stats" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
-            <SectionTitle>Thống kê Job</SectionTitle>
-            <InfoRow label="Tổng số job" value={info.jobs.total} />
-            <InfoRow label="Hoàn thành" value={<span style={{ color: 'var(--ok)' }}>{info.jobs.completed}</span>} />
-            <InfoRow label="Lỗi" value={<span style={{ color: 'var(--fail)' }}>{info.jobs.failed}</span>} />
-            <InfoRow label="Đang chạy" value={<span style={{ color: 'var(--accent)' }}>{info.jobs.active}</span>} />
+            <SectionTitle>{t('st_stats_title')}</SectionTitle>
+            <InfoRow label={t('st_stats_total')} value={info.jobs.total} />
+            <InfoRow label={t('st_stats_completed')} value={<span style={{ color: 'var(--ok)' }}>{info.jobs.completed}</span>} />
+            <InfoRow label={t('st_stats_failed')} value={<span style={{ color: 'var(--fail)' }}>{info.jobs.failed}</span>} />
+            <InfoRow label={t('st_stats_running')} value={<span style={{ color: 'var(--accent)' }}>{info.jobs.active}</span>} />
           </section>
 
           {/* Tips */}
           <section id="settings-help" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
-            <SectionTitle>Hướng dẫn</SectionTitle>
+            <SectionTitle>{t('st_help_title')}</SectionTitle>
             <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.8 }}>
-              <div>• Cache lưu kết quả scene detection, transcription, motion path — tăng tốc render lại cùng video</div>
-              <div>• Xóa cache nếu kết quả transcription/subtitle bị lỗi hoặc cần giải phóng dung lượng</div>
-              <div>• Database <code>app.db</code> chứa toàn bộ lịch sử job — không xóa thủ công</div>
-              <div>• Để tăng/giảm số job song song, đặt biến môi trường <code>MAX_CONCURRENT_JOBS</code></div>
+              <div>{t('st_help_1')}</div>
+              <div>{t('st_help_2')}</div>
+              <div>{t('st_help_3')}</div>
+              <div>{t('st_help_4')}</div>
             </div>
           </section>
         </>
       ) : (
-        <div style={{ color: 'var(--fail)', fontSize: 12 }}>Không thể tải thông tin hệ thống</div>
+        <div style={{ color: 'var(--fail)', fontSize: 12 }}>{t('st_sys_failed')}</div>
       )}
       </div>
     </div>
@@ -972,11 +980,12 @@ const _NAV_ITEMS: Array<{ id: string; label: string }> = [
   { id: 'settings-retention', label: 'Data Retention' },
   { id: 'settings-storage',   label: 'Cache' },
   { id: 'settings-database',  label: 'Database' },
-  { id: 'settings-stats',     label: 'Thống kê' },
-  { id: 'settings-help',      label: 'Hướng dẫn' },
+  { id: 'settings-stats',     label: 'st_nav_stats' },
+  { id: 'settings-help',      label: 'st_nav_help' },
 ]
 
 function SettingsNav() {
+  const { t } = useI18n()
   function scrollTo(id: string) {
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -992,7 +1001,7 @@ function SettingsNav() {
         color: 'var(--text-3)', textTransform: 'uppercase',
         marginBottom: 6, paddingLeft: 8,
       }}>
-        Mục
+        {t('st_nav')}
       </div>
       {_NAV_ITEMS.map((it) => (
         <button
@@ -1012,7 +1021,7 @@ function SettingsNav() {
           onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-card-hover)' }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
-          {it.label}
+          {it.label.startsWith('st_') ? t(it.label as 'st_nav_stats' | 'st_nav_help') : it.label}
         </button>
       ))}
     </nav>
@@ -1053,6 +1062,7 @@ const _DEFAULTS_VOICE_PROVIDER_OPTIONS = [
 ]
 
 function RenderDefaultsSection() {
+  const { t } = useI18n()
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState<string | null>(null)
@@ -1101,9 +1111,9 @@ function RenderDefaultsSection() {
         llm_provider:   llmProvider   || null,
       })
       setIsConfigured(env.is_configured)
-      setSaveMsg(env.is_configured ? 'Đã lưu defaults' : 'Đã xóa defaults')
+      setSaveMsg(env.is_configured ? t('st_rd_saved') : t('st_rd_cleared'))
     } catch {
-      setSaveMsg('Lưu thất bại — kiểm tra log')
+      setSaveMsg(t('st_rd_save_failed'))
     } finally {
       setSaving(false)
     }
@@ -1111,11 +1121,11 @@ function RenderDefaultsSection() {
 
   async function handleClear() {
     const choice = await confirmDialog({
-      title: 'Xóa toàn bộ render defaults?',
-      message: 'Bước Configure sẽ trở về giá trị mặc định.',
+      title: t('st_rd_clear_title'),
+      message: t('st_rd_clear_msg'),
       buttons: [
-        { id: 'clear', label: 'Xóa', variant: 'danger' },
-        { id: 'cancel', label: 'Hủy' },
+        { id: 'clear', label: t('st_delete'), variant: 'danger' },
+        { id: 'cancel', label: t('st_cancel') },
       ],
     })
     if (choice !== 'clear') return
@@ -1130,9 +1140,9 @@ function RenderDefaultsSection() {
       setSubtitleStyle('')
       setLlmProvider('')
       setIsConfigured(false)
-      setSaveMsg('Đã xóa defaults')
+      setSaveMsg(t('st_rd_cleared'))
     } catch {
-      setSaveMsg('Xóa thất bại')
+      setSaveMsg(t('st_clear_failed'))
     } finally {
       setSaving(false)
     }
@@ -1151,72 +1161,72 @@ function RenderDefaultsSection() {
             fontSize: 9, fontWeight: 700, letterSpacing: '.04em',
             color: 'var(--ok)',
           }}>
-            • ĐÃ CẤU HÌNH
+            • {t('st_configured')}
           </span>
         )}
       </SectionTitle>
 
       {!loaded ? (
-        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Đang tải…</div>
+        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('st_loading')}</div>
       ) : (
         <>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12, lineHeight: 1.5 }}>
-            Mỗi field tùy chọn — bỏ trống nghĩa "không có defaults, hỏi user mỗi render".
+            {t('st_rd_intro')}
           </div>
 
-          <FormRow label="Aspect ratio" hint="Tỉ lệ output mặc định">
+          <FormRow label="Aspect ratio" hint={t('st_rd_aspect_h')}>
             <select
               value={aspectRatio}
               onChange={(e) => setAspectRatio(e.target.value)}
               style={_inputStyle}
             >
-              <option value="">— (không default)</option>
+              <option value="">{t('st_none_default')}</option>
               {_DEFAULTS_ASPECT_OPTIONS.map((v) => (
                 <option key={v} value={v}>{v}</option>
               ))}
             </select>
           </FormRow>
 
-          <FormRow label="Preset" hint="Template style mặc định">
+          <FormRow label="Preset" hint={t('st_rd_preset_h')}>
             <select
               value={preset}
               onChange={(e) => setPreset(e.target.value)}
               style={_inputStyle}
             >
-              <option value="">— (không default)</option>
+              <option value="">{t('st_none_default')}</option>
               {_DEFAULTS_PRESET_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
           </FormRow>
 
-          <FormRow label="Subtitle style" hint="Style phụ đề mặc định">
+          <FormRow label="Subtitle style" hint={t('st_rd_sub_h')}>
             <select
               value={subtitleStyle}
               onChange={(e) => setSubtitleStyle(e.target.value)}
               style={_inputStyle}
             >
-              <option value="">— (không default)</option>
+              <option value="">{t('st_none_default')}</option>
               {_DEFAULTS_SUB_STYLE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
           </FormRow>
 
-          <FormRow label="Voice provider" hint="Engine TTS mặc định">
+          <FormRow label="Voice provider" hint={t('st_rd_voice_h')}>
             <select
               value={voiceProvider}
               onChange={(e) => setVoiceProvider(e.target.value)}
               style={_inputStyle}
             >
-              <option value="">— (không default)</option>
+              <option value="">{t('st_none_default')}</option>
               {_DEFAULTS_VOICE_PROVIDER_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
           </FormRow>
 
-          <FormRow label="Voice ID" hint="ID giọng cụ thể (vd: rachel_v2). Để trống nếu chưa có preference.">
+          <FormRow label="Voice ID" hint={t('st_rd_voiceid_h')}>
             <input
               type="text"
               value={voiceId}
@@ -1226,13 +1236,13 @@ function RenderDefaultsSection() {
             />
           </FormRow>
 
-          <FormRow label="LLM provider" hint="Provider cho AI Director mặc định">
+          <FormRow label="LLM provider" hint={t('st_rd_llm_h')}>
             <select
               value={llmProvider}
               onChange={(e) => setLlmProvider(e.target.value)}
               style={_inputStyle}
             >
-              <option value="">— (không default)</option>
+              <option value="">{t('st_none_default')}</option>
               {_DEFAULTS_LLM_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
@@ -1251,7 +1261,7 @@ function RenderDefaultsSection() {
                 opacity: saving ? .5 : 1,
               }}
             >
-              {saving ? 'Đang lưu…' : 'Lưu defaults'}
+              {saving ? t('st_saving') : t('st_rd_save')}
             </button>
             <button
               onClick={handleClear}
@@ -1265,7 +1275,7 @@ function RenderDefaultsSection() {
                 opacity: (saving || !isConfigured) ? .5 : 1,
               }}
             >
-              Xóa hết
+              {t('st_rd_clear')}
             </button>
             {saveMsg && (
               <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{saveMsg}</span>
