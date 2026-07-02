@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -41,7 +42,11 @@ from app.db.jobs_repo import list_job_parts, update_job_progress, upsert_job, up
 from app.jobs import cancel as cancel_registry
 from app.jobs.manager import MAX_CONCURRENT_JOBS as _MAX_CONCURRENT_JOBS
 from app.features.render.ai.llm import select_recap_plan
-from app.features.render.engine.encoder.ffmpeg_helpers import resolve_target_dimensions, resolve_ffmpeg_threads
+from app.features.render.engine.encoder.ffmpeg_helpers import (
+    nvenc_available,
+    resolve_ffmpeg_threads,
+    resolve_target_dimensions,
+)
 from app.features.render.engine.pipeline.pipeline_setup import setup_render_pipeline, prepare_output_dir
 from app.features.render.engine.pipeline.pipeline_source_prep import prepare_render_source
 from app.features.render.engine.pipeline.pipeline_config import _resolve_profile
@@ -242,6 +247,36 @@ def run_recap(
         _output_stem = _src.output_stem
         video_duration = float(source.get("duration") or 0.0)
 
+        # 2b (start nền). SceneMap substrate (D-2-thin) chỉ cần source_path —
+        # không phụ thuộc SRT — nên chạy trên thread nền SONG SONG với Whisper
+        # + lời gọi LLM thay vì tuần tự sau Whisper như trước. Consumer đầu
+        # tiên (snap-to-shots bên dưới) join trước khi đọc kết quả. Thất bại
+        # hay None không bao giờ chặn render — giữ nguyên hành vi cũ. Đánh
+        # đổi nhỏ: job bị cancel giữa chừng thì thread nền vẫn chạy nốt
+        # scenedetect (daemon, vô hại — chỉ tốn CPU nền một lần).
+        _scene_map_holder: dict = {"map": None}
+
+        def _scene_map_worker() -> None:
+            try:
+                from app.features.render.engine.pipeline.scene_map_stage import (
+                    run_scene_map as _run_scene_map,
+                )
+                _scene_map_holder["map"] = _run_scene_map(
+                    job_id=job_id, channel_code=effective_channel,
+                    video_path=source_path,
+                    emit_fn=_emit_render_event,
+                )
+            except Exception:
+                # Phòng thủ — stage đã tự bắt lỗi, nhưng thread nền tuyệt đối
+                # không được làm sập render vì một khâu quan sát/substrate.
+                _scene_map_holder["map"] = None
+
+        _scene_map_thread = threading.Thread(
+            target=_scene_map_worker, daemon=True,
+            name=f"scene_map_{job_id[:8]}",
+        )
+        _scene_map_thread.start()
+
         # 2. Full transcript (Whisper) — skip clip selection ------------------
         _pre = run_llm_pre_render(
             source_path=source_path, source=source, work_dir=work_dir, payload=payload,
@@ -262,26 +297,10 @@ def run_recap(
         if not _ai_srt.strip():
             raise RuntimeError("Recap: transcript empty — cannot select scenes")
 
-        # 2b. SceneMap substrate (architecture-review Batch D-2-thin,
-        # 2026-06-30). Pre-compute the shot-boundary map so consumers
-        # (D-2-snap pass-3 snap-to-shot reconciler — wired below;
-        # D-2-motion crop subject path — future) can read it without
-        # re-detecting. Failure here is informational and never blocks
-        # the render. Sacred Contract #3 spirit.
-        _scene_map = None
-        try:
-            from app.features.render.engine.pipeline.scene_map_stage import (
-                run_scene_map as _run_scene_map,
-            )
-            _scene_map = _run_scene_map(
-                job_id=job_id, channel_code=effective_channel,
-                video_path=source_path,
-                emit_fn=_emit_render_event,
-            )
-        except Exception:
-            # Defensive — stage already guards, but the recap render must
-            # never abort on a substrate/observability concern.
-            _scene_map = None
+        # 2b. SceneMap giờ chạy trên thread nền (khởi động trước Whisper ở
+        # trên). Kết quả được join + đọc ngay trước bước snap-to-shots —
+        # consumer đầu tiên của nó — để tối đa phần chạy chồng lấp với
+        # Whisper và lời gọi LLM.
 
         # 3. Recap scene selection (AI) --------------------------------------
         _set_stage(JobStage.SEGMENT_BUILDING, 30, "AI selecting recap scenes + acts")
@@ -388,6 +407,13 @@ def run_recap(
             # Defensive — domain method already guards, but the recap render
             # must never abort on a binding/observability concern.
             pass
+
+        # Join thread SceneMap nền (thường đã xong từ lâu — Whisper + LLM
+        # chậm hơn scenedetect nhiều). join không timeout để giữ đúng
+        # semantics của lời gọi inline trước đây: scenedetect chưa xong thì
+        # chờ, kết quả None thì bước snap tự bỏ qua như cũ.
+        _scene_map_thread.join()
+        _scene_map = _scene_map_holder["map"]
 
         # Architecture-review Batch D-2-snap (2026-06-30): snap each scene's
         # start/end to the nearest shot boundary from the SceneMap produced
@@ -593,6 +619,13 @@ def run_recap(
         try:
             _user_req = int(getattr(payload, "max_parallel_parts", 0) or 0)
             _hw_cap = max(1, _MAX_CONCURRENT_JOBS)
+            # Máy có GPU: giới hạn worker theo số phiên NVENC (mặc định 3).
+            # Worker vượt giới hạn chỉ ngồi block trên NVENC_SEMAPHORE — tốn
+            # thread/RAM và tranh CPU với motion pass mà không thêm throughput.
+            # Đồng bộ với cách clips path (render_pipeline) tính hw_cap ở chế
+            # độ GPU; máy không có NVENC giữ nguyên công thức cũ.
+            if nvenc_available():
+                _hw_cap = min(_hw_cap, max(1, int(os.getenv("NVENC_MAX_SESSIONS", "3"))))
             max_workers = max(1, min(_user_req, _hw_cap)) if _user_req > 0 else _hw_cap
         except Exception:
             max_workers = 1
