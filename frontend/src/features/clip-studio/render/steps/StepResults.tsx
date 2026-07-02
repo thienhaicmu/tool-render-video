@@ -11,6 +11,8 @@ import {
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
+import { ClipActionsMenu } from './ClipActionsMenu'
+import type { ClipMenuItem } from './ClipActionsMenu'
 
 function aiTier(score: number): { label: string; cls: string } {
   if (score >= 85) return { label: 'VIRAL READY', cls: 'tier-viral' }
@@ -568,6 +570,9 @@ function StepResultsBase({
                         {part.viral_score > 0 && <span className="clip-score-pill viral">Viral {Math.round(part.viral_score)}%</span>}
                       </div>
                     )}
+                    {/* P0.6 — Save + feedback stay visible; utility actions
+                        (copy path / open folder / delete / details) moved into
+                        the ··· overflow menu to end the 7-equal-buttons row. */}
                     <div className="clip-actions2">
                       <a className="clip-save-btn"
                         href={getPartMediaUrl(jobId, part.part_no)}
@@ -585,61 +590,46 @@ function StepResultsBase({
                         className={`clip-fb-btn${feedbackRatings[part.part_no] === -1 ? ' active-dislike' : ''}`}
                         onClick={(e) => { e.stopPropagation(); handleFeedback(part.part_no, -1, part) }}
                       >👎</button>
-                      {part.output_file && (
-                        <button
-                          title="Copy path"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            navigator.clipboard.writeText(part.output_file).catch(() => {})
-                          }}
-                          style={{
-                            fontSize: 11, padding: '2px 7px', borderRadius: 5,
-                            border: '1px solid var(--border)', background: 'var(--bg-hover)',
-                            color: 'var(--text-3)', cursor: 'pointer',
-                          }}
-                        >
-                          Copy
-                        </button>
-                      )}
-                      {part.output_file && !deletedOutputs.has(part.part_no) && (
-                        <button
-                          title="Open folder"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const f = part.output_file
-                            const sep = f.includes('\\') ? '\\' : '/'
-                            const dir = f.substring(0, f.lastIndexOf(sep)) || f
-                            window.electronAPI?.openPath?.(dir)
-                          }}
-                          style={{
-                            fontSize: 11, padding: '2px 7px', borderRadius: 5,
-                            border: '1px solid var(--border)', background: 'var(--bg-hover)',
-                            color: 'var(--text-3)', cursor: 'pointer',
-                          }}
-                        >
-                          📂
-                        </button>
-                      )}
-                      {part.output_file && !deletedOutputs.has(part.part_no) && (
-                        <button
-                          title="Delete output file"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteOutput(part.part_no) }}
-                          style={{
-                            fontSize: 11, padding: '2px 7px', borderRadius: 5,
-                            border: '1px solid rgba(232,64,122,.3)', background: 'rgba(232,64,122,.08)',
-                            color: 'var(--fail)', cursor: 'pointer',
-                          }}
-                        >
-                          🗑
-                        </button>
-                      )}
                       {deletedOutputs.has(part.part_no) && (
                         <span style={{ fontSize: 10, color: 'var(--text-3)', padding: '2px 5px' }}>deleted</span>
                       )}
-                      <button className="clip-more-btn" title="Details"
-                        onClick={(e) => { e.stopPropagation(); setSelectedPart(isSelected ? null : part) }}>
-                        ···
-                      </button>
+                      <ClipActionsMenu
+                        items={(() => {
+                          const items: ClipMenuItem[] = [
+                            {
+                              id: 'details',
+                              label: isSelected ? 'Hide details' : 'Details',
+                              onClick: () => setSelectedPart(isSelected ? null : part),
+                            },
+                          ]
+                          if (part.output_file) {
+                            items.push({
+                              id: 'copy',
+                              label: 'Copy file path',
+                              onClick: () => { navigator.clipboard.writeText(part.output_file).catch(() => {}) },
+                            })
+                          }
+                          if (part.output_file && !deletedOutputs.has(part.part_no)) {
+                            items.push({
+                              id: 'folder',
+                              label: 'Open folder',
+                              onClick: () => {
+                                const f = part.output_file
+                                const sep = f.includes('\\') ? '\\' : '/'
+                                const dir = f.substring(0, f.lastIndexOf(sep)) || f
+                                window.electronAPI?.openPath?.(dir)
+                              },
+                            })
+                            items.push({
+                              id: 'delete',
+                              label: 'Delete output file',
+                              danger: true,
+                              onClick: () => { void handleDeleteOutput(part.part_no) },
+                            })
+                          }
+                          return items
+                        })()}
+                      />
                     </div>
                   </div>
                 </div>
