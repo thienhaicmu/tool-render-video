@@ -189,7 +189,7 @@ export function EditorMetadataPanel({
       </div>
 
       {/* Part number */}
-      <MetaRow label="Part" value={`Part ${partNo}`} />
+      <MetaRow label="Clip" value={`Clip ${partNo}`} />
 
       {/* Status */}
       {jobStatus && (

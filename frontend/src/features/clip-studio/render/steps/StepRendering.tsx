@@ -49,10 +49,14 @@ export function clipStateKey(status: string): 'done' | 'failed' | 'active' | 'wa
   return 'active'
 }
 
-const ACTIVITY_LABELS: Record<string, string> = {
-  cutting:      'Extracting video segment · FFmpeg',
-  transcribing: 'Generating subtitles · Whisper AI',
-  rendering:    'Encoding clip · FFmpeg NVENC',
+// P2.3 - activity labels via the Strings table (tool names kept as detail).
+function activityLabel(status: string, t: Strings): string {
+  switch (status.toLowerCase()) {
+    case 'cutting':      return `${t.actCutting} · FFmpeg`
+    case 'transcribing': return `${t.actTranscribing} · Whisper AI`
+    case 'rendering':    return `${t.actRendering} · FFmpeg`
+    default:             return ''
+  }
 }
 
 const STEP_NODES = [
@@ -61,8 +65,8 @@ const STEP_NODES = [
   { key: 'rendering',    label: 'Render' },
 ] as const satisfies readonly { key: JobPartStageEnum; label: string }[]
 
-function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
-  slot: ClipSlot; statusLabel: string; jobId: string | null; thumbRatio: string; compact?: boolean
+function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false, t }: {
+  slot: ClipSlot; statusLabel: string; jobId: string | null; thumbRatio: string; compact?: boolean; t: Strings
 }) {
   const state   = clipStateKey(slot.status)
   const pct     = slot.progress_percent
@@ -70,7 +74,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
   const isFail  = state === 'failed'
   const isWait  = state === 'waiting'
   const isActive = state === 'active'
-  const activity = ACTIVITY_LABELS[slot.status.toLowerCase()] ?? ''
+  const activity = activityLabel(slot.status, t)
   const activeStepIdx = STEP_NODES.findIndex((n) => n.key === slot.status.toLowerCase())
 
   // S4.1 — per-clip ETA. Track when the clip first transitioned into an
@@ -511,18 +515,18 @@ function StepRenderingBase({
           </div>
           <div className="rd-ai-body">
             {stage === 'analyze' && !isTerminal
-              ? <><span className="rd-ai-pulse" /> AI Director analyzing content — selecting best moments…</>
+              ? <><span className="rd-ai-pulse" /> {t.rndAiAnalyzing}</>
               : stage === 'transcribe' && !isTerminal
-              ? 'Transcribing audio — Whisper AI processing…'
+              ? t.rndAiTranscribing
               : stage === 'render' && !isTerminal && isRecap && effTotal > 0
               ? t.rndRecapBuilding(effTotal, recapEpisodes || 1)
               : stage === 'render' && !isTerminal && totalCount > 0
-              ? `Rendering ${totalCount} clip${totalCount !== 1 ? 's' : ''} — AI scene tracking active`
+              ? t.rndAiRendering(totalCount)
               : isTerminal && !isFailed && isRecap
               ? t.rndRecapDone(recapEpisodes || 1)
               : isTerminal && !isFailed
-              ? `Analysis complete — ${doneCount} clip${doneCount !== 1 ? 's' : ''} selected`
-              : displayMsg || 'Processing…'
+              ? t.rndAiDone(doneCount)
+              : displayMsg || t.rndProcessing
             }
           </div>
         </div>
@@ -650,6 +654,7 @@ function StepRenderingBase({
               statusLabel={getStatusLabel(slot.status)}
               jobId={jobId}
               thumbRatio={thumbRatio}
+              t={t}
               compact={clipStateKey(slot.status) === 'done' || clipStateKey(slot.status) === 'waiting'}
             />
           ))}

@@ -48,7 +48,7 @@ export function QualityPartCard({ jobId, part }: QualityPartCardProps) {
       >
         <div className="quality-part-card-header-left">
           <span>{expanded ? '▾' : '▸'}</span>
-          <span>Part {part.part_no}</span>
+          <span>Clip {part.part_no}</span>
         </div>
         <div className="quality-part-card-header-right">
           {part.available ? (

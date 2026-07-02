@@ -15,11 +15,16 @@ import { ClipActionsMenu } from './ClipActionsMenu'
 import { IconInbox, IconFilm } from '@/components/icons'
 import type { ClipMenuItem } from './ClipActionsMenu'
 
-function aiTier(score: number): { label: string; cls: string } {
-  if (score >= 85) return { label: 'VIRAL READY', cls: 'tier-viral' }
-  if (score >= 70) return { label: 'HIGH IMPACT', cls: 'tier-high' }
-  if (score >= 55) return { label: 'GOOD', cls: 'tier-good' }
-  return { label: 'REVIEW', cls: 'tier-review' }
+// P2.3 - tier label comes from the Strings table (creator-voiced, both locales).
+function aiTier(score: number, t: Strings): { label: string; cls: string } {
+  if (score >= 85) return { label: t.tierViral, cls: 'tier-viral' }
+  if (score >= 70) return { label: t.tierHigh, cls: 'tier-high' }
+  if (score >= 55) return { label: t.tierGood, cls: 'tier-good' }
+  return { label: t.tierReview, cls: 'tier-review' }
+}
+
+function confLabel(tier: string, t: Strings): string {
+  return tier === 'strong' ? t.confStrong : tier === 'worth_testing' ? t.confTest : t.confExp
 }
 
 function ScoreRingSm({ score }: { score: number }) {
@@ -38,11 +43,11 @@ function ScoreRingSm({ score }: { score: number }) {
   )
 }
 
-function ScoreRingLg({ score }: { score: number }) {
+function ScoreRingLg({ score, t }: { score: number; t: Strings }) {
   const r = 28, circ = 2 * Math.PI * r
   const fill = (score / 100) * circ
   const col = score >= 70 ? 'var(--ok)' : score >= 40 ? 'var(--warn)' : 'var(--fail)'
-  const tier = aiTier(score)
+  const tier = aiTier(score, t)
   return (
     <div className="srl-wrap">
       <div style={{ position: 'relative', width: 68, height: 68, flexShrink: 0 }}>
@@ -56,7 +61,7 @@ function ScoreRingLg({ score }: { score: number }) {
       </div>
       <div className="srl-info">
         <div className={`res-ai-tier ${tier.cls}`}>{tier.label}</div>
-        <div className="srl-sub">AI Quality Score</div>
+        <div className="srl-sub">{t.resAiQualityScore}</div>
       </div>
     </div>
   )
@@ -87,6 +92,64 @@ function HybridAnalysisBadge({
                                 '💻 Local AI'
   const cls = fallbackMode === 'cloud' ? 'vtag-blue' : fallbackMode === 'hybrid' ? 'vtag-purple' : 'vtag-teal'
   return <span className={`res-vtag ${cls}`}>{label}</span>
+}
+
+// P2.3 - score education. An info toggle on the results bar explaining the
+// 0-100 score + tiers; auto-opens once per install (localStorage flag) so
+// first-time users aren't left guessing what "VIRAL READY" means.
+const SCORE_EDU_KEY = 'score_edu_seen_v1'
+
+function ScoreInfoTip({ t }: { t: Strings }) {
+  const [open, setOpen] = useState(() => {
+    try { return localStorage.getItem(SCORE_EDU_KEY) !== '1' } catch { return false }
+  })
+  function dismiss() {
+    setOpen(false)
+    try { localStorage.setItem(SCORE_EDU_KEY, '1') } catch { /* ignore */ }
+  }
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex' }}>
+      <button
+        onClick={() => (open ? dismiss() : setOpen(true))}
+        title={t.resScoreEduTitle}
+        aria-label={t.resScoreEduTitle}
+        style={{
+          width: 18, height: 18, borderRadius: '50%', marginLeft: 6,
+          border: '1px solid var(--border)', background: 'transparent',
+          color: open ? 'var(--accent)' : 'var(--text-3)',
+          fontSize: 11, fontWeight: 700, lineHeight: 1, cursor: 'pointer',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        i
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 24, left: -8, zIndex: 60,
+          width: 300, padding: '12px 14px',
+          background: 'var(--bg-panel)', border: '1px solid var(--border)',
+          borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.35)',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', marginBottom: 6 }}>
+            {t.resScoreEduTitle}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.6 }}>
+            {t.resScoreEduBody}
+          </div>
+          <button
+            onClick={dismiss}
+            style={{
+              marginTop: 10, padding: '4px 12px', borderRadius: 6,
+              border: '1px solid var(--border)', background: 'var(--bg-hover)',
+              color: 'var(--text-1)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            OK
+          </button>
+        </div>
+      )}
+    </span>
+  )
 }
 
 // Sprint 5.7: wrapped in React.memo at export below. See StepConfigure for rationale.
@@ -418,7 +481,7 @@ function StepResultsBase({
                           background: r.is_best_clip ? 'rgba(var(--accent-rgb), 0.15)' : 'rgba(var(--text-rgb),.03)',
                         }}>
                           <span style={{ width: 14, textAlign: 'center', fontWeight: 700, color: r.rank === 1 ? 'var(--accent)' : 'var(--text-3)' }}>#{r.rank}</span>
-                          <span style={{ color: 'var(--text-2)' }}>Part {r.part_no}</span>
+                          <span style={{ color: 'var(--text-2)' }}>Clip {r.part_no}</span>
                           <span style={{ fontWeight: 700, color: r.score >= 75 ? 'var(--ok)' : r.score >= 50 ? 'var(--warn)' : 'var(--text-3)' }}>{r.score}%</span>
                           {r.dominant_signal && <span style={{ color: 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.dominant_signal.replace(/_/g, ' ')}</span>}
                           {r.is_best_clip && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700 }}>BEST</span>}
@@ -447,6 +510,7 @@ function StepResultsBase({
         {/* Sort / count bar */}
         <div className="res-bar">
           <span className="res-count">{t.resClipsRendered(doneParts.length)}</span>
+          <ScoreInfoTip t={t} />
           <div className="res-sort">
             <button className={`sort-btn${sortMode === 'viral' ? ' on' : ''}`} onClick={() => setSortMode('viral')}>{t.resSortViral}</button>
             <button className={`sort-btn${sortMode === 'duration' ? ' on' : ''}`} onClick={() => setSortMode('duration')}>{t.resSortDuration}</button>
@@ -469,7 +533,7 @@ function StepResultsBase({
               const dispScore  = rank?.output_rank_score ?? qualScore
               const thumbUrl   = getPartThumbnailUrl(jobId, part.part_no)
               const isSelected = selectedPart?.part_no === part.part_no
-              const tier       = dispScore !== undefined ? aiTier(dispScore) : null
+              const tier       = dispScore !== undefined ? aiTier(dispScore, t) : null
               const durFmt     = fmtDur(part.duration)
               const scoreCol   = dispScore !== undefined
                 ? (dispScore >= 70 ? 'var(--ok)' : dispScore >= 50 ? 'var(--warn)' : 'var(--fail)')
@@ -531,7 +595,7 @@ function StepResultsBase({
                           color: rank.confidence_tier === 'strong' ? 'var(--status-success)' : 'var(--confidence-mid)',
                           letterSpacing: '.05em', textTransform: 'uppercase',
                         }}>
-                          {rank.confidence_tier === 'strong' ? 'STRONG' : rank.confidence_tier === 'worth_testing' ? 'TEST' : 'EXP'}
+                          {confLabel(rank.confidence_tier, t)}
                         </span>
                       )}
                     </div>
@@ -676,7 +740,7 @@ function StepResultsBase({
               </div>
 
               {(selRank?.output_rank_score ?? selScore) !== undefined && (
-                <ScoreRingLg score={selRank?.output_rank_score ?? selScore!} />
+                <ScoreRingLg score={selRank?.output_rank_score ?? selScore!} t={t} />
               )}
 
               {selRank && (
@@ -690,7 +754,7 @@ function StepResultsBase({
                         color: selRank.confidence_tier === 'strong' ? 'var(--status-success)' : 'var(--confidence-mid)',
                         letterSpacing: '.05em',
                       }}>
-                        {selRank.confidence_tier === 'strong' ? 'STRONG' : selRank.confidence_tier === 'worth_testing' ? 'WORTH TESTING' : 'EXPERIMENTAL'}
+                        {confLabel(selRank.confidence_tier, t)}
                       </span>
                     )}
                     {selRank.score_margin !== undefined && (
@@ -704,12 +768,12 @@ function StepResultsBase({
                   )}
                   <div className="player-score-bars">
                     {([
-                      ['Viral',     selRank.ranking_components.segment_viral_score, 'psb-viral'],
-                      ['Hook',      selRank.ranking_components.hook_score,           'psb-hook'],
-                      ['Retention', selRank.ranking_components.retention_score,      'psb-motion'],
-                      ['Speech',    selRank.ranking_components.speech_density_score, 'psb-hook'],
-                      ['Market',    selRank.ranking_components.market_score,         'psb-viral'],
-                      ['Duration',  selRank.ranking_components.duration_fit_score,   'psb-motion'],
+                      [t.resSigViral,     selRank.ranking_components.segment_viral_score, 'psb-viral'],
+                      [t.resSigHook,      selRank.ranking_components.hook_score,           'psb-hook'],
+                      [t.resSigRetention, selRank.ranking_components.retention_score,      'psb-motion'],
+                      [t.resSigSpeech,    selRank.ranking_components.speech_density_score, 'psb-hook'],
+                      [t.resSigMarket,    selRank.ranking_components.market_score,         'psb-viral'],
+                      [t.resSigDuration,  selRank.ranking_components.duration_fit_score,   'psb-motion'],
                     ] as [string, number, string][]).map(([label, val, cls]) => (
                       <div key={label} className="psb-row">
                         <span className="psb-label">{label}</span>
@@ -724,12 +788,12 @@ function StepResultsBase({
                     <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {selRank.dominant_signal && (
                         <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                          Dominant: <span style={{ color: 'var(--accent)' }}>{selRank.dominant_signal.replace(/_/g, ' ')}</span>
+                          {t.resWhyTop}: <span style={{ color: 'var(--accent)' }}>{selRank.dominant_signal.replace(/_/g, ' ')}</span>
                         </div>
                       )}
                       {selRank.suppressed_signals && selRank.suppressed_signals.length > 0 && (
                         <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                          Suppressed:{' '}
+                          {t.resWhyDown}:{' '}
                           {selRank.suppressed_signals.map((s, i) => (
                             <span key={i} style={{
                               display: 'inline-block', marginRight: 4, padding: '1px 6px',

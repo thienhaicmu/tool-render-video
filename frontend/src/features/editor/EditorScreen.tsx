@@ -101,7 +101,7 @@ export function EditorScreen() {
                 data-testid={`part-btn-${part.part_no}`}
                 title={!isAvailable ? `Part ${part.part_no}: ${part.status}` : undefined}
               >
-                Part {part.part_no}
+                Clip {part.part_no}
               </button>
             )
           })}
