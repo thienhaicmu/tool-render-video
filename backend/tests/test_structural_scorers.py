@@ -19,6 +19,7 @@ from app.domain.recap_plan import (
 from ai_eval.runmeta import config_vector
 from ai_eval.structural import (
     beat_coverage,
+    duration_ratio,
     episode_balance,
     hold_placement,
     scene_fatigue,
@@ -120,13 +121,47 @@ def test_episode_balance_single_episode_is_none():
     assert episode_balance(_plan([[_scene(0, 60)]]))["balance_score"] is None
 
 
+# ── duration_ratio ───────────────────────────────────────────────────────────
+
+def test_duration_ratio_in_band_scores_100():
+    # 1000s recap of a 5000s film → ratio 0.20, inside the prompt's 10–25% band.
+    p = _plan([[_scene(0, 500), _scene(500, 1000)]])
+    d = duration_ratio(p, 5000.0)
+    assert d["ratio"] == 0.2 and d["in_band"] is True and d["ratio_score"] == 100.0
+
+
+def test_duration_ratio_undercompression_penalized():
+    # The observed failure: ~6% of runtime → shortfall vs 10% floor → score 60.
+    p = _plan([[_scene(0, 300)]])          # 300s recap
+    d = duration_ratio(p, 5000.0)          # ratio 0.06
+    assert d["ratio"] == 0.06 and d["in_band"] is False
+    assert d["ratio_score"] == 60.0
+
+
+def test_duration_ratio_overcompression_penalized():
+    # 40% of runtime → excess vs 25% ceiling → 100*(1-0.15/0.25)=40.
+    p = _plan([[_scene(0, 2000)]])
+    d = duration_ratio(p, 5000.0)
+    assert d["ratio"] == 0.4 and d["ratio_score"] == 40.0
+
+
+def test_duration_ratio_unknown_film_is_none():
+    d = duration_ratio(_plan([[_scene(0, 300)]]), 0.0)
+    assert d["ratio"] is None and d["ratio_score"] is None
+
+
 # ── report / robustness / runmeta ────────────────────────────────────────────
 
 def test_structural_report_shape_and_none():
     assert structural_report(None) == {"empty": True}
-    rep = structural_report(_plan([[_scene(0, 20, "original", climax=True)]]))
-    assert set(rep) == {"fatigue", "holds", "beats", "episodes"}
+    rep = structural_report(_plan([[_scene(0, 20, "original", climax=True)]]), film_duration_sec=100.0)
+    assert set(rep) == {"fatigue", "holds", "beats", "episodes", "duration"}
+    assert rep["duration"]["ratio"] == 0.2
     assert "scenes=" in summarize_structural(rep)
+    assert "dur_ratio=0.2" in summarize_structural(rep)
+    # Backward compat: no film duration → duration metrics None, no crash.
+    rep2 = structural_report(_plan([[_scene(0, 20)]]))
+    assert rep2["duration"]["ratio"] is None
 
 
 def test_scorers_never_raise_on_junk():

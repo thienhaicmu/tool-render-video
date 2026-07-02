@@ -27,6 +27,8 @@ from typing import Any, Optional
 FRAGMENT_SEC = 8.0          # scenes shorter than this are "fragments"
 TARGET_SCENE_MAX = 40       # prompt: "15–40 scenes" for a feature film
 OVERFLOW_SPAN = 60.0        # scenes beyond target that zero the count factor
+RATIO_LO = 0.10             # prompt: recap "roughly 10–25% of the film runtime"
+RATIO_HI = 0.25
 
 
 def scene_fatigue(plan: Any) -> dict:
@@ -133,11 +135,48 @@ def episode_balance(plan: Any) -> dict:
         return {"episodes": -1, "error": "unreadable_plan"}
 
 
-def structural_report(plan: Any) -> dict:
+def duration_ratio(plan: Any, film_duration_sec: float) -> dict:
+    """Total recap length vs film runtime, against the prompt's own 10–25% band.
+
+    Added after the first structural sample exposed an editorial-ON plan that
+    compressed a 91-min film into a 5.5-min recap (ratio 0.06) which the LLM
+    judge scored identically to a 20%-ratio OFF plan — this is the metric that
+    catches over/under-compression.
+
+    ratio_score: 100 inside [RATIO_LO, RATIO_HI]; below the band it decays with
+    the relative shortfall (0.06 vs 0.10 → 60); above it with the relative
+    excess (0.40 vs 0.25 → 40). Clamped to [0, 100]. Raw ratio always included
+    so the score can be re-derived if the band ever changes. None when the film
+    duration is unknown (unknown ≠ bad).
+    """
+    try:
+        film = float(film_duration_sec or 0.0)
+        if film <= 0:
+            return {"recap_sec": None, "ratio": None, "ratio_score": None}
+        recap = sum(max(0.0, float(s.end) - float(s.start)) for s in plan.scenes())
+        ratio = recap / film
+        if RATIO_LO <= ratio <= RATIO_HI:
+            score = 100.0
+        elif ratio < RATIO_LO:
+            score = 100.0 * ratio / RATIO_LO
+        else:
+            score = 100.0 * (1.0 - (ratio - RATIO_HI) / RATIO_HI)
+        return {
+            "recap_sec": round(recap, 1),
+            "ratio": round(ratio, 3),
+            "in_band": RATIO_LO <= ratio <= RATIO_HI,
+            "ratio_score": round(max(0.0, min(100.0, score)), 1),
+        }
+    except Exception:
+        return {"recap_sec": -1, "ratio": None, "ratio_score": 0.0, "error": "unreadable_plan"}
+
+
+def structural_report(plan: Any, film_duration_sec: float = 0.0) -> dict:
     """All structural metrics for one RecapPlan, flattened for the store.
 
-    Never raises; a None plan yields an 'empty' marker so accumulation rows
-    stay parseable.
+    ``film_duration_sec`` enables the duration-ratio metric; 0/unknown keeps it
+    None (backward compatible). Never raises; a None plan yields an 'empty'
+    marker so accumulation rows stay parseable.
     """
     if plan is None:
         return {"empty": True}
@@ -146,6 +185,7 @@ def structural_report(plan: Any) -> dict:
         "holds": hold_placement(plan),
         "beats": beat_coverage(plan),
         "episodes": episode_balance(plan),
+        "duration": duration_ratio(plan, film_duration_sec),
     }
 
 
@@ -157,9 +197,11 @@ def summarize_structural(report: dict) -> str:
         b = report.get("beats", {})
         prec = h.get("hold_precision")
         cov = b.get("coverage_pct")
+        ratio = report.get("duration", {}).get("ratio")
         return (f"scenes={f.get('scene_count')} frag={f.get('fragment_rate')} "
                 f"discipline={f.get('discipline_score')} "
                 f"hold_prec={'-' if prec is None else prec} "
-                f"beat_cov={'-' if cov is None else cov}")
+                f"beat_cov={'-' if cov is None else cov} "
+                f"dur_ratio={'-' if ratio is None else ratio}")
     except Exception:
         return "structural: unreadable"

@@ -210,6 +210,8 @@ def _print_grand_aggregate(store_path: str, rubric) -> None:
             ("hold_precision", ("holds", "hold_precision")),
             ("beat_coverage", ("beats", "coverage_pct")),
             ("episode_balance", ("episodes", "balance_score")),
+            ("duration_ratio", ("duration", "ratio")),
+            ("duration_ratio_score", ("duration", "ratio_score")),
         ):
             a, b = _pick(rows, "off", *path), _pick(rows, "on", *path)
             fa = f"{_mean(a):.2f}" if a else "-"
@@ -308,8 +310,8 @@ def main(argv=None) -> int:
             print(f"    weighted OFF={res_off.weighted:g} ON={res_on.weighted:g} Δ={d:+g}")
             # Sprint-1A — deterministic structural metrics (judge-free, the
             # construct-valid instrument for editorial's actual output).
-            _struct_off = structural_report(plan_off)
-            _struct_on = structural_report(plan_on)
+            _struct_off = structural_report(plan_off, film_duration_sec=dur)
+            _struct_on = structural_report(plan_on, film_duration_sec=dur)
             print(f"    struct OFF: {summarize_structural(_struct_off)}")
             print(f"    struct ON : {summarize_structural(_struct_on)}")
             if args.store:
