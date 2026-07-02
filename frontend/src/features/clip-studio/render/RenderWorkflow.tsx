@@ -344,9 +344,10 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
         type: 'success',
         title: 'Render complete',
         message: doneCount > 0 ? `${doneCount} clip${doneCount !== 1 ? 's' : ''} ready` : undefined,
+        jobId, kind: 'render',
       })
     } else if (s === 'failed') {
-      addNotification({ type: 'error', title: 'Render failed', message: jobMessage || undefined })
+      addNotification({ type: 'error', title: 'Render failed', message: jobMessage || undefined, jobId, kind: 'render' })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTerminal])

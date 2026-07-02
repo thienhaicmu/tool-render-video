@@ -262,6 +262,13 @@ export const translations = {
     history_cancel: 'Cancel',
     history_dup_title: 'Settings copied',
     history_dup_msg: 'Configure step pre-filled from the old job',
+
+    // P1.4 — dock "needs attention" section
+    dock_failed: 'Failed',
+    dock_interrupted: 'Interrupted',
+    dock_retry: 'Retry',
+    dock_resume: 'Resume',
+    dock_dismiss: 'Dismiss',
   },
 
   vi: {
@@ -519,6 +526,13 @@ export const translations = {
     history_cancel: 'Hủy',
     history_dup_title: 'Đã copy settings',
     history_dup_msg: 'Bước Configure đã pre-fill từ job cũ',
+
+    // P1.4 — dock "cần chú ý"
+    dock_failed: 'Thất bại',
+    dock_interrupted: 'Gián đoạn',
+    dock_retry: 'Thử lại',
+    dock_resume: 'Tiếp tục',
+    dock_dismiss: 'Bỏ qua',
   },
 } as const
 

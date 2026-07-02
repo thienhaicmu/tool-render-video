@@ -13,13 +13,29 @@ import { useActiveJobs, useJobsStore } from '../stores/jobsStore'
 import { useUIStore } from '../stores/uiStore'
 import { useRenderStore } from '../stores/renderStore'
 import { useI18n } from '../i18n/useI18n'
-import { cancelRender } from '../api/render'
+import { cancelRender, retryRender, resumeRender } from '../api/render'
 import { moveJobToTop, moveJobToBottom } from '../api/jobs'
 import { cancelJob as cancelDownloadJob } from '../api/platformDownloader'
 import { IconQueue, IconToTop, IconToBottom, IconX } from '../components/icons'
 import type { HistoryItem } from '../types/api'
 
 const MAX_VISIBLE = 3
+
+// P1.4 — "needs attention": terminal-failed/interrupted render jobs stay
+// in the dock for this long (unless dismissed) so a failure that happens
+// while the user is on another screen doesn't vanish with its toast.
+const ATTENTION_WINDOW_MS = 30 * 60 * 1000
+const DISMISSED_KEY = 'dock_dismissed_attention_v1'
+
+function loadDismissed(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(DISMISSED_KEY)
+    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+  } catch { return new Set() }
+}
+function saveDismissed(ids: Set<string>) {
+  try { sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids])) } catch { /* ignore */ }
+}
 
 // Mirror of App.tsx FULLSCREEN_PANELS — panels that hide the sidebar so the
 // dock must extend all the way to the left edge.
@@ -35,9 +51,34 @@ export function ActiveJobsDock() {
   const activePanel = useUIStore((s) => s.activePanel)
   const isFullscreen = FULLSCREEN_PANELS.includes(activePanel)
 
+  // P1.4 — session-scoped dismissals for the attention section.
+  const [dismissed, setDismissed] = useState<Set<string>>(loadDismissed)
+  function dismiss(jobId: string) {
+    setDismissed((prev) => {
+      const next = new Set(prev).add(jobId)
+      saveDismissed(next)
+      return next
+    })
+  }
+
   const activeItems = items.filter(
     (j) => j.status === 'running' || j.status === 'queued',
   )
+
+  // P1.4 — recently failed/interrupted renders. Previously these dropped
+  // out of the dock the instant they turned terminal, so a failure that
+  // happened while the user was on another screen was only discoverable
+  // via a 5 s toast or by opening Library.
+  const now = Date.now()
+  const attentionItems = items.filter((j) => {
+    if (j.kind !== 'render') return false
+    if (j.status !== 'failed' && j.status !== 'interrupted') return false
+    if (dismissed.has(j.job_id)) return false
+    const ts = Date.parse(j.updated_at || '')
+    return !Number.isNaN(ts) && now - ts < ATTENTION_WINDOW_MS
+  }).slice(0, 2)
+
+  const hasContent = activeItems.length > 0 || attentionItems.length > 0
 
   // The dock is a fixed bottom strip mounted as a sibling of the app shell.
   // Without reserving space it would overlap the bottom of the content (the
@@ -46,11 +87,11 @@ export function ActiveJobsDock() {
   // Height is constant (one 40px row + 8px padding top/bottom + 1px border).
   useEffect(() => {
     const root = document.documentElement
-    root.style.setProperty('--active-jobs-dock-h', activeItems.length > 0 ? '57px' : '0px')
+    root.style.setProperty('--active-jobs-dock-h', hasContent ? '57px' : '0px')
     return () => { root.style.setProperty('--active-jobs-dock-h', '0px') }
-  }, [activeItems.length])
+  }, [hasContent])
 
-  if (activeItems.length === 0) return null
+  if (!hasContent) return null
 
   const visible = activeItems.slice(0, MAX_VISIBLE)
   const overflow = activeItems.length - visible.length
@@ -128,6 +169,15 @@ export function ActiveJobsDock() {
       aria-label="Active jobs"
     >
       <div style={styles.inner}>
+        {attentionItems.map((job) => (
+          <AttentionRow
+            key={job.job_id}
+            job={job}
+            onOpen={handleOpen}
+            onDismiss={dismiss}
+            onActed={() => void refresh()}
+          />
+        ))}
         {visible.map((job) => (
           <DockRow
             key={job.job_id}
@@ -158,6 +208,73 @@ export function ActiveJobsDock() {
           <IconQueue size={16} />
         </button>
       </div>
+    </div>
+  )
+}
+
+// P1.4 — a failed/interrupted render pinned in the dock with inline
+// recovery. Retry restarts a failed job; Resume continues an interrupted
+// one. Dismiss (×) hides it for this session only.
+function AttentionRow({ job, onOpen, onDismiss, onActed }: {
+  job: HistoryItem
+  onOpen: (job: HistoryItem) => void
+  onDismiss: (jobId: string) => void
+  onActed: () => void
+}) {
+  const { t } = useI18n()
+  const [busy, setBusy] = useState(false)
+  const isInterrupted = job.status === 'interrupted'
+  const title = job.title || job.source_hint || job.job_id.slice(0, 8)
+
+  async function handleRecover(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (busy) return
+    setBusy(true)
+    try {
+      if (isInterrupted) await resumeRender(job.job_id)
+      else await retryRender(job.job_id)
+      onDismiss(job.job_id)
+      onActed()
+    } catch {
+      // Job may have been retried elsewhere / deleted — next poll reconciles.
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ ...styles.row, borderColor: 'rgba(239,68,68,.35)' }}>
+      <button style={styles.rowBody} onClick={() => onOpen(job)} title={t('dock_open_detail')}>
+        <span style={{
+          ...styles.kindBadge,
+          backgroundColor: 'var(--status-error-bg, rgba(239,68,68,.12))',
+          color: 'var(--status-error)',
+        }}>
+          {isInterrupted ? t('dock_interrupted') : t('dock_failed')}
+        </span>
+        <span style={styles.rowText}>
+          <span style={styles.rowTitle}>{title}</span>
+          <span style={styles.rowSubtitle}>{job.message || job.stage || ''}</span>
+        </span>
+        <span />
+        <span style={{ ...styles.pct, color: 'var(--status-error)' }} />
+      </button>
+      <button
+        style={{ ...styles.moveBtn, width: 'auto', padding: '0 10px', fontSize: 11, fontWeight: 600 }}
+        onClick={handleRecover}
+        disabled={busy}
+        title={isInterrupted ? t('dock_resume') : t('dock_retry')}
+      >
+        {busy ? '…' : isInterrupted ? t('dock_resume') : t('dock_retry')}
+      </button>
+      <button
+        style={styles.cancelBtn}
+        onClick={(e) => { e.stopPropagation(); onDismiss(job.job_id) }}
+        title={t('dock_dismiss')}
+        aria-label={t('dock_dismiss')}
+      >
+        <IconX size={13} />
+      </button>
     </div>
   )
 }

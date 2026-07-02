@@ -48,6 +48,7 @@ export function useJobCompletionNotifier() {
   const { items } = useActiveJobs()
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const setMonitorJobId = useUIStore((s) => s.setMonitorJobId)
+  const addNotification = useUIStore((s) => s.addNotification)
 
   // Map<job_id, last-seen status>. Used to diff transitions across polls.
   const prevStatuses = useRef<Map<string, string> | null>(null)
@@ -76,10 +77,26 @@ export function useJobCompletionNotifier() {
         before !== undefined &&
         !isTerminalStatus(before) &&
         isTerminalStatus(item.status)
-      if (becameTerminal && notify) {
-        void notify({
+      if (becameTerminal) {
+        if (notify) {
+          void notify({
+            title: formatTitle(item),
+            body: formatBody(item),
+            jobId: item.job_id,
+            kind: item.kind,
+          })
+        }
+        // P1.4 — also record an in-app history entry (silent: the OS
+        // notification covers the alert role; RenderWorkflow shows its
+        // own toast for the attached job). Gives every terminal job a
+        // findable, clickable trace in NotificationCenter.
+        addNotification({
+          silent: true,
+          type: item.status === 'failed' ? 'error'
+            : item.status === 'completed' ? 'success'
+            : 'warning',
           title: formatTitle(item),
-          body: formatBody(item),
+          message: formatBody(item),
           jobId: item.job_id,
           kind: item.kind,
         })

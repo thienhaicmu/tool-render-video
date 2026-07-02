@@ -25,6 +25,16 @@ export interface Notification {
   title: string
   message?: string
   duration?: number
+  /** P1.4 — job this notification is about. History entries carrying a
+   *  jobId become clickable in NotificationCenter (deep-link to the
+   *  job's monitor / the download panel). */
+  jobId?: string
+  kind?: 'render' | 'download'
+  /** P1.4 — when true, only a history entry is recorded; no toast is
+   *  shown. Used by useJobCompletionNotifier, which already fires an OS
+   *  notification — a simultaneous in-app toast would double up with
+   *  the RenderWorkflow terminal toast for the attached job. */
+  silent?: boolean
 }
 
 /** S4.7 — notification history entry. Same shape as `Notification`
@@ -38,6 +48,8 @@ export interface NotificationHistoryEntry {
   message?: string
   created_at: number
   read: boolean
+  jobId?: string
+  kind?: 'render' | 'download'
 }
 
 export interface UIStore {
@@ -155,14 +167,15 @@ export const useUIStore = create<UIStore>((set) => ({
         message: notification.message,
         created_at: Date.now(),
         read: false,
+        jobId: notification.jobId,
+        kind: notification.kind,
       }
       const history = [historyEntry, ...s.notificationHistory].slice(0, NOTIF_HISTORY_CAP)
       _saveHistory(history)
       return {
-        notifications: [
-          ...s.notifications,
-          { ...notification, id },
-        ],
+        notifications: notification.silent
+          ? s.notifications
+          : [...s.notifications, { ...notification, id }],
         notificationHistory: history,
       }
     })

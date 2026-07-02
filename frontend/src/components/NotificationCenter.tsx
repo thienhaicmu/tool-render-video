@@ -53,6 +53,19 @@ export function NotificationCenter() {
   const markNotificationRead     = useUIStore((s) => s.markNotificationRead)
   const markAllNotificationsRead = useUIStore((s) => s.markAllNotificationsRead)
   const clearNotificationHistory = useUIStore((s) => s.clearNotificationHistory)
+  const setMonitorJobId          = useUIStore((s) => s.setMonitorJobId)
+  const setActivePanel           = useUIStore((s) => s.setActivePanel)
+
+  // P1.4 — entries carrying a jobId deep-link to that job's surface.
+  function openEntry(jobId: string, kind?: 'render' | 'download') {
+    setOpen(false)
+    if (kind === 'download') {
+      setActivePanel('download')
+      return
+    }
+    setMonitorJobId(jobId)
+    setActivePanel('clip-studio')
+  }
 
   const unreadCount = history.filter((n) => !n.read).length
 
@@ -168,17 +181,21 @@ export function NotificationCenter() {
             ) : (
               history.map((n) => {
                 const color = TYPE_COLOR[n.type] || 'var(--text-2)'
+                const clickable = !!n.jobId
                 return (
                   <div
                     key={n.id}
                     onMouseEnter={() => { if (!n.read) markNotificationRead(n.id) }}
+                    onClick={() => { if (n.jobId) openEntry(n.jobId, n.kind) }}
+                    title={clickable ? (n.kind === 'download' ? t('nav_download') : t('dock_open_detail')) : undefined}
                     style={{
                       padding: '10px 12px',
                       borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,.05))',
                       display: 'grid',
                       gridTemplateColumns: '8px 1fr auto',
                       gap: 10,
-                      background: n.read ? 'transparent' : 'rgba(255,255,255,.02)',
+                      background: n.read ? 'transparent' : 'rgba(var(--text-rgb, 255,255,255),.02)',
+                      cursor: clickable ? 'pointer' : 'default',
                     }}
                   >
                     <span style={{
