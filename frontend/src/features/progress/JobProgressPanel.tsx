@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { useRenderSocket } from '@/hooks/useRenderSocket'
 import { useUIStore } from '@/stores/uiStore'
 import { cancelRender } from '@/api/render'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { isTerminalStatus } from '@/types/enums'
 import { isActiveStatus } from '../jobs/jobs.utils'
 import { ConnectionStatusBadge } from './ConnectionStatusBadge'
@@ -205,8 +206,15 @@ export function JobProgressPanel({
 
   const handleCancelRequest = async () => {
     if (isCanceling) return
-    const confirmed = window.confirm('Cancel this render job?')
-    if (!confirmed) return
+    const choice = await confirmDialog({
+      title: 'Cancel this render job?',
+      message: 'Progress on unfinished clips will be lost. Completed clips are kept.',
+      buttons: [
+        { id: 'confirm', label: 'Cancel render', variant: 'danger' },
+        { id: 'keep', label: 'Keep rendering' },
+      ],
+    })
+    if (choice !== 'confirm') return
     setIsCanceling(true)
     try {
       await cancelRender(jobId)

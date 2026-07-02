@@ -7,6 +7,7 @@ import { deleteJob } from '@/api/jobs'
 import { useEditorStore } from '@/stores/editorStore'
 import { useUIStore } from '@/stores/uiStore'
 import { ApiError } from '@/api/client'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import type { JobStatus, JobPart } from '@/types/api'
 
 export interface JobDetailDrawerProps {
@@ -196,7 +197,15 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
   }
 
   async function handleDelete() {
-    if (!window.confirm('Xóa job và tất cả file output?')) return
+    const choice = await confirmDialog({
+      title: 'Xóa job này?',
+      message: 'Job và tất cả file output sẽ bị xóa. Thao tác không thể hoàn tác.',
+      buttons: [
+        { id: 'delete', label: 'Xóa', variant: 'danger' },
+        { id: 'cancel', label: 'Hủy' },
+      ],
+    })
+    if (choice !== 'delete') return
     setActionLoading(true)
     try {
       await deleteJob(jobId, true)

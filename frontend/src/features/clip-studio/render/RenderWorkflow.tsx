@@ -18,6 +18,7 @@ import { StepConfigure } from './steps/StepConfigure'
 import { StepRendering } from './steps/StepRendering'
 import { StepResults } from './steps/StepResults'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 
 // ── Root component ────────────────────────────────────────────────────────────
 export function RenderWorkflow({ lang }: { lang: Lang }) {
@@ -752,14 +753,26 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     try {
       const active = useJobsStore.getState().active
       if (active) {
-        const msg = lang === 'VI'
-          ? `Vẫn còn render đang chạy: ${active.title || active.job_id.slice(0, 8)}. Mở màn theo dõi job đó? (OK = mở · Cancel = bắt đầu render mới)`
-          : `A render is still running: ${active.title || active.job_id.slice(0, 8)}. Open its monitor? (OK = open · Cancel = start a new render)`
-        if (window.confirm(msg)) {
+        // P0.4 — in-app 3-way dialog. The old window.confirm crammed
+        // "open monitor" vs "start new" into OK/Cancel prose.
+        const jobLabel = active.title || active.job_id.slice(0, 8)
+        const choice = await confirmDialog({
+          title: lang === 'VI' ? 'Vẫn còn render đang chạy' : 'A render is still running',
+          message: lang === 'VI'
+            ? `"${jobLabel}" đang chạy. Bạn muốn mở màn theo dõi job đó, hay bắt đầu một render mới?`
+            : `"${jobLabel}" is in progress. Open its monitor, or start a new render anyway?`,
+          buttons: [
+            { id: 'monitor', label: lang === 'VI' ? 'Mở monitor' : 'Open monitor', variant: 'primary' },
+            { id: 'new',     label: lang === 'VI' ? 'Render mới' : 'New render' },
+            { id: 'cancel',  label: lang === 'VI' ? 'Đóng' : 'Cancel' },
+          ],
+        })
+        if (choice === 'monitor') {
           setJobId(active.job_id)
           setStep(3)
           return
         }
+        if (choice !== 'new') return  // dismissed / cancel — do nothing
         // User chose to proceed — fall through and start fresh. Backend dedup
         // will still block if they pick the same source path; that's now
         // handled by the 409→navigate path in handleStartRender.

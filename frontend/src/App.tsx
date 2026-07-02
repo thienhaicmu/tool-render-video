@@ -17,6 +17,7 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { useJobCompletionNotifier } from './hooks/useJobCompletionNotifier'
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts'
 import { CommandPalette } from './components/CommandPalette'
+import { ConfirmDialogHost } from './components/ui/ConfirmDialog'
 
 // Code-split each top-level screen into its own chunk (F1). The initial
 // bundle no longer carries every screen's code; a screen's chunk is fetched
@@ -112,6 +113,7 @@ export function App() {
           <ActiveJobsDock />
           <QueueDrawer />
           <CommandPalette />
+          <ConfirmDialogHost />
           <Notifications />
         </div>
       </ErrorBoundary>
@@ -126,6 +128,7 @@ export function App() {
         </Suspense>
       </AppShell>
       <CommandPalette />
+      <ConfirmDialogHost />
     </ErrorBoundary>
   )
 }

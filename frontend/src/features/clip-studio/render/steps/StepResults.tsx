@@ -10,6 +10,7 @@ import {
 } from '@/api/feedback'
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 
 function aiTier(score: number): { label: string; cls: string } {
   if (score >= 85) return { label: 'VIRAL READY', cls: 'tier-viral' }
@@ -154,7 +155,15 @@ function StepResultsBase({
 
   async function handleDeleteOutput(partNo: number) {
     if (!jobId) return
-    if (!window.confirm(`Delete output file for clip #${partNo}? This cannot be undone.`)) return
+    const choice = await confirmDialog({
+      title: `Delete output file for clip #${partNo}?`,
+      message: 'The rendered video file will be removed from disk. This cannot be undone.',
+      buttons: [
+        { id: 'delete', label: 'Delete file', variant: 'danger' },
+        { id: 'cancel', label: 'Cancel' },
+      ],
+    })
+    if (choice !== 'delete') return
     try {
       await deletePartOutput(jobId, partNo)
       setDeletedOutputs(prev => new Set([...prev, partNo]))

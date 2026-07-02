@@ -12,6 +12,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useUIStore } from '../stores/uiStore'
 import { useI18n } from '../i18n/useI18n'
 import type { Lang } from '../i18n/translations'
+import { confirmDialog } from './ui/ConfirmDialog'
 
 function IconBell({ size = 16 }: { size?: number }) {
   return (
@@ -136,8 +137,15 @@ export function NotificationCenter() {
                   {t('notif_mark_all')}
                 </button>
                 <button
-                  onClick={() => {
-                    if (window.confirm(t('notif_clear_confirm'))) clearNotificationHistory()
+                  onClick={async () => {
+                    const choice = await confirmDialog({
+                      title: t('notif_clear_confirm'),
+                      buttons: [
+                        { id: 'clear', label: t('notif_clear'), variant: 'danger' },
+                        { id: 'cancel', label: t('dock_cancel') },
+                      ],
+                    })
+                    if (choice === 'clear') clearNotificationHistory()
                   }}
                   style={{
                     fontSize: 10, fontWeight: 600,

@@ -15,6 +15,7 @@ import { deleteJob } from '@/api/jobs'
 import { useUIStore } from '@/stores/uiStore'
 import { useActiveJobs } from '@/stores/jobsStore'
 import { ApiError } from '@/api/client'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import type { HistoryItem } from '@/types/api'
 import type { StatusFilter } from './jobs.types'
 
@@ -177,7 +178,15 @@ export function HistoryScreen() {
   }
 
   async function handleDelete(jobId: string) {
-    if (!window.confirm('Delete this job and its files?')) return
+    const choice = await confirmDialog({
+      title: 'Xóa job này?',
+      message: 'Job và các file output của nó sẽ bị xóa. Thao tác không thể hoàn tác.',
+      buttons: [
+        { id: 'delete', label: 'Xóa', variant: 'danger' },
+        { id: 'cancel', label: 'Hủy' },
+      ],
+    })
+    if (choice !== 'delete') return
     addToLoading(jobId)
     try {
       await deleteJob(jobId, true)
@@ -238,7 +247,15 @@ export function HistoryScreen() {
   async function handleBatchDelete() {
     if (batchSelected.size === 0 || batchBusy) return
     const ids = Array.from(batchSelected)
-    if (!window.confirm(`Xóa ${ids.length} job đã chọn? Thao tác không thể hoàn tác.`)) return
+    const choice = await confirmDialog({
+      title: `Xóa ${ids.length} job đã chọn?`,
+      message: 'Các job và file output của chúng sẽ bị xóa. Thao tác không thể hoàn tác.',
+      buttons: [
+        { id: 'delete', label: `Xóa ${ids.length} job`, variant: 'danger' },
+        { id: 'cancel', label: 'Hủy' },
+      ],
+    })
+    if (choice !== 'delete') return
     setBatchBusy(true)
     let okCount = 0
     let failCount = 0

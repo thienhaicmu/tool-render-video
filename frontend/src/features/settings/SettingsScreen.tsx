@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { apiFetch } from '@/api/client'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import {
   BLANK_CREATOR_CONTEXT,
   getCreatorContext,
@@ -174,7 +175,14 @@ function CreatorContextSection() {
   }
 
   async function handleClear() {
-    if (!window.confirm('Xoá toàn bộ cấu hình Creator Context?')) return
+    const choice = await confirmDialog({
+      title: 'Xoá toàn bộ cấu hình Creator Context?',
+      buttons: [
+        { id: 'clear', label: 'Xoá', variant: 'danger' },
+        { id: 'cancel', label: 'Hủy' },
+      ],
+    })
+    if (choice !== 'clear') return
     setSaving(true)
     setSaveResult(null)
     try {
@@ -407,7 +415,14 @@ function OutputDirSection() {
   }
 
   async function handleClear() {
-    if (!window.confirm('Xoá thư mục lưu mặc định?')) return
+    const choice = await confirmDialog({
+      title: 'Xoá thư mục lưu mặc định?',
+      buttons: [
+        { id: 'clear', label: 'Xoá', variant: 'danger' },
+        { id: 'cancel', label: 'Hủy' },
+      ],
+    })
+    if (choice !== 'clear') return
     setSaving(true)
     setSaveResult(null)
     try {
@@ -799,7 +814,15 @@ export function SettingsScreen() {
   useEffect(() => { fetchInfo() }, [fetchInfo])
 
   async function handleClearCache() {
-    if (!window.confirm('Xóa toàn bộ cache render? Các render tiếp theo sẽ chậm hơn lần đầu.')) return
+    const choice = await confirmDialog({
+      title: 'Xóa toàn bộ cache render?',
+      message: 'Các render tiếp theo sẽ chậm hơn lần đầu.',
+      buttons: [
+        { id: 'clear', label: 'Xóa cache', variant: 'danger' },
+        { id: 'cancel', label: 'Hủy' },
+      ],
+    })
+    if (choice !== 'clear') return
     setClearing(true)
     setClearResult(null)
     try {
@@ -1087,7 +1110,15 @@ function RenderDefaultsSection() {
   }
 
   async function handleClear() {
-    if (!window.confirm('Xóa toàn bộ render defaults? Step 2 sẽ trở lại trắng.')) return
+    const choice = await confirmDialog({
+      title: 'Xóa toàn bộ render defaults?',
+      message: 'Bước Configure sẽ trở về giá trị mặc định.',
+      buttons: [
+        { id: 'clear', label: 'Xóa', variant: 'danger' },
+        { id: 'cancel', label: 'Hủy' },
+      ],
+    })
+    if (choice !== 'clear') return
     setSaving(true)
     setSaveMsg(null)
     try {
