@@ -261,20 +261,24 @@ _PACING_LEGACY_FLAGS: list[str] = ["-c:v", "libx264", "-preset", "medium", "-crf
 def _pacing_encode_flags(video_codec: str, encoder_mode: str) -> tuple[list[str], bool]:
     """Cờ encoder cho pass re-encode của micro-pacing → (flags, used_gpu).
 
-    Mặc định giữ nguyên libx264 medium crf17 — hành vi legacy bit-identical.
-    Khi ``MICRO_PACING_GPU=1`` và job resolve ra GPU encoder: encode pass này
-    trên GPU với cùng mục tiêu chất lượng (bộ cờ chuẩn từ
+    Mặc định BẬT (quyết định của chủ dự án 2026-07 — máy render khách có
+    GPU; encode chính vốn đã chạy NVENC nên pass pacing cùng họ cờ không
+    phải chế độ chất lượng mới): khi job resolve ra GPU encoder, pass này
+    chạy GPU với cùng mục tiêu chất lượng (bộ cờ chuẩn từ
     ``encoder_helpers.gpu_pacing_flags`` — literal codec GPU sống ở đó để
     file này giữ đúng phân loại false-positive của
     tests/test_nvenc_semaphore_external_acquire.py). Lý do: pass này trước
     đây luôn chạy libx264 trên CPU (90-110s cho clip 60s theo log
     production) trong khi GPU ngồi không sau lần encode chính.
-    ``_run_ffmpeg_with_retry`` tự acquire NVENC_SEMAPHORE khi argv chứa
-    codec GPU nên không cần khoá thủ công. Mọi lỗi resolve → rơi về cờ
-    legacy, không bao giờ raise.
+
+    Ba lớp an toàn: máy không GPU → resolver trả CPU codec → cờ legacy;
+    NVENC lỗi giữa chừng → caller retry libx264; kill switch
+    ``MICRO_PACING_GPU=0``. ``_run_ffmpeg_with_retry`` tự acquire
+    NVENC_SEMAPHORE khi argv chứa codec GPU nên không cần khoá thủ công.
+    Mọi lỗi resolve → rơi về cờ legacy, không bao giờ raise.
     """
     import os as _os
-    if _os.getenv("MICRO_PACING_GPU", "0") != "1":
+    if _os.getenv("MICRO_PACING_GPU", "1") != "1":
         return list(_PACING_LEGACY_FLAGS), False
     try:
         from app.features.render.engine.encoder.encoder_helpers import gpu_pacing_flags

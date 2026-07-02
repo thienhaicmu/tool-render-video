@@ -51,7 +51,7 @@ Cache dir cũng nhận: `XDG_CACHE_HOME`, `TORCH_HOME`, `HF_HOME`,
 | `RENDER_MIN_FREE_DISK_MB` / `RENDER_WARN_FREE_DISK_MB` | — | Gate/ cảnh báo dung lượng trống trước render |
 | `RENDER_FUSE_CUT` | `1` | Cắt fuse trong `part_cut` (gộp cut + encode vào 1 lệnh FFmpeg, bỏ intermediate `raw_part.mp4`). `0` = tắt khẩn cấp, quay về đường legacy. Bật mặc định sau smoke-check A/B 2026-07 (3 lỗi fuse đã vá — xem docstring `_fuse_safe_active`) |
 | `MICRO_PACING_MIN_TRIM_MS` | — | Ngưỡng micro-pacing trim |
-| `MICRO_PACING_GPU` | `0` | `1` = pass re-encode của micro-pacing chạy NVENC (cq 17, p5) khi job resolve ra NVENC, thay vì libx264 CPU (~90-110s/clip 60s). Opt-in — cần A/B chất lượng trên máy GPU trước khi bật mặc định. NVENC lỗi tự rơi về libx264 |
+| `MICRO_PACING_GPU` | `1` | Pass re-encode của micro-pacing chạy NVENC (cq 17, p5) khi job resolve ra NVENC, thay vì libx264 CPU (~90-110s/clip 60s). Bật mặc định theo quyết định chủ dự án 2026-07 (máy render khách có GPU; encode chính vốn đã NVENC). Máy không GPU tự về libx264; NVENC lỗi tự retry libx264; `0` = tắt khẩn cấp |
 | `SUBTITLE_CAPCUT` | — | Style phụ đề kiểu CapCut |
 | `S4_THUMBNAIL_QUALITY_ENABLED` | — | Bật chấm chất lượng thumbnail |
 | `PREVIEW_SESSION_TTL_HOURS` | — | TTL phiên preview nguồn |
