@@ -375,6 +375,11 @@ def run_part_voice_mix(
             )
         except Exception as _auth_exc:
             _part_subtitle_voice_path = None
+            # 2026-07-02: _reaction_segments was assigned BEFORE the TTS call,
+            # so a failed synthesis still burned the narration captions (R3b)
+            # onto a voiceless clip ("chữ có, tiếng không"). Clear it so the
+            # caption burn + freeze post-passes skip this part.
+            _reaction_segments = None
             _job_log(ctx.effective_channel, ctx.job_id, f"voice_authored_failed part_no={idx}: {_auth_exc}", kind="error")
             _emit_render_event(
                 channel_code=ctx.effective_channel, job_id=ctx.job_id,
@@ -902,6 +907,10 @@ def run_part_voice_mix(
                     )
                 except Exception as _part_tts_exc:
                     _part_subtitle_voice_path = None
+                    # 2026-07-02: same as the pre-authored path — clear the
+                    # captured segments so R3b caption burn + reaction freeze
+                    # don't run against a clip whose narration never rendered.
+                    _reaction_segments = None
                     _job_log(
                         ctx.effective_channel, ctx.job_id,
                         f"voice_ai_rewrite_tts_failed part_no={idx}: {_part_tts_exc}",

@@ -19,11 +19,46 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from app.services.bin_paths import get_ffmpeg_bin
+from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
 
 logger = logging.getLogger("app.render.recap_assembler")
 
 _FFMPEG_TIMEOUT_SEC: int = max(300, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "3600")))
+
+
+def _probe_duration(path: str) -> float:
+    """Container duration in seconds via ffprobe. 0.0 on any failure."""
+    try:
+        out = subprocess.run(
+            [get_ffprobe_bin(), "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, encoding="utf-8", timeout=30,
+        )
+        return max(0.0, float((out.stdout or "").strip() or 0.0))
+    except Exception:
+        return 0.0
+
+
+def _demuxer_output_sane(out_path: str, expected_sec: float) -> bool:
+    """Stream-copy concat exits 0 even when input specs differ (NVENC scene
+    clips + libx264 caption-burned clips + title cards), silently emitting
+    broken PTS: a container duration wildly off the sum of the inputs
+    (observed 2026-07-02: 15,134s for a ~295s episode, frozen video, audio
+    desync). Verify the duration before trusting the demuxer result."""
+    if expected_sec <= 0:
+        return True  # nothing to compare against
+    actual = _probe_duration(out_path)
+    if actual <= 0:
+        return False
+    tolerance = max(3.0, expected_sec * 0.02)
+    if abs(actual - expected_sec) > tolerance:
+        logger.warning(
+            "recap_assembler: demuxer output duration %.1fs deviates from expected "
+            "%.1fs (tol %.1fs) — discarding, falling back to re-encode concat",
+            actual, expected_sec, tolerance,
+        )
+        return False
+    return True
 
 
 def _concat_demuxer(clips: list[str], out_path: str) -> bool:
@@ -70,10 +105,20 @@ def _concat_filter(clips: list[str], out_path: str, width: int, height: int, fps
             parts.append(
                 f"[{i}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
                 f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps:.3f}[v{i}];"
-                f"[{i}:a]aresample=async=1[a{i}]"
+                # aformat: the concat filter requires uniform audio specs, and the
+                # inputs mix NVENC scenes (mixer aac), caption-burned clips
+                # (audio copy) and 48 kHz title cards. Normalise every input the
+                # same way remotion_adapter's proven intro-concat does, so the
+                # fallback works regardless of ffmpeg version / input rates.
+                f"[{i}:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+                f"aresample=async=1[a{i}]"
             )
             labels.append(f"[v{i}][a{i}]")
-        graph = "".join(parts) + "".join(labels) + f"concat=n={len(clips)}:v=1:a=1[outv][outa]"
+        # 2026-07-02: filter chains MUST be ';'-separated. The previous
+        # "".join(parts) glued "[a0][1:v]..." together into an invalid graph,
+        # so this fallback had never actually run — every spec-mismatched
+        # episode silently shipped the broken demuxer output instead.
+        graph = ";".join(parts) + ";" + "".join(labels) + f"concat=n={len(clips)}:v=1:a=1[outv][outa]"
         cmd = [
             get_ffmpeg_bin(), "-y", *inputs,
             "-filter_complex", graph, "-map", "[outv]", "-map", "[outa]",
@@ -104,7 +149,11 @@ def concat_clips(
     falls back to a re-encode filter. Returns {"ok": bool, "method": str}."""
     valid = [c for c in clips if c and Path(c).exists() and Path(c).stat().st_size > 0]
     if not valid:
-        return {"ok": False, "method": "none"}
+        return {"ok": False, "method": "none", "expected_duration": 0.0}
+    # Sum of input durations — the ground truth the assembled output must
+    # match. Also returned to the caller so episode-level QA can enforce it
+    # (Sacred Contract #8: _validate_render_output expected_duration).
+    expected_sec = sum(_probe_duration(c) for c in valid)
     if len(valid) == 1:
         # Single clip — just copy it to the output path.
         try:
@@ -113,14 +162,21 @@ def concat_clips(
             subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                            check=True, timeout=_FFMPEG_TIMEOUT_SEC)
             if Path(out_path).exists() and Path(out_path).stat().st_size > 0:
-                return {"ok": True, "method": "copy_single"}
+                return {"ok": True, "method": "copy_single", "expected_duration": expected_sec}
         except Exception as exc:
             logger.info("recap_assembler: single-clip copy failed (will re-encode): %s", exc)
         if _concat_filter(valid, out_path, width, height, fps):
-            return {"ok": True, "method": "filter_single"}
-        return {"ok": False, "method": "none"}
+            return {"ok": True, "method": "filter_single", "expected_duration": expected_sec}
+        return {"ok": False, "method": "none", "expected_duration": expected_sec}
     if _concat_demuxer(valid, out_path):
-        return {"ok": True, "method": "demuxer"}
+        if _demuxer_output_sane(out_path, expected_sec):
+            return {"ok": True, "method": "demuxer", "expected_duration": expected_sec}
+        # Broken stream-copy output — remove it so a filter failure below
+        # can't leave the corrupt file behind as the "delivered" episode.
+        try:
+            Path(out_path).unlink()
+        except Exception:
+            pass
     if _concat_filter(valid, out_path, width, height, fps):
-        return {"ok": True, "method": "filter"}
-    return {"ok": False, "method": "none"}
+        return {"ok": True, "method": "filter", "expected_duration": expected_sec}
+    return {"ok": False, "method": "none", "expected_duration": expected_sec}

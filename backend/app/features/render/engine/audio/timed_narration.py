@@ -25,6 +25,7 @@ import logging
 import os
 import re
 import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
@@ -45,6 +46,14 @@ _ATEMPO_MAX: float = 1.25       # cap speed-up so voice doesn't sound chipmunk
 # under Edge-TTS rate caps; raise via env when the user has paid TTS quota or
 # is running fully offline (Piper/XTTS). Cap at 8 to avoid disk/thread storms.
 _TTS_CONCURRENCY: int = max(1, min(8, int(os.getenv("TIMED_NARRATION_TTS_CONCURRENCY", "3"))))
+
+# 2026-07-02: Edge TTS fails transiently under parallel load (observed on a
+# recap job: the first 2 scenes' TTS returned None within seconds of each
+# other while every later scene succeeded → the episode opened with captions
+# but no voice). Retry each segment with a short linear backoff before
+# declaring it failed.
+_TTS_ATTEMPTS: int = max(1, min(5, int(os.getenv("TTS_SEGMENT_ATTEMPTS", "3"))))
+_TTS_RETRY_DELAY_SEC: float = max(0.0, float(os.getenv("TTS_SEGMENT_RETRY_DELAY_SEC", "2.0")))
 
 # N3 (2026-07) — prosody continuity. The old path synthesised every utterance as
 # a SEPARATE TTS call; the engine resets intonation at each boundary → choppy,
@@ -310,26 +319,41 @@ def synthesize_timed_narration(
                 )
                 return None
             raw_mp3 = work_dir / f"seg_{i:03d}_raw.mp3"
-            try:
-                generate_narration_audio(
-                    text=text,
-                    language=voice_language,
-                    gender=voice_gender,
-                    rate=voice_rate,
-                    job_id=job_id,
-                    voice_id=voice_id,
-                    output_path=str(raw_mp3),
-                    content_type=content_type,
-                    tts_engine=tts_engine,
-                )
-            except Exception as exc:
+            # 2026-07-02: bounded retry — Edge TTS drops calls transiently
+            # under parallel load; one failed attempt must not cost the
+            # whole scene its narration (see _TTS_ATTEMPTS note above).
+            for _attempt in range(1, _TTS_ATTEMPTS + 1):
+                if _attempt > 1:
+                    time.sleep(_TTS_RETRY_DELAY_SEC * (_attempt - 1))
+                try:
+                    generate_narration_audio(
+                        text=text,
+                        language=voice_language,
+                        gender=voice_gender,
+                        rate=voice_rate,
+                        job_id=job_id,
+                        voice_id=voice_id,
+                        output_path=str(raw_mp3),
+                        content_type=content_type,
+                        tts_engine=tts_engine,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "timed_narration: TTS attempt %d/%d failed for seg %d (%.1f-%.1fs): %s",
+                        _attempt, _TTS_ATTEMPTS, i, start, end, exc,
+                    )
+                    continue
+                if raw_mp3.exists() and raw_mp3.stat().st_size > 0:
+                    break
                 logger.warning(
-                    "timed_narration: TTS failed for seg %d (%.1f-%.1fs): %s",
-                    i, start, end, exc,
+                    "timed_narration: TTS attempt %d/%d produced empty file for seg %d",
+                    _attempt, _TTS_ATTEMPTS, i,
                 )
-                return None
             if not raw_mp3.exists() or raw_mp3.stat().st_size <= 0:
-                logger.warning("timed_narration: TTS produced empty file for seg %d", i)
+                logger.warning(
+                    "timed_narration: TTS failed for seg %d after %d attempt(s)",
+                    i, _TTS_ATTEMPTS,
+                )
                 return None
             fit_mp3 = work_dir / f"seg_{i:03d}_fit.mp3"
             if _atempo_fit(raw_mp3, seg_dur, fit_mp3):

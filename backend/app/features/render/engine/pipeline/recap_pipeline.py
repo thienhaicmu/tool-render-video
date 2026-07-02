@@ -687,7 +687,17 @@ def run_recap(
         _outputs: list[dict] = []
         _failed_eps: list[int] = []
         for _ep in _episodes:
-            _qa = _validate_render_output(Path(_ep["path"]), expect_audio=True)
+            # 2026-07-02: expected_duration was previously omitted, so a
+            # concat-broken episode (container said 15,134s vs ~295s planned)
+            # sailed through QA on the "has video + has audio + >10KB" checks
+            # alone. Passing the assembler's summed input duration arms the
+            # duration-tolerance check in _validate_render_output.
+            _exp_dur = float(_ep.get("expected_duration") or 0.0)
+            _qa = _validate_render_output(
+                Path(_ep["path"]),
+                expected_duration=_exp_dur if _exp_dur > 0 else None,
+                expect_audio=True,
+            )
             if not _qa["ok"]:
                 _failed_eps.append(int(_ep["episode_index"]))
                 _job_log(
@@ -864,6 +874,9 @@ def _assemble_recap_episodes(
             "episode_index": ep_i,
             "title": ep_titles.get(ep_i, "") or (None if single else f"Tập {ep_i + 1}"),
             "path": str(_out),
+            # Sum of input-clip durations (probed by concat_clips) — QA uses it
+            # to reject a broken assembly whose container duration drifted.
+            "expected_duration": float(_res.get("expected_duration") or 0.0),
         })
 
     return out_episodes
