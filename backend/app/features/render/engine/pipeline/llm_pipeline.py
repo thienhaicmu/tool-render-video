@@ -64,6 +64,34 @@ class LLMPipelineError(RuntimeError):
     """
 
 
+def _llm_whisper_auto_select(model: str, video_dur: float, payload) -> str:
+    """Hạ model Whisper xuống ``tiny`` cho video ngắn KHI VÀ CHỈ KHI full
+    SRT không nuôi consumer chất lượng nào ngoài LLM chọn cảnh.
+
+    Từ khi phụ đề per-part slice trực tiếp từ full SRT (và narration đọc
+    text từ đó), chất lượng full SRT = chất lượng phụ đề/voice. Vì vậy:
+      - Job bật phụ đề hoặc voice → GIỮ NGUYÊN model (quality first) —
+        đồng thời vá lỗ rò chất lượng cũ: bản trước hạ base→tiny bất kể
+        phụ đề có tiêu thụ SRT hay không.
+      - Job tắt cả hai + video < 180s → tiny (~10x realtime) là đủ để
+        LLM hiểu nội dung; Gemini/GPT/Claude chịu lỗi chính tả tốt.
+
+    Caller đã loại model do operator chỉ định (env LLM_WHISPER_MODEL /
+    channel) trước khi gọi — hàm này chỉ áp lên default profile/tuned.
+    Tắt toàn bộ cơ chế bằng LLM_WHISPER_AUTO_SELECT=0.
+    """
+    import os as _os
+    if _os.getenv("LLM_WHISPER_AUTO_SELECT", "1") != "1":
+        return model
+    if not (0 < video_dur < 180):
+        return model
+    if getattr(payload, "add_subtitle", True):
+        return model
+    if getattr(payload, "voice_enabled", False):
+        return model
+    return "tiny"
+
+
 def run_llm_pre_render(
     *,
     source_path: Path,
@@ -151,16 +179,11 @@ def run_llm_pre_render(
             "llm_pipeline.transcription: resume hit, reusing existing SRT",
         )
     else:
-        # For LLM segment selection the SRT only needs to convey content,
-        # not word-perfect transcription. Per-clip subtitles are transcribed
-        # SEPARATELY in part_renderer.py with the higher-quality `small` model
-        # so subtitle quality is untouched.
-        #
-        # Default `base`: sweet spot for Vietnamese — ~85% accuracy (vs ~70%
-        # for tiny, ~90% for small) and ~3x faster than small on CPU. LLM
-        # segment selection tolerates the residual error well because Gemini/
-        # GPT/Claude infer meaning from context. Override via LLM_WHISPER_MODEL
-        # for slower-but-accurate (small) or faster-but-lossier (tiny).
+        # LƯU Ý CHẤT LƯỢNG: từ khi phụ đề per-part slice từ full SRT này,
+        # model ở đây quyết định LUÔN chất lượng chữ phụ đề/voice — không
+        # còn là "SRT chỉ cho LLM" như thời per-part Whisper riêng (comment
+        # cũ đã stale). Auto-select bên dưới chỉ hạ model khi job không có
+        # consumer chất lượng (xem _llm_whisper_auto_select).
         import os as _os
         _env_model = (_os.getenv("LLM_WHISPER_MODEL") or "").strip()
         _ch_code = (getattr(payload, "channel_code", "") or "").strip()
@@ -172,24 +195,16 @@ def run_llm_pre_render(
             except Exception:
                 pass
         _model = (_env_model or _channel_model or tuned["whisper_model"] or "base").strip()
-        # B1-OPT-5 (2026-06-28): auto-select `tiny` for short videos (< 3 min)
-        # when no operator-provided model is configured. tiny runs ~10x realtime
-        # vs base ~7x — saves 30–80s of shared Whisper time. LLM Call 1 tolerates
-        # tiny's lower transcript accuracy for segment selection; per-part
-        # subtitle generation still uses the configured model. Override via
-        # LLM_WHISPER_AUTO_SELECT=0 to disable.
-        if (
-            _os.getenv("LLM_WHISPER_AUTO_SELECT", "1") == "1"
-            and not _env_model and not _channel_model
-        ):
+        if not _env_model and not _channel_model:
             _video_dur_check = float(source.get("duration") or 0.0)
-            if 0 < _video_dur_check < 180 and _model == "base":
-                _model = "tiny"
+            _selected = _llm_whisper_auto_select(_model, _video_dur_check, payload)
+            if _selected != _model:
                 _job_log(
                     effective_channel, job_id,
-                    f"llm_pipeline.whisper_auto_select model=tiny "
-                    f"reason=short_video video_dur={_video_dur_check:.0f}s",
+                    f"llm_pipeline.whisper_auto_select model={_selected} (was {_model}) "
+                    f"reason=short_video_no_quality_consumers video_dur={_video_dur_check:.0f}s",
                 )
+                _model = _selected
         _engine = getattr(payload, "subtitle_transcription_engine", "default")
         _llm_language_raw = (getattr(payload, "llm_language", None) or "").strip().lower()
         _language = None if _llm_language_raw in ("", "auto") else _llm_language_raw
@@ -212,9 +227,14 @@ def run_llm_pre_render(
             # Diagnostics so the log shows what's happening, not just silence.
             _src_size_mb = source_path.stat().st_size / (1024 * 1024)
             _video_dur = float(source.get("duration") or 0.0)
-            # Rough CPU realtime multipliers for faster-whisper:
-            # tiny ~10x, base ~7x, small ~4x, medium ~2x, large 1x
-            _rt_mult = {"tiny": 10, "base": 7, "small": 4, "medium": 2, "large": 1}.get(_model, 5)
+            # Hệ số realtime CPU ước lượng cho faster-whisper. Các biến thể
+            # large-* trước đây rơi vào default 5 làm ETA sai ~9x (smoke
+            # 2026-07: hiển thị est 23s, chạy thật 210s với large-v3 int8).
+            _rt_mult = {
+                "tiny": 10, "base": 7, "small": 4, "medium": 2,
+                "large": 1, "large-v1": 1, "large-v2": 1, "large-v3": 1,
+                "large-v3-turbo": 4, "turbo": 4,
+            }.get(_model, 2)
             _eta_sec = max(5, _video_dur / max(1, _rt_mult))
             _job_log(
                 effective_channel, job_id,
