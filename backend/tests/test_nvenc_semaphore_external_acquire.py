@@ -250,6 +250,49 @@ def test_nvenc_semaphore_symbol_lives_in_ffmpeg_helpers():
 
 
 # ---------------------------------------------------------------------------
+# 4. recap_assembler.py — Fix D (2026-07-02): the episode concat re-encode
+#    may use h264_nvenc via a raw subprocess.run, so the semaphore MUST be
+#    held in the same function (with NVENC_SEMAPHORE: block).
+# ---------------------------------------------------------------------------
+
+_RECAP_ASSEMBLER = (
+    _BACKEND_APP / "features" / "render" / "engine"
+    / "stages" / "recap_assembler.py"
+)
+
+
+def test_recap_assembler_nvenc_encode_is_semaphore_guarded():
+    """Every function in recap_assembler.py that mentions an NVENC codec
+    must also contain a ``with NVENC_SEMAPHORE`` block. A refactor that
+    drops the guard lets the job-level concat open an extra NVENC session
+    while parallel renders encode — NVIDIA fails ALL active sessions."""
+    source = _RECAP_ASSEMBLER.read_text(encoding="utf-8-sig")
+    assert "h264_nvenc" in source, (
+        "recap_assembler.py no longer references h264_nvenc — if Fix D's "
+        "GPU concat was removed, delete this test alongside it."
+    )
+    tree = ast.parse(source)
+    failures: list[str] = []
+    for func in ast.walk(tree):
+        if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        func_src = ast.get_source_segment(source, func) or ""
+        if "h264_nvenc" not in func_src and "hevc_nvenc" not in func_src:
+            continue
+        has_with_sem = any(
+            isinstance(node, ast.With)
+            and any(_call_name(item.context_expr) == "NVENC_SEMAPHORE" for item in node.items)
+            for node in ast.walk(func)
+        )
+        if not has_with_sem:
+            failures.append(
+                f"{func.name} (line {func.lineno}) references an NVENC codec "
+                f"without a 'with NVENC_SEMAPHORE:' block"
+            )
+    assert not failures, "\n".join(failures)
+
+
+# ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
 

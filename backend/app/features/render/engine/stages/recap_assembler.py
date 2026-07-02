@@ -93,8 +93,28 @@ def _concat_demuxer(clips: list[str], out_path: str) -> bool:
                 pass
 
 
+def _use_gpu_concat() -> bool:
+    """Fix D (2026-07-02): whether the re-encode concat may use NVENC.
+
+    The episode concat runs ONCE per episode at job level (sequential, after
+    the parallel per-part loop has finished), so borrowing one NVENC session
+    here is safe as long as NVENC_SEMAPHORE is held around the subprocess.
+    Kill switch: RECAP_CONCAT_GPU=0. Never raises."""
+    if os.getenv("RECAP_CONCAT_GPU", "1") != "1":
+        return False
+    try:
+        from app.features.render.engine.encoder.ffmpeg_helpers import nvenc_available
+        return bool(nvenc_available())
+    except Exception:
+        return False
+
+
 def _concat_filter(clips: list[str], out_path: str, width: int, height: int, fps: float) -> bool:
-    """Re-encode concat — normalises every input to width×height/fps. Robust."""
+    """Re-encode concat — normalises every input to width×height/fps. Robust.
+
+    Fix D: tries an NVENC encode first (semaphore held — see _use_gpu_concat)
+    and falls back to libx264 when NVENC is unavailable or fails.
+    """
     try:
         inputs: list[str] = []
         for c in clips:
@@ -119,13 +139,39 @@ def _concat_filter(clips: list[str], out_path: str, width: int, height: int, fps
         # so this fallback had never actually run — every spec-mismatched
         # episode silently shipped the broken demuxer output instead.
         graph = ";".join(parts) + ";" + "".join(labels) + f"concat=n={len(clips)}:v=1:a=1[outv][outa]"
-        cmd = [
+        head = [
             get_ffmpeg_bin(), "-y", *inputs,
             "-filter_complex", graph, "-map", "[outv]", "-map", "[outa]",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out_path,
         ]
-        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+        tail = ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out_path]
+        if _use_gpu_concat():
+            gpu_cmd = head + [
+                "-c:v", "h264_nvenc", "-preset", "p5", "-cq", "19",
+                "-pix_fmt", "yuv420p",
+            ] + tail
+            try:
+                # NVENC session limit protection: raw subprocess here, so the
+                # semaphore MUST be held externally (same contract as
+                # motion/crop.py) — pinned by
+                # tests/test_nvenc_semaphore_external_acquire.py.
+                from app.features.render.engine.encoder.ffmpeg_helpers import NVENC_SEMAPHORE
+                with NVENC_SEMAPHORE:
+                    subprocess.run(gpu_cmd, capture_output=True, text=True, encoding="utf-8",
+                                   check=True, timeout=_FFMPEG_TIMEOUT_SEC)
+                if Path(out_path).exists() and Path(out_path).stat().st_size > 0:
+                    return True
+            except Exception as gpu_exc:
+                detail = ""
+                if isinstance(gpu_exc, subprocess.CalledProcessError):
+                    detail = (gpu_exc.stderr or gpu_exc.stdout or "").strip()[:300]
+                logger.warning(
+                    "recap_assembler: NVENC concat failed — falling back to libx264: %s",
+                    detail or gpu_exc,
+                )
+        cpu_cmd = head + [
+            "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+        ] + tail
+        subprocess.run(cpu_cmd, capture_output=True, text=True, encoding="utf-8",
                        check=True, timeout=_FFMPEG_TIMEOUT_SEC)
         return Path(out_path).exists() and Path(out_path).stat().st_size > 0
     except subprocess.CalledProcessError as exc:
