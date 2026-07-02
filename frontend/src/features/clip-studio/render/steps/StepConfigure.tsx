@@ -111,6 +111,8 @@ function SubStyleCard({ id, label, selected, onSelect }: {
 
   return (
     <div
+      role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }}
       className={`sub-style-card${selected ? ' on' : ''}`}
       onClick={onSelect}
     >
@@ -547,7 +549,7 @@ function StepConfigureBase({
           </div>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
             {[1, 3, 5, 10].map(v => (
-              <div key={v} className={`seg-b${cfg.outputCount === v ? ' on' : ''}`}
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} key={v} className={`seg-b${cfg.outputCount === v ? ' on' : ''}`}
                 onClick={() => setCfgKey('outputCount', v)}>{v}</div>
             ))}
             <div className="clip-count-row">
@@ -570,7 +572,7 @@ function StepConfigureBase({
               { v: 'youtube_shorts'  as const, l: 'YT Short' },
               { v: 'instagram_reels' as const, l: 'Reels'    },
             ]).map(({ v, l }) => (
-              <div key={v} className={`seg-b${cfg.platform === v ? ' on' : ''}`}
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} key={v} className={`seg-b${cfg.platform === v ? ' on' : ''}`}
                 onClick={() => setCfgKey('platform', v)}>{l}</div>
             ))}
           </div>
@@ -583,7 +585,7 @@ function StepConfigureBase({
           </div>
           <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
             {(['r916', 'r34', 'r45', 'r11', 'r169'] as Ratio[]).map(r => (
-              <div key={r} className={`seg-b${cfg.ratio === r ? ' on' : ''}`}
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} key={r} className={`seg-b${cfg.ratio === r ? ' on' : ''}`}
                 onClick={() => setCfgKey('ratio', r)}>{RATIO_INFO[r].label}</div>
             ))}
           </div>
@@ -601,7 +603,7 @@ function StepConfigureBase({
               { v: 'object' as ConfigState['focusMode'], l: 'Object' },
               { v: 'center' as ConfigState['focusMode'], l: 'Center' },
             ]).map(({ v, l }) => (
-              <div key={v} className={`seg-b${cfg.focusMode === v ? ' on' : ''}`}
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} key={v} className={`seg-b${cfg.focusMode === v ? ' on' : ''}`}
                 onClick={() => setCfgKey('focusMode', v)}>{l}</div>
             ))}
           </div>
@@ -615,7 +617,7 @@ function StepConfigureBase({
           </div>
           <div className="seg">
             {QUALITY_MAP.map(({ v, l }) => (
-              <div key={v} className={`seg-b${cfg.renderProfile === v ? ' on' : ''}`}
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} key={v} className={`seg-b${cfg.renderProfile === v ? ' on' : ''}`}
                 onClick={() => setCfgKey('renderProfile', v)}>{l}</div>
             ))}
           </div>
@@ -692,7 +694,7 @@ function StepConfigureBase({
           </div>
           <div className="style-strip-list">
             {STYLES.map((s) => (
-              <div key={s.id} className={`style-strip-c${cfg.style === s.id ? ' on' : ''}`}
+              <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} key={s.id} className={`style-strip-c${cfg.style === s.id ? ' on' : ''}`}
                 onClick={() => setCfgKey('style', s.id)}>
                 <div className="style-strip-ico">{s.ico}</div>
                 <div className="style-strip-nm">{s.label}</div>
@@ -896,7 +898,7 @@ function StepConfigureBase({
                       { v: 'en' as const, l: '🇺🇸 English' },
                       { v: 'ja' as const, l: '🇯🇵 日本語'   },
                     ]).map(({ v, l }) => (
-                      <div key={v} className={`seg-b${cfg.subTranslateLang === v ? ' on' : ''}`}
+                      <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} key={v} className={`seg-b${cfg.subTranslateLang === v ? ' on' : ''}`}
                         onClick={() => setCfgKey('subTranslateLang', v)}>{l}</div>
                     ))}
                   </div>
@@ -929,7 +931,7 @@ function StepConfigureBase({
                   { v: 'ja-JP' as const, l: '🇯🇵 JA'    },
                   { v: 'ko-KR' as const, l: '🇰🇷 KO'    },
                 ]).map(({ v, l }) => (
-                  <div key={v} className={`seg-b${cfg.voiceLang === v ? ' on' : ''}`}
+                  <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} key={v} className={`seg-b${cfg.voiceLang === v ? ' on' : ''}`}
                     onClick={() => setCfgKey('voiceLang', v)}>{l}</div>
                 ))}
               </div>
@@ -940,8 +942,8 @@ function StepConfigureBase({
                 <span>{t.cfgVoiceGender}</span>
               </div>
               <div className="seg">
-                <div className={`seg-b${cfg.voiceGender === 'female' ? ' on' : ''}`} onClick={() => setCfgKey('voiceGender', 'female')}>♀ Female</div>
-                <div className={`seg-b${cfg.voiceGender === 'male'   ? ' on' : ''}`} onClick={() => setCfgKey('voiceGender', 'male')}>♂ Male</div>
+                <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} className={`seg-b${cfg.voiceGender === 'female' ? ' on' : ''}`} onClick={() => setCfgKey('voiceGender', 'female')}>♀ Female</div>
+                <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} className={`seg-b${cfg.voiceGender === 'male'   ? ' on' : ''}`} onClick={() => setCfgKey('voiceGender', 'male')}>♂ Male</div>
               </div>
             </div>
 
@@ -954,7 +956,7 @@ function StepConfigureBase({
                   { v: 'replace_original'  as const, l: 'Replace original',       d: 'Original audio removed — narration only' },
                   { v: 'keep_original_low' as const, l: 'Keep original (lowered)', d: 'Original kept, ducked while narration speaks' },
                 ]).map(({ v, l, d }) => (
-                  <div key={v} className={`seg-b${cfg.voiceMixMode === v ? ' on' : ''}`}
+                  <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} key={v} className={`seg-b${cfg.voiceMixMode === v ? ' on' : ''}`}
                     style={{ textAlign: 'left', padding: '7px 10px' }}
                     onClick={() => setCfgKey('voiceMixMode', v)}>
                     <div>{l}</div>
@@ -985,7 +987,7 @@ function StepConfigureBase({
                   { v: 'ai_rewrite'          as const, l: t.cfgVoiceSrcRewrite, d: t.cfgVoiceSrcRewriteDesc },
                   { v: 'manual'              as const, l: t.cfgVoiceSrcManual,  d: t.cfgVoiceSrcManualDesc  },
                 ]).map(({ v, l, d }) => (
-                  <div key={v} className={`seg-b${cfg.voiceSource === v ? ' on' : ''}`}
+                  <div role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }} key={v} className={`seg-b${cfg.voiceSource === v ? ' on' : ''}`}
                     style={{ textAlign: 'left', padding: '7px 10px' }}
                     onClick={() => setCfgKey('voiceSource', v)}>
                     <div>{l}</div>
