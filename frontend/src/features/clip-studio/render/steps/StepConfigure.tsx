@@ -363,7 +363,6 @@ function StepConfigureBase({
         <div className="cfg-section">
           <div className="cfg-sec-hd">
             <span>{t.cfgRenderMode}</span>
-            <span className="cfg-sec-api">render_format</span>
           </div>
           <div style={{ display: 'flex', gap: '6px' }}>
             {([
@@ -412,7 +411,6 @@ function StepConfigureBase({
           <div className="cfg-section">
             <div className="cfg-sec-hd">
               <span>{t.cfgTrim}</span>
-              <span className="cfg-sec-api">edit_trim_in · edit_trim_out</span>
             </div>
             <SourceTrim
               duration={prepareResult.duration}
@@ -430,7 +428,6 @@ function StepConfigureBase({
         <div className="cfg-section">
           <div className="cfg-sec-hd">
             <span>CLIP DURATION</span>
-            <span className="cfg-sec-api">min_part_sec · max_part_sec</span>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
             {[
@@ -470,7 +467,6 @@ function StepConfigureBase({
         <div className="cfg-section">
           <div className="cfg-sec-hd">
             <span>OUTPUT VIDEOS</span>
-            <span className="cfg-sec-api">output_count</span>
           </div>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
             {[1, 3, 5, 10].map(v => (
@@ -490,7 +486,6 @@ function StepConfigureBase({
         <div className="cfg-section">
           <div className="cfg-sec-hd">
             <span>{t.cfgPlatform}</span>
-            <span className="cfg-sec-api">target_platform</span>
           </div>
           <div className="seg">
             {([
@@ -508,7 +503,6 @@ function StepConfigureBase({
         <div className="cfg-section">
           <div className="cfg-sec-hd">
             <span>FRAME</span>
-            <span className="cfg-sec-api">aspect_ratio</span>
           </div>
           <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
             {(['r916', 'r34', 'r45', 'r11', 'r169'] as Ratio[]).map(r => (
@@ -522,7 +516,6 @@ function StepConfigureBase({
         <div className="cfg-section">
           <div className="cfg-sec-hd">
             <span>FOCUS</span>
-            <span className="cfg-sec-api">reframe_mode</span>
           </div>
           <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
             {([
@@ -542,7 +535,6 @@ function StepConfigureBase({
         <div className="cfg-section">
           <div className="cfg-sec-hd">
             <span>QUALITY</span>
-            <span className="cfg-sec-api">render_profile</span>
           </div>
           <div className="seg">
             {QUALITY_MAP.map(({ v, l }) => (
@@ -557,7 +549,6 @@ function StepConfigureBase({
         <div className="cfg-section">
           <div className="cfg-sec-hd">
             <span>{t.cfgSaveFolder}</span>
-            <span className="cfg-sec-api">output_dir</span>
           </div>
           <div className="dir-row">
             <input className="dir-in" type="text" placeholder="D:\Videos\Output" value={cfg.outputDir}
@@ -621,7 +612,6 @@ function StepConfigureBase({
         <div className="cfg-style-strip">
           <div className="cfg-sec-hd" style={{ marginBottom: '10px' }}>
             <span>{t.cfgVisualStyle}</span>
-            <span className="cfg-sec-api">effect_preset</span>
           </div>
           <div className="style-strip-list">
             {STYLES.map((s) => (
@@ -668,12 +658,11 @@ function StepConfigureBase({
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>AI PROVIDER</span>
-                <span className="cfg-sec-api">ai_provider</span>
               </div>
               <div className="tog-row" style={{ alignItems: 'flex-start' }}>
                 <div>
                   <div className="tog-lbl">Auto-select clips with AI</div>
-                  <div className="tog-desc">AI reads transcript and picks best segments. API keys configured in server .env.</div>
+                  <div className="tog-desc">AI reads the transcript and picks the strongest moments automatically.</div>
                 </div>
                 <Tog checked={cfg.llmEnabled} onChange={(v) => setCfgKey('llmEnabled', v)} />
               </div>
@@ -716,7 +705,7 @@ function StepConfigureBase({
                         color: testStatus === 'ok' ? 'var(--color-success)' : testStatus === 'error' ? 'var(--color-error)' : 'var(--text-secondary)',
                       }}
                     >
-                      {testStatus === 'testing' ? 'Testing...' : testStatus === 'ok' ? `✓ ${cfg.aiProvider} OK` : testStatus === 'error' ? `✗ ${testMsg}` : `Test ${cfg.aiProvider} key (server)`}
+                      {testStatus === 'testing' ? 'Testing...' : testStatus === 'ok' ? `✓ ${cfg.aiProvider} OK` : testStatus === 'error' ? `✗ ${testMsg}` : `Test ${cfg.aiProvider} connection`}
                     </button>
                   </div>
                   {testStatus === 'ok' && (
@@ -756,7 +745,7 @@ function StepConfigureBase({
                   </select>
 
                   <div style={{ fontSize: 10, color: '#a855f7', lineHeight: 1.4 }}>
-                    ✦ Keys set in .env on server. Edit .env to rotate or switch defaults.
+                    ✦ Uses the API key configured on this machine — click Test to verify the connection.
                   </div>
                 </div>
               )}
@@ -777,7 +766,6 @@ function StepConfigureBase({
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>STYLE</span>
-                <span className="cfg-sec-api">subtitle_style</span>
               </div>
               <div className="sub-style-grid">
                 {([
@@ -800,7 +788,6 @@ function StepConfigureBase({
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>{t.cfgFontSize}</span>
-                <span className="cfg-sec-api">sub_font_size</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <input
@@ -856,7 +843,6 @@ function StepConfigureBase({
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>LANGUAGE</span>
-                <span className="cfg-sec-api">voice_language</span>
               </div>
               <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
                 {([
@@ -875,7 +861,6 @@ function StepConfigureBase({
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>VOICE</span>
-                <span className="cfg-sec-api">voice_gender</span>
               </div>
               <div className="seg">
                 <div className={`seg-b${cfg.voiceGender === 'female' ? ' on' : ''}`} onClick={() => setCfgKey('voiceGender', 'female')}>♀ Female</div>
@@ -886,7 +871,6 @@ function StepConfigureBase({
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>AUDIO MIX</span>
-                <span className="cfg-sec-api">voice_mix_mode</span>
               </div>
               <div className="seg" style={{ flexDirection: 'column', gap: '3px' }}>
                 {([
@@ -907,7 +891,6 @@ function StepConfigureBase({
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>SOURCE</span>
-                <span className="cfg-sec-api">voice_source</span>
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-3)', fontFamily: 'var(--fb)', lineHeight: 1.5, padding: '6px 2px' }}>
                 {t.cfgVoiceSrcRecapNote}
@@ -917,7 +900,6 @@ function StepConfigureBase({
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>SOURCE</span>
-                <span className="cfg-sec-api">voice_source</span>
               </div>
               <div className="seg" style={{ flexDirection: 'column', gap: '3px' }}>
                 {([

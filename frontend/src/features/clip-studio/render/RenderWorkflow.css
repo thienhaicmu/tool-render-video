@@ -345,7 +345,6 @@
   align-items: center;
   justify-content: space-between;
 }
-.cfg-sec-api { font-size: 9px; font-family: monospace; color: var(--text-3); opacity: 0.5; text-transform: none; letter-spacing: 0; font-weight: 400; }
 
 /* Preset cards */
 .preset-list { display: flex; flex-direction: column; gap: 4px; }

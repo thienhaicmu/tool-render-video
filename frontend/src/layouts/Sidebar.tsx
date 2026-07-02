@@ -36,16 +36,6 @@ function IconDownload() {
   )
 }
 
-function IconUpload() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 16V3"/>
-      <path d="M7 8L12 3L17 8"/>
-      <path d="M3 20H21"/>
-    </svg>
-  )
-}
-
 function IconSettings() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
@@ -73,11 +63,14 @@ interface NavItem {
 // pointed at HistoryScreen which doubled the IA for no benefit. The
 // `home` ActivePanel value remains in uiStore for deep-link backward
 // compatibility but is no longer surfaced in the sidebar nav.
+// P0.2 (frontend redesign): removed the "Publish" entry — it routed to a
+// "coming soon" placeholder. A dead top-level nav item erodes trust in the
+// rest of the nav. The `publish` ActivePanel value + PANEL_MAP entry remain
+// for backward compat; re-add the nav item when the feature ships.
 const MAIN_NAV: NavItem[] = [
   { panel: 'clip-studio', labelKey: 'nav_studio',   icon: <IconScissors /> },
   { panel: 'library',     labelKey: 'nav_library',  icon: <IconGrid /> },
   { panel: 'download',    labelKey: 'nav_download', icon: <IconDownload /> },
-  { panel: 'publish',     labelKey: 'nav_publish',  icon: <IconUpload /> },
 ]
 
 const BOTTOM_NAV: NavItem[] = [

@@ -937,7 +937,6 @@
   letter-spacing: 0;
   margin-bottom: 10px;
 }
-.cs-root .cfg-sec-api { font-size: 10px; color: var(--text-disabled); }
 
 .cs-root .cfg-src-card {
   background: var(--surface-card);
@@ -1329,4 +1328,3 @@
 
 /* Hide the raw API field-name hints (min_part_sec, output_count, …) — they
    look like leftover debug labels in the Configure panels. */
-.cs-root .cfg-sec-api { display: none !important; }
