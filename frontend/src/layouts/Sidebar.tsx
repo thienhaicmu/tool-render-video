@@ -154,61 +154,6 @@ function NavGroup({ items, activePanel, hoveredItem, setHoveredItem, setActivePa
   )
 }
 
-// ── Language toggle ────────────────────────────────────────────────────────────
-
-function LangToggle() {
-  const { lang, setLang } = useI18n()
-
-  return (
-    <div style={langStyles.wrap}>
-      <button
-        style={{ ...langStyles.btn, ...(lang === 'en' ? langStyles.active : {}) }}
-        onClick={() => setLang('en')}
-      >EN</button>
-      <div style={langStyles.divider} />
-      <button
-        style={{ ...langStyles.btn, ...(lang === 'vi' ? langStyles.active : {}) }}
-        onClick={() => setLang('vi')}
-      >VI</button>
-    </div>
-  )
-}
-
-const langStyles: Record<string, React.CSSProperties> = {
-  wrap: {
-    display: 'flex',
-    alignItems: 'center',
-    height: '28px',
-    backgroundColor: 'var(--surface-card)',
-    border: '1px solid var(--border-subtle)',
-    borderRadius: '6px',
-    overflow: 'hidden',
-    margin: '0 var(--space-3)',
-  },
-  btn: {
-    flex: 1,
-    height: '100%',
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: 'var(--text-tertiary)',
-    fontSize: '11px',
-    fontWeight: 600,
-    letterSpacing: '0.04em',
-    cursor: 'pointer',
-    transition: 'color 0.12s ease, background-color 0.12s ease',
-  },
-  active: {
-    color: 'var(--accent-primary)',
-    backgroundColor: 'var(--accent-subtle)',
-  },
-  divider: {
-    width: '1px',
-    height: '16px',
-    backgroundColor: 'var(--border-subtle)',
-    flexShrink: 0,
-  },
-}
-
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
 export function Sidebar() {
@@ -225,12 +170,13 @@ export function Sidebar() {
         <span style={styles.wordmark}>AI Clip Studio</span>
       </div>
 
+      {/* P1.2 — the EN/VI toggle was duplicated here and in the Studio
+          topbar, both writing uiStore.lang. One control now lives in the
+          Studio topbar (where the user spends most time). */}
       <nav style={styles.nav}>
         <NavGroup items={MAIN_NAV} {...sharedProps} />
         <div style={{ flex: 1 }} />
         <hr style={styles.separator} />
-        <LangToggle />
-        <div style={{ height: 'var(--space-2)' }} />
         <NavGroup items={BOTTOM_NAV} {...sharedProps} />
       </nav>
     </aside>

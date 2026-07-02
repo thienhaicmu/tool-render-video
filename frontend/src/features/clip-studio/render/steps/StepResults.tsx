@@ -247,7 +247,7 @@ function StepResultsBase({
                 <div className="res-complete-row">
                   <div className="res-complete-icon res-failed-icon">✕</div>
                   <div>
-                    <div className="res-kicker res-kicker-failed">Render Failed</div>
+                    <div className="res-kicker res-kicker-failed">{t.resFailedTitle}</div>
                     <div className="res-hero-title">
                       {jobMessage.includes('ai_emission_empty')
                         ? 'AI providers unavailable — check API keys in Configure → AI panel → Test connection'
@@ -271,9 +271,9 @@ function StepResultsBase({
                 <div className="res-complete-row">
                   <div className="res-complete-icon">✓</div>
                   <div>
-                    <div className="res-kicker">Render Complete</div>
+                    <div className="res-kicker">{t.resComplete}</div>
                     <div className="res-hero-title">
-                      {doneParts.length} clip{doneParts.length !== 1 ? 's' : ''} ready to publish
+                      {t.resReadyToPublish(doneParts.length)}
                     </div>
                   </div>
                 </div>
@@ -291,19 +291,19 @@ function StepResultsBase({
                 <div className="res-kpi-row">
                   <div className="res-kpi green">
                     <strong>{bestScore > 0 ? Math.round(bestScore) : '—'}</strong>
-                    <span>Top Score</span>
+                    <span>{t.resTopScore}</span>
                   </div>
                   <div className="res-kpi blue">
                     <strong>{doneParts.length}</strong>
-                    <span>Clips</span>
+                    <span>{t.resKpiClips}</span>
                   </div>
                   <div className="res-kpi">
                     <strong>{totalDurFmt}</strong>
-                    <span>Total</span>
+                    <span>{t.resKpiTotal}</span>
                   </div>
                 </div>
                 {outputDir && (
-                  <button className="res-export-btn" onClick={openOutputFolder}>Open Folder</button>
+                  <button className="res-export-btn" onClick={openOutputFolder}>{t.resOpenFolder}</button>
                 )}
               </div>
             </div>
@@ -407,7 +407,7 @@ function StepResultsBase({
                 {aiSummary.ranking_summary.length > 0 && (
                   <div>
                     <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 5 }}>
-                      Clip Ranking
+                      {t.resClipRanking}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       {aiSummary.ranking_summary.map(r => (
@@ -598,21 +598,21 @@ function StepResultsBase({
                           const items: ClipMenuItem[] = [
                             {
                               id: 'details',
-                              label: isSelected ? 'Hide details' : 'Details',
+                              label: isSelected ? t.resMenuHideDetails : t.resMenuDetails,
                               onClick: () => setSelectedPart(isSelected ? null : part),
                             },
                           ]
                           if (part.output_file) {
                             items.push({
                               id: 'copy',
-                              label: 'Copy file path',
+                              label: t.resMenuCopyPath,
                               onClick: () => { navigator.clipboard.writeText(part.output_file).catch(() => {}) },
                             })
                           }
                           if (part.output_file && !deletedOutputs.has(part.part_no)) {
                             items.push({
                               id: 'folder',
-                              label: 'Open folder',
+                              label: t.resMenuOpenFolder,
                               onClick: () => {
                                 const f = part.output_file
                                 const sep = f.includes('\\') ? '\\' : '/'
@@ -622,7 +622,7 @@ function StepResultsBase({
                             })
                             items.push({
                               id: 'delete',
-                              label: 'Delete output file',
+                              label: t.resMenuDeleteFile,
                               danger: true,
                               onClick: () => { void handleDeleteOutput(part.part_no) },
                             })
@@ -783,7 +783,7 @@ function StepResultsBase({
               )}
 
               <div className="player-section">
-                <div className="player-section-title">AI Analysis</div>
+                <div className="player-section-title">{t.resAiAnalysis}</div>
 
                 {selReport && selReport.issues.length > 0 ? (
                   <div className="player-issues">
@@ -803,17 +803,17 @@ function StepResultsBase({
                     ))}
                   </div>
                 ) : selReport ? (
-                  <div className="player-all-ok">✓ No issues — all quality checks passed</div>
+                  <div className="player-all-ok">{t.resAllOk}</div>
                 ) : qualityLoadFailed ? (
                   <div className="player-no-data" style={{ color: 'var(--warn)' }}>⚠ {t.qualityLoadFailed}</div>
                 ) : (
-                  <div className="player-no-data">Quality data loading…</div>
+                  <div className="player-no-data">{t.resQualityLoading}</div>
                 )}
               </div>
 
               {selReport && Object.keys(selReport.metrics).length > 0 && (
                 <div className="player-section">
-                  <div className="player-section-title">Metrics</div>
+                  <div className="player-section-title">{t.resMetrics}</div>
                   <div className="player-metrics-grid">
                     {Object.entries(selReport.metrics)
                       .filter(([, v]) => v !== null && v !== undefined && typeof v !== 'object')

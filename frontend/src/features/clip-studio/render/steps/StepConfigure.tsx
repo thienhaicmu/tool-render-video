@@ -331,7 +331,7 @@ function StepConfigureBase({
                   transition: 'background .12s, color .12s',
                 }}
               >
-                {m === 'quick' ? 'Quick' : 'Advanced'}
+                {m === 'quick' ? t.cfgModeQuick : t.cfgModeAdvanced}
               </button>
             ))}
           </div>
@@ -350,7 +350,7 @@ function StepConfigureBase({
           <div className="cfg-src-thumb">📁</div>
           <div className="cfg-src-info">
             <div className="cfg-src-name">
-              {prepareResult?.title || (src?.value ? src.value.slice(0, 28) + '…' : 'No source')}
+              {prepareResult?.title || (src?.value ? src.value.slice(0, 28) + '…' : t.cfgNoSource)}
             </div>
             <div className="cfg-src-meta">
               {prepareResult ? fmtDuration(prepareResult.duration) : 'Local File'}
@@ -427,7 +427,7 @@ function StepConfigureBase({
         {/* C. Duration */}
         <div className="cfg-section">
           <div className="cfg-sec-hd">
-            <span>CLIP DURATION</span>
+            <span>{t.cfgDuration}</span>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
             {[
@@ -466,7 +466,7 @@ function StepConfigureBase({
         {/* D. Output count */}
         <div className="cfg-section">
           <div className="cfg-sec-hd">
-            <span>OUTPUT VIDEOS</span>
+            <span>{t.cfgOutputCount}</span>
           </div>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
             {[1, 3, 5, 10].map(v => (
@@ -502,7 +502,7 @@ function StepConfigureBase({
         {/* A. Frame */}
         <div className="cfg-section">
           <div className="cfg-sec-hd">
-            <span>FRAME</span>
+            <span>{t.cfgFrame}</span>
           </div>
           <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
             {(['r916', 'r34', 'r45', 'r11', 'r169'] as Ratio[]).map(r => (
@@ -515,7 +515,7 @@ function StepConfigureBase({
         {/* A. Focus / reframe */}
         <div className="cfg-section">
           <div className="cfg-sec-hd">
-            <span>FOCUS</span>
+            <span>{t.cfgFocus}</span>
           </div>
           <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
             {([
@@ -534,7 +534,7 @@ function StepConfigureBase({
         {adv && (
         <div className="cfg-section">
           <div className="cfg-sec-hd">
-            <span>QUALITY</span>
+            <span>{t.cfgQuality}</span>
           </div>
           <div className="seg">
             {QUALITY_MAP.map(({ v, l }) => (
@@ -553,11 +553,11 @@ function StepConfigureBase({
           <div className="dir-row">
             <input className="dir-in" type="text" placeholder="D:\Videos\Output" value={cfg.outputDir}
               onChange={(e) => setCfgKey('outputDir', e.target.value)} />
-            <button className="btn-xs" onClick={pickOutputDir}>Browse</button>
+            <button className="btn-xs" onClick={pickOutputDir}>{t.cfgBrowse}</button>
           </div>
           {prepareResult?.export_dir && (
             <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '6px', wordBreak: 'break-all', lineHeight: 1.5 }}>
-              Default: {prepareResult.export_dir}
+              {t.cfgDefaultDir(prepareResult.export_dir)}
             </div>
           )}
         </div>
@@ -600,7 +600,7 @@ function StepConfigureBase({
             ) : (
               <div className="pv-placeholder">
                 <span className="pv-play">▶</span>
-                <span className="pv-hint">Preview updates as you configure</span>
+                <span className="pv-hint">{t.cfgPreviewHint}</span>
               </div>
             )}
             {prepareResult && (
@@ -657,12 +657,12 @@ function StepConfigureBase({
             {/* LLM segment selection — Phase I */}
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>AI PROVIDER</span>
+                <span>{t.cfgAiProvider}</span>
               </div>
               <div className="tog-row" style={{ alignItems: 'flex-start' }}>
                 <div>
-                  <div className="tog-lbl">Auto-select clips with AI</div>
-                  <div className="tog-desc">AI reads the transcript and picks the strongest moments automatically.</div>
+                  <div className="tog-lbl">{t.cfgAiAutoSelect}</div>
+                  <div className="tog-desc">{t.cfgAiAutoSelectDesc}</div>
                 </div>
                 <Tog checked={cfg.llmEnabled} onChange={(v) => setCfgKey('llmEnabled', v)} />
               </div>
@@ -745,7 +745,7 @@ function StepConfigureBase({
                   </select>
 
                   <div style={{ fontSize: 10, color: '#a855f7', lineHeight: 1.4 }}>
-                    ✦ Uses the API key configured on this machine — click Test to verify the connection.
+                    {t.cfgAiKeyNote}
                   </div>
                 </div>
               )}
@@ -765,7 +765,7 @@ function StepConfigureBase({
 
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>STYLE</span>
+                <span>{t.cfgSubStyle}</span>
               </div>
               <div className="sub-style-grid">
                 {([
@@ -842,7 +842,7 @@ function StepConfigureBase({
 
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>LANGUAGE</span>
+                <span>{t.cfgVoiceLang}</span>
               </div>
               <div className="seg" style={{ flexWrap: 'wrap', gap: '5px' }}>
                 {([
@@ -860,7 +860,7 @@ function StepConfigureBase({
 
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>VOICE</span>
+                <span>{t.cfgVoiceGender}</span>
               </div>
               <div className="seg">
                 <div className={`seg-b${cfg.voiceGender === 'female' ? ' on' : ''}`} onClick={() => setCfgKey('voiceGender', 'female')}>♀ Female</div>
@@ -870,7 +870,7 @@ function StepConfigureBase({
 
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>AUDIO MIX</span>
+                <span>{t.cfgMixMode}</span>
               </div>
               <div className="seg" style={{ flexDirection: 'column', gap: '3px' }}>
                 {([
@@ -890,7 +890,7 @@ function StepConfigureBase({
             {cfg.renderFormat === 'recap' ? (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>SOURCE</span>
+                <span>{t.cfgVoiceSource}</span>
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-3)', fontFamily: 'var(--fb)', lineHeight: 1.5, padding: '6px 2px' }}>
                 {t.cfgVoiceSrcRecapNote}
@@ -899,7 +899,7 @@ function StepConfigureBase({
             ) : (
             <div className="cfg-section">
               <div className="cfg-sec-hd">
-                <span>SOURCE</span>
+                <span>{t.cfgVoiceSource}</span>
               </div>
               <div className="seg" style={{ flexDirection: 'column', gap: '3px' }}>
                 {([

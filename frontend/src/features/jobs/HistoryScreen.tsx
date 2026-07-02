@@ -13,6 +13,7 @@ import { getJobHistory } from '@/api/jobs'
 import { cancelRender, retryRender, resumeRender } from '@/api/render'
 import { deleteJob } from '@/api/jobs'
 import { useUIStore } from '@/stores/uiStore'
+import { useI18n } from '@/i18n/useI18n'
 import { useActiveJobs } from '@/stores/jobsStore'
 import { ApiError } from '@/api/client'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
@@ -47,6 +48,7 @@ export function HistoryScreen() {
   const [batchBusy, setBatchBusy] = useState(false)
   const lastShiftAnchorRef = useRef<string | null>(null)
 
+  const { t, lang } = useI18n()
   const addNotification = useUIStore((s) => s.addNotification)
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const setDuplicateSeedJobId = useUIStore((s) => s.setDuplicateSeedJobId)
@@ -171,19 +173,19 @@ export function HistoryScreen() {
     setDuplicateSeedJobId(jobId)
     setActivePanel('clip-studio')
     addNotification({
-      title: 'Đã copy settings',
-      message: 'Configure step đã pre-fill từ job cũ',
+      title: t('history_dup_title'),
+      message: t('history_dup_msg'),
       type: 'info',
     })
   }
 
   async function handleDelete(jobId: string) {
     const choice = await confirmDialog({
-      title: 'Xóa job này?',
-      message: 'Job và các file output của nó sẽ bị xóa. Thao tác không thể hoàn tác.',
+      title: t('history_delete_title'),
+      message: t('history_delete_msg'),
       buttons: [
-        { id: 'delete', label: 'Xóa', variant: 'danger' },
-        { id: 'cancel', label: 'Hủy' },
+        { id: 'delete', label: t('history_delete_confirm'), variant: 'danger' },
+        { id: 'cancel', label: t('history_cancel') },
       ],
     })
     if (choice !== 'delete') return
@@ -248,11 +250,11 @@ export function HistoryScreen() {
     if (batchSelected.size === 0 || batchBusy) return
     const ids = Array.from(batchSelected)
     const choice = await confirmDialog({
-      title: `Xóa ${ids.length} job đã chọn?`,
-      message: 'Các job và file output của chúng sẽ bị xóa. Thao tác không thể hoàn tác.',
+      title: lang === 'vi' ? `Xóa ${ids.length} job đã chọn?` : `Delete ${ids.length} selected jobs?`,
+      message: t('history_delete_msg'),
       buttons: [
-        { id: 'delete', label: `Xóa ${ids.length} job`, variant: 'danger' },
-        { id: 'cancel', label: 'Hủy' },
+        { id: 'delete', label: lang === 'vi' ? `Xóa ${ids.length} job` : `Delete ${ids.length} jobs`, variant: 'danger' },
+        { id: 'cancel', label: t('history_cancel') },
       ],
     })
     if (choice !== 'delete') return
@@ -268,8 +270,8 @@ export function HistoryScreen() {
       }
     }
     addNotification({
-      title: `Đã xóa ${okCount} / ${ids.length} job`,
-      message: failCount > 0 ? `${failCount} job xóa thất bại` : undefined,
+      title: lang === 'vi' ? `Đã xóa ${okCount} / ${ids.length} job` : `Deleted ${okCount} / ${ids.length} jobs`,
+      message: failCount > 0 ? (lang === 'vi' ? `${failCount} job xóa thất bại` : `${failCount} jobs failed to delete`) : undefined,
       type: failCount > 0 ? 'warning' : 'success',
     })
     clearBatch()
@@ -292,8 +294,8 @@ export function HistoryScreen() {
       }
     }
     addNotification({
-      title: `Đã re-run ${okCount} / ${ids.length} job`,
-      message: failCount > 0 ? `${failCount} job thất bại` : undefined,
+      title: lang === 'vi' ? `Đã re-run ${okCount} / ${ids.length} job` : `Re-ran ${okCount} / ${ids.length} jobs`,
+      message: failCount > 0 ? (lang === 'vi' ? `${failCount} job thất bại` : `${failCount} jobs failed`) : undefined,
       type: failCount > 0 ? 'warning' : 'success',
     })
     clearBatch()
@@ -319,11 +321,11 @@ export function HistoryScreen() {
       }}>
         <div>
           <div style={{ fontFamily: 'var(--fh)', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '.6px' }}>
-            LỊCH SỬ RENDER
+            {t('history_title')}
           </div>
           {items.length > 0 && (
             <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
-              {items.length} job · {completedCount} xong{failedCount > 0 ? ` · ${failedCount} lỗi` : ''}{activeCount > 0 ? ` · ${activeCount} chạy` : ''}
+              {items.length} job · {completedCount} {t('history_done')}{failedCount > 0 ? ` · ${failedCount} ${t('history_failed')}` : ''}{activeCount > 0 ? ` · ${activeCount} ${t('history_running')}` : ''}
             </div>
           )}
         </div>
@@ -333,7 +335,7 @@ export function HistoryScreen() {
               fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
               background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid rgba(123,97,255,.3)',
             }}>
-              {activeCount} chạy
+              {activeCount} {t('history_running')}
             </span>
           )}
           <button
@@ -371,7 +373,7 @@ export function HistoryScreen() {
           fontSize: 11,
         }}>
           <span style={{ fontWeight: 700, color: 'var(--accent)' }}>
-            {batchSelected.size} đã chọn
+            {batchSelected.size} {t('history_selected')}
           </span>
           <span style={{ flex: 1 }} />
           <button
@@ -384,7 +386,7 @@ export function HistoryScreen() {
               opacity: batchBusy ? .5 : 1,
             }}
           >
-            {batchBusy ? '…' : 'Re-run'}
+            {batchBusy ? '…' : t('history_rerun')}
           </button>
           <button
             onClick={handleBatchDelete}
@@ -397,7 +399,7 @@ export function HistoryScreen() {
               opacity: batchBusy ? .5 : 1,
             }}
           >
-            {batchBusy ? '…' : 'Xóa'}
+            {batchBusy ? '…' : t('history_delete')}
           </button>
           <button
             onClick={clearBatch}
@@ -408,7 +410,7 @@ export function HistoryScreen() {
               color: 'var(--text-2)', cursor: 'pointer',
             }}
           >
-            Bỏ chọn (Esc)
+            {t('history_deselect')}
           </button>
         </div>
       )}
@@ -423,7 +425,7 @@ export function HistoryScreen() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           flexShrink: 0,
         }}>
-          <span>Click vào row để xem chi tiết · Shift+click để batch-select</span>
+          <span>{t('history_hint')}</span>
           <button
             onClick={() => {
               if (filteredItems[0]) toggleBatch(filteredItems[0].job_id, false)
@@ -434,7 +436,7 @@ export function HistoryScreen() {
               color: 'var(--text-2)', cursor: 'pointer',
             }}
           >
-            Bật batch-mode
+            {t('history_batch_on')}
           </button>
         </div>
       )}

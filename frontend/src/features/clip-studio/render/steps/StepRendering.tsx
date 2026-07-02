@@ -486,7 +486,7 @@ function StepRenderingBase({
             {effTotal > 0 && (
               <span className="rd-clips-text">
                 {isRecap
-                  ? `${doneCount} / ${effTotal} cảnh${recapEpisodes > 0 ? ` · ${recapEpisodes} tập` : ''}`
+                  ? t.rndRecapProgress(doneCount, effTotal, recapEpisodes)
                   : t.rndClipsDone(doneCount, totalCount)}
                 {failedCount > 0 && <span style={{ color: 'var(--fail)' }}> · {t.rndClipsFailed(failedCount)}</span>}
               </span>
@@ -515,11 +515,11 @@ function StepRenderingBase({
               : stage === 'transcribe' && !isTerminal
               ? 'Transcribing audio — Whisper AI processing…'
               : stage === 'render' && !isTerminal && isRecap && effTotal > 0
-              ? `Dựng ${effTotal} cảnh → ${recapEpisodes || 1} tập — recap đang chạy`
+              ? t.rndRecapBuilding(effTotal, recapEpisodes || 1)
               : stage === 'render' && !isTerminal && totalCount > 0
               ? `Rendering ${totalCount} clip${totalCount !== 1 ? 's' : ''} — AI scene tracking active`
               : isTerminal && !isFailed && isRecap
-              ? `Recap xong — ${recapEpisodes || 1} tập`
+              ? t.rndRecapDone(recapEpisodes || 1)
               : isTerminal && !isFailed
               ? `Analysis complete — ${doneCount} clip${doneCount !== 1 ? 's' : ''} selected`
               : displayMsg || 'Processing…'
@@ -658,7 +658,7 @@ function StepRenderingBase({
 
       {/* R5 — recap live-build view (renders only when a recap.plan.ready event
           has arrived; null otherwise so clips mode is unaffected). */}
-      <RecapLiveView recapPlan={recapPlan ?? null} liveEvents={liveEvents || []} liveParts={liveParts} />
+      <RecapLiveView recapPlan={recapPlan ?? null} liveEvents={liveEvents || []} liveParts={liveParts} t={t} />
 
       {/* S4.5 — event log tail panel */}
       <EventLogPanel events={liveEvents || []} t={t} />
@@ -666,7 +666,7 @@ function StepRenderingBase({
       <div className="rd-abp-toolbar">
         <div className="rd-abp-job">
           <div className="rd-abp-title">{jobId ? jobId.slice(-12) : '—'}</div>
-          <div className="rd-abp-meta">{isRecap && effTotal > 0 ? `${effTotal} cảnh · ${recapEpisodes || 1} tập · ${aspectRatio}` : totalCount > 0 ? `${totalCount} clips · ${aspectRatio}` : aspectRatio}</div>
+          <div className="rd-abp-meta">{isRecap && effTotal > 0 ? t.rndRecapMeta(effTotal, recapEpisodes || 1, aspectRatio) : totalCount > 0 ? `${totalCount} clips · ${aspectRatio}` : aspectRatio}</div>
         </div>
         <div className="rd-abp-progress">
           <div className="rd-abp-bar-track">

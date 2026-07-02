@@ -244,6 +244,24 @@ export const translations = {
     notif_clear_confirm: 'Clear all notification history?',
     notif_empty: 'No notifications yet',
     notif_ago: 'ago',
+
+    // P1.2 — HistoryScreen (was hardcoded VI)
+    history_title: 'RENDER HISTORY',
+    history_done: 'done',
+    history_failed: 'failed',
+    history_running: 'running',
+    history_selected: 'selected',
+    history_rerun: 'Re-run',
+    history_delete: 'Delete',
+    history_deselect: 'Clear (Esc)',
+    history_hint: 'Click a row for details · Shift+click to batch-select',
+    history_batch_on: 'Batch mode',
+    history_delete_title: 'Delete this job?',
+    history_delete_msg: 'The job and its output files will be removed. This cannot be undone.',
+    history_delete_confirm: 'Delete',
+    history_cancel: 'Cancel',
+    history_dup_title: 'Settings copied',
+    history_dup_msg: 'Configure step pre-filled from the old job',
   },
 
   vi: {
@@ -483,6 +501,24 @@ export const translations = {
     notif_clear_confirm: 'Xóa toàn bộ lịch sử thông báo?',
     notif_empty: 'Chưa có thông báo nào',
     notif_ago: 'trước',
+
+    // P1.2 — HistoryScreen
+    history_title: 'LỊCH SỬ RENDER',
+    history_done: 'xong',
+    history_failed: 'lỗi',
+    history_running: 'chạy',
+    history_selected: 'đã chọn',
+    history_rerun: 'Chạy lại',
+    history_delete: 'Xóa',
+    history_deselect: 'Bỏ chọn (Esc)',
+    history_hint: 'Click vào row để xem chi tiết · Shift+click để batch-select',
+    history_batch_on: 'Bật batch-mode',
+    history_delete_title: 'Xóa job này?',
+    history_delete_msg: 'Job và các file output của nó sẽ bị xóa. Thao tác không thể hoàn tác.',
+    history_delete_confirm: 'Xóa',
+    history_cancel: 'Hủy',
+    history_dup_title: 'Đã copy settings',
+    history_dup_msg: 'Bước Configure đã pre-fill từ job cũ',
   },
 } as const
 

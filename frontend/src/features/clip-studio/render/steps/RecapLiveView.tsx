@@ -25,6 +25,7 @@ import type {
   RecapEpisodeInfo as EpisodeInfo,
 } from '@/websocket/events'
 import { StoryModelCard } from '@/features/jobs/StoryModelCard'
+import type { Strings } from '../i18n'
 
 type EpState = 'done' | 'active' | 'pending'
 
@@ -35,16 +36,17 @@ function _isActive(status: string | undefined): boolean {
 function _isDone(status: string | undefined): boolean { return _norm(status) === 'done' }
 function _isFailed(status: string | undefined): boolean { return ['failed', 'cancelled'].includes(_norm(status)) }
 
-// Short status label + colour for a scene.
-function _statusInfo(status: string | undefined): { color: string; label: string } {
+// Short status label + colour for a scene. P1.2 — labels come from the
+// Strings table instead of hardcoded VI.
+function _statusInfo(status: string | undefined, t: Strings): { color: string; label: string } {
   switch (_norm(status)) {
-    case 'done':         return { color: 'var(--accent, #10b981)', label: 'xong' }
-    case 'rendering':    return { color: '#f59e0b', label: 'render' }
-    case 'cutting':      return { color: '#f59e0b', label: 'cắt' }
-    case 'transcribing': return { color: '#f59e0b', label: 'phụ đề' }
+    case 'done':         return { color: 'var(--accent, #10b981)', label: t.rndStatusDone }
+    case 'rendering':    return { color: '#f59e0b', label: t.rndStatusRendering }
+    case 'cutting':      return { color: '#f59e0b', label: t.rndStatusCutting }
+    case 'transcribing': return { color: '#f59e0b', label: t.rndStatusTranscribing }
     case 'failed':
-    case 'cancelled':    return { color: '#ef4444', label: 'lỗi' }
-    default:             return { color: 'var(--text-3, #888)', label: 'chờ' }
+    case 'cancelled':    return { color: '#ef4444', label: t.rndStatusFailed }
+    default:             return { color: 'var(--text-3, #888)', label: t.rndStatusWaiting }
   }
 }
 // Node glyph for the queue list.
@@ -63,10 +65,12 @@ export function RecapLiveView({
   recapPlan,
   liveEvents,
   liveParts,
+  t,
 }: {
   recapPlan?: WsLogEvent | null
   liveEvents: WsLogEvent[]
   liveParts: JobPart[]
+  t: Strings
 }) {
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({})
 
@@ -97,7 +101,7 @@ export function RecapLiveView({
   if (scenes.length === 0) {
     return (
       <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-3)' }}>
-        🎬 RECAP — đang dựng kế hoạch cảnh…
+        {t.rndRecapPlanning}
       </div>
     )
   }
@@ -133,9 +137,9 @@ export function RecapLiveView({
       {/* ── LEFT: focus on the scene rendering now ──────────────────────── */}
       <div style={{ width: 360, flexShrink: 0, borderRight: '1px solid var(--border)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
         <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: 'var(--text-3)' }}>
-          {allDone ? '✓ ĐÃ DỰNG XONG · ĐANG GHÉP TẬP' : '● ĐANG DỰNG'}
+          {allDone ? t.rndRecapAssembling : t.rndRecapBuildingLbl}
         </div>
-        {focus && <FocusCard sc={focus} part={partByNo.get(focus.n)} preview={previews.get(focus.n)} epTitle={episodes[focus.ep]?.title || `Tập ${focus.ep + 1}`} />}
+        {focus && <FocusCard sc={focus} part={partByNo.get(focus.n)} preview={previews.get(focus.n)} epTitle={episodes[focus.ep]?.title || t.rndRecapEpisodeN(focus.ep + 1)} t={t} />}
         <StoryModelCard storyModel={storyModel} />
       </div>
 
@@ -144,7 +148,7 @@ export function RecapLiveView({
         {/* Episode chips */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 12px 6px', borderBottom: '1px solid var(--border)' }}>
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', marginRight: 4, alignSelf: 'center' }}>
-            {doneCount}/{scenes.length} cảnh
+            {t.rndRecapScenesShort(doneCount, scenes.length)}
           </span>
           {epOrder.map((ep) => {
             const st = epState(ep)
@@ -159,7 +163,7 @@ export function RecapLiveView({
                   color: st === 'done' ? 'var(--accent, #10b981)' : st === 'active' ? '#f59e0b' : 'var(--text-3)',
                 }}
               >
-                {st === 'done' ? '✓ ' : st === 'active' ? '● ' : ''}Tập {ep + 1}
+                {st === 'done' ? '✓ ' : st === 'active' ? '● ' : ''}{t.rndRecapEpisodeN(ep + 1)}
               </button>
             )
           })}
@@ -171,7 +175,7 @@ export function RecapLiveView({
             const epScenes = byEpisode.get(ep)!
             const st = epState(ep)
             const epDone = epScenes.filter((s) => _isDone(partByNo.get(s.n)?.status)).length
-            const epTitle = episodes[ep]?.title || `Tập ${ep + 1}`
+            const epTitle = episodes[ep]?.title || t.rndRecapEpisodeN(ep + 1)
             const folded = isCollapsed(ep)
             const headColor = st === 'done' ? 'var(--accent, #10b981)' : st === 'active' ? '#f59e0b' : 'var(--text-3)'
             return (
@@ -199,7 +203,7 @@ export function RecapLiveView({
                 {/* Scene rows */}
                 {!folded && epScenes.map((sc) => {
                   const part = partByNo.get(sc.n)
-                  const si = _statusInfo(part?.status)
+                  const si = _statusInfo(part?.status, t)
                   const isOrig = sc.mode === 'original'
                   const isFocus = focus?.n === sc.n
                   return (
@@ -214,11 +218,11 @@ export function RecapLiveView({
                       <span style={{ fontSize: 11, color: si.color, width: 12, textAlign: 'center' }}>{_glyph(part?.status)}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 11, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          <span style={{ color: 'var(--text-3)' }}>#{sc.n}</span> {sc.title || `Cảnh ${sc.n}`}
+                          <span style={{ color: 'var(--text-3)' }}>#{sc.n}</span> {sc.title || t.rndRecapSceneN(sc.n)}
                           {sc.climax && <span style={{ marginLeft: 4 }}>★</span>}
                         </div>
-                        <div style={{ fontSize: 8.5, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
-                          {_fmt(sc.start)}–{_fmt(sc.end)} · {isOrig ? '🔊 tiếng gốc' : '🎙 thuyết minh'}
+                        <div style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--fb)' }}>
+                          {_fmt(sc.start)}–{_fmt(sc.end)} · {isOrig ? t.rndRecapOriginalAudio : t.rndRecapNarration}
                         </div>
                       </div>
                       <span style={{ fontSize: 8.5, fontWeight: 700, color: si.color, fontFamily: 'var(--fb)', flexShrink: 0 }}>
@@ -237,15 +241,15 @@ export function RecapLiveView({
 }
 
 // ── Left focus card ───────────────────────────────────────────────────────────
-function FocusCard({ sc, part, preview, epTitle }: {
-  sc: SceneBlock; part: JobPart | undefined; preview: string | undefined; epTitle: string
+function FocusCard({ sc, part, preview, epTitle, t }: {
+  sc: SceneBlock; part: JobPart | undefined; preview: string | undefined; epTitle: string; t: Strings
 }) {
-  const si = _statusInfo(part?.status)
+  const si = _statusInfo(part?.status, t)
   const isOrig = sc.mode === 'original'
   const pct = _isActive(part?.status) ? Math.max(2, Math.round(part?.progress_percent ?? 0)) : (_isDone(part?.status) ? 100 : 0)
   const line = isOrig
-    ? '🔊 Để tiếng gốc của phim tự nói'
-    : (preview || (_isActive(part?.status) ? 'đang dựng lời thuyết minh…' : 'chờ thuyết minh'))
+    ? t.rndRecapOriginalLine
+    : (preview || (_isActive(part?.status) ? t.rndRecapNarrWriting : t.rndRecapNarrWaiting))
   return (
     <>
       {/* Preview placeholder (a real scene frame isn't available mid-render) */}
@@ -261,15 +265,15 @@ function FocusCard({ sc, part, preview, epTitle }: {
           position: 'absolute', top: 8, right: 10, fontSize: 9, fontWeight: 700, color: '#fff',
           background: si.color, borderRadius: 4, padding: '2px 6px', fontFamily: 'var(--fb)',
         }}>{si.label}</span>
-        {sc.climax && <span style={{ position: 'absolute', top: 8, left: 10, fontSize: 12 }} title="cao trào">★</span>}
+        {sc.climax && <span style={{ position: 'absolute', top: 8, left: 10, fontSize: 12 }} title={t.rndRecapClimax}>★</span>}
       </div>
 
       <div>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1.3 }}>
-          {sc.title || `Cảnh ${sc.n}`}
+          {sc.title || t.rndRecapSceneN(sc.n)}
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--fb)', marginTop: 3 }}>
-          ⏱ {_fmt(sc.start)}–{_fmt(sc.end)}  ·  {isOrig ? '🔊 tiếng gốc' : '🎙 thuyết minh'}  ·  {epTitle}
+          ⏱ {_fmt(sc.start)}–{_fmt(sc.end)}  ·  {isOrig ? t.rndRecapOriginalAudio : t.rndRecapNarration}  ·  {epTitle}
         </div>
       </div>
 
