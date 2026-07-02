@@ -70,6 +70,18 @@ editorial-ON path (pass-2/3) anchoring the 10–25% duration band + minimum
 scene length; verify before/after with `duration_ratio_score` +
 `fragment_rate` on ≥3 samples. Judge n=14: +0.165 ± 0.160 (inconclusive).
 
+**ADDENDUM 2026-07-02 (later) — defect CLOSED in two layers:**
+1. *Prompt anchor* (`RECAP_DURATION_ANCHOR=1`, PROMPT_VERSION 2): post-fix
+   n=2 — fragment_rate FIXED (0.18→0.0/0.0), discipline 100/100,
+   beat_coverage 0.49→~0.78; duration variance narrowed but band still not
+   guaranteed (0.69 sample — the LLM ignores even a HARD budget).
+2. *Deterministic reconciler* (`RECAP_TRIM_TO_BAND=1`,
+   `RecapPlan.trim_to_duration_band`): cap scenes at 40s → drop non-essential
+   scenes globally longest-first (never climax / holds / last-of-episode) until
+   the 10–25% band holds. Unit-proven (8 tests); the production guarantee.
+Editorial's one measured defect is now governed the same way as shot
+boundaries (snap) and beat bindings: prompt guides, determinism guarantees.
+
 ---
 
 ## Status of the other AI-quality flags
