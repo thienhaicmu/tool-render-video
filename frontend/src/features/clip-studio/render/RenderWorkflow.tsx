@@ -15,6 +15,7 @@ import { useT, ERROR_KIND_KEY, ERROR_FIX_STEPS, inferErrorKind } from './i18n'
 import type { CfgTab, ConfigState, Source } from './types'
 import { PRESETS, RATIO_INFO } from './constants'
 import { buildRenderPayload } from './buildRenderPayload'
+import { payloadToConfig } from './payloadToConfig'
 import { CreateHero } from './steps/CreateHero'
 import { StepConfigure } from './steps/StepConfigure'
 import { StepRendering } from './steps/StepRendering'
@@ -226,29 +227,10 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
         } catch {
           payload = {}
         }
-        // Inverse-map the same RenderRequest fields S2.4 reads from
-        // server-side defaults. Anything else stays at whatever S2.4
-        // defaults already chose (or hard-coded constructor defaults).
-        const ratioReverseMap: Record<string, ConfigState['ratio']> = {
-          '9:16': 'r916', '3:4': 'r34', '4:5': 'r45',
-          '1:1':  'r11',  '16:9': 'r169',
-        }
-        setCfg((prev) => {
-          const patch: Partial<ConfigState> = {}
-          const aspect = payload.aspect_ratio as string | undefined
-          if (aspect && ratioReverseMap[aspect]) patch.ratio = ratioReverseMap[aspect]
-          const subStyle = payload.subtitle_style as string | undefined
-          if (subStyle) patch.subStyle = subStyle
-          const ttsEng = payload.tts_engine as string | undefined
-          if (ttsEng === 'edge' || ttsEng === 'xtts') patch.ttsEngine = ttsEng
-          const ai = payload.ai_provider as string | undefined
-          if (ai === 'gemini' || ai === 'openai' || ai === 'claude') patch.aiProvider = ai
-          const dur = payload.target_duration as number | undefined
-          if (typeof dur === 'number' && dur > 0) patch.targetDuration = dur
-          const out = payload.output_dir as string | undefined
-          if (out) patch.outputDir = out
-          return Object.keys(patch).length ? { ...prev, ...patch } : prev
-        })
+        // P4.B — full inverse mapping. The old ad-hoc patch restored only
+        // ~6 fields, silently resetting subtitles/narration/LLM/trim to
+        // defaults while the user believed their settings were copied.
+        setCfg((prev) => ({ ...prev, ...payloadToConfig(payload) }))
 
         // Pre-fill the source step. Best-effort: the original payload may
         // be a local file (source_video_path) or an edit session ID. Only
