@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { JobActionsMenu } from './JobActionsMenu'
 import { formatRelativeTime, isActiveStatus } from './jobs.utils'
 import { IconFolder } from '@/components/icons'
+import { getPartThumbnailUrl } from '@/features/clip-studio/render/utils'
 import type { HistoryItem } from '@/types/api'
 
 const STATUS_CFG: Record<string, { color: string; label: string }> = {
@@ -45,6 +47,11 @@ export function JobListItem({
   const progressPct = item.total_count > 0
     ? Math.round((item.completed_count / item.total_count) * 100)
     : 0
+  // P1.5 — best-effort thumbnail (part 1) for render jobs with output.
+  // History was a text-only list while every finished job has frames.
+  const [thumbFailed, setThumbFailed] = useState(false)
+  const showThumb =
+    item.kind === 'render' && item.completed_count > 0 && !thumbFailed
 
   return (
     <div
@@ -97,6 +104,23 @@ export function JobListItem({
         </div>
       )}
 
+      {/* P1.5 — thumbnail rail */}
+      {showThumb && (
+        <div style={{
+          width: 34, alignSelf: 'stretch', flexShrink: 0,
+          background: 'var(--bg-card)', overflow: 'hidden',
+          borderRight: '1px solid var(--border)',
+        }}>
+          <img
+            src={getPartThumbnailUrl(item.job_id, 1)}
+            alt=""
+            loading="lazy"
+            onError={() => setThumbFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        </div>
+      )}
+
       <div style={{ flex: 1, minWidth: 0, padding: '9px 10px' }}>
         {/* Row 1: title + time */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 3 }}>
@@ -114,7 +138,7 @@ export function JobListItem({
           }}>
             {item.title || item.job_id.slice(0, 12)}
           </span>
-          <span style={{ fontSize: 9, color: 'var(--text-3)', flexShrink: 0, marginTop: 1 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0, marginTop: 1 }}>
             {formatRelativeTime(item.created_at)}
           </span>
         </div>
@@ -122,14 +146,14 @@ export function JobListItem({
         {/* Row 2: status + clips + failed */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: isActive ? 5 : 0 }}>
           <span style={{
-            fontSize: 8, fontWeight: 700, color: st.color,
+            fontSize: 10, fontWeight: 700, color: st.color,
             fontFamily: 'var(--fh)', letterSpacing: '.04em',
           }}>
             {st.label}
           </span>
           {item.total_count > 0 && (
             <span style={{
-              fontSize: 8, padding: '1px 5px', borderRadius: 4,
+              fontSize: 10, padding: '1px 5px', borderRadius: 4,
               background: 'var(--bg-card)', color: 'var(--text-2)',
               border: '1px solid var(--border)', fontWeight: 600,
             }}>
@@ -138,7 +162,7 @@ export function JobListItem({
           )}
           {item.failed_count > 0 && (
             <span style={{
-              fontSize: 8, padding: '1px 5px', borderRadius: 4,
+              fontSize: 10, padding: '1px 5px', borderRadius: 4,
               background: 'rgba(232,64,122,.1)', color: 'var(--fail)',
               border: '1px solid rgba(232,64,122,.2)', fontWeight: 600,
             }}>
