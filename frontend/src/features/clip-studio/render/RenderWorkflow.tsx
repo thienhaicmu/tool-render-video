@@ -1173,7 +1173,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                       }}>
                         {t[ERROR_KIND_KEY[displayKind]] as string}
                       </div>
-                      <ul style={{ margin: '0 0 6px 14px', padding: 0, fontSize: 10, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                      <ul style={{ margin: '0 0 6px 14px', padding: 0, fontSize: 11, color: 'var(--text-2)', lineHeight: 1.6 }}>
                         {ERROR_FIX_STEPS[displayKind].map((step, i) => (
                           <li key={i}>{step}</li>
                         ))}
@@ -1182,14 +1182,14 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                         <div>
                           <button
                             onClick={() => setRawMsgOpen(o => !o)}
-                            style={{ fontSize: 9, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                            style={{ fontSize: 10, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
                           >
                             {rawMsgOpen ? 'Hide detail' : 'Show raw error'}
                           </button>
                           {rawMsgOpen && (
                             <pre style={{
                               marginTop: 6, padding: '6px 8px', borderRadius: 5,
-                              background: 'rgba(0,0,0,.35)', fontSize: 9, color: 'var(--text-2)',
+                              background: 'rgba(0,0,0,.35)', fontSize: 10, color: 'var(--text-2)',
                               whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 120, overflowY: 'auto',
                             }}>
                               {jobMessage}

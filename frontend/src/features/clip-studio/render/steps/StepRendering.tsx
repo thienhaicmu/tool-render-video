@@ -128,15 +128,15 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', fontFamily: 'monospace', flexShrink: 0 }}>
           #{String(slot.part_no).padStart(2, '0')}
         </span>
-        <span style={{ fontSize: 10, color: 'var(--text-3)', flex: 1 }}>{statusLabel}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-3)', flex: 1 }}>{statusLabel}</span>
         {slot.duration != null && slot.duration > 0 && (
-          <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-3)', flexShrink: 0 }}>
+          <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)', flexShrink: 0 }}>
             {Math.floor(slot.duration / 60)}:{String(Math.floor(slot.duration % 60)).padStart(2, '0')}
           </span>
         )}
         {isDone && jobId && (
           <a href={getPartMediaUrl(jobId, slot.part_no)} target="_blank" rel="noreferrer"
-            style={{ fontSize: 9, color: 'var(--status-success)', textDecoration: 'none', fontWeight: 700, letterSpacing: '.04em', flexShrink: 0 }}>
+            style={{ fontSize: 10, color: 'var(--status-success)', textDecoration: 'none', fontWeight: 700, letterSpacing: '.04em', flexShrink: 0 }}>
             ▶
           </a>
         )}
@@ -205,7 +205,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
           </span>
 
           <span style={{
-            fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, flexShrink: 0,
+            fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, flexShrink: 0,
             background: `${accentColor}20`, color: accentColor,
             animation: isActive ? 'rndv-badge-pulse 1.4s ease-in-out infinite' : 'none',
           }}>
@@ -224,12 +224,12 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
             }} />
           </div>
 
-          <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'monospace', flexShrink: 0, color: accentColor }}>
+          <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'monospace', flexShrink: 0, color: accentColor }}>
             {isDone ? '100%' : isFail ? 'ERR' : isWait ? '—' : `${pct}%`}
           </span>
           {clipEtaLabel && (
             <span style={{
-              fontSize: 9, fontWeight: 600, fontFamily: 'monospace', flexShrink: 0,
+              fontSize: 10, fontWeight: 600, fontFamily: 'monospace', flexShrink: 0,
               color: 'var(--text-3)', opacity: 0.7,
             }} title="Estimated time remaining for this clip">
               ~{clipEtaLabel}
@@ -251,12 +251,12 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
                         border: `2px solid ${col}`,
                         background: st === 'done' ? col : 'transparent',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 7,
+                        fontSize: 10,
                       }}>
                         {st === 'done' && <span style={{ color: '#000' }}>✓</span>}
                         {st === 'active' && <span style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: col, animation: 'rndv-badge-pulse 1.2s ease-in-out infinite' }} />}
                       </div>
-                      <span style={{ fontSize: 9, color: col, fontWeight: st === 'active' ? 700 : 500 }}>{n.label}</span>
+                      <span style={{ fontSize: 10, color: col, fontWeight: st === 'active' ? 700 : 500 }}>{n.label}</span>
                     </div>
                     {i < STEP_NODES.length - 1 && (
                       <div style={{ flex: 1, height: 1, background: i < activeStepIdx ? 'var(--status-success)' : 'rgba(255,255,255,.1)', maxWidth: 20 }} />
@@ -266,14 +266,14 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
               })}
             </div>
             {(slot.message || activity) && (
-              <div style={{ fontSize: 9, color: 'var(--text-3)', paddingLeft: 2 }}>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', paddingLeft: 2 }}>
                 {slot.message || activity}
               </div>
             )}
           </div>
         )}
         {isFail && slot.message && (
-          <div style={{ fontSize: 9, color: 'var(--fail)', opacity: 0.8, paddingLeft: 2, marginTop: 4, lineHeight: 1.4 }}>
+          <div style={{ fontSize: 10, color: 'var(--fail)', opacity: 0.8, paddingLeft: 2, marginTop: 4, lineHeight: 1.4 }}>
             {slot.message}
           </div>
         )}
@@ -282,7 +282,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
             <a
               href={getPartMediaUrl(jobId, slot.part_no)}
               target="_blank" rel="noreferrer"
-              style={{ fontSize: 9, color: 'var(--status-success)', textDecoration: 'none', fontWeight: 700, letterSpacing: '.04em' }}
+              style={{ fontSize: 10, color: 'var(--status-success)', textDecoration: 'none', fontWeight: 700, letterSpacing: '.04em' }}
             >
               ▶ PREVIEW
             </a>
@@ -578,7 +578,7 @@ function StepRenderingBase({
                   {t.rndStuckNoUpdate(Math.round(longestStuckSec))}
                 </span>
                 <span style={{ flex: 1 }} />
-                <span style={{ opacity: 0.6, fontSize: 10 }}>{t.rndStuckHint}</span>
+                <span style={{ opacity: 0.6, fontSize: 11 }}>{t.rndStuckHint}</span>
               </>
             )}
 
@@ -606,7 +606,7 @@ function StepRenderingBase({
                   }}
                   style={{
                     padding: '4px 12px', borderRadius: 6,
-                    fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
+                    fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
                     border: '1px solid var(--warn)',
                     background: 'var(--warn)',
                     color: '#000',
@@ -620,7 +620,7 @@ function StepRenderingBase({
                   onClick={() => setWatchdogDismissed(true)}
                   style={{
                     padding: '4px 10px', borderRadius: 6,
-                    fontSize: 10, fontWeight: 600,
+                    fontSize: 11, fontWeight: 600,
                     border: '1px solid var(--border)', background: 'transparent',
                     color: 'var(--text-2)', cursor: 'pointer',
                   }}
@@ -638,7 +638,7 @@ function StepRenderingBase({
           <span className="rnd-waiting-dot" />
           <span>
             {t.rndPreparing}
-            {jobMessage && <span style={{ display: 'block', fontSize: '10px', opacity: .55, marginTop: 2 }}>{jobMessage}</span>}
+            {jobMessage && <span style={{ display: 'block', fontSize: '11px', opacity: .55, marginTop: 2 }}>{jobMessage}</span>}
           </span>
         </div>
       ) : isRecap ? null : (
@@ -742,7 +742,7 @@ function EventLogPanel({ events, t }: { events: WsLogEvent[]; t: Strings }) {
           width: '100%', display: 'flex', alignItems: 'center', gap: 8,
           padding: '6px 14px', background: 'transparent',
           border: 'none', borderBottom: open ? '1px solid var(--border)' : 'none',
-          color: 'var(--text-2)', fontSize: 10, fontWeight: 700,
+          color: 'var(--text-2)', fontSize: 11, fontWeight: 700,
           fontFamily: 'var(--fh)', letterSpacing: '.06em', textTransform: 'uppercase',
           cursor: 'pointer', textAlign: 'left',
         }}
@@ -761,7 +761,7 @@ function EventLogPanel({ events, t }: { events: WsLogEvent[]; t: Strings }) {
               border: '1px solid var(--border)',
               background: filterErrors ? 'rgba(234,179,8,.18)' : 'transparent',
               color: filterErrors ? 'var(--warn)' : 'var(--text-3)',
-              fontSize: 9, fontWeight: 700, letterSpacing: '.04em',
+              fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
             }}
           >
             {filterErrors ? 'ONLY WARN/ERROR' : 'ALL LEVELS'}
@@ -772,7 +772,7 @@ function EventLogPanel({ events, t }: { events: WsLogEvent[]; t: Strings }) {
       {open && (
         <div style={{
           maxHeight: 240, overflowY: 'auto',
-          fontFamily: 'monospace', fontSize: 10, lineHeight: 1.5,
+          fontFamily: 'monospace', fontSize: 11, lineHeight: 1.5,
           padding: '6px 14px',
         }}>
           {visible.length === 0 ? (

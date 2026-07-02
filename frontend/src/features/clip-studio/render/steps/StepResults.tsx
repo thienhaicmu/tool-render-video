@@ -360,7 +360,7 @@ function StepResultsBase({
               AI Analysis
               {aiSummary.confidence_tier && (
                 <span style={{
-                  fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, marginLeft: 4,
+                  fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, marginLeft: 4,
                   background: aiSummary.confidence_tier === 'strong' ? 'rgba(52,200,120,.15)' : 'rgba(234,179,8,.12)',
                   color: aiSummary.confidence_tier === 'strong' ? 'var(--status-success)' : 'var(--confidence-mid)',
                 }}>
@@ -368,11 +368,11 @@ function StepResultsBase({
                 </span>
               )}
               {aiSummary.best_score !== null && (
-                <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>
                   Best: #{aiSummary.best_part_no} · {aiSummary.best_score}%
                 </span>
               )}
-              <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: aiSummary.best_score !== null ? 0 : 'auto' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: aiSummary.best_score !== null ? 0 : 'auto' }}>
                 {aiSummaryOpen ? '▲' : '▼'}
               </span>
             </button>
@@ -385,7 +385,7 @@ function StepResultsBase({
                     <span style={{ color: 'var(--accent)', marginRight: 4 }}>★</span>
                     {aiSummary.best_reason}
                     {aiSummary.score_margin !== null && (
-                      <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 6 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 6 }}>
                         (+{aiSummary.score_margin.toFixed(1)} vs #2)
                       </span>
                     )}
@@ -393,7 +393,7 @@ function StepResultsBase({
                 )}
 
                 {typeof aiSummary.story === 'object' && (aiSummary.story as Record<string,unknown>)['description'] != null && (
-                  <div style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5, borderLeft: '2px solid var(--accent)', paddingLeft: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5, borderLeft: '2px solid var(--accent)', paddingLeft: 8 }}>
                     {String((aiSummary.story as Record<string,unknown>)['description'])}
                   </div>
                 )}
@@ -404,13 +404,13 @@ function StepResultsBase({
 
                 {aiSummary.ranking_summary.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 5 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 5 }}>
                       Clip Ranking
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       {aiSummary.ranking_summary.map(r => (
                         <div key={r.part_no} style={{
-                          display: 'flex', alignItems: 'center', gap: 8, fontSize: 10,
+                          display: 'flex', alignItems: 'center', gap: 8, fontSize: 11,
                           padding: '3px 8px', borderRadius: 5,
                           background: r.is_best_clip ? 'rgba(var(--accent-rgb,.15),0.15)' : 'rgba(255,255,255,.03)',
                         }}>
@@ -418,7 +418,7 @@ function StepResultsBase({
                           <span style={{ color: 'var(--text-2)' }}>Part {r.part_no}</span>
                           <span style={{ fontWeight: 700, color: r.score >= 75 ? 'var(--ok)' : r.score >= 50 ? 'var(--warn)' : 'var(--text-3)' }}>{r.score}%</span>
                           {r.dominant_signal && <span style={{ color: 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.dominant_signal.replace(/_/g, ' ')}</span>}
-                          {r.is_best_clip && <span style={{ fontSize: 9, color: 'var(--accent)', fontWeight: 700 }}>BEST</span>}
+                          {r.is_best_clip && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700 }}>BEST</span>}
                         </div>
                       ))}
                     </div>
@@ -426,13 +426,13 @@ function StepResultsBase({
                 )}
 
                 {aiSummary.rejected_count > 0 && (
-                  <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
                     {aiSummary.rejected_count} segment{aiSummary.rejected_count !== 1 ? 's' : ''} evaluated but not selected
                   </div>
                 )}
 
                 {aiSummary.output_ranking_warning && (
-                  <div style={{ fontSize: 10, color: 'var(--warn)' }}>⚠ {aiSummary.output_ranking_warning}</div>
+                  <div style={{ fontSize: 11, color: 'var(--warn)' }}>⚠ {aiSummary.output_ranking_warning}</div>
                 )}
 
               </div>
@@ -513,7 +513,7 @@ function StepResultsBase({
                       </span>
                       {(part.source === 'llm' || part.source === 'groq') && (
                         <span style={{
-                          fontSize: 7, fontWeight: 700, padding: '1px 6px', borderRadius: 99, flexShrink: 0,
+                          fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, flexShrink: 0,
                           background: 'rgba(168,85,247,.15)', color: '#a855f7',
                           letterSpacing: '.05em', textTransform: 'uppercase', border: '1px solid rgba(168,85,247,.3)',
                         }}>
@@ -523,7 +523,7 @@ function StepResultsBase({
                       {tier && <span className={`clip-ai-badge ${tier.cls}`}>{tier.label}</span>}
                       {rank?.confidence_tier && (
                         <span style={{
-                          fontSize: 7, fontWeight: 700, padding: '1px 5px', borderRadius: 99, flexShrink: 0,
+                          fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 99, flexShrink: 0,
                           background: rank.confidence_tier === 'strong' ? 'rgba(52,200,120,.12)' : 'rgba(234,179,8,.1)',
                           color: rank.confidence_tier === 'strong' ? 'var(--status-success)' : 'var(--confidence-mid)',
                           letterSpacing: '.05em', textTransform: 'uppercase',
@@ -538,15 +538,15 @@ function StepResultsBase({
                       </div>
                     )}
                     {(part.ai_reason ) && (
-                      <div style={{ fontSize: 9, color: 'rgba(168,85,247,.85)', marginTop: 2, lineHeight: 1.3, fontStyle: 'italic' }}>
+                      <div style={{ fontSize: 10, color: 'rgba(168,85,247,.85)', marginTop: 2, lineHeight: 1.3, fontStyle: 'italic' }}>
                         {part.ai_reason}
                       </div>
                     )}
                     {rank?.ranking_reason && (
-                      <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2, lineHeight: 1.3 }}>{rank.ranking_reason}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2, lineHeight: 1.3 }}>{rank.ranking_reason}</div>
                     )}
                     {rank?.dominant_signal && (
-                      <div style={{ fontSize: 8, marginTop: 3, color: 'rgba(168,85,247,.75)', fontWeight: 700, letterSpacing: '.02em' }}>
+                      <div style={{ fontSize: 10, marginTop: 3, color: 'rgba(168,85,247,.75)', fontWeight: 700, letterSpacing: '.02em' }}>
                         ↑ {rank.dominant_signal.replace(/_/g, ' ')}
                       </div>
                     )}
@@ -554,7 +554,7 @@ function StepResultsBase({
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, marginTop: 2 }}>
                         {rank.suppressed_signals.slice(0, 2).map((s, i) => (
                           <span key={i} style={{
-                            fontSize: 7, padding: '1px 4px', borderRadius: 99,
+                            fontSize: 10, padding: '1px 4px', borderRadius: 99,
                             background: 'rgba(239,68,68,.1)', color: 'rgba(239,68,68,.6)',
                           }}>
                             ↓ {s.replace(/_/g, ' ')}
@@ -593,7 +593,7 @@ function StepResultsBase({
                             navigator.clipboard.writeText(part.output_file).catch(() => {})
                           }}
                           style={{
-                            fontSize: 10, padding: '2px 7px', borderRadius: 5,
+                            fontSize: 11, padding: '2px 7px', borderRadius: 5,
                             border: '1px solid var(--border)', background: 'var(--bg-hover)',
                             color: 'var(--text-3)', cursor: 'pointer',
                           }}
@@ -612,7 +612,7 @@ function StepResultsBase({
                             window.electronAPI?.openPath?.(dir)
                           }}
                           style={{
-                            fontSize: 10, padding: '2px 7px', borderRadius: 5,
+                            fontSize: 11, padding: '2px 7px', borderRadius: 5,
                             border: '1px solid var(--border)', background: 'var(--bg-hover)',
                             color: 'var(--text-3)', cursor: 'pointer',
                           }}
@@ -625,7 +625,7 @@ function StepResultsBase({
                           title="Delete output file"
                           onClick={(e) => { e.stopPropagation(); handleDeleteOutput(part.part_no) }}
                           style={{
-                            fontSize: 10, padding: '2px 7px', borderRadius: 5,
+                            fontSize: 11, padding: '2px 7px', borderRadius: 5,
                             border: '1px solid rgba(232,64,122,.3)', background: 'rgba(232,64,122,.08)',
                             color: 'var(--fail)', cursor: 'pointer',
                           }}
@@ -634,7 +634,7 @@ function StepResultsBase({
                         </button>
                       )}
                       {deletedOutputs.has(part.part_no) && (
-                        <span style={{ fontSize: 9, color: 'var(--text-3)', padding: '2px 5px' }}>deleted</span>
+                        <span style={{ fontSize: 10, color: 'var(--text-3)', padding: '2px 5px' }}>deleted</span>
                       )}
                       <button className="clip-more-btn" title="Details"
                         onClick={(e) => { e.stopPropagation(); setSelectedPart(isSelected ? null : part) }}>
@@ -650,7 +650,7 @@ function StepResultsBase({
 
         {failedParts.length > 0 && (
           <div style={{ margin: '12px 16px 0', padding: '10px 12px', background: 'rgba(232,64,122,.07)', border: '1px solid rgba(232,64,122,.2)', borderRadius: '6px' }}>
-            <div style={{ fontSize: '10px', fontFamily: 'var(--fh)', letterSpacing: '1px', color: 'var(--fail)', marginBottom: '8px' }}>
+            <div style={{ fontSize: '11px', fontFamily: 'var(--fh)', letterSpacing: '1px', color: 'var(--fail)', marginBottom: '8px' }}>
               {t.resFailedParts} ({failedParts.length})
             </div>
             {failedParts.map((p) => (
@@ -694,7 +694,7 @@ function StepResultsBase({
                     AI Rank Score
                     {selRank.confidence_tier && (
                       <span style={{
-                        fontSize: 8, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
+                        fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
                         background: selRank.confidence_tier === 'strong' ? 'rgba(52,200,120,.15)' : 'rgba(234,179,8,.12)',
                         color: selRank.confidence_tier === 'strong' ? 'var(--status-success)' : 'var(--confidence-mid)',
                         letterSpacing: '.05em',
@@ -703,7 +703,7 @@ function StepResultsBase({
                       </span>
                     )}
                     {selRank.score_margin !== undefined && (
-                      <span style={{ fontSize: 9, color: 'var(--text-3)', marginLeft: 'auto' }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>
                         +{selRank.score_margin.toFixed(1)} vs #2
                       </span>
                     )}
@@ -732,18 +732,18 @@ function StepResultsBase({
                   {(selRank.dominant_signal || (selRank.suppressed_signals && selRank.suppressed_signals.length > 0) || selRank.ranking_components.content_type_hint) && (
                     <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {selRank.dominant_signal && (
-                        <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
                           Dominant: <span style={{ color: 'var(--accent)' }}>{selRank.dominant_signal.replace(/_/g, ' ')}</span>
                         </div>
                       )}
                       {selRank.suppressed_signals && selRank.suppressed_signals.length > 0 && (
-                        <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
                           Suppressed:{' '}
                           {selRank.suppressed_signals.map((s, i) => (
                             <span key={i} style={{
                               display: 'inline-block', marginRight: 4, padding: '1px 6px',
                               borderRadius: 99, background: 'rgba(239,68,68,.1)',
-                              color: 'rgba(239,68,68,.7)', fontSize: 9,
+                              color: 'rgba(239,68,68,.7)', fontSize: 10,
                             }}>
                               {s.replace(/_/g, ' ')}
                             </span>
@@ -751,7 +751,7 @@ function StepResultsBase({
                         </div>
                       )}
                       {selRank.ranking_components.content_type_hint && (
-                        <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
                           Content type: <span style={{ color: 'var(--text-2)' }}>{selRank.ranking_components.content_type_hint.replace(/_/g, ' ')}</span>
                         </div>
                       )}

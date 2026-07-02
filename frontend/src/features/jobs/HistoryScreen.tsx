@@ -322,7 +322,7 @@ export function HistoryScreen() {
             LỊCH SỬ RENDER
           </div>
           {items.length > 0 && (
-            <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 1 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
               {items.length} job · {completedCount} xong{failedCount > 0 ? ` · ${failedCount} lỗi` : ''}{activeCount > 0 ? ` · ${activeCount} chạy` : ''}
             </div>
           )}
@@ -330,7 +330,7 @@ export function HistoryScreen() {
         <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
           {activeCount > 0 && (
             <span style={{
-              fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
               background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid rgba(123,97,255,.3)',
             }}>
               {activeCount} chạy
@@ -341,7 +341,7 @@ export function HistoryScreen() {
             disabled={loading}
             data-testid="refresh-btn"
             style={{
-              fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
+              fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
               border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-2)',
               fontFamily: 'var(--fh)', letterSpacing: '.4px',
               cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? .5 : 1,
@@ -378,7 +378,7 @@ export function HistoryScreen() {
             onClick={handleBatchRetry}
             disabled={batchBusy}
             style={{
-              padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700,
+              padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
               border: '1px solid var(--border)', background: 'var(--bg-card)',
               color: 'var(--text-1)', cursor: batchBusy ? 'not-allowed' : 'pointer',
               opacity: batchBusy ? .5 : 1,
@@ -390,7 +390,7 @@ export function HistoryScreen() {
             onClick={handleBatchDelete}
             disabled={batchBusy}
             style={{
-              padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700,
+              padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
               border: '1px solid rgba(var(--fail-rgb),.4)',
               background: 'rgba(var(--fail-rgb),.08)',
               color: 'var(--fail)', cursor: batchBusy ? 'not-allowed' : 'pointer',
@@ -403,7 +403,7 @@ export function HistoryScreen() {
             onClick={clearBatch}
             disabled={batchBusy}
             style={{
-              padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
+              padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
               border: '1px solid var(--border)', background: 'transparent',
               color: 'var(--text-2)', cursor: 'pointer',
             }}
@@ -417,7 +417,7 @@ export function HistoryScreen() {
       {batchSelected.size === 0 && filteredItems.length > 0 && (
         <div style={{
           padding: '4px 14px',
-          fontSize: 9, color: 'var(--text-3)',
+          fontSize: 10, color: 'var(--text-3)',
           background: 'var(--bg-panel)',
           borderBottom: '1px solid var(--border)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -429,7 +429,7 @@ export function HistoryScreen() {
               if (filteredItems[0]) toggleBatch(filteredItems[0].job_id, false)
             }}
             style={{
-              padding: '2px 8px', borderRadius: 5, fontSize: 9, fontWeight: 700,
+              padding: '2px 8px', borderRadius: 5, fontSize: 10, fontWeight: 700,
               border: '1px solid var(--border)', background: 'var(--bg-card)',
               color: 'var(--text-2)', cursor: 'pointer',
             }}
