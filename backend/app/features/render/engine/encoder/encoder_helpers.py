@@ -136,6 +136,25 @@ def map_preset_for_encoder(video_preset: str, resolved_codec: str) -> str:
     return p
 
 
+def gpu_pacing_flags(video_codec: str, encoder_mode: str = "auto") -> list[str] | None:
+    """Cờ NVENC cho pass re-encode của micro-pacing (mục tiêu chất lượng
+    tương đương legacy libx264 crf17: cq 17, preset p5 ~ medium).
+
+    Trả ``None`` khi máy/job không resolve ra NVENC — caller (clip_ops)
+    giữ cờ CPU legacy. Literal codec NVENC sống ở file này (resolver) để
+    clip_ops giữ đúng phân loại false-positive trong
+    tests/test_nvenc_semaphore_external_acquire.py.
+    """
+    resolved = resolve_encoder(video_codec or "h264", encoder_mode or "auto")
+    if resolved not in ("h264_nvenc", "hevc_nvenc"):
+        return None
+    return [
+        "-c:v", resolved,
+        "-preset", map_preset_for_encoder("medium", resolved),
+        *codec_extra_flags(resolved, 17, "medium"),
+    ]
+
+
 def codec_extra_flags(
     resolved_codec: str,
     video_crf: int,

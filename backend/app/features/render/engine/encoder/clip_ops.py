@@ -255,6 +255,37 @@ def _detect_silence_segments(
         return []
 
 
+_PACING_LEGACY_FLAGS: list[str] = ["-c:v", "libx264", "-preset", "medium", "-crf", "17"]
+
+
+def _pacing_encode_flags(video_codec: str, encoder_mode: str) -> tuple[list[str], bool]:
+    """Cờ encoder cho pass re-encode của micro-pacing → (flags, used_gpu).
+
+    Mặc định giữ nguyên libx264 medium crf17 — hành vi legacy bit-identical.
+    Khi ``MICRO_PACING_GPU=1`` và job resolve ra GPU encoder: encode pass này
+    trên GPU với cùng mục tiêu chất lượng (bộ cờ chuẩn từ
+    ``encoder_helpers.gpu_pacing_flags`` — literal codec GPU sống ở đó để
+    file này giữ đúng phân loại false-positive của
+    tests/test_nvenc_semaphore_external_acquire.py). Lý do: pass này trước
+    đây luôn chạy libx264 trên CPU (90-110s cho clip 60s theo log
+    production) trong khi GPU ngồi không sau lần encode chính.
+    ``_run_ffmpeg_with_retry`` tự acquire NVENC_SEMAPHORE khi argv chứa
+    codec GPU nên không cần khoá thủ công. Mọi lỗi resolve → rơi về cờ
+    legacy, không bao giờ raise.
+    """
+    import os as _os
+    if _os.getenv("MICRO_PACING_GPU", "0") != "1":
+        return list(_PACING_LEGACY_FLAGS), False
+    try:
+        from app.features.render.engine.encoder.encoder_helpers import gpu_pacing_flags
+        _gpu = gpu_pacing_flags(video_codec, encoder_mode)
+        if _gpu is None:
+            return list(_PACING_LEGACY_FLAGS), False
+        return _gpu, True
+    except Exception:
+        return list(_PACING_LEGACY_FLAGS), False
+
+
 def apply_micro_pacing(
     input_path: str,
     output_path: str,
@@ -263,6 +294,8 @@ def apply_micro_pacing(
     max_total_trim: float = 2.0,
     min_clip_dur: float = 5.0,
     content_type: str = "vlog",
+    video_codec: str = "",
+    encoder_mode: str = "auto",
 ) -> dict:
     """Compress mid-clip silences with human-feeling rhythm.
 
@@ -403,18 +436,32 @@ def apply_micro_pacing(
     map_args = ["-map", "[vout]", "-map", "[aout]"] if has_audio else ["-map", "[vout]"]
     audio_args = ["-c:a", "aac", "-b:a", "192k"] if has_audio else []
 
-    cmd = [
-        get_ffmpeg_bin(), "-hide_banner", "-y",
-        "-i", input_path,
-        "-filter_complex", filter_complex,
-        *map_args,
-        "-c:v", "libx264", "-preset", "medium", "-crf", "17",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        *audio_args,
-        output_path,
-    ]
-    _run_ffmpeg_with_retry(cmd, retry_count=0)
+    _encode_flags, _gpu_pacing_used = _pacing_encode_flags(video_codec, encoder_mode)
+
+    def _pacing_cmd(flags: list[str]) -> list[str]:
+        return [
+            get_ffmpeg_bin(), "-hide_banner", "-y",
+            "-i", input_path,
+            "-filter_complex", filter_complex,
+            *map_args,
+            *flags,
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            *audio_args,
+            output_path,
+        ]
+
+    try:
+        _run_ffmpeg_with_retry(_pacing_cmd(_encode_flags), retry_count=0)
+    except Exception:
+        # GPU encode lỗi (hết phiên, driver, ...) → thử lại bằng cờ legacy
+        # CPU để tính năng pacing không mất; đường legacy lỗi thì raise như
+        # cũ cho caller giữ nguyên file chưa pacing.
+        if _gpu_pacing_used:
+            logger.warning("micro_pacing: GPU encode failed — retrying on libx264")
+            _run_ffmpeg_with_retry(_pacing_cmd(list(_PACING_LEGACY_FLAGS)), retry_count=0)
+        else:
+            raise
 
     return {
         "applied": True,

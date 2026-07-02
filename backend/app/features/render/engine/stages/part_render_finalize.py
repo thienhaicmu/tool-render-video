@@ -213,9 +213,13 @@ def run_part_finalize(
         _t_mp = time.perf_counter()
         try:
             _seg_content_type = seg.get("content_type_hint", "vlog")
+            # Truyền codec của job xuống để pass pacing có thể chạy NVENC
+            # khi MICRO_PACING_GPU=1 (mặc định tắt — hành vi cũ nguyên vẹn).
             _pacing = apply_micro_pacing(
                 str(final_part), str(_paced_part),
                 content_type=_seg_content_type,
+                video_codec=ctx.payload.video_codec,
+                encoder_mode=ctx.payload.encoder_mode,
             )
             _micro_pacing_ms = int((time.perf_counter() - _t_mp) * 1000)
             if _pacing["applied"] and _paced_part.exists() and _paced_part.stat().st_size > 0:
