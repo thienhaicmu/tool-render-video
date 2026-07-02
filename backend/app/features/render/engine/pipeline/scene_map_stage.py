@@ -136,6 +136,12 @@ def run_scene_map(
         )
         return None
 
+    # PySceneDetect open_video() yêu cầu str (nó check '"://" in path' để
+    # nhận diện URL) — truyền WindowsPath nổ "argument of type 'WindowsPath'
+    # is not iterable" và stage âm thầm trả None từ ngày đầu trên Windows.
+    # Ép str tại cửa vào để che mọi caller (quan sát live 2026-07 phát hiện).
+    video_path = os.fspath(video_path)
+
     try:
         _safe_emit(
             emit_fn,

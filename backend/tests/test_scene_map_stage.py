@@ -135,6 +135,37 @@ def test_happy_path_calls_detector_caches_persists_and_emits():
     assert done["context"]["shot_count"] == 3
 
 
+def test_pathlib_video_path_is_coerced_to_str_for_detector():
+    # Quan sát live 2026-07: recap truyền WindowsPath → PySceneDetect
+    # open_video ('"://" in path') nổ "'WindowsPath' is not iterable" và
+    # stage âm thầm trả None từ ngày đầu trên Windows. Cửa vào stage phải
+    # ép str trước khi gọi detector/cache/probe.
+    from pathlib import Path
+
+    from app.features.render.engine.pipeline import scene_map_stage as stage
+
+    received: list = []
+
+    def fake_detect(video_path):
+        received.append(video_path)
+        return _good_shots()
+
+    events, emit = _collect_events()
+    result = stage.run_scene_map(
+        job_id="job-p", channel_code="vn",
+        video_path=Path("/tmp/movie.mp4"),
+        emit_fn=emit,
+        detect_scenes_fn=fake_detect,
+        cache_get_fn=lambda p: None,
+        cache_put_fn=lambda p, shots: None,
+        update_scene_map_fn=lambda jid, blob: None,
+        probe_metadata_fn=lambda p: {"fps": 30.0, "duration": 30.0},
+    )
+    assert result is not None
+    assert len(received) == 1
+    assert isinstance(received[0], str)
+
+
 # ---------------------------------------------------------------------------
 # Cache hit short-circuits the detector call
 # ---------------------------------------------------------------------------
