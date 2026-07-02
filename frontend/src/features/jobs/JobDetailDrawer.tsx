@@ -8,6 +8,7 @@ import { useEditorStore } from '@/stores/editorStore'
 import { useUIStore } from '@/stores/uiStore'
 import { ApiError } from '@/api/client'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
+import { IconFolder, IconX } from '@/components/icons'
 import type { JobStatus, JobPart } from '@/types/api'
 
 export interface JobDetailDrawerProps {
@@ -137,7 +138,7 @@ function ClipCard({ part, isBest }: { part: JobPart; isBest: boolean; jobId: str
               border: '1px solid var(--border)', background: 'transparent',
               color: 'var(--text-3)', cursor: 'pointer',
             }}
-          >📂</button>
+          ><IconFolder size={13} /></button>
         )}
       </div>
     </div>
@@ -307,7 +308,7 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
       }}>
         {outputDir && (
           <button onClick={() => window.electronAPI?.openPath?.(outputDir)} style={actionBtnStyle('var(--text-2)')}>
-            📂 Mở thư mục
+            <IconFolder size={12} /> Mở thư mục
           </button>
         )}
         {canEditor && (
@@ -326,7 +327,7 @@ export function JobDetailDrawer({ jobId, onClose }: JobDetailDrawerProps) {
           </button>
         )}
         <button onClick={handleDelete} disabled={actionLoading} style={{ ...actionBtnStyle('var(--fail)'), marginLeft: 'auto', borderColor: 'rgba(232,64,122,.3)', background: 'rgba(232,64,122,.07)' }}>
-          🗑 Xóa
+          <IconX size={12} /> Xóa
         </button>
       </div>
 

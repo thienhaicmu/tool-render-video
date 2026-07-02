@@ -19,6 +19,10 @@ import type { TranslationKey } from '../i18n/translations'
 import { moveJobToTop, moveJobToBottom, moveJob, holdJob, resumeJob } from '../api/jobs'
 import { cancelRender } from '../api/render'
 import { cancelJob as cancelDownloadJob } from '../api/platformDownloader'
+import {
+  IconPlay, IconPause, IconToTop, IconToBottom,
+  IconChevronUp, IconChevronDown, IconX,
+} from '../components/icons'
 import type { HistoryItem } from '../types/api'
 
 export function QueueDrawer() {
@@ -158,28 +162,28 @@ function QueueRow({
 
       <div style={styles.controls}>
         {isHeld ? (
-          <button style={styles.ctlBtn} title={t('queue_resume')} aria-label={t('queue_resume')} onClick={() => act(() => resumeJob(job.job_id))}>▶</button>
+          <button style={styles.ctlBtn} title={t('queue_resume')} aria-label={t('queue_resume')} onClick={() => act(() => resumeJob(job.job_id))}><IconPlay size={12} /></button>
         ) : (
           <>
             {canUp && (
-              <button style={styles.ctlBtn} title={t('dock_move_top')} onClick={() => act(() => moveJobToTop(job.job_id))}>⤴</button>
+              <button style={styles.ctlBtn} title={t('dock_move_top')} onClick={() => act(() => moveJobToTop(job.job_id))}><IconToTop size={12} /></button>
             )}
             {canUp && (
-              <button style={styles.ctlBtn} title={t('queue_move_up')} onClick={() => act(() => moveJob(job.job_id, -1))}>▲</button>
+              <button style={styles.ctlBtn} title={t('queue_move_up')} onClick={() => act(() => moveJob(job.job_id, -1))}><IconChevronUp size={12} /></button>
             )}
             {canDown && (
-              <button style={styles.ctlBtn} title={t('queue_move_down')} onClick={() => act(() => moveJob(job.job_id, 1))}>▼</button>
+              <button style={styles.ctlBtn} title={t('queue_move_down')} onClick={() => act(() => moveJob(job.job_id, 1))}><IconChevronDown size={12} /></button>
             )}
             {canDown && (
-              <button style={styles.ctlBtn} title={t('dock_move_bottom')} onClick={() => act(() => moveJobToBottom(job.job_id))}>⤓</button>
+              <button style={styles.ctlBtn} title={t('dock_move_bottom')} onClick={() => act(() => moveJobToBottom(job.job_id))}><IconToBottom size={12} /></button>
             )}
             {isRenderQueued && (
-              <button style={styles.ctlBtn} title={t('queue_pause')} aria-label={t('queue_pause')} onClick={() => act(() => holdJob(job.job_id))}>⏸</button>
+              <button style={styles.ctlBtn} title={t('queue_pause')} aria-label={t('queue_pause')} onClick={() => act(() => holdJob(job.job_id))}><IconPause size={12} /></button>
             )}
           </>
         )}
         <span style={{ flex: 1 }} />
-        <button style={{ ...styles.ctlBtn, color: 'var(--text-tertiary)' }} title={t('queue_cancel')} aria-label={t('queue_cancel')} onClick={() => act(cancelFn)}>×</button>
+        <button style={{ ...styles.ctlBtn, color: 'var(--text-tertiary)' }} title={t('queue_cancel')} aria-label={t('queue_cancel')} onClick={() => act(cancelFn)}><IconX size={12} /></button>
       </div>
     </div>
   )

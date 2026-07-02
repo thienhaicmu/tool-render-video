@@ -13,6 +13,7 @@ import {
   OVERLAY_HIGHLIGHT_COLORS,
 } from '../subtitle-styles'
 import { fmtDuration, Tog } from '../utils'
+import { IconFilm } from '@/components/icons'
 
 // ── Subtitle preview — visual approximation of each style ────────────────────
 function SubtitleDemo({ style }: { style: string }) {
@@ -347,7 +348,7 @@ function StepConfigureBase({
 
         {/* Source card */}
         <div className="cfg-src-card">
-          <div className="cfg-src-thumb">📁</div>
+          <div className="cfg-src-thumb"><IconFilm size={20} /></div>
           <div className="cfg-src-info">
             <div className="cfg-src-name">
               {prepareResult?.title || (src?.value ? src.value.slice(0, 28) + '…' : t.cfgNoSource)}

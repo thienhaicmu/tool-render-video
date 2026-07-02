@@ -12,6 +12,7 @@ import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { ClipActionsMenu } from './ClipActionsMenu'
+import { IconInbox, IconFilm } from '@/components/icons'
 import type { ClipMenuItem } from './ClipActionsMenu'
 
 function aiTier(score: number): { label: string; cls: string } {
@@ -227,7 +228,7 @@ function StepResultsBase({
     return (
       <div className="res-screen">
         <div className="res-left">
-          <div className="rw-empty"><span className="rw-empty-icon">📭</span>{t.resNoResults}</div>
+          <div className="rw-empty"><span className="rw-empty-icon"><IconInbox size={40} /></span>{t.resNoResults}</div>
         </div>
       </div>
     )
@@ -459,7 +460,7 @@ function StepResultsBase({
             {t.resLoading}
           </div>
         ) : doneParts.length === 0 ? (
-          <div className="rw-empty"><span className="rw-empty-icon">📭</span>{t.resNoClips}</div>
+          <div className="rw-empty"><span className="rw-empty-icon"><IconInbox size={40} /></span>{t.resNoClips}</div>
         ) : (
           <div className="clip-cards-row">
             {sortedDone.map((part, i) => {
@@ -833,7 +834,7 @@ function StepResultsBase({
               </div>
             </>
           ) : (
-            <div className="player-placeholder">🎬</div>
+            <div className="player-placeholder"><IconFilm size={40} /></div>
           )}
         </div>
       </div>

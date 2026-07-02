@@ -3,6 +3,7 @@
  */
 import { Button } from '@/components/ui/Button'
 import { useUIStore } from '@/stores/uiStore'
+import { IconFilm } from '@/components/icons'
 
 export function JobEmptyState() {
   const setActivePanel = useUIStore((s) => s.setActivePanel)
@@ -20,7 +21,7 @@ export function JobEmptyState() {
         textAlign: 'center',
       }}
     >
-      <div style={{ fontSize: '48px', opacity: 0.3 }}>🎬</div>
+      <div style={{ opacity: 0.3, color: 'var(--text-tertiary)' }}><IconFilm size={48} /></div>
       <div>
         <p
           style={{

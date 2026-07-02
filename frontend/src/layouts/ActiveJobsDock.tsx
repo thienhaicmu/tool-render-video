@@ -16,6 +16,7 @@ import { useI18n } from '../i18n/useI18n'
 import { cancelRender } from '../api/render'
 import { moveJobToTop, moveJobToBottom } from '../api/jobs'
 import { cancelJob as cancelDownloadJob } from '../api/platformDownloader'
+import { IconQueue, IconToTop, IconToBottom, IconX } from '../components/icons'
 import type { HistoryItem } from '../types/api'
 
 const MAX_VISIBLE = 3
@@ -154,7 +155,7 @@ export function ActiveJobsDock() {
           title={t('queue_manage')}
           aria-label={t('queue_manage')}
         >
-          ⛁
+          <IconQueue size={16} />
         </button>
       </div>
     </div>
@@ -237,7 +238,7 @@ function DockRow({
           title={t('dock_move_top')}
           aria-label={t('dock_move_top')}
         >
-          {moving ? '…' : '⤴'}
+          {moving ? '…' : <IconToTop size={13} />}
         </button>
       )}
       {canMoveBottom && (
@@ -254,7 +255,7 @@ function DockRow({
           title={t('dock_move_bottom')}
           aria-label={t('dock_move_bottom')}
         >
-          {moving ? '…' : '⤓'}
+          {moving ? '…' : <IconToBottom size={13} />}
         </button>
       )}
       <button
@@ -270,7 +271,7 @@ function DockRow({
         title={t('dock_cancel_job')}
         aria-label={t('dock_cancel')}
       >
-        {cancelling ? '…' : '×'}
+        {cancelling ? '…' : <IconX size={13} />}
       </button>
     </div>
   )

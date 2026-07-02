@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { formatTime } from './editor.utils'
 import { useUIStore } from '@/stores/uiStore'
 import { trimJobPart, rerenderSelection, exportClip } from '@/api/editing'
+import { IconClipboard } from '@/components/icons'
 import { _formatApiError } from '@/lib/errors'
 
 export interface EditorMetadataPanelProps {
@@ -182,7 +183,7 @@ export function EditorMetadataPanel({
               flexShrink: 0,
             }}
           >
-            📋
+            <IconClipboard size={14} />
           </button>
         </div>
       </div>

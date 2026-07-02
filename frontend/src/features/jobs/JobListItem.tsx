@@ -1,5 +1,6 @@
 import { JobActionsMenu } from './JobActionsMenu'
 import { formatRelativeTime, isActiveStatus } from './jobs.utils'
+import { IconFolder } from '@/components/icons'
 import type { HistoryItem } from '@/types/api'
 
 const STATUS_CFG: Record<string, { color: string; label: string }> = {
@@ -180,7 +181,7 @@ export function JobListItem({
                   border: '1px solid var(--border)', background: 'var(--bg-hover)',
                   color: 'var(--text-3)', cursor: 'pointer',
                 }}
-              >📂</button>
+              ><IconFolder size={13} /></button>
             )}
           </div>
         )}

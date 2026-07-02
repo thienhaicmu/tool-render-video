@@ -7,6 +7,7 @@ import {
 import type { DownloadJob } from '@/api/platformDownloader'
 import { getDefaultOutputDir, putDefaultOutputDir } from '@/api/outputDir'
 import { useUIStore } from '@/stores/uiStore'
+import { IconFolder, IconClipboard } from '@/components/icons'
 import './DownloadTab.css'
 
 // Instant client-side platform guess from the URL host (replaced by the real
@@ -382,7 +383,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
               </div>
               <div className="dlt-cookie-row" style={{ paddingTop: 0 }}>
                 <input className={`dlt-cookie-input${cookieError ? ' is-invalid' : ''}`} value={cookiePath} onChange={e => { setCookiePath(e.target.value); setCookieError(null) }} placeholder="Paste path to cookies.txt, or click Browse" />
-                <button className="dlt-mini-btn" onClick={handleBrowseCookies} title="Browse for cookies.txt">📂 Browse</button>
+                <button className="dlt-mini-btn" onClick={handleBrowseCookies} title="Browse for cookies.txt"><IconFolder size={12} /> Browse</button>
                 <button className="dlt-mini-btn" onClick={handleImportFile} disabled={!cookiePath.trim() || cookieAction === 'loading'} style={{ color: cookiePath.trim() ? 'var(--accent)' : undefined, borderColor: cookiePath.trim() ? 'rgba(var(--accent-rgb),.4)' : undefined }}>
                   {cookieAction === 'loading' ? '⟳ Importing…' : 'Import'}
                 </button>
@@ -410,7 +411,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               placeholder="Paste one or more video links here…"
             />
-            {!url && <button className="dlt-icon-btn" onClick={handlePaste} title="Paste from clipboard">📋</button>}
+            {!url && <button className="dlt-icon-btn" onClick={handlePaste} title="Paste from clipboard"><IconClipboard size={14} /></button>}
             {url && <button className="dlt-icon-btn" onClick={() => { setUrl(''); setError(null) }} title="Clear">×</button>}
             <button className="dlt-add-btn" onClick={handleAdd} disabled={!inputValid}>+ Add</button>
           </div>
@@ -501,7 +502,7 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
           <div className="dlt-actionbar-inner">
             <span className="dlt-opt-label">Save to</span>
             <div className={`dlt-folder${folderInvalid ? ' is-invalid' : ''}`} onClick={pickDir} title={outputDir || 'Choose a folder'}>
-              <span style={{ flexShrink: 0 }}>📁</span>
+              <span style={{ flexShrink: 0, display: 'inline-flex' }}><IconFolder size={14} /></span>
               <span className={`dlt-folder-path${outputDir ? '' : ' is-empty'}`}>{outputDir ? '‪' + outputDir + '‬' : 'Click to choose a folder…'}</span>
               <span className="dlt-folder-change">{outputDir ? 'Change' : 'Choose'}</span>
             </div>
