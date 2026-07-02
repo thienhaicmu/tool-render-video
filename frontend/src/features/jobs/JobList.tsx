@@ -15,7 +15,6 @@ export interface JobListProps {
   selectedJobId: string | null
   actionLoading: Set<string>
   hasMore: boolean
-  offset: number
   onSelect: (jobId: string) => void
   onCancel: (jobId: string) => void
   onRetry: (jobId: string) => void
@@ -27,16 +26,15 @@ export interface JobListProps {
   batchSelected?: Set<string>
   onToggleBatch?: (jobId: string, withShift: boolean) => void
   onRetryFetch: () => void
-  onPrevPage: () => void
-  onNextPage: () => void
+  onLoadMore: () => void
 }
 
 export function JobList({
   items, loading, error, hasFilters, selectedJobId,
-  actionLoading, hasMore, offset,
+  actionLoading, hasMore,
   onSelect, onCancel, onRetry, onRerun, onDelete, onDuplicate,
   batchSelected, onToggleBatch,
-  onRetryFetch, onPrevPage, onNextPage,
+  onRetryFetch, onLoadMore,
 }: JobListProps) {
   const { t } = useI18n()
   // P3.C - "session v1": older runs of the same source collapse under the
@@ -139,38 +137,24 @@ export function JobList({
         })()}
       </div>
 
-      {/* Pagination */}
-      {(offset > 0 || hasMore) && (
+      {/* B6 — cumulative Load more (replaces prev/next page swap) */}
+      {hasMore && (
         <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '6px 10px', borderTop: '1px solid var(--border)',
-          background: 'var(--bg-panel)', flexShrink: 0,
+          padding: '8px 10px', borderTop: '1px solid var(--border)',
+          background: 'var(--bg-panel)', flexShrink: 0, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', gap: 10,
         }}>
           <button
-            disabled={offset === 0}
-            onClick={onPrevPage}
-            data-testid="pagination-prev"
+            onClick={onLoadMore}
+            data-testid="load-more"
             style={{
-              fontSize: 10, padding: '3px 10px', borderRadius: 5,
+              fontSize: 11, padding: '5px 18px', borderRadius: 6, fontWeight: 600,
               border: '1px solid var(--border)', background: 'var(--bg-hover)',
-              color: offset === 0 ? 'var(--text-3)' : 'var(--text-2)',
-              cursor: offset === 0 ? 'not-allowed' : 'pointer', fontWeight: 600,
+              color: 'var(--text-2)', cursor: 'pointer',
             }}
-          >{t('history_prev')}</button>
-          <span style={{ fontSize: 9, color: 'var(--text-3)' }}>
-            {offset + 1}–{offset + items.length}
-          </span>
-          <button
-            disabled={!hasMore}
-            onClick={onNextPage}
-            data-testid="pagination-next"
-            style={{
-              fontSize: 10, padding: '3px 10px', borderRadius: 5,
-              border: '1px solid var(--border)', background: 'var(--bg-hover)',
-              color: !hasMore ? 'var(--text-3)' : 'var(--text-2)',
-              cursor: !hasMore ? 'not-allowed' : 'pointer', fontWeight: 600,
-            }}
-          >{t('history_next')}</button>
+          >
+            {t('history_load_more')} · {items.length}+
+          </button>
         </div>
       )}
     </div>

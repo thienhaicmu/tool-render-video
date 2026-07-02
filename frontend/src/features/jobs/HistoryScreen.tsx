@@ -27,7 +27,6 @@ export function HistoryScreen() {
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(false)
 
   // ── Filter state ──────────────────────────────────────────────────────────
@@ -56,25 +55,39 @@ export function HistoryScreen() {
   const setDuplicateSeedJobId = useUIStore((s) => s.setDuplicateSeedJobId)
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
-  const fetchPage = useCallback(async (newOffset: number) => {
-    setLoading(true)
+  // B6 — cumulative list. 'replace' resets (initial load / filter change),
+  // 'append' adds the next page (Load more), 'merge' refreshes the newest
+  // page in place while preserving pages the user already loaded (live
+  // poll + post-action refresh).
+  const fetchPage = useCallback(async (newOffset: number, mode: 'replace' | 'append' | 'merge' = 'replace') => {
+    if (mode !== 'merge') setLoading(true)
     setFetchError(null)
     try {
-      // P3.E — status filter applies server-side over the FULL history,
-      // not just the fetched page (the old client-side filter made the
-      // header counts lie about anything beyond the current 20 rows).
+      // P3.E — status filter applies server-side over the FULL history.
       const result = await getJobHistory(
         PAGE_SIZE, newOffset,
         statusFilter !== 'all' ? statusFilter : undefined,
       )
-      setItems(result.items)
-      setHasMore(result.has_more)
-      setOffset(newOffset)
+      if (mode === 'append') {
+        setItems((prev) => {
+          const seen = new Set(prev.map((i) => i.job_id))
+          return [...prev, ...result.items.filter((i) => !seen.has(i.job_id))]
+        })
+        setHasMore(result.has_more)
+      } else if (mode === 'merge') {
+        setItems((prev) => {
+          const ids = new Set(result.items.map((i) => i.job_id))
+          return [...result.items, ...prev.filter((i) => !ids.has(i.job_id))]
+        })
+      } else {
+        setItems(result.items)
+        setHasMore(result.has_more)
+      }
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Failed to load history'
-      setFetchError(msg)
+      if (mode !== 'merge') setFetchError(msg)
     } finally {
-      setLoading(false)
+      if (mode !== 'merge') setLoading(false)
     }
   }, [statusFilter])
 
@@ -83,7 +96,8 @@ export function HistoryScreen() {
     fetchPage(0)
   }, [fetchPage])
 
-  const refreshJobs = useCallback(() => fetchPage(offset), [fetchPage, offset])
+  // Refresh = merge the newest page in; accumulated pages stay put.
+  const refreshJobs = useCallback(() => fetchPage(0, 'merge'), [fetchPage])
 
   // Pha 5.5 — auto-refresh off the shared jobsStore poll instead of a second
   // dedicated 5 s interval. Subscribing arms the single shared poll; each tick
@@ -91,7 +105,7 @@ export function HistoryScreen() {
   // on it is still active. One timer for the whole app, not two.
   const { items: liveJobs } = useActiveJobs()
   useEffect(() => {
-    if (items.some((i) => isActiveStatus(i.status))) fetchPage(offset)
+    if (items.some((i) => isActiveStatus(i.status))) fetchPage(0, 'merge')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveJobs])
 
@@ -461,7 +475,6 @@ export function HistoryScreen() {
             selectedJobId={selectedJobId}
             actionLoading={actionLoading}
             hasMore={hasMore}
-            offset={offset}
             onSelect={handleSelect}
             onCancel={handleCancel}
             onRetry={handleRetry}
@@ -470,9 +483,8 @@ export function HistoryScreen() {
             onDuplicate={handleDuplicate}
             batchSelected={batchSelected.size > 0 ? batchSelected : undefined}
             onToggleBatch={toggleBatch}
-            onRetryFetch={() => fetchPage(offset)}
-            onPrevPage={() => fetchPage(Math.max(0, offset - PAGE_SIZE))}
-            onNextPage={() => fetchPage(offset + PAGE_SIZE)}
+            onRetryFetch={() => fetchPage(0)}
+            onLoadMore={() => fetchPage(items.length, 'append')}
           />
         </div>
 

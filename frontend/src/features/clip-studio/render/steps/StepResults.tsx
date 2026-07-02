@@ -113,11 +113,26 @@ function ExportPanel({ jobId, parts, defaultDir, t, notify }: {
   const [dir, setDir] = useState(defaultDir)
   const [meta, setMeta] = useState(true)
   const [busy, setBusy] = useState(false)
+  // B7 — per-clip selection (default: everything checked on open).
+  const [sel, setSel] = useState<Set<number>>(new Set())
+  function openPanel() {
+    setSel(new Set(parts.map((p) => p.part_no)))
+    setOpen(true)
+  }
+  function toggleSel(no: number) {
+    setSel((prev) => {
+      const next = new Set(prev)
+      if (next.has(no)) next.delete(no)
+      else next.add(no)
+      return next
+    })
+  }
+  const chosen = parts.filter((p) => sel.has(p.part_no))
 
   async function run() {
-    if (busy || !dir.trim() || parts.length === 0) return
+    if (busy || !dir.trim() || chosen.length === 0) return
     setBusy(true)
-    const results = await Promise.allSettled(parts.map((p) =>
+    const results = await Promise.allSettled(chosen.map((p) =>
       exportClip(jobId, p.part_no, {
         destination_dir: dir.trim(),
         platform_preset: platform || undefined,
@@ -138,7 +153,7 @@ function ExportPanel({ jobId, parts, defaultDir, t, notify }: {
 
   return (
     <span style={{ position: 'relative', display: 'inline-flex', marginLeft: 'auto' }}>
-      <button className="btn-xs" onClick={() => setOpen((o) => !o)} disabled={parts.length === 0}>
+      <button className="btn-xs" onClick={() => (open ? setOpen(false) : openPanel())} disabled={parts.length === 0}>
         {t.resExportBtn}
       </button>
       {open && (
@@ -149,6 +164,21 @@ function ExportPanel({ jobId, parts, defaultDir, t, notify }: {
           padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8,
         }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{t.resExportTitle}</div>
+          {/* B7 — clip checklist */}
+          <div style={{
+            maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2,
+            border: '1px solid var(--border)', borderRadius: 8, padding: '6px 8px',
+          }}>
+            {parts.map((p) => (
+              <label key={p.part_no} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={sel.has(p.part_no)} onChange={() => toggleSel(p.part_no)} />
+                <span style={{ fontFamily: 'monospace' }}>#{String(p.part_no).padStart(2, '0')}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.ai_title || p.clip_name || ''}
+                </span>
+              </label>
+            ))}
+          </div>
           <label style={{ fontSize: 10, color: 'var(--text-3)' }}>{t.resExportPlatform}</label>
           <select
             value={platform}
@@ -179,10 +209,10 @@ function ExportPanel({ jobId, parts, defaultDir, t, notify }: {
           <button
             className="res-export-btn"
             onClick={run}
-            disabled={busy || !dir.trim()}
-            style={{ opacity: busy || !dir.trim() ? 0.5 : 1 }}
+            disabled={busy || !dir.trim() || chosen.length === 0}
+            style={{ opacity: busy || !dir.trim() || chosen.length === 0 ? 0.5 : 1 }}
           >
-            {busy ? t.resExportBusy : t.resExportRun(parts.length)}
+            {busy ? t.resExportBusy : t.resExportRun(chosen.length)}
           </button>
         </div>
       )}
