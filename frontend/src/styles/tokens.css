@@ -385,130 +385,64 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   CLIP-STUDIO PROTOTYPE TOKENS (.cs-root scope, dark-only)
+   CLIP-STUDIO PROTOTYPE ALIASES → SEMANTIC TOKENS
    ═══════════════════════════════════════════════════════════════════════════
-   These tokens drive the cinematic clip-studio prototype layout. They are
-   intentionally dark-themed regardless of app theme — the prototype was
-   authored dark-first and the light treatment for clip-studio is a separate
-   pass. To follow app theme later, scope these under .cs-root or move them
-   into theme blocks above.
+   P1.1 (frontend redesign, 2026-07-02): these aliases used to hold a THIRD
+   raw palette (navy surfaces #090C13…, violet #7B61FF, violet→cyan brand
+   gradient) that drifted from the semantic system above and kept the Studio
+   subtree visually forked from the rest of the app. They now point at the
+   semantic tokens, so:
+     - both themes work everywhere data-theme flips (themeStore always sets it)
+     - there is ONE brand accent (violet) and ONE brand gradient (violet→pink)
+     - text/status colors cannot drift between the two shells
+   Only --cyan stays raw: it approximates the rendered subtitle-highlight
+   color in previews (output emulation, not brand) and keeps a per-theme
+   override. The cinematic font stack (--fh/--fb/--fo) is unchanged — type
+   unification is a separate design decision.
+   The old --cs-* prefixed set had no consumers and was deleted.
 */
 
 :root {
-  /* Surfaces */
-  --cs-bg-void:    #05070A;
-  --cs-bg-base:    #090C13;
-  --cs-bg-panel:   #0D1019;
-  --cs-bg-card:    #111622;
-  --cs-bg-hover:   #161C2C;
-  --cs-bg-active:  #1B2235;
+  /* Accent + brand */
+  --accent:      var(--accent-primary);
+  --accent-hi:   var(--accent-hover);
+  --accent-dim:  var(--accent-subtle);
+  --grad:        var(--brand-gradient);
+  --grad-btn:    var(--brand-gradient-button);
 
-  /* Borders */
-  --cs-border:    #1C2438;
-  --cs-border-hi: #2A3558;
-
-  /* Accent */
-  --cs-accent:      #7B61FF;
-  --cs-accent-hi:   #9B85FF;
-  --cs-accent-dim:  rgba(123, 97, 255, 0.15);
-  --cs-cyan:        #00E5C8;
-  --cs-cyan-dim:    rgba(0, 229, 200, 0.12);
-  --cs-grad:        linear-gradient(135deg, #7B61FF, #00E5C8);
-  --cs-grad-btn:    linear-gradient(135deg, #6C52F0, #00C8B0);
-
-  /* Text */
-  --cs-text-1: #EEF0F8;
-  --cs-text-2: #8A93B0;
-  --cs-text-3: #4A5270;
-
-  /* Status */
-  --cs-ok:   #00C896;
-  --cs-warn: #F0A020;
-  --cs-fail: #E8407A;
-
-  /* Fonts */
-  --cs-fo: 'Orbitron', monospace;
-  --cs-fh: 'Rajdhani', sans-serif;
-  --cs-fb: 'Inter', sans-serif;
-
-  /* Aliases used inside .cs-root */
-  --accent:      #7B61FF;
-  --accent-hi:   #9B85FF;
-  --accent-dim:  rgba(123, 97, 255, 0.15);
+  /* Subtitle-highlight emulation — deliberately NOT brand-aliased */
   --cyan:        #00E5C8;
   --cyan-dim:    rgba(0, 229, 200, 0.12);
-  --grad:        linear-gradient(135deg, #7B61FF, #00E5C8);
-  --grad-btn:    linear-gradient(135deg, #6C52F0, #00C8B0);
-  --bg-void:     #05070A;
-  --bg-base:     #090C13;
-  --bg-panel:    #0D1019;
-  --bg-card:     #111622;
-  --bg-hover:    #161C2C;
-  --bg-active:   #1B2235;
-  --border-hi:   #2A3558;
-  --text-1:      #EEF0F8;
-  --text-2:      #8A93B0;
-  --text-3:      #4A5270;
-  --ok:          #00C896;
-  --warn:        #F0A020;
-  --fail:        #E8407A;
+
+  /* Surfaces */
+  --bg-void:     var(--surface-base);
+  --bg-base:     var(--surface-base);
+  --bg-panel:    var(--surface-panel);
+  --bg-card:     var(--surface-card);
+  --bg-hover:    var(--surface-card-hover);
+  --bg-active:   var(--surface-card-hover);
+
+  /* Borders (--border itself is defined in the theme blocks above) */
+  --border-hi:   var(--border-strong);
+
+  /* Text */
+  --text-1:      var(--text-primary);
+  --text-2:      var(--text-secondary);
+  --text-3:      var(--text-tertiary);
+
+  /* Status */
+  --ok:          var(--status-success);
+  --warn:        var(--status-warning);
+  --fail:        var(--status-error);
+
+  /* Fonts */
   --fh:          'Rajdhani', sans-serif;
   --fb:          'Inter', sans-serif;
   --fo:          'Orbitron', monospace;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   LIGHT THEME — clip-studio prototype overrides
-   ═══════════════════════════════════════════════════════════════════════════
-   Override the cs-* + prototype-alias tokens when the user picks light mode.
-   The cinematic Orbitron/Rajdhani type stays — only the palette shifts to a
-   bright, neutral Linear-style canvas so the same shell works in both modes.
-*/
-
 [data-theme="light"] {
-  /* cs-* tokens */
-  --cs-bg-void:    #fafafa;
-  --cs-bg-base:    #f4f4f5;
-  --cs-bg-panel:   #ffffff;
-  --cs-bg-card:    #ffffff;
-  --cs-bg-hover:   #f5f5f5;
-  --cs-bg-active:  #ededed;
-  --cs-border:     rgba(0, 0, 0, 0.08);
-  --cs-border-hi:  rgba(0, 0, 0, 0.14);
-  --cs-accent:     #5b5bd6;
-  --cs-accent-hi:  #6e6ee6;
-  --cs-accent-dim: rgba(91, 91, 214, 0.10);
-  --cs-cyan:       #0891b2;
-  --cs-cyan-dim:   rgba(8, 145, 178, 0.10);
-  --cs-grad:       linear-gradient(135deg, #5b5bd6, #0891b2);
-  --cs-grad-btn:   linear-gradient(135deg, #4f4fc7, #0e7490);
-  --cs-text-1:     #0a0a0a;
-  --cs-text-2:     #525252;
-  --cs-text-3:     #a1a1aa;
-  --cs-ok:         #16a34a;
-  --cs-warn:       #d97706;
-  --cs-fail:       #dc2626;
-
-  /* Bare aliases used inside .cs-root */
-  --accent:        #5b5bd6;
-  --accent-hi:     #6e6ee6;
-  --accent-dim:    rgba(91, 91, 214, 0.10);
-  --cyan:          #0891b2;
-  --cyan-dim:      rgba(8, 145, 178, 0.10);
-  --grad:          linear-gradient(135deg, #5b5bd6, #0891b2);
-  --grad-btn:      linear-gradient(135deg, #4f4fc7, #0e7490);
-  --bg-void:       #fafafa;
-  --bg-base:       #f4f4f5;
-  --bg-panel:      #ffffff;
-  --bg-card:       #ffffff;
-  --bg-hover:      #f5f5f5;
-  --bg-active:     #ededed;
-  --border:        rgba(0, 0, 0, 0.08);
-  --border-hi:     rgba(0, 0, 0, 0.14);
-  --text-1:        #0a0a0a;
-  --text-2:        #525252;
-  --text-3:        #a1a1aa;
-  --ok:            #16a34a;
-  --warn:          #d97706;
-  --fail:          #dc2626;
+  /* Cyan reads too neon on white — shift to a legible teal. */
+  --cyan:     #0891b2;
+  --cyan-dim: rgba(8, 145, 178, 0.10);
 }

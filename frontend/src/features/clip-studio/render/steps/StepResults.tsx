@@ -28,7 +28,7 @@ function ScoreRingSm({ score }: { score: number }) {
   return (
     <div className="sr-wrap">
       <svg width="34" height="34" viewBox="0 0 34 34" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx="17" cy="17" r={r} fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="3.5" />
+        <circle cx="17" cy="17" r={r} fill="none" stroke="rgba(var(--text-rgb),.1)" strokeWidth="3.5" />
         <circle cx="17" cy="17" r={r} fill="none" stroke={col} strokeWidth="3.5"
           strokeDasharray={`${fill} ${circ}`} strokeLinecap="round" />
       </svg>
@@ -46,7 +46,7 @@ function ScoreRingLg({ score }: { score: number }) {
     <div className="srl-wrap">
       <div style={{ position: 'relative', width: 68, height: 68, flexShrink: 0 }}>
         <svg width="68" height="68" viewBox="0 0 68 68" style={{ transform: 'rotate(-90deg)' }}>
-          <circle cx="34" cy="34" r={r} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="6" />
+          <circle cx="34" cy="34" r={r} fill="none" stroke="rgba(var(--text-rgb),.08)" strokeWidth="6" />
           <circle cx="34" cy="34" r={r} fill="none" stroke={col} strokeWidth="6"
             strokeDasharray={`${fill} ${circ}`} strokeLinecap="round"
             style={{ transition: 'stroke-dasharray 0.5s ease' }} />
@@ -414,7 +414,7 @@ function StepResultsBase({
                         <div key={r.part_no} style={{
                           display: 'flex', alignItems: 'center', gap: 8, fontSize: 11,
                           padding: '3px 8px', borderRadius: 5,
-                          background: r.is_best_clip ? 'rgba(var(--accent-rgb,.15),0.15)' : 'rgba(255,255,255,.03)',
+                          background: r.is_best_clip ? 'rgba(var(--accent-rgb), 0.15)' : 'rgba(var(--text-rgb),.03)',
                         }}>
                           <span style={{ width: 14, textAlign: 'center', fontWeight: 700, color: r.rank === 1 ? 'var(--accent)' : 'var(--text-3)' }}>#{r.rank}</span>
                           <span style={{ color: 'var(--text-2)' }}>Part {r.part_no}</span>

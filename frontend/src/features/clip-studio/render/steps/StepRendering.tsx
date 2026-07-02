@@ -120,7 +120,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '5px 10px', borderRadius: 7,
         background: isDone ? 'rgba(52,200,120,.04)' : 'transparent',
-        border: `1px solid ${isDone ? 'rgba(52,200,120,.1)' : 'rgba(255,255,255,.04)'}`,
+        border: `1px solid ${isDone ? 'rgba(52,200,120,.1)' : 'rgba(var(--text-rgb),.04)'}`,
       }}>
         <span style={{ fontSize: 13, color: accentColor, flexShrink: 0, width: 14, textAlign: 'center', lineHeight: 1 }}>
           {isDone ? '✓' : '○'}
@@ -161,7 +161,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
       <div style={{
         width: 52, flexShrink: 0,
         aspectRatio: thumbRatio,
-        background: 'rgba(255,255,255,.04)',
+        background: 'rgba(var(--text-rgb),.04)',
         overflow: 'hidden', position: 'relative',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
@@ -213,7 +213,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
             {statusLabel}
           </span>
 
-          <div style={{ flex: 1, height: 3, borderRadius: 99, background: 'rgba(255,255,255,.07)', overflow: 'hidden' }}>
+          <div style={{ flex: 1, height: 3, borderRadius: 99, background: 'rgba(var(--text-rgb),.07)', overflow: 'hidden' }}>
             <div style={{
               height: '100%', borderRadius: 99,
               width: `${isDone ? 100 : isFail || isWait ? 0 : pct}%`,
@@ -259,7 +259,7 @@ function ClipRow({ slot, statusLabel, jobId, thumbRatio, compact = false }: {
                       <span style={{ fontSize: 10, color: col, fontWeight: st === 'active' ? 700 : 500 }}>{n.label}</span>
                     </div>
                     {i < STEP_NODES.length - 1 && (
-                      <div style={{ flex: 1, height: 1, background: i < activeStepIdx ? 'var(--status-success)' : 'rgba(255,255,255,.1)', maxWidth: 20 }} />
+                      <div style={{ flex: 1, height: 1, background: i < activeStepIdx ? 'var(--status-success)' : 'rgba(var(--text-rgb),.1)', maxWidth: 20 }} />
                     )}
                   </React.Fragment>
                 )
@@ -795,7 +795,7 @@ function EventLogPanel({ events, t }: { events: WsLogEvent[]; t: Strings }) {
                     gap: 8, padding: '3px 4px', borderRadius: 4,
                     cursor: 'pointer',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.04)' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--text-rgb),.04)' }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 >
                   <span style={{ color: 'var(--text-3)' }}>{t}</span>
