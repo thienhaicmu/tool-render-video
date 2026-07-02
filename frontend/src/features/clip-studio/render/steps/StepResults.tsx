@@ -11,6 +11,8 @@ import {
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
+import { useEditorStore } from '@/stores/editorStore'
+import { useUIStore } from '@/stores/uiStore'
 import { ClipActionsMenu } from './ClipActionsMenu'
 import { IconInbox, IconFilm } from '@/components/icons'
 import type { ClipMenuItem } from './ClipActionsMenu'
@@ -175,6 +177,8 @@ function StepResultsBase({
   aiCloudProvider?: string
   goal?: string
 }) {
+  const openEditor = useEditorStore((st) => st.openEditor)
+  const setActivePanel = useUIStore((st) => st.setActivePanel)
   const [selectedPart, setSelectedPart] = useState<JobPart | null>(null)
   const [sortMode, setSortMode] = useState<'viral' | 'duration' | 'newest'>('viral')
   const [aiSummary, setAiSummary] = useState<JobAiSummary | null>(null)
@@ -665,6 +669,16 @@ function StepResultsBase({
                               id: 'details',
                               label: isSelected ? t.resMenuHideDetails : t.resMenuDetails,
                               onClick: () => setSelectedPart(isSelected ? null : part),
+                            },
+                            // P3.B - the trim -> re-render editor existed but was
+                            // unreachable from anywhere; this is its entry point.
+                            {
+                              id: 'trim',
+                              label: t.resMenuTrim,
+                              onClick: () => {
+                                openEditor(jobId, part.part_no)
+                                setActivePanel('editor')
+                              },
                             },
                           ]
                           if (part.output_file) {

@@ -176,6 +176,7 @@ const T = {
     resMenuDetails: 'Details', resMenuHideDetails: 'Hide details',
     resMenuCopyPath: 'Copy file path', resMenuOpenFolder: 'Open folder',
     resMenuDeleteFile: 'Delete output file',
+    resMenuTrim: 'Trim & re-render',
     // P2.3 - AI copy pass: creator-voiced score language
     tierViral: 'VIRAL READY', tierHigh: 'HIGH IMPACT', tierGood: 'GOOD', tierReview: 'NEEDS REVIEW',
     confStrong: 'High confidence', confTest: 'Worth testing', confExp: 'Experimental',
@@ -371,6 +372,7 @@ const T = {
     resMenuDetails: 'Chi tiết', resMenuHideDetails: 'Ẩn chi tiết',
     resMenuCopyPath: 'Copy đường dẫn', resMenuOpenFolder: 'Mở thư mục',
     resMenuDeleteFile: 'Xóa file output',
+    resMenuTrim: 'Cắt & render lại',
     // P2.3 - AI copy pass
     tierViral: 'SẴN SÀNG VIRAL', tierHigh: 'HIỆU QUẢ CAO', tierGood: 'TỐT', tierReview: 'CẦN XEM LẠI',
     confStrong: 'Độ tin cậy cao', confTest: 'Đáng thử', confExp: 'Thử nghiệm',
