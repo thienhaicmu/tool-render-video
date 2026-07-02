@@ -1,1 +1,0 @@
-import{e as t}from"./index-DKorHJk0.js";async function r(){return t("/api/settings/output-dir")}async function e(u){return t("/api/settings/output-dir",{method:"PUT",body:JSON.stringify({path:u})})}export{r as g,e as p};
