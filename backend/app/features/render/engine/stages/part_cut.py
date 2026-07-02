@@ -103,7 +103,13 @@ def _fuse_safe_active(ctx: PartRenderContext, force_accurate_cut: bool) -> bool:
     Returns True when it is safe to skip the cut_video step and let
     ``render_part_from_source`` perform cut + encode in one FFmpeg call.
 
-    Default OFF: requires opt-in via ``RENDER_FUSE_CUT=1`` env var.
+    Mặc định BẬT — bỏ 1 lần ghi + 1 lần đọc đĩa + 1 subprocess FFmpeg mỗi
+    part, chất lượng không đổi (cut vốn là stream-copy). Tắt khẩn cấp
+    bằng ``RENDER_FUSE_CUT=0``. Trước khi bật mặc định, smoke-check
+    2026-07 đã vá 3 lỗi của đường fuse: guard phụ đề nhận full SRT làm
+    nguồn (part_asset_planner), forward reframe_mode qua cfg
+    (clip_renderer), và re-export helper tracker trong motion/__init__ —
+    xem tests/test_render_fuse_gate.py + test_motion_package_exports.py.
 
     Conservative gates the helper applies:
       - ``force_accurate_cut`` → False. The accurate cut path needs the
@@ -123,7 +129,7 @@ def _fuse_safe_active(ctx: PartRenderContext, force_accurate_cut: bool) -> bool:
         tracker would silently degrade to the default tracker. Keep the
         legacy cut+render path whenever the plan names a tracker.
     """
-    if os.getenv("RENDER_FUSE_CUT", "0") != "1":
+    if os.getenv("RENDER_FUSE_CUT", "1") != "1":
         return False
     if force_accurate_cut:
         return False
