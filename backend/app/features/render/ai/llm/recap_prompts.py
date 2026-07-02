@@ -334,6 +334,29 @@ def _fit_transcript(srt: str, max_chars: int) -> str:
 # 2-hour film as one unwatchable block. Override the hard cap via RECAP_MAX_EPISODES.
 _RECAP_MAX_EPISODES = max(1, int(_os.getenv("RECAP_MAX_EPISODES", "4") or 4))
 
+# Duration-anchor fix (2026-07-02). Structural measurement at n=5 showed the
+# editorial-ON path cannot hold the recap's own 10–25%-of-runtime spec: total
+# length ranged from 4% to 96% of the film across samples (duration_ratio_score
+# 81→42 vs OFF), plus a higher fragment rate. Root cause: the pass-2 blueprint
+# plans pacing with NO duration budget, and pass-3's "EXECUTE this plan"
+# instruction lets the blueprint outrank the base template's soft 10–25%
+# guidance. Fix: state the budget as CONCRETE SECONDS in pass-2, and append a
+# HARD budget guardrail to the pass-3 editorial block. Applies ONLY when an
+# editorial blueprint is present (the measured defect path) — the editorial-OFF
+# prompt stays byte-identical. Kill switch: RECAP_DURATION_ANCHOR=0.
+_DURATION_BAND_LO = 0.10
+_DURATION_BAND_HI = 0.25
+
+
+def _duration_anchor_enabled() -> bool:
+    """Read at call time so tests/operators can toggle without a reload."""
+    return _os.getenv("RECAP_DURATION_ANCHOR", "1") == "1"
+
+
+def _duration_budget_bounds(video_duration: float) -> "tuple[int, int]":
+    dur = max(0.0, float(video_duration or 0.0))
+    return int(dur * _DURATION_BAND_LO), int(dur * _DURATION_BAND_HI)
+
 
 def _episode_range(video_duration: float) -> tuple[int, int]:
     """Suggested (min, max) episode count from film runtime. Short films stay a
@@ -416,6 +439,20 @@ def build_recap_prompt(
     # Editorial blueprint (pass-2). When it pins an episode_count, that is the
     # authoritative split for pass-3; otherwise fall back to the duration heuristic.
     editorial_block = _editorial_block(editorial)
+    # Duration-anchor fix: when a blueprint is present (the measured defect
+    # path), append a HARD budget the plan can never override. Plain text with
+    # no braces — the block is a .format VALUE, so this stays format-safe.
+    if editorial_block and dur > 0 and _duration_anchor_enabled():
+        _lo, _hi = _duration_budget_bounds(dur)
+        editorial_block += (
+            "═══ DURATION BUDGET (HARD — the editorial plan NEVER overrides this) ═══\n"
+            f"Total recap length (sum of every scene's end-start, across ALL episodes) "
+            f"MUST be between {_lo} and {_hi} seconds (10-25% of the {dur:.0f}s film). "
+            f"Set total_target_sec inside that band. Every scene MUST be at least 8 "
+            f"seconds long - merge shorter beats into a neighbour. If executing the "
+            f"editorial plan would break this budget, TRIM scenes to fit the budget; "
+            f"the budget wins.\n"
+        )
     ed_count = int(getattr(editorial, "episode_count", 0) or 0) if editorial is not None else 0
     if ed_count >= 1:
         ep_lo = ep_hi = min(ed_count, _RECAP_MAX_EPISODES)
@@ -456,7 +493,7 @@ _USER_TEMPLATE_EDITORIAL = """═══ STORY UNDERSTANDING (plan FROM this) ═
 Plan HOW to tell this ~{video_minutes:.0f}-min film as a recap. Write in {lang_name}.
 Decide:
 - EPISODES (Tập): how many and WHY — cut at natural story breaks. Suggested {episode_min}–{episode_max}.
-- PACING: overall rhythm, using the emotional curve (where to linger, where to move fast).
+- PACING: overall rhythm, using the emotional curve (where to linger, where to move fast).{duration_budget_line}
 - per key BEAT: its editorial role, the emotional intent to land, and NARRATE vs HOLD
   (HOLD = let source audio play for a peak beat — use sparingly, 1–3 total).
 Do NOT pick timestamps and do NOT write narration — that is the next step.
@@ -497,12 +534,25 @@ def build_editorial_prompt(
     lang_name = _LANG_NAMES.get(target_language, target_language or "the target language")
     dur = float(video_duration or 0.0)
     ep_lo, ep_hi = _episode_range(dur)
+    # Duration-anchor fix: give the blueprint a CONCRETE seconds budget so
+    # pacing is planned inside the 10-25% band instead of unconstrained.
+    # Empty when disabled / duration unknown — pre-fix prompt byte-identical.
+    if dur > 0 and _duration_anchor_enabled():
+        _lo, _hi = _duration_budget_bounds(dur)
+        duration_budget_line = (
+            f"\n- DURATION BUDGET: the whole recap totals {_lo}-{_hi} seconds "
+            f"(10-25% of the film). Your episode split, pacing and beat plan "
+            f"MUST fit inside that budget."
+        )
+    else:
+        duration_budget_line = ""
     user = _USER_TEMPLATE_EDITORIAL.format(
         story_block=block,
         lang_name=lang_name,
         video_minutes=dur / 60.0,
         episode_min=ep_lo,
         episode_max=ep_hi,
+        duration_budget_line=duration_budget_line,
     )
     return _SYSTEM_EDITORIAL, user
 

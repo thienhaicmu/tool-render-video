@@ -19,7 +19,11 @@ import re as _re
 # History:
 #   1 — Architecture-review Batch A (2026-06-30). Inaugural version. Flushes
 #       all pre-batch cache entries by construction.
-PROMPT_VERSION: int = 1
+#   2 — Duration-anchor fix (2026-07-02). Editorial-ON recap prompts (pass-2 +
+#       pass-3) gain a hard 10–25%-of-runtime duration budget + 8s scene floor
+#       after structural measurement (n=5) showed the editorial path ranged
+#       4%–96% of runtime. Also marks pre/post-fix rows in the ablation store.
+PROMPT_VERSION: int = 2
 
 # SRT timestamp pattern: 00:01:23,456 --> 00:02:03,100
 _SRT_TS_RE = _re.compile(
