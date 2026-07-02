@@ -14,6 +14,7 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { useEditorStore } from '@/stores/editorStore'
 import { useUIStore } from '@/stores/uiStore'
 import { ClipActionsMenu } from './ClipActionsMenu'
+import { ClipPlayerModal } from './ClipPlayerModal'
 import { IconInbox, IconFilm } from '@/components/icons'
 import type { ClipMenuItem } from './ClipActionsMenu'
 
@@ -177,6 +178,8 @@ function StepResultsBase({
   aiCloudProvider?: string
   goal?: string
 }) {
+  // P3.A - index into sortedDone for the in-app player modal (null = closed)
+  const [playerIdx, setPlayerIdx] = useState<number | null>(null)
   const openEditor = useEditorStore((st) => st.openEditor)
   const setActivePanel = useUIStore((st) => st.setActivePanel)
   const [selectedPart, setSelectedPart] = useState<JobPart | null>(null)
@@ -565,10 +568,10 @@ function StepResultsBase({
                     )}
                     {durFmt && <div className="clip-dur-badge">{durFmt}</div>}
                     <div className="clip-overlay">
-                      <a href={getPartMediaUrl(jobId, part.part_no)} target="_blank" rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}>
-                        <button className="clip-ov-btn">▶</button>
-                      </a>
+                      <button
+                        className="clip-ov-btn"
+                        onClick={(e) => { e.stopPropagation(); setPlayerIdx(i) }}
+                      >▶</button>
                       <a href={getPartMediaUrl(jobId, part.part_no)}
                         download={part.clip_name || `clip_${part.part_no}.mp4`}
                         onClick={(e) => e.stopPropagation()}>
@@ -731,6 +734,22 @@ function StepResultsBase({
           </div>
         )}
       </div>
+
+      {/* P3.A - in-app review player */}
+      {playerIdx !== null && jobId && (
+        <ClipPlayerModal
+          jobId={jobId}
+          parts={sortedDone}
+          index={Math.min(playerIdx, sortedDone.length - 1)}
+          onNavigate={setPlayerIdx}
+          onClose={() => setPlayerIdx(null)}
+          partScores={partScores}
+          partRanks={partRanks}
+          feedbackRatings={feedbackRatings}
+          onFeedback={handleFeedback}
+          t={t}
+        />
+      )}
 
       {/* ── Detail panel ── */}
       <div className={`player-panel${selectedPart ? '' : ' collapsed'}`}>
@@ -907,7 +926,10 @@ function StepResultsBase({
               )}
 
               <div className="player-btns">
-                <a className="player-btn" href={getPartMediaUrl(jobId, selectedPart.part_no)} target="_blank" rel="noreferrer">{t.btnPlay}</a>
+                <button className="player-btn" onClick={() => {
+                  const idx = sortedDone.findIndex((p) => p.part_no === selectedPart.part_no)
+                  if (idx >= 0) setPlayerIdx(idx)
+                }}>{t.btnPlay}</button>
                 <a className="player-btn primary" href={getPartMediaUrl(jobId, selectedPart.part_no)} download={`clip_${selectedPart.part_no}.mp4`}>{t.btnExport}</a>
               </div>
             </>
