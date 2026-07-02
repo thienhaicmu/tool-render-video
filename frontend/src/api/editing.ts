@@ -42,6 +42,10 @@ export interface RerenderResult {
 
 export interface ExportRequest {
   destination_dir: string
+  /** Publish v1 — platform subfolder + filename tag (additive, optional). */
+  platform_preset?: 'tiktok' | 'youtube_shorts' | 'instagram_reels'
+  /** Publish v1 — write a .txt sidecar (AI title/reason + hashtags). */
+  write_metadata?: boolean
 }
 
 export interface ExportResult {

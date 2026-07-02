@@ -50,6 +50,11 @@ class RerenderRequest(BaseModel):
 
 class ExportRequest(BaseModel):
     destination_dir: str = Field(..., min_length=1, description="Absolute path to destination directory")
+    # Publish v1 (additive, conservative defaults — Sacred Contract #2 spirit):
+    platform_preset: str | None = Field(
+        default=None, description="tiktok | youtube_shorts | instagram_reels — adds platform subfolder + filename tag")
+    write_metadata: bool = Field(
+        default=False, description="Write a .txt sidecar with AI title/reason + platform hashtags")
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -130,6 +135,8 @@ def api_export_part(job_id: str, part_no: int, req: ExportRequest):
             job_id=job_id,
             part_no=part_no,
             destination_dir=req.destination_dir,
+            platform_preset=req.platform_preset,
+            write_metadata=req.write_metadata,
         )
         return result
     except FileNotFoundError as exc:

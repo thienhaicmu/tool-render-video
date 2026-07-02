@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import type { JobPart, QualityReport, PartRankResult } from '@/types/api'
 import { getJobAiSummary, deletePartOutput } from '@/api/jobs'
+import { exportClip } from '@/api/editing'
 import { StoryModelCard } from '@/features/jobs/StoryModelCard'
 import type { JobAiSummary, HybridAnalysis } from '@/api/jobs'
 import {
@@ -95,6 +96,97 @@ function HybridAnalysisBadge({
                                 '💻 Local AI'
   const cls = fallbackMode === 'cloud' ? 'vtag-blue' : fallbackMode === 'hybrid' ? 'vtag-purple' : 'vtag-teal'
   return <span className={`res-vtag ${cls}`}>{label}</span>
+}
+
+// Publish v1 — export panel: batch-export all done clips with an optional
+// platform preset (subfolder + filename tag) and metadata sidecar.
+function ExportPanel({ jobId, parts, defaultDir, t, notify }: {
+  jobId: string
+  parts: JobPart[]
+  defaultDir: string
+  t: Strings
+  notify: (n: { type: 'success' | 'warning' | 'error' | 'info'; title: string; message?: string }) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [platform, setPlatform] = useState<'' | 'tiktok' | 'youtube_shorts' | 'instagram_reels'>('tiktok')
+  const [dir, setDir] = useState(defaultDir)
+  const [meta, setMeta] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  async function run() {
+    if (busy || !dir.trim() || parts.length === 0) return
+    setBusy(true)
+    const results = await Promise.allSettled(parts.map((p) =>
+      exportClip(jobId, p.part_no, {
+        destination_dir: dir.trim(),
+        platform_preset: platform || undefined,
+        write_metadata: meta,
+      })))
+    const ok = results.filter((r) => r.status === 'fulfilled').length
+    const fail = results.length - ok
+    notify({
+      type: fail === 0 ? 'success' : ok === 0 ? 'error' : 'warning',
+      title: `${t.resExportRun(ok)} ✓${fail > 0 ? ` · ${fail} ✗` : ''}`,
+    })
+    setBusy(false)
+    if (fail === 0) {
+      setOpen(false)
+      window.electronAPI?.openPath?.(dir.trim())
+    }
+  }
+
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', marginLeft: 'auto' }}>
+      <button className="btn-xs" onClick={() => setOpen((o) => !o)} disabled={parts.length === 0}>
+        {t.resExportBtn}
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 26, right: 0, zIndex: 60, width: 300,
+          background: 'var(--bg-panel)', border: '1px solid var(--border)',
+          borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.35)',
+          padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{t.resExportTitle}</div>
+          <label style={{ fontSize: 10, color: 'var(--text-3)' }}>{t.resExportPlatform}</label>
+          <select
+            value={platform}
+            onChange={(e) => setPlatform(e.target.value as typeof platform)}
+            style={{ padding: '5px 8px', borderRadius: 6, fontSize: 11, border: '1px solid var(--border)', background: 'var(--surface-input)', color: 'var(--text-1)' }}
+          >
+            <option value="tiktok">TikTok</option>
+            <option value="youtube_shorts">YouTube Shorts</option>
+            <option value="instagram_reels">Instagram Reels</option>
+            <option value="">{t.resExportNone}</option>
+          </select>
+          <label style={{ fontSize: 10, color: 'var(--text-3)' }}>{t.resExportFolder}</label>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input
+              value={dir}
+              onChange={(e) => setDir(e.target.value)}
+              style={{ flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 6, fontSize: 11, border: '1px solid var(--border)', background: 'var(--surface-input)', color: 'var(--text-1)', outline: 'none' }}
+            />
+            <button className="btn-xs" onClick={async () => {
+              const picked = await window.electronAPI?.pickDirectory?.()
+              if (picked) setDir(picked)
+            }}>…</button>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={meta} onChange={(e) => setMeta(e.target.checked)} />
+            {t.resExportMeta}
+          </label>
+          <button
+            className="res-export-btn"
+            onClick={run}
+            disabled={busy || !dir.trim()}
+            style={{ opacity: busy || !dir.trim() ? 0.5 : 1 }}
+          >
+            {busy ? t.resExportBusy : t.resExportRun(parts.length)}
+          </button>
+        </div>
+      )}
+    </span>
+  )
 }
 
 // P2.3 - score education. An info toggle on the results bar explaining the
@@ -531,6 +623,15 @@ function StepResultsBase({
         <div className="res-bar">
           <span className="res-count">{t.resClipsRendered(doneParts.length)}</span>
           <ScoreInfoTip t={t} />
+          {jobId && (
+            <ExportPanel
+              jobId={jobId}
+              parts={doneParts}
+              defaultDir={outputDir ?? ''}
+              t={t}
+              notify={addNotification}
+            />
+          )}
           <div className="res-sort">
             <button className={`sort-btn${sortMode === 'viral' ? ' on' : ''}`} onClick={() => setSortMode('viral')}>{t.resSortViral}</button>
             <button className={`sort-btn${sortMode === 'duration' ? ' on' : ''}`} onClick={() => setSortMode('duration')}>{t.resSortDuration}</button>

@@ -250,10 +250,22 @@ def rerender_selection(
     }
 
 
+# Publish v1 (2026-07-02, additive): per-platform export presets. Folder
+# names + filename tags are FIXED strings (never user input — the export
+# security stance of "no user-supplied filenames" is preserved).
+_PLATFORM_PRESETS: dict = {
+    "tiktok":          {"folder": "TikTok",          "tag": "tiktok", "hashtags": "#fyp #viral #tiktok"},
+    "youtube_shorts":  {"folder": "YouTube Shorts",  "tag": "shorts", "hashtags": "#shorts #viral"},
+    "instagram_reels": {"folder": "Instagram Reels", "tag": "reels",  "hashtags": "#reels #explore #viral"},
+}
+
+
 def export_clip(
     job_id: str,
     part_no: int,
     destination_dir: str,
+    platform_preset: str | None = None,
+    write_metadata: bool = False,
 ) -> dict:
     """
     Copy the rendered clip to a user-specified directory.
@@ -294,10 +306,25 @@ def export_clip(
             f"Must be within home directory or app data directories."
         )
 
+    # Publish v1 — per-platform subfolder + filename tag. The subfolder is a
+    # fixed child of the validated dest_dir, so it stays inside safe roots.
+    preset = None
+    if platform_preset is not None:
+        preset = _PLATFORM_PRESETS.get(str(platform_preset).strip().lower())
+        if preset is None:
+            raise ValueError(
+                f"Unknown platform_preset: {platform_preset!r}. "
+                f"Allowed: {', '.join(sorted(_PLATFORM_PRESETS))}"
+            )
+        dest_dir = dest_dir / preset["folder"]
+
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     # Build output filename (source stem preserved, no user input)
-    out_name = source_path.name
+    if preset is not None:
+        out_name = f"{source_path.stem}_{preset['tag']}{source_path.suffix}"
+    else:
+        out_name = source_path.name
     dest_path = dest_dir / out_name
 
     # Avoid overwrite: append suffix if file exists
@@ -308,9 +335,37 @@ def export_clip(
 
     shutil.copy2(str(source_path), str(dest_path))
 
+    # Publish v1 — optional metadata sidecar (.txt next to the export):
+    # AI title/reason + per-platform hashtag starter. Best-effort: a
+    # metadata failure must never fail an already-successful copy.
+    metadata_file = None
+    if write_metadata:
+        try:
+            ai_title = ""
+            ai_reason = ""
+            for _p in list_job_parts(job_id):
+                if int(_p.get("part_no") or 0) == part_no:
+                    ai_title = str(_p.get("ai_title") or "")
+                    ai_reason = str(_p.get("ai_reason") or "")
+                    break
+            lines = []
+            if ai_title:
+                lines.append(ai_title)
+            lines.append("")
+            if ai_reason:
+                lines.append(ai_reason)
+                lines.append("")
+            if preset is not None:
+                lines.append(preset["hashtags"])
+            meta_path = dest_path.with_suffix(".txt")
+            meta_path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+            metadata_file = str(meta_path)
+        except Exception as exc:  # noqa: BLE001 — sidecar is best-effort
+            logger.warning("export_clip metadata sidecar failed: %s", exc)
+
     logger.info(
-        "export_clip: job_id=%s part_no=%d source=%s dest=%s",
-        job_id, part_no, source_path.name, dest_path,
+        "export_clip: job_id=%s part_no=%d source=%s dest=%s preset=%s",
+        job_id, part_no, source_path.name, dest_path, platform_preset,
     )
 
     return {
@@ -320,4 +375,7 @@ def export_clip(
         "source_file": source_path.name,
         "exported_to": str(dest_path),
         "destination_dir": str(dest_dir),
+        # Publish v1 additive keys
+        "platform_preset": platform_preset,
+        "metadata_file": metadata_file,
     }
