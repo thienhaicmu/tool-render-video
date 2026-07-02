@@ -23,13 +23,15 @@ import { CommandPalette } from './components/CommandPalette'
 // the first time its panel is opened. Named exports are mapped to default.
 const importHistory    = () => import('./features/jobs/HistoryScreen').then(m => ({ default: m.HistoryScreen }))
 const importEditor     = () => import('./features/editor/EditorScreen').then(m => ({ default: m.EditorScreen }))
-const importDownloader = () => import('./features/downloader/DownloaderScreen').then(m => ({ default: m.DownloaderScreen }))
+// P0.3: sidebar Download now mounts the canonical DownloadTab (via
+// DownloadScreen wrapper). The parallel features/downloader/ screen is gone.
+const importDownloader = () => import('./features/download/DownloadScreen').then(m => ({ default: m.DownloadScreen }))
 const importClipStudio = () => import('./features/clip-studio/ClipStudio').then(m => ({ default: m.ClipStudio }))
 const importSettings   = () => import('./features/settings/SettingsScreen').then(m => ({ default: m.SettingsScreen }))
 
 const HistoryScreen    = lazy(importHistory)
 const EditorScreen     = lazy(importEditor)
-const DownloaderScreen = lazy(importDownloader)
+const DownloadScreen   = lazy(importDownloader)
 const ClipStudio       = lazy(importClipStudio)
 const SettingsScreen   = lazy(importSettings)
 
@@ -52,7 +54,7 @@ const PANEL_MAP: Record<ActivePanel, React.ComponentType> = {
   library:       HistoryScreen,
   publish:       PublishPlaceholder,
   settings:      SettingsScreen,
-  download:      DownloaderScreen,
+  download:      DownloadScreen,
   // Deprecated aliases — do not add new usage
   render:        HistoryScreen,
   history:       HistoryScreen,
