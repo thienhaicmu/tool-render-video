@@ -13,7 +13,6 @@ import {
   OVERLAY_HIGHLIGHT_COLORS,
 } from '../subtitle-styles'
 import { fmtDuration, Tog } from '../utils'
-import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { IconFilm } from '@/components/icons'
 
 // ── Subtitle preview — visual approximation of each style ────────────────────
@@ -453,29 +452,12 @@ function StepConfigureBase({
                 key={v}
                 className={`seg-b${cfg.renderFormat === v ? ' on' : ''}`}
                 style={{ flex: 1, textAlign: 'center', padding: '8px 6px' }}
-                onClick={async () => {
-                  if (v !== 'recap' || cfg.renderFormat === 'recap') {
-                    setCfgKey('renderFormat', v)
-                    return
-                  }
-                  // A1 — recap used to силently force 16:9 + narration.
-                  // Now the change is explicit and declinable.
-                  const choice = await confirmDialog({
-                    title: t.cfgRecapPromptTitle,
-                    message: t.cfgRecapPromptMsg,
-                    buttons: [
-                      { id: 'apply', label: t.cfgRecapApply, variant: 'primary' },
-                      { id: 'keep', label: t.cfgRecapKeep },
-                    ],
-                  })
-                  if (choice === null) return  // dismissed — stay on clips
-                  setCfgKey('renderFormat', 'recap')
-                  if (choice === 'apply') {
-                    setCfgKey('ratio', 'r169')
-                    setCfgKey('narrEnabled', true)
-                    setCfgKey('voiceSource', 'ai_rewrite')
-                  }
-                }}
+                // Pure mode toggle (2026-07): clicking a segment sets exactly
+                // that mode — no modal, no silent override of the user's own
+                // ratio/narration choices. Whatever mode the user picks is the
+                // mode that renders. Recap-friendly settings (16:9, narration)
+                // are left to the user's explicit choice in the panels below.
+                onClick={() => setCfgKey('renderFormat', v)}
               >
                 <div style={{ fontWeight: 600 }}>{label}</div>
                 <div style={{ fontSize: '9px', color: cfg.renderFormat === v ? 'rgba(255,255,255,.6)' : 'var(--text-3)', marginTop: '2px', fontFamily: 'var(--fb)', fontWeight: 400, lineHeight: 1.3 }}>{desc}</div>
