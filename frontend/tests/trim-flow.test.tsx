@@ -129,7 +129,9 @@ describe('trim-flow — Re-render Selection', () => {
     )
   })
 
-  it('redirects to History panel on re-render success', async () => {
+  it('redirects to the Queue panel on re-render success', async () => {
+    // WP4 — re-render now lands on the canonical 'queue' panel (was the
+    // deprecated 'history' alias) where the new render job is watchable.
     const user = userEvent.setup()
     vi.mocked(editingApi.rerenderSelection).mockResolvedValue({
       status: 'queued', new_job_id: 'rerender_abc', parent_job_id: 'job-trim-test',
@@ -140,7 +142,7 @@ describe('trim-flow — Re-render Selection', () => {
     await user.click(screen.getByTestId('rerender-btn'))
 
     await waitFor(() => {
-      expect(mockSetActivePanel).toHaveBeenCalledWith('history')
+      expect(mockSetActivePanel).toHaveBeenCalledWith('queue')
     })
   })
 

@@ -149,6 +149,7 @@ export function EditorScreen() {
             <EditorMetadataPanel
               jobId={selectedJobId}
               partNo={selectedPartNo}
+              jobStatus={parts.find((p) => p.part_no === selectedPartNo)?.status}
               durationSec={durationSec}
               trimStartSec={trimStartSec}
               trimEndSec={trimEndSec}
