@@ -162,6 +162,11 @@ def test_run_content_end_to_end(_content_sandbox, monkeypatch):
         assert key in o, f"Sacred Contract #1 key {key!r} missing from output"
     assert o["is_best_output"] is True and o["is_best_clip"] is True
 
+    # CU-8/9: cost summary present (local provider → free).
+    assert "ai_cost" in result
+    assert result["ai_cost"]["by_provider"].get("local", 0) >= 1
+    assert result["ai_cost"]["estimated"] == 0.0
+
     # 4. ContentPlan persisted.
     raw_plan = get_content_plan(job_id)
     assert raw_plan and "scenes" in raw_plan, "content_plan_json not persisted"

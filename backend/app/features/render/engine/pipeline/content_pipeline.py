@@ -75,6 +75,7 @@ from app.features.render.engine.stages.content_scene_render import (
     synthesize_scene_narration,
 )
 from app.features.render.engine.visual import SceneVisualRequest, resolve_scene_visual
+from app.features.render.engine.visual.decision import BudgetTracker, decide_provider
 
 logger = logging.getLogger("app.render.content")
 
@@ -253,6 +254,18 @@ def run_content(
         # MED-3: word-by-word opt-in via highlight_per_word (FE defaults it on).
         _word_by_word = bool(getattr(payload, "highlight_per_word", False))
 
+        # CU-8/9: decide the cheapest-sufficient visual provider per scene UP FRONT
+        # (budget applied deterministically in scene order) so the parallel loop
+        # just executes. Uses est_duration_sec (no TTS needed). Only downgrades a
+        # paid choice — never costs more than the user's provider selection.
+        _budget = BudgetTracker(float(os.getenv("CONTENT_AI_BUDGET", "0") or 0))
+        _scene_providers: dict[int, str] = {}
+        for _si, _s in enumerate(scenes, start=1):
+            _scene_providers[_si] = decide_provider(
+                _s, visual_provider, _budget,
+                float(getattr(_s, "est_duration_sec", 0.0) or 0.0),
+            )
+
         try:
             _user_req = int(getattr(payload, "max_parallel_parts", 0) or 0)
         except Exception:
@@ -298,13 +311,15 @@ def run_content(
             if _cancel_cb():
                 raise cancel_registry.JobCancelledError()
 
-            # Per-scene override (Asset Manager) WINS via local; else job provider.
+            # Provider chosen by the CU-8 pre-pass (decision tree + budget). A
+            # per-scene override still resolves via local with the user's asset.
             _s_source = (getattr(scene, "visual_source", "") or "").strip().lower()
             _s_ken_burns = bool(getattr(scene, "ken_burns", False))
+            _prov = _scene_providers.get(i, visual_provider)
             if _s_source in ("color", "image", "video"):
-                _prov, _kind, _value = "local", _s_source, (getattr(scene, "visual_path", "") or "").strip()
+                _kind, _value = _s_source, (getattr(scene, "visual_path", "") or "").strip()
             else:
-                _prov, _kind, _value = visual_provider, bg_kind, bg_value
+                _kind, _value = bg_kind, bg_value
 
             asset = resolve_scene_visual(
                 SceneVisualRequest(
@@ -477,6 +492,15 @@ def run_content(
             "selected_segments_count": total_parts,
             "is_partial_success": bool(failed_parts),
             "ai_director": {"enabled": True, "mode": "content"},
+            # CU-8/9: which visual provider each scene used + estimated paid cost.
+            "ai_cost": {
+                "estimated": round(_budget.spent, 3),
+                "budget_cap": _budget.cap,
+                "by_provider": {
+                    _p: sum(1 for _v in _scene_providers.values() if _v == _p)
+                    for _p in sorted(set(_scene_providers.values()))
+                },
+            },
         }
         # MED-1: a partial success (some scenes failed but ≥1 delivered) reports
         # "completed_with_errors" so the UI/history flag it — matching the clips /
