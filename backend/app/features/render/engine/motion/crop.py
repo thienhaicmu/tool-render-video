@@ -3,6 +3,7 @@
 import math
 import os
 import subprocess
+import threading
 import time
 import logging
 from pathlib import Path
@@ -132,6 +133,24 @@ from app.features.render.engine.encoder.encoder_helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _drain_pipe(pipe, chunks: list) -> None:
+    """Read a subprocess pipe to EOF into ``chunks`` (runs in a daemon thread).
+
+    The motion-crop encode writes rawvideo frames to ffmpeg's stdin in a tight
+    loop while ffmpeg writes to stderr. With ``stderr=PIPE`` and nobody draining
+    it, a full ~64 KB stderr buffer blocks ffmpeg, which then stops reading its
+    stdin, which blocks our ``stdin.write()`` — a mutual deadlock that froze the
+    encode indefinitely with the ffmpeg error trapped, unread, in the pipe (zero
+    diagnostics). This drainer keeps stderr flowing (no deadlock) AND captures
+    it so the failure/warnings are actually logged. Never raises."""
+    try:
+        for chunk in iter(lambda: pipe.read(65536), b""):
+            if chunk:
+                chunks.append(chunk)
+    except Exception:
+        pass
 
 # Wall-clock ceiling for the motion-crop ffmpeg subprocess. Mirrors
 # encoder/ffmpeg_helpers._FFMPEG_TIMEOUT_SEC (same env). Without it, the
@@ -855,9 +874,18 @@ def render_motion_aware_crop(
         if _fuse_window_mode and _window_start_frame > 0:
             cap.set(cv2.CAP_PROP_POS_FRAMES, float(_window_start_frame))
         proc = None
+        _err_chunks: list = []
+        _err_thread = None
         try:
             proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Drain stderr concurrently — breaks the stdin-write / stderr-full
+            # deadlock (see _drain_pipe) and captures ffmpeg output for logs.
+            _err_thread = threading.Thread(target=_drain_pipe, args=(proc.stderr, _err_chunks), daemon=True)
+            _err_thread.start()
+            logger.info("motion_crop_encode.start pid=%s argv=%s", proc.pid, " ".join(str(a) for a in ffmpeg_cmd))
             frame_idx = 0
+            _hb_start = time.monotonic()
+            _last_hb = _hb_start
             while True:
                 # T2.2 — cancel poll for the motion-aware encode loop.
                 # On raise the FFmpeg subprocess will be reaped by the
@@ -897,6 +925,12 @@ def render_motion_aware_crop(
                     raise RuntimeError("ffmpeg stdin closed unexpectedly")
                 proc.stdin.write(final_frame.tobytes())
                 frame_idx += 1
+                # Heartbeat every ~10s so a freeze is never fully silent and is
+                # attributable (last frame count → OpenCV-read vs ffmpeg-write).
+                _now = time.monotonic()
+                if _now - _last_hb >= 10.0:
+                    logger.info("motion_crop_encode.progress frames=%d elapsed=%.0fs", frame_idx, _now - _hb_start)
+                    _last_hb = _now
 
             if proc.stdin:
                 proc.stdin.close()
@@ -904,35 +938,28 @@ def render_motion_aware_crop(
             # the NVENC permit). TimeoutExpired is reaped by the catch-all
             # except below, which kills proc and retries/raises.
             rc = proc.wait(timeout=_FFMPEG_TIMEOUT_SEC)
+            if _err_thread is not None:
+                _err_thread.join(timeout=5)
+            err_tail = b"".join(_err_chunks).decode(errors="ignore")[-2000:].strip()
             if rc != 0:
-                err_tail = ""
-                try:
-                    if proc.stderr is not None:
-                        raw = proc.stderr.read() or b""
-                        err_tail = raw.decode(errors="ignore")[-2000:].strip()
-                except Exception:
-                    err_tail = ""
                 diag = _summarize_ffmpeg_stderr(err_tail)
                 raise RuntimeError(
                     f"FFmpeg render failed: {diag} (exit={rc})"
                     + (f"\n{err_tail}" if err_tail else "")
                 )
+            logger.info("motion_crop_encode.done frames=%d exit=0", frame_idx)
             cap.release()
             break
         except BrokenPipeError:
             cap.release()
-            err_tail = ""
-            try:
-                if proc and proc.stderr is not None:
-                    raw = proc.stderr.read() or b""
-                    err_tail = raw.decode(errors="ignore")[-2000:].strip()
-            except Exception:
-                err_tail = ""
             try:
                 if proc and proc.poll() is None:
                     proc.kill()
             except Exception:
                 pass
+            if _err_thread is not None:
+                _err_thread.join(timeout=5)
+            err_tail = b"".join(_err_chunks).decode(errors="ignore")[-2000:].strip()
             if attempt > retry_count:
                 diag = _summarize_ffmpeg_stderr(err_tail)
                 raise RuntimeError(
