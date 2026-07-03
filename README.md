@@ -110,6 +110,34 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Open `http://127.0.0.1:8000` (React v2 UI, requires `STATIC_UI_VERSION=v2` in .env).
 
+### Cloning to a new machine — what git does NOT carry
+
+Git tracks **source only**. The items below are gitignored and must be recreated
+per machine — that is why a fresh clone can look "broken" (CPU/GPU dots off, AI
+disabled, render failing) even though the code is identical:
+
+| Not in git | Restore with | Symptom if missing |
+|---|---|---|
+| `backend/.venv/`, `**/node_modules/` | `pip install -r requirements.txt` (+ `-r requirements-ai.txt`); `npm install` in `frontend/` | Backend / UI won't start |
+| `.env` (API keys) | `copy .env.example .env`, then fill `GEMINI_API_KEY` etc. | AI Director / Gemini TTS off — keys **never** sync via git (by design) |
+| FFmpeg + FFprobe | `winget install -e --id Gyan.FFmpeg` (or set `FFMPEG_BIN`) | Render, thumbnails, GPU probe fail |
+| `data/` (app.db, caches, whisper models, cookies) | Auto-created on first run; Whisper auto-downloads | Empty job history — **history does not sync** |
+| `models/`, media (`*.mp4`, `*.wav`, …) | Added / downloaded per machine | Local XTTS models absent |
+
+**CPU / RAM / GPU status dots** (`/api/system/resources`): CPU/RAM/disk need
+`psutil` and GPU needs `nvidia-ml-py` (module `pynvml`). Both are now declared in
+`requirements.txt` — previously `psutil` arrived only transitively via the AI
+extras (`trainer`), so a **base-only** install showed CPU/RAM off. After a plain
+`pip install -r requirements.txt` the CPU/RAM/disk dots work everywhere.
+**GPU stats additionally need the NVIDIA management layer** — `nvml.dll` (full
+driver) *or* `nvidia-smi` on PATH (the endpoint tries pynvml, then falls back to
+`nvidia-smi`). A host with only the NVENC *encode* runtime but no
+`nvml.dll`/`nvidia-smi`, or an AMD/Intel GPU, shows the GPU dot off — a driver
+detail, not a code/git issue.
+
+> After pulling changes that touch dependencies, re-run
+> `pip install -r requirements.txt` **and** `npm install` before starting.
+
 ### PowerShell shortcuts
 
 ```powershell

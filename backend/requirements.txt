@@ -16,6 +16,15 @@ edge-tts==7.2.8
 deep-translator==1.11.4
 prometheus-client>=0.19,<1.0
 
+# System status bar (Clip Studio) — CPU/RAM + GPU dots via /api/system/resources.
+# Declared here so a BASE install powers the monitor. Previously psutil arrived
+# only transitively (via requirements-ai's `trainer`), so CPU/RAM went dark on a
+# base-only machine, and GPU stats never worked at all (pynvml was undeclared).
+# nvidia-ml-py provides the `pynvml` module and returns null on non-NVIDIA / no-
+# driver hosts — the endpoint degrades to null, never crashes.
+psutil>=5.9,<7
+nvidia-ml-py>=12.535
+
 # Optional local AI dependencies (do NOT install automatically):
 # sentence-transformers
 # faiss-cpu

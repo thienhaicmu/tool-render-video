@@ -77,20 +77,64 @@ def _measure_cpu_ram() -> dict:
     return out
 
 
+def _measure_gpu_smi() -> dict:
+    """Fallback NVIDIA GPU read via the ``nvidia-smi`` CLI.
+
+    pynvml needs the driver's ``nvml.dll`` on the DLL search path, which is
+    absent on some machines that still have the NVENC/CUDA *runtime* (encode
+    works, but ``nvmlInit`` raises ``NVMLError_LibraryNotFound``). ``nvidia-smi``
+    ships with every full driver install and is more reliable cross-machine.
+    Best-effort — returns {} on any failure. Reads GPU 0 only."""
+    import os
+    import shutil
+    import subprocess
+    exe = shutil.which("nvidia-smi")
+    if exe is None:
+        _win = r"C:\Windows\System32\nvidia-smi.exe"
+        exe = _win if os.path.isfile(_win) else None
+    if exe is None:
+        return {}
+    try:
+        proc = subprocess.run(
+            [exe, "--query-gpu=name,utilization.gpu,memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        line = (proc.stdout or "").strip().splitlines()
+        if not line:
+            return {}
+        name, util, used, total = (x.strip() for x in line[0].split(",")[:4])
+        out: dict = {"gpu_name": name or None}
+        try:
+            out["gpu_percent"] = float(util)
+        except Exception:
+            pass
+        try:
+            out["gpu_mem_used_mb"] = int(float(used))
+            out["gpu_mem_total_mb"] = int(float(total))
+        except Exception:
+            pass
+        return out
+    except Exception:
+        return {}
+
+
 def _measure_gpu() -> dict:
-    """Best-effort NVIDIA GPU read via pynvml. Reads GPU 0 only — the
+    """Best-effort NVIDIA GPU read. Tries pynvml (nvml.dll) first, then falls
+    back to the nvidia-smi CLI when the NVML shared library isn't found (some
+    hosts have the NVENC runtime but not nvml.dll). Reads GPU 0 only — the
     NVENC semaphore in encoder/ffmpeg_helpers.py is single-GPU as well
     so a multi-GPU host with the renderer pinned to one card is the
     expected steady state."""
     try:
         import pynvml  # type: ignore
     except Exception:
-        return {}
+        return _measure_gpu_smi()
     out: dict = {}
     try:
         pynvml.nvmlInit()
     except Exception:
-        return {}
+        return _measure_gpu_smi()
     try:
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
         try:
