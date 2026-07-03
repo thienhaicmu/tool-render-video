@@ -263,14 +263,12 @@ def test_b7b_all_three_providers_accept_story_model():
         )
 
 
-def test_b8_audit_document_exists():
-    audit = _PROJECT_ROOT.parent / "docs" / "audit-c-1-2026-06-30.md"
-    assert audit.exists(), "C1.3 B8: audit doc missing"
-    content = audit.read_text(encoding="utf-8")
-    # Spot-check the three section anchors Phase 2/3 implementers cite.
-    assert "## 2." in content
-    assert "Phase 2" in content
-    assert "Phase 3" in content
+# test_b8_audit_document_exists removed 2026-07-03: the audit doc it guarded
+# (docs/audit-c-1-2026-06-30.md) was DELETED intentionally in commit 129c56a9
+# ("docs: drop finished phase/plan/audit docs; refresh reference set") — the
+# dated audit docs are recoverable from git history per the CLAUDE.md audit
+# ledger. The guard was stale (a persistently-failing pin for a deliberately
+# removed file), so it is retired rather than resurrecting obsolete audit text.
 
 
 # ---------------------------------------------------------------------------

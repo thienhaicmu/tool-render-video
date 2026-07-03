@@ -98,7 +98,7 @@ def _measure_gpu_smi() -> dict:
         proc = subprocess.run(
             [exe, "--query-gpu=name,utilization.gpu,memory.used,memory.total",
              "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, encoding="utf-8", timeout=5,
         )
         line = (proc.stdout or "").strip().splitlines()
         if not line:
