@@ -73,6 +73,50 @@ nguồn nền và gắn audio TTS thật thay cho silence.
 
 ---
 
+## 2b. Visual Generator — Provider Layer (bổ sung 2026-07-03)
+
+> Nguyên tắc kiến trúc bắt buộc từ spec bổ sung: **tách AI Director (Gemini
+> lập kế hoạch) khỏi Visual Generator (tạo asset)**. "Render Engine chỉ nhận
+> Asset, không quan tâm asset được tạo bằng cách nào." Nhờ đó sau này đổi/thêm
+> nhà cung cấp visual (AI Image / AI Video / Stock) mà **không refactor**
+> Content Mode.
+
+**Seam:** một interface provider duy nhất mà `run_content` gọi cho mỗi scene:
+
+```
+resolve_scene_visual(request: SceneVisualRequest) -> SceneVisualAsset | None
+    SceneVisualRequest:  scene_index, prompt/visual_hint, kind, value,
+                         width, height, fps, duration_sec, work_dir
+    SceneVisualAsset:    kind ("clip" | "image" | "video" | "color"),
+                         path (asset đã sẵn sàng) hoặc color spec
+```
+
+- Provider chọn theo config `content_visual_provider` (mặc định `"local"`).
+- **v1 ships provider `local`** = nền do user chọn (color/image/video) —
+  chính là `stages/content_background.py` đã viết ở Phase 2. Offline 100%,
+  không mạng, không API. Đây KHÔNG phải "tạm bỏ visual" — nó là provider hợp
+  lệ đầu tiên của lớp seam.
+- **Phase sau (không refactor):** thêm provider `ai_image` / `stock` /
+  `ai_video` — mỗi cái đọc `scene.visual_hint` (prompt Gemini đã lập) → gọi
+  API tương ứng → trả asset path. Các provider mạng/AI này nằm ngoài
+  offline-first mặc định (opt-in, cần user bật + cấp key — cùng chính sách
+  như TTS Gemini).
+
+**Ràng buộc:** `content_scene_render.render_content_scene` **chỉ nhận asset đã
+resolve** (kind + value/path), KHÔNG tự biết provider nào tạo ra. Hôm nay nó
+nhận `(kind, value)` từ payload (provider local); mai nhận `path` ảnh AI từ
+provider ai_image — cùng một chữ ký, không đổi. Đây là điểm mở rộng đã có sẵn
+trong thiết kế Phase 2 (background_kind/background_value là tham số).
+
+**Tác động file (bổ sung vào §3):**
+- MỚI: `engine/visual/__init__.py` + `engine/visual/provider_local.py`
+  (dispatcher `resolve_scene_visual` + provider local wrap content_background).
+  Tier LOW (code mới, không đụng path cũ). Đây là lớp seam.
+- `run_content` gọi `resolve_scene_visual` cho mỗi scene thay vì gọi thẳng
+  `build_background_clip` — giữ Render Engine "chỉ nhận asset".
+
+---
+
 ## 3. Danh sách file — thêm mới & sửa (kèm risk tier)
 
 ### 3.1 File THÊM MỚI (đa số LOW — code mới, không đụng path cũ)
