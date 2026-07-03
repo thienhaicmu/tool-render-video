@@ -333,13 +333,14 @@ function PresetRow({ cfg, setCfgKey }: {
 }
 
 function StepConfigureBase({
-  cfg, cfgTab, setCfgTab, setCfgKey, applyPreset,
+  cfg, cfgTab, setCfgTab, setCfgKey, setRenderMode, applyPreset,
   sources, prepareResult, pickOutputDir, onChangeSource, t,
 }: {
   cfg: ConfigState
   cfgTab: CfgTab
   setCfgTab: (tab: CfgTab) => void
   setCfgKey: <K extends keyof ConfigState>(k: K, v: ConfigState[K]) => void
+  setRenderMode: (mode: ConfigState['renderFormat']) => void
   applyPreset: (id: string) => void
   sources: Source[]
   prepareResult: PrepareSourceResponse | null
@@ -452,12 +453,11 @@ function StepConfigureBase({
                 key={v}
                 className={`seg-b${cfg.renderFormat === v ? ' on' : ''}`}
                 style={{ flex: 1, textAlign: 'center', padding: '8px 6px' }}
-                // Pure mode toggle (2026-07): clicking a segment sets exactly
-                // that mode — no modal, no silent override of the user's own
-                // ratio/narration choices. Whatever mode the user picks is the
-                // mode that renders. Recap-friendly settings (16:9, narration)
-                // are left to the user's explicit choice in the panels below.
-                onClick={() => setCfgKey('renderFormat', v)}
+                // Mode drives defaults (2026-07-03): picking a mode applies
+                // that mode's baseline (clips → 9:16; recap → 16:9 + narration)
+                // deterministically — not restored user behaviour. No modal;
+                // explicit tweaks after still win until the mode switches again.
+                onClick={() => setRenderMode(v)}
               >
                 <div style={{ fontWeight: 600 }}>{label}</div>
                 <div style={{ fontSize: '9px', color: cfg.renderFormat === v ? 'rgba(255,255,255,.6)' : 'var(--text-3)', marginTop: '2px', fontFamily: 'var(--fb)', fontWeight: 400, lineHeight: 1.3 }}>{desc}</div>
@@ -948,9 +948,10 @@ function StepConfigureBase({
               </div>
             )}
 
-            {/* Detailed narration config (voice / gender / mix / source) lives in
-                Advanced; Quick surfaces only the on/off toggle above. */}
-            {adv && (<>
+            {/* Essentials (voice language + source) show whenever narration is
+                ON — they decide WHAT/how the voice reads. Only the tuning
+                (gender / mix mode) stays behind Advanced. */}
+            {cfg.narrEnabled && (<>
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>{t.cfgVoiceLang}</span>
@@ -969,6 +970,7 @@ function StepConfigureBase({
               </div>
             </div>
 
+            {adv && (<>
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>{t.cfgVoiceGender}</span>
@@ -998,6 +1000,7 @@ function StepConfigureBase({
               </div>
             </div>
 
+            </>)}
             {cfg.renderFormat === 'recap' ? (
             <div className="cfg-section">
               <div className="cfg-sec-hd">

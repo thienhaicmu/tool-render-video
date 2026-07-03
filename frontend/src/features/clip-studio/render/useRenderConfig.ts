@@ -15,7 +15,18 @@ export interface RenderConfigApi {
   cfg: ConfigState
   setCfg: Dispatch<SetStateAction<ConfigState>>
   setCfgKey: <K extends keyof ConfigState>(k: K, v: ConfigState[K]) => void
+  setRenderMode: (mode: ConfigState['renderFormat']) => void
   applyPreset: (id: string) => void
+}
+
+// Mode-appropriate baseline. Picking a mode applies these deterministically
+// (per-mode defaults, NOT restored user behaviour). Explicit tweaks after the
+// switch still win until the mode is switched again.
+const MODE_DEFAULTS: Record<ConfigState['renderFormat'], Partial<ConfigState>> = {
+  // Short vertical clips.
+  clips: { ratio: 'r916' },
+  // Long-form act-structured recap: landscape by default, narration-driven.
+  recap: { ratio: 'r169', narrEnabled: true },
 }
 
 export function useRenderConfig(): RenderConfigApi {
@@ -49,7 +60,15 @@ export function useRenderConfig(): RenderConfigApi {
       const raw = localStorage.getItem(CFG_DRAFT_KEY)
       if (raw) {
         hadDraftRef.current = true
-        return { ...cfgDefaults, ...(JSON.parse(raw) as Partial<ConfigState>) }
+        const draft = JSON.parse(raw) as Partial<ConfigState>
+        // Mode is NOT restored from prior behaviour — each session starts at
+        // the default mode with that mode's baseline (per requirement: default
+        // per mode, not per user behaviour). Everything else still persists.
+        return {
+          ...cfgDefaults, ...draft,
+          renderFormat: cfgDefaults.renderFormat,
+          ...MODE_DEFAULTS[cfgDefaults.renderFormat],
+        }
       }
     } catch { /* corrupt draft — fall back to defaults */ }
     return cfgDefaults
@@ -130,6 +149,10 @@ export function useRenderConfig(): RenderConfigApi {
     if (!p) return
     setCfg((prev) => ({ ...prev, platform: p.platform, ratio: 'r916' }))
   }
+  // Switching mode applies that mode's baseline defaults (deterministic).
+  function setRenderMode(mode: ConfigState['renderFormat']) {
+    setCfg((prev) => ({ ...prev, renderFormat: mode, ...MODE_DEFAULTS[mode] }))
+  }
 
-  return { cfg, setCfg, setCfgKey, applyPreset }
+  return { cfg, setCfg, setCfgKey, setRenderMode, applyPreset }
 }

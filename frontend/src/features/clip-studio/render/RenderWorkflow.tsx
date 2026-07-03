@@ -57,7 +57,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   // Config state (defaults + localStorage draft + one-shot server-defaults
   // hydration + setCfgKey/applyPreset) lives in useRenderConfig — slice 2 of
   // the RenderWorkflow decomposition.
-  const { cfg, setCfg, setCfgKey, applyPreset } = useRenderConfig()
+  const { cfg, setCfg, setCfgKey, setRenderMode, applyPreset } = useRenderConfig()
 
   const [jobId, setJobId]               = useState<string | null>(null)
   const [submitError, setSubmitError]   = useState<string | null>(null)
@@ -639,7 +639,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
             <ErrorBoundary>
               <StepConfigure
                 cfg={cfg} cfgTab={cfgTab} setCfgTab={setCfgTab}
-                setCfgKey={setCfgKey} applyPreset={applyPreset}
+                setCfgKey={setCfgKey} setRenderMode={setRenderMode} applyPreset={applyPreset}
                 sources={sources} prepareResult={prepareResult}
                 pickOutputDir={pickOutputDir} onChangeSource={handleChangeSource} t={t}
               />
