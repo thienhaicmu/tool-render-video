@@ -45,6 +45,7 @@ vi.mock('../src/api/system', () => ({
 }))
 
 import { ClipStudio } from '../src/features/clip-studio/ClipStudio'
+import { Topbar } from '../src/layouts/Topbar'
 import { useUIStore } from '../src/stores/uiStore'
 
 beforeEach(() => {
@@ -63,7 +64,10 @@ afterEach(() => {
 describe('Pha 1.2 — language unification', () => {
   it('EN/VI toggle drives uiStore.lang and flips a translated surface', async () => {
     const user = userEvent.setup()
-    render(<ClipStudio />)
+    // The EN/VI toggle lives in the shared AppShell Topbar (P1.2), the
+    // translated surface in ClipStudio; both read the single uiStore.lang, so
+    // render them together.
+    render(<><Topbar /><ClipStudio /></>)
 
     // Default English: Step-1 eyebrow reads the EN copy.
     expect(screen.getByText(/AI ready to clip/i)).toBeInTheDocument()

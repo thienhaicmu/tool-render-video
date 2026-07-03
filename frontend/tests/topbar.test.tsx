@@ -23,12 +23,20 @@ vi.mock('../src/api/client', async (importOriginal) => {
 })
 
 import { Topbar } from '../src/layouts/Topbar'
+import { useHealthStore } from '../src/hooks/useBackendHealth'
 
+// AI text lives in a span alongside a status-dot element, so the text node is
+// split ("AI " + "Ready"). Match on the element's whole textContent.
+const wholeText = (want: string) => (_: string, el: Element | null) =>
+  el?.textContent === want
 
 beforeEach(() => {
   apiFetchMock.mockReset()
   // Default both endpoints to a polite "no backend"
   apiFetchMock.mockRejectedValue(new Error('no backend in tests'))
+  // The health store is a shared singleton — reset it so warmup state from a
+  // prior test (whisperReady latches true) doesn't leak into the next.
+  useHealthStore.setState({ apiOk: null, whisperReady: null, warmupStatus: null, _refcount: 0, _intervalId: null })
 })
 
 afterEach(() => {
@@ -72,25 +80,27 @@ describe('Topbar — backend connection dot', () => {
 describe('Topbar — AI warmup badge', () => {
   it('shows "AI Ready" when warmup status reports loaded=true', async () => {
     apiFetchMock.mockImplementation((path: string) => {
+      if (path === '/health') return Promise.resolve({ status: 'ok' })
       if (path === '/api/warmup/status')
         return Promise.resolve({ loaded: true, status: 'ready' })
       return Promise.reject(new Error('not configured'))
     })
     render(<Topbar />)
     await waitFor(() => {
-      expect(screen.getByText('AI Ready')).toBeTruthy()
+      expect(screen.getByText(wholeText('AI Ready'))).toBeTruthy()
     })
   })
 
   it('shows "AI Loading" when warmup is still in progress', async () => {
     apiFetchMock.mockImplementation((path: string) => {
+      if (path === '/health') return Promise.resolve({ status: 'ok' })
       if (path === '/api/warmup/status')
         return Promise.resolve({ loaded: false, ready: false, status: 'loading' })
       return Promise.reject(new Error('not configured'))
     })
     render(<Topbar />)
     await waitFor(() => {
-      expect(screen.getByText('AI Loading')).toBeTruthy()
+      expect(screen.getByText(wholeText('AI Loading'))).toBeTruthy()
     })
   })
 

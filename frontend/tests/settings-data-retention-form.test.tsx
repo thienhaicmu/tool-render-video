@@ -57,6 +57,7 @@ vi.mock('../src/api/client', async () => {
 
 import { SettingsScreen } from '../src/features/settings/SettingsScreen'
 import * as DR from '../src/api/dataRetention'
+import { useUIStore } from '../src/stores/uiStore'
 
 const mockedGet = DR.getDataRetention as unknown as ReturnType<typeof vi.fn>
 const mockedPut = DR.putDataRetention as unknown as ReturnType<typeof vi.fn>
@@ -66,6 +67,8 @@ describe('SettingsScreen — Data Retention form', () => {
   beforeEach(() => {
     mockedGet.mockReset()
     mockedPut.mockReset()
+    // These assertions pin the Vietnamese labels; default lang is 'en'.
+    useUIStore.setState({ lang: 'vi' })
   })
 
   it('hydrates from getDataRetention on mount', async () => {

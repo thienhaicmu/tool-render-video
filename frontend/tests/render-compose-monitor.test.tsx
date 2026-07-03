@@ -68,14 +68,17 @@ beforeEach(() => {
 })
 
 describe('Pha 4 — compose is not hijacked by a running job', () => {
-  it('stays on the SOURCE step even when a render is running', async () => {
+  it('stays on the Create screen even when a render is running (no auto-hijack)', async () => {
+    // A running job is seeded via the getJobHistory mock + jobsStore poll.
+    // Post-redesign the broad auto-reattach is gone: RenderWorkflow must NOT
+    // jump to the Monitor just because a render is active — it stays on the
+    // Create hero (drop zone). (ActiveJobBadge moved to the AppShell Topbar,
+    // which ClipStudio doesn't render, so we assert on the Create hero
+    // instead of the badge.)
     const { container } = render(<ClipStudio />)
 
-    // Wait until the running job is known (the ActiveJobBadge surfaces it).
-    await screen.findByText(/Rendering ·/)
-
-    // The wizard must still be on the SOURCE step — not auto-jumped to Monitor.
-    const activeStep = container.querySelector('.rw-step.active')
-    expect(activeStep?.textContent).toContain('SOURCE')
+    // Create hero (drop zone) is shown — not the monitor.
+    await screen.findByText(/AI ready to clip/i)
+    expect(container.querySelector('.rnd-screen')).toBeNull()
   })
 })
