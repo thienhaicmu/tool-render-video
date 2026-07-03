@@ -235,12 +235,24 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
         # A cancel requested while the job was still queued pre-sets the event.
         if ev.is_set():
             raise cancel_registry.JobCancelledError()
-        # render_format="recap" routes to a FULLY SEPARATE orchestrator so the
-        # clips path (run_render_pipeline) is never touched. Both share this
-        # wrapper's cancel / failure / metrics / close_thread_conn housekeeping.
-        if str(getattr(payload, "render_format", "clips") or "clips").strip().lower() == "recap":
+        # render_format="recap"/"content" each route to a FULLY SEPARATE
+        # orchestrator so the clips path (run_render_pipeline) is never touched.
+        # All three share this wrapper's cancel / failure / metrics /
+        # close_thread_conn housekeeping (identical run_* signatures).
+        _rf = str(getattr(payload, "render_format", "clips") or "clips").strip().lower()
+        if _rf == "recap":
             from app.features.render.engine.pipeline.recap_pipeline import run_recap
             run_recap(
+                job_id=job_id,
+                payload=payload,
+                resume_mode=resume_mode,
+                load_session_fn=_load_session,
+                cleanup_session_fn=_cleanup_preview_session,
+            )
+        elif _rf == "content":
+            # Content Mode: Script → AI narration → Video (no source footage).
+            from app.features.render.engine.pipeline.content_pipeline import run_content
+            run_content(
                 job_id=job_id,
                 payload=payload,
                 resume_mode=resume_mode,

@@ -109,8 +109,17 @@ def test_render_request_field_count_unchanged():
     # 2026-06-30 C.1 Phase 1: +1 (use_story_intelligence, default False) → 157.
     # Sacred Contract #2 verified: use_story_intelligence defaults to False
     # (Clip path runs without Comprehension stage — bit-identical to pre-C.1).
-    assert field_count == 157, (
-        f"RenderRequest now has {field_count} fields (expected 157 post-C.1-Phase-1). "
+    # 2026-07-03 Content Mode: +5 content fields → 162. All BE-only, all inert
+    # by default (content_script="", content_background_kind="color",
+    # content_background_value="#000000", content_bgm_path="",
+    # content_visual_provider="local"). Sacred Contract #2 verified: a stored
+    # clips/recap payload replays with NO content behaviour (content_script=""
+    # is the off-switch; Content Mode only activates on render_format=="content").
+    # 2026-07-03 CS-A: +1 (content_plan_override, default "") → 163. Sacred
+    # Contract #2 verified: "" = AI planning path unchanged; only Content
+    # Studio's Review→Approve flow sets it to render from an edited plan.
+    assert field_count == 163, (
+        f"RenderRequest now has {field_count} fields (expected 163 post-CS-A). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import uuid
 
-from app.db.connection import init_db
+from app.db.connection import close_thread_conn, init_db
 from app.db.jobs_repo import list_job_parts, upsert_job, upsert_job_part
 from app.features.render.engine.pipeline.recap_pipeline import (
     _recap_subtitle_map,
@@ -41,6 +41,12 @@ from app.features.render.engine.stages.part_voice_mix import _filter_voiced_segm
 
 def _make_recap_job_with_parts(n_parts: int) -> str:
     job_id = f"test-repoint-{uuid.uuid4().hex[:12]}"
+    # Test isolation: a prior test that monkeypatched DATABASE_PATH to a temp DB
+    # can leave this thread's cached _thread_conn (used by upsert_job_part)
+    # pointing at that stale DB, while list_job_parts (db_conn) reads the real
+    # one — the two then disagree and the assertions flake in a full run. Drop
+    # the thread-local connection so both target the CURRENT DATABASE_PATH.
+    close_thread_conn()
     init_db()
     upsert_job(job_id, "render", "testch", "running", {}, {})
     for i in range(1, n_parts + 1):

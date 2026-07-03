@@ -8,6 +8,7 @@ export type ActivePanel =
   // Canonical navigation
   | 'home'
   | 'clip-studio'
+  | 'content-studio'
   | 'queue'
   | 'library'
   | 'publish'

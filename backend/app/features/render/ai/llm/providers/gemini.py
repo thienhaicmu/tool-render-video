@@ -27,6 +27,15 @@ from app.features.render.ai.llm.recap_parser import (
     parse_recap_response, parse_story_model_response, parse_editorial_response,
     parse_episode_narration_response,
 )
+from app.features.render.ai.llm.content_prompts import (
+    build_content_plan_prompt, build_story_bible_prompt, build_publish_meta_prompt,
+)
+from app.features.render.ai.llm.content_parser import (
+    parse_content_plan_response, parse_story_bible_response, parse_publish_meta_response,
+)
+from app.features.render.ai.llm.content_quality import (
+    validate_and_repair, inject_character_fragments,
+)
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.gemini_client")
@@ -545,6 +554,160 @@ def select_recap_plan(
         return plan
     except Exception as exc:
         logger.warning("gemini_client: select_recap_plan unexpected error %s", exc, exc_info=True)
+        return None
+
+
+# ── Content Mode (render_format="content"): AI Content Director ───────────────
+# A content plan is article-sized (a handful of scenes with short narration),
+# so the token budget is modest. Temperature is a touch higher than segment
+# selection (0.2) because narration authoring is a mildly creative task, but
+# lower than the rewrite path (0.85) since the JSON structure must stay strict.
+# Review LOW-2: a rich ContentPlan (many scenes × ~16 fields incl. narration +
+# visual_prompt) can exceed 8192 tokens → the JSON is truncated and the parser
+# salvages only the complete prefix (dropping tail scenes). 16384 gives the plan
+# real headroom; thinking budget (below) stays well under it so output is never
+# starved. Override via GEMINI_CONTENT_MAX_TOKENS.
+_CONTENT_MAX_TOKENS = int(os.getenv("GEMINI_CONTENT_MAX_TOKENS", "16384"))
+_CONTENT_TEMPERATURE = float(os.getenv("GEMINI_CONTENT_TEMPERATURE", "0.5"))
+_CONTENT_THINKING_BUDGET = int(os.getenv("GEMINI_CONTENT_THINKING_BUDGET", "1024"))
+# CU-4: two-pass Content Director. Pass A commits a Story Bible (characters +
+# through-line); Pass B writes the plan GROUNDED in it → consistent narration +
+# visuals. Default on. CONTENT_MULTIPASS=0 → legacy single call.
+_CONTENT_MULTIPASS = os.getenv("CONTENT_MULTIPASS", "1") == "1"
+
+
+def _call_gemini_content_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _genai.Client(api_key=api_key, http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000})
+    resp = client.models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "response_mime_type": "application/json",
+            "temperature": _CONTENT_TEMPERATURE,
+            "max_output_tokens": _CONTENT_MAX_TOKENS,
+            "thinking_config": {"thinking_budget": _CONTENT_THINKING_BUDGET},
+        },
+    )
+    return resp.text
+
+
+def _call_gemini_content(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Content-plan call with cache + key rotation. Cache namespaced 'gemini-content'."""
+    cached = llm_cache_get("gemini-content", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("gemini_client: content cache HIT model=%s", model)
+        return cached
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_content_once(_k, model, system_prompt, user_prompt),
+        label="gemini-content", seed_key=api_key,
+    )
+    if result is not None:
+        llm_cache_put("gemini-content", model, system_prompt, user_prompt, result)
+    return result
+
+
+def select_content_plan(
+    script: str,
+    target_duration_sec: float = 90.0,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["ContentPlan"]:
+    """Content Mode director — turn a raw script into a ContentPlan (scenes +
+    narration + emotion/speed/pause + subtitle-style suggestion). Returns a
+    ContentPlan or None (Sacred Contract #3 — never raises)."""
+    try:
+        if not _GENAI_SDK:
+            logger.warning("gemini_client: google-genai SDK not installed (content path)")
+            return None
+        if not api_key:
+            logger.warning("gemini_client: no api_key supplied (content path)")
+            return None
+        if not script or not script.strip():
+            logger.warning("gemini_client: empty script (content path)")
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+
+        # ── CU-4 Pass A — Story Bible (best-effort; failure → single-pass) ────
+        bible = None
+        meta: dict = {}
+        if _CONTENT_MULTIPASS:
+            try:
+                _bsys, _buser = build_story_bible_prompt(script, target_language, tone)
+                _braw = _call_gemini_content(api_key, resolved_model, _bsys, _buser)
+                _parsed = parse_story_bible_response(_braw) if _braw else None
+                if _parsed is not None:
+                    bible, meta = _parsed
+                    logger.info(
+                        "gemini_client: content pass-A bible OK characters=%d",
+                        len(bible.characters),
+                    )
+            except Exception as _be:
+                logger.info("gemini_client: content pass-A bible failed (%s) — single-pass", _be)
+                bible = None
+
+        # ── Pass B — the plan, GROUNDED in the Bible when available ──────────
+        system_prompt, user_prompt = build_content_plan_prompt(
+            script, target_duration_sec, target_language, tone, bible=bible,
+        )
+        logger.info(
+            "gemini_client: calling content model=%s target_dur=%.0fs lang=%s in_chars=%d grounded=%s",
+            resolved_model, float(target_duration_sec or 0.0), target_language, len(script),
+            bible is not None,
+        )
+        raw = _call_gemini_content(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            logger.warning("gemini_client: empty content response (model=%s)", resolved_model)
+            return None
+        plan = parse_content_plan_response(raw, target_duration_sec)
+        if plan is None:
+            return None
+
+        # Assemble: stamp the Bible + pass-A metadata, then deterministic CU-5/CU-6.
+        if bible is not None and plan.story_bible.is_empty():
+            plan.story_bible = bible
+        for _k in ("topic", "tone", "audience", "video_style"):
+            if meta.get(_k) and not (getattr(plan, _k, "") or "").strip():
+                setattr(plan, _k, meta[_k])
+        plan = validate_and_repair(plan, plan.story_bible)       # CU-5
+        plan = inject_character_fragments(plan, plan.story_bible)  # CU-6
+        logger.info(
+            "gemini_client: content OK model=%s scenes=%d total=%.0fs topic=%r chars=%d",
+            resolved_model, plan.scene_count(), plan.total_target_sec, plan.topic,
+            len(plan.story_bible.characters),
+        )
+        return plan
+    except Exception as exc:
+        logger.warning("gemini_client: select_content_plan unexpected error %s", exc, exc_info=True)
+        return None
+
+
+def generate_publish_meta(
+    topic: str = "",
+    tone: str = "",
+    audience: str = "",
+    target_language: str = "vi-VN",
+    narration_sample: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional[dict]:
+    """CU-14 — SEO publish metadata (title/description/tags/thumbnail) from a
+    finished plan. Returns a dict or None (Sacred Contract #3 — never raises)."""
+    try:
+        if not _GENAI_SDK or not api_key:
+            return None
+        if not (topic or narration_sample).strip():
+            return None
+        rm = model or _DEFAULT_MODEL
+        sys_p, user_p = build_publish_meta_prompt(topic, tone, audience, target_language, narration_sample)
+        raw = _call_gemini_content(api_key, rm, sys_p, user_p)
+        if not raw:
+            return None
+        return parse_publish_meta_response(raw)
+    except Exception as exc:
+        logger.warning("gemini_client: generate_publish_meta error %s", exc)
         return None
 
 

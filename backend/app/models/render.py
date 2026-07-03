@@ -26,7 +26,9 @@ _security_logger = logging.getLogger("app.api.security")
 # default "clips" so every stored historical payload deserialises into the
 # legacy clips path bit-identically. The runtime normaliser
 # (_validate_render_format below) tolerates legacy casing/whitespace.
-RenderFormat = Literal["clips", "recap"]
+# "content" (2026-07-03) = Content Mode: Script → AI narration → Video (no
+# source footage). Additive third value — clips/recap paths untouched.
+RenderFormat = Literal["clips", "recap", "content"]
 
 
 class PrepareSourceRequest(BaseModel):
@@ -359,6 +361,26 @@ class RenderRequest(BaseModel):
     # so the OpenAPI schema lists the closed set explicitly; the validator
     # below still normalises legacy casing/whitespace ("RECAP" → "recap").
     render_format: RenderFormat = "clips"
+
+    # ── Content Mode (render_format="content") ────────────────────────────────
+    # Script → AI narration → Video. Sacred Contract #2: every field below
+    # defaults to an INERT/disabled state, so a stored clips/recap payload (which
+    # never set them) replays with NO content behaviour. ``content_script`` is
+    # the true off-switch — Content Mode only activates when
+    # render_format=="content" AND a non-empty script is supplied. These are
+    # BE-only for now (NOT in render_public.FE_FACING_FIELDS); the FE surface +
+    # api.ts land together in the Content-tab UI phase (coordinated migration).
+    content_script: str = ""                    # the raw user text; "" = not a content job
+    content_background_kind: str = "color"      # color|image|video (visual provider 'local')
+    content_background_value: str = "#000000"   # color hex / asset path
+    content_bgm_path: str = ""                  # "" = no background music
+    content_visual_provider: str = "local"      # engine.visual seam selector
+    # CS-A: an APPROVED/edited ContentPlan JSON from the Review step. When set
+    # (Content Studio's mandatory Review → Approve flow), run_content renders
+    # FROM this plan and SKIPS the AI planning call. "" = generate the plan via
+    # the AI Director as before (Sacred Contract #2: default inert → unchanged).
+    content_plan_override: str = ""
+
     target_duration: int = 90
     output_count: int = 1
     video_type: str = "auto"          # auto|viral|storytelling|educational|emotional|high_retention
@@ -471,10 +493,31 @@ class RenderRequest(BaseModel):
         # mode="before" runs PRIOR to Pydantic's Literal coercion so legacy
         # casing/whitespace ("RECAP", " Recap ") + None + non-string payloads
         # are normalised first. The Literal check (RenderFormat) then enforces
-        # the closed set — any value outside {clips, recap} falls back to
-        # "clips" here so historical payloads with unknown values keep loading.
+        # the closed set — any value outside {clips, recap, content} falls back
+        # to "clips" here so historical payloads with unknown values keep loading.
         v = str(v or "clips").strip().lower()
-        return v if v in {"clips", "recap"} else "clips"
+        return v if v in {"clips", "recap", "content"} else "clips"
+
+    @field_validator("content_background_kind", mode="before")
+    @classmethod
+    def _validate_content_background_kind(cls, v) -> str:
+        # Coerce (never raise) — Sacred Contract #2: a stored payload with a
+        # stale/unknown value must replay cleanly. Unknown → "color" (the safe
+        # default that needs no external asset).
+        v = str(v or "color").strip().lower()
+        return v if v in {"color", "image", "video"} else "color"
+
+    @field_validator("content_visual_provider", mode="before")
+    @classmethod
+    def _validate_content_visual_provider(cls, v) -> str:
+        # engine.visual providers: "local" (offline default) | "stock" |
+        # "ai_image" | "ai_video" (CS-G, online + opt-in). Unknown/future values
+        # coerce to "local" so a payload for a not-yet-shipped provider still
+        # renders offline instead of failing (Sacred Contract #2). Online
+        # providers always fall back to local at render time when their API key /
+        # network is unavailable.
+        v = str(v or "local").strip().lower()
+        return v if v in {"local", "stock", "ai_image", "ai_video"} else "local"
 
     @field_validator("ai_clip_min_duration_sec")
     @classmethod

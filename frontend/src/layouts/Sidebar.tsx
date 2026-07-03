@@ -32,6 +32,14 @@ function IconDownload() {
   )
 }
 
+function IconContent() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 5h16" /><path d="M4 10h16" /><path d="M4 15h10" /><path d="M4 20h7" />
+    </svg>
+  )
+}
+
 function IconSettings() {
   return (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
@@ -53,6 +61,7 @@ interface NavItem {
 
 const MAIN_NAV: NavItem[] = [
   { panel: 'clip-studio', labelKey: 'nav_studio',   icon: <IconSpark size={19} /> },
+  { panel: 'content-studio', labelKey: 'nav_content', icon: <IconContent /> },
   { panel: 'queue',       labelKey: 'nav_queue',    icon: <IconQueue size={19} /> },
   { panel: 'library',     labelKey: 'nav_library',  icon: <IconGrid /> },
   { panel: 'download',    labelKey: 'nav_download', icon: <IconDownload /> },
