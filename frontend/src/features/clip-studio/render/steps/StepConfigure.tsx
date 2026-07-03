@@ -722,7 +722,7 @@ function StepConfigureBase({
         <div className="cfg-tab-body">
 
           {/* ── AI tab ── */}
-          <div className={`cfg-tab-pane${adv && cfgTab === 'ai' ? ' active' : ''}`}>
+          <div className={`cfg-tab-pane${!adv || cfgTab === 'ai' ? ' active' : ''}`}>
 
             {/* UI cleanup 2026-06-28: removed 5 creator-preference sections
                 (VIDEO TYPE / MARKET / HOOK / STRUCTURE BIAS / SUBTITLE EMPHASIS).
@@ -747,7 +747,9 @@ function StepConfigureBase({
                 <Tog checked={cfg.llmEnabled} onChange={(v) => setCfgKey('llmEnabled', v)} />
               </div>
 
-              {cfg.llmEnabled && (
+              {/* Detailed AI config (provider / test / model / language) lives in
+                  Advanced; Quick surfaces only the auto-select on/off toggle. */}
+              {adv && cfg.llmEnabled && (
                 <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {/* Provider selector — Gemini, OpenAI, Claude */}
                   <div style={{ display: 'flex', gap: 4 }}>
@@ -911,7 +913,7 @@ function StepConfigureBase({
           </div>
 
           {/* ── NARR tab ── */}
-          <div className={`cfg-tab-pane${adv && cfgTab === 'narr' ? ' active' : ''}`}>
+          <div className={`cfg-tab-pane${!adv || cfgTab === 'narr' ? ' active' : ''}`}>
 
             <div className="cfg-section">
               <div className="tog-row">
@@ -920,6 +922,9 @@ function StepConfigureBase({
               </div>
             </div>
 
+            {/* Detailed narration config (voice / gender / mix / source) lives in
+                Advanced; Quick surfaces only the on/off toggle above. */}
+            {adv && (<>
             <div className="cfg-section">
               <div className="cfg-sec-hd">
                 <span>{t.cfgVoiceLang}</span>
@@ -1050,6 +1055,7 @@ function StepConfigureBase({
               )}
             </div>
             )}
+            </>)}
 
           </div>
 
