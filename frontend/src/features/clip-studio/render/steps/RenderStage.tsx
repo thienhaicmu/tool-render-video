@@ -1,35 +1,34 @@
 /**
- * RenderStage — clips-mode live view (WP1 redesign).
+ * RenderStage — clips-mode live monitor (desktop render-dashboard redesign).
  *
- * One FOCUS card for the clip rendering right now (large ConicRing progress
- * while active, real thumbnail once done, Cut→Sub→Render pipeline, activity
- * line, per-clip ETA) + a GRID of rich ClipTiles for every clip. Click a tile
- * to focus it. Same visual language as the Results grid so monitor→results
- * reads as one surface.
- *
- * CSS lives in RenderWorkflow.css under `.rs-*` (focus card) and `.ct-*` (tiles).
+ * Modeled 1:1 on a desktop render-dashboard reference:
+ *   • "Current Rendering" card — landscape thumbnail + title + status pill +
+ *     progress bar + a spread stats row (ETA · Elapsed · Progress · Duration).
+ *   • "Queue" — the clip list as dense rows (index · thumb · name · status ·
+ *     progress · time · action), see ClipTile.
+ * Dark surface, single purple accent, status colors. Every number derives from
+ * data the pipeline already streams (ClipSlot + per-part thumbnail on done).
  */
-import React, { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ClipSlot } from '../types'
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
-import { ConicRing } from '@/components/ui/ConicRing'
-import { IconCheck, IconScissors, IconCaptions, IconFilm, IconPlay } from '@/components/icons'
+import { IconPlay } from '@/components/icons'
 import { ClipTile } from './ClipTile'
-import { clipStateKey, STEP_NODES, activityLabel } from './clipState'
+import { useCountUp } from './useCountUp'
+import { clipStateKey } from './clipState'
 
 // Re-export so existing consumers (StepRendering) keep importing from here.
 export { clipStateKey }
 
-const STEP_ICON = {
-  cutting: IconScissors,
-  transcribing: IconCaptions,
-  rendering: IconFilm,
-} as const
-
 function fmtDur(sec?: number): string | null {
   if (sec == null || sec <= 0) return null
   return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`
+}
+
+function fmtClock(sec: number): string {
+  const s = Math.max(0, Math.floor(sec))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
 export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
@@ -39,6 +38,7 @@ export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
   t: Strings
   getStatusLabel: (s: string) => string
 }) {
+  void thumbRatio
   const [focusOverride, setFocusOverride] = useState<number | null>(null)
 
   const auto =
@@ -47,7 +47,6 @@ export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
     ?? slots[slots.length - 1]
   const focus = slots.find((s) => s.part_no === focusOverride) ?? auto
 
-  // Per-clip ETA — anchored to when the FOCUSED clip entered its active state.
   const startRef = useRef<{ no: number; at: number } | null>(null)
   const focusState = focus ? clipStateKey(focus.status) : 'waiting'
   if (focus && focusState === 'active') {
@@ -55,130 +54,99 @@ export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
   } else {
     startRef.current = null
   }
+
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (focusState !== 'active') return
+    const id = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => clearInterval(id)
+  }, [focusState, focus?.part_no])
+
+  const pct = focusState === 'done' ? 100 : focusState === 'active' ? focus.progress_percent : 0
+  const shownPct = Math.round(useCountUp(pct))
+
+  let elapsedLabel: string | null = null
   let etaLabel: string | null = null
   if (focus && focusState === 'active' && startRef.current) {
-    const pct = focus.progress_percent
     const elapsed = (Date.now() - startRef.current.at) / 1000
+    elapsedLabel = fmtClock(elapsed)
     if (pct > 5 && pct < 100 && elapsed >= 3) {
       const remain = Math.round(elapsed * (100 - pct) / pct)
-      if (remain >= 1 && remain <= 3600) {
-        etaLabel = remain < 60 ? `~${remain}s` : `~${Math.floor(remain / 60)}:${String(remain % 60).padStart(2, '0')}`
-      }
+      if (remain >= 1 && remain <= 3600) etaLabel = fmtClock(remain)
     }
   }
 
   if (!focus) return null
 
-  const pct = focusState === 'done' ? 100 : focusState === 'active' ? focus.progress_percent : 0
-  const activeStepIdx = STEP_NODES.findIndex((n) => n.key === focus.status.toLowerCase())
-  const activity = focus.message || activityLabel(focus.status, t)
   const thumbUrl = jobId && focusState === 'done' ? getPartThumbnailUrl(jobId, focus.part_no) : null
   const durFmt = fmtDur(focus.duration)
+  const no = String(focus.part_no).padStart(2, '0')
+
+  const stats: Array<[string, string]> = [
+    ['ETA', etaLabel ?? '—'],
+    ['Elapsed', elapsedLabel ?? '—'],
+    ['Progress', `${shownPct}%`],
+    ['Duration', durFmt ?? '—'],
+  ]
 
   return (
     <div className="rs-root">
-      {/* ── FOCUS CARD ─────────────────────────────────────────────────── */}
-      <div className={`rs-focus${focusState === 'active' ? ' rs-focus-live' : ''}`}>
-        {/* Preview / progress area */}
-        <div className="rs-thumb" style={{ aspectRatio: thumbRatio }}>
-          {thumbUrl ? (
-            <>
-              <img
-                src={thumbUrl} alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-              />
-              {jobId && (
-                <a
-                  className="rs-thumb-play"
-                  href={getPartMediaUrl(jobId, focus.part_no)}
-                  target="_blank" rel="noreferrer"
-                  aria-label="Play clip"
-                ><IconPlay size={26} /></a>
-              )}
-            </>
-          ) : (
-            <div className={`rs-thumb-ph rs-ph-${focusState}`}>
-              {focusState === 'active' ? (
-                <ConicRing progress={Math.round(pct)} size={92} />
-              ) : focusState === 'failed' ? (
-                <span className="rs-thumb-x">✕</span>
-              ) : (
-                <span className="rs-thumb-no">#{String(focus.part_no).padStart(2, '0')}</span>
-              )}
-            </div>
+      {/* ── Current Rendering ──────────────────────────────────────────── */}
+      <div className="rs-focus">
+        <div className={`rs-thumb rs-thumb-${focusState}`}>
+          <span className="rs-thumb-ph"><span>{no}</span></span>
+          {thumbUrl && (
+            <img
+              src={thumbUrl} alt="" className="rs-thumb-img"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+            />
+          )}
+          {thumbUrl && jobId && (
+            <a
+              className="rs-thumb-play"
+              href={getPartMediaUrl(jobId, focus.part_no)}
+              target="_blank" rel="noreferrer" aria-label="Play clip"
+            ><IconPlay size={18} /></a>
           )}
         </div>
 
-        {/* Detail column */}
-        <div className="rs-body">
-          <div className="rs-head">
-            <span className={`rs-badge rs-badge-${focusState}`}>
-              {focusState === 'active' && <span className="rs-badge-dot" />}
-              {getStatusLabel(focus.status)}
-            </span>
-            <span className="rs-title">
-              Clip #{String(focus.part_no).padStart(2, '0')}
-              {durFmt && <span className="rs-dur"> · {durFmt}</span>}
-            </span>
-            {etaLabel && <span className="rs-eta" title="ETA">{etaLabel}</span>}
+        <div className="rs-info">
+          <div className="rs-info-top">
+            <span className="rs-title" title={focus.name || `Clip ${focus.part_no}`}>{focus.name || `Clip ${focus.part_no}`}</span>
+            <span className={`rs-badge rs-badge-${focusState}`}>{getStatusLabel(focus.status)}</span>
           </div>
 
-          <div className="rs-bar">
-            <div
-              className="rs-bar-fill"
-              style={{
-                width: `${pct}%`,
-                background: focusState === 'failed'
-                  ? 'var(--color-error)'
-                  : 'linear-gradient(90deg, var(--ai-active), var(--accent-primary))',
-              }}
-            />
-          </div>
-
-          {/* Pipeline — line-icon nodes */}
-          <div className="rs-pipe">
-            {STEP_NODES.map((n, i) => {
-              const stt = focusState === 'done' ? 'done'
-                : i < activeStepIdx ? 'done'
-                : i === activeStepIdx ? 'active'
-                : 'pending'
-              const Ico = STEP_ICON[n.key]
-              return (
-                <React.Fragment key={n.key}>
-                  <span className={`rs-pipe-node rs-pipe-${stt}`}>
-                    {stt === 'done' ? <IconCheck size={12} /> : <Ico size={12} />}
-                  </span>
-                  <span className={`rs-pipe-lbl rs-pipe-lbl-${stt}`}>{n.label}</span>
-                  {i < STEP_NODES.length - 1 && (
-                    <span className={`rs-pipe-line${i < activeStepIdx || focusState === 'done' ? ' rs-pipe-line-done' : ''}`} />
-                  )}
-                </React.Fragment>
-              )
-            })}
-          </div>
-
-          {activity && focusState !== 'done' && (
-            <div className={`rs-activity${focusState === 'failed' ? ' rs-activity-fail' : ''}`}>
-              {activity}
+          <div className="rs-prog-row">
+            <div className="rs-bar">
+              <div
+                className={`rs-bar-fill${focusState === 'active' ? ' rs-bar-live' : ''}`}
+                style={{
+                  width: `${pct}%`,
+                  background: focusState === 'failed' ? 'var(--mon-fail)' : undefined,
+                }}
+              />
             </div>
-          )}
-          {focusState === 'done' && jobId && (
-            <a className="rs-preview-link" href={getPartMediaUrl(jobId, focus.part_no)} target="_blank" rel="noreferrer">
-              <IconPlay size={12} /> {t.btnPlay.replace('▶ ', '')}
-            </a>
-          )}
+            <span className="rs-pct">{shownPct}%</span>
+          </div>
+
+          <div className="rs-stats">
+            {stats.map(([k, v]) => (
+              <div key={k} className="rs-stat">
+                <span className="rs-stat-k">{k}</span>
+                <span className="rs-stat-v">{v}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* ── CLIP GRID ──────────────────────────────────────────────────── */}
-      <div className="ct-grid" role="listbox" aria-label="Clips">
+      {/* ── Queue ──────────────────────────────────────────────────────── */}
+      <div className="ct-list" role="listbox" aria-label="Clips">
         {slots.map((s) => (
           <ClipTile
             key={s.part_no}
             slot={s}
             jobId={jobId}
-            thumbRatio={thumbRatio}
             isFocus={s.part_no === focus.part_no}
             onFocus={setFocusOverride}
             t={t}

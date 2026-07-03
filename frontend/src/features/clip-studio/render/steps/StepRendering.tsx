@@ -18,6 +18,12 @@ function buildClipSlots(liveParts: JobPart[], progress: WsProgressSummary | null
       progress_percent: p.progress_percent ?? 0,
       duration: p.duration,
       message: p.message,
+      // Prefer the AI-chosen title; fall back to the output filename (basename,
+      // no extension). UI falls back to "Clip N" when neither is set.
+      name: p.ai_title
+        || (p.clip_name || p.output_file || '')
+          .split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '')
+        || undefined,
     }))
   }
   if (!progress) return []

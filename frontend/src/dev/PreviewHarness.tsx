@@ -12,6 +12,7 @@ import { ConicRing } from '@/components/ui/ConicRing'
 import { Toggle } from '@/components/ui/Toggle'
 import { IconFilm, IconScissors, IconCaptions, IconCheck, IconSpark } from '@/components/icons'
 import { ClipTile } from '@/features/clip-studio/render/steps/ClipTile'
+import { RenderStage } from '@/features/clip-studio/render/steps/RenderStage'
 import { RecapResults } from '@/features/clip-studio/render/steps/RecapResults'
 import { useT } from '@/features/clip-studio/render/i18n'
 import type { ClipSlot } from '@/features/clip-studio/render/types'
@@ -75,37 +76,55 @@ function IconCase() {
 // layout (the thumbnail 404s offline and hides itself, which is fine — the
 // chip / duration / play overlay still demonstrate the composition).
 const MOCK_SLOTS: ClipSlot[] = [
-  { part_no: 1, status: 'done',         progress_percent: 100, duration: 42 },
-  { part_no: 2, status: 'done',         progress_percent: 100, duration: 55 },
-  { part_no: 3, status: 'rendering',    progress_percent: 72 },
-  { part_no: 4, status: 'cutting',      progress_percent: 20 },
-  { part_no: 5, status: 'transcribing', progress_percent: 48 },
-  { part_no: 6, status: 'waiting',      progress_percent: 0 },
-  { part_no: 7, status: 'failed',       progress_percent: 0, message: 'ffmpeg exited with code 1' },
+  { part_no: 1, status: 'done',         progress_percent: 100, duration: 42, name: '3 Tips for better interviews' },
+  { part_no: 2, status: 'done',         progress_percent: 100, duration: 55, name: 'The one mistake everyone makes' },
+  { part_no: 3, status: 'rendering',    progress_percent: 72, name: 'Why nobody tells you this' },
+  { part_no: 4, status: 'cutting',      progress_percent: 20, name: 'How to start strong' },
+  { part_no: 5, status: 'transcribing', progress_percent: 48, name: 'The secret to going viral' },
+  { part_no: 6, status: 'waiting',      progress_percent: 0,  name: 'Ending that converts' },
+  { part_no: 7, status: 'failed',       progress_percent: 0, message: 'ffmpeg exited with code 1', name: 'Bonus hook idea' },
 ]
 
 function ClipTileCase() {
   const [focus, setFocus] = useState<number>(3)
   const t = {} as unknown as Strings
   const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+  return (
+    <Row title="Clip queue rows (click to focus)">
+      <div className="ct-list" style={{ width: '100%' }}>
+        {MOCK_SLOTS.map((s) => (
+          <ClipTile
+            key={s.part_no}
+            slot={s}
+            jobId="preview-job"
+            isFocus={s.part_no === focus}
+            onFocus={setFocus}
+            t={t}
+            getStatusLabel={statusLabel}
+          />
+        ))}
+      </div>
+    </Row>
+  )
+}
+
+// Broadcast redesign — the full live monitor (focus card + multiview grid).
+function RenderStageCase() {
+  const t = useT('EN')
+  const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
   const ratios: Array<[string, string]> = [['9:16', '9 / 16'], ['16:9', '16 / 9']]
   return (
     <>
       {ratios.map(([label, ratio]) => (
-        <Row key={label} title={`ClipTile grid · ${label} (click to focus)`}>
-          <div className="ct-grid" style={{ width: '100%' }}>
-            {MOCK_SLOTS.map((s) => (
-              <ClipTile
-                key={s.part_no}
-                slot={s}
-                jobId="preview-job"
-                thumbRatio={ratio}
-                isFocus={s.part_no === focus}
-                onFocus={setFocus}
-                t={t}
-                getStatusLabel={statusLabel}
-              />
-            ))}
+        <Row key={label} title={`RenderStage · ${label} (live monitor)`}>
+          <div style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            <RenderStage
+              slots={MOCK_SLOTS}
+              jobId="preview-job"
+              thumbRatio={ratio}
+              t={t}
+              getStatusLabel={statusLabel}
+            />
           </div>
         </Row>
       ))}
@@ -167,6 +186,7 @@ const CASES: Record<string, React.ComponentType> = {
   toggle: ToggleCase,
   icons: IconCase,
   cliptile: ClipTileCase,
+  renderstage: RenderStageCase,
   recapresults: RecapResultsCase,
 }
 

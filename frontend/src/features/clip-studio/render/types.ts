@@ -70,4 +70,6 @@ export type ClipSlot = {
   progress_percent: number
   duration?: number
   message?: string
+  // AI-chosen clip title / name (falls back to "Clip N" in the UI).
+  name?: string
 }
