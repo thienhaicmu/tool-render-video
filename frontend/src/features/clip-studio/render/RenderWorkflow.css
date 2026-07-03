@@ -8,6 +8,32 @@
   background: var(--bg-base);
 }
 
+/* ── Workflow step indicator (Configure → Rendering → Result) ─────────────── */
+.rw-steps {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  padding: 10px 20px; border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.rw-step { display: inline-flex; align-items: center; gap: 9px; flex-shrink: 0; }
+.rw-step-no {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 700 12px var(--font-mono); border: 1.5px solid var(--border);
+  color: var(--text-3); background: var(--bg-card);
+  transition: border-color .25s, background .25s, color .25s, box-shadow .25s;
+}
+.rw-step-txt { display: flex; flex-direction: column; line-height: 1.15; }
+.rw-step-k { font: 700 11px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.rw-step-s { font: 400 10px var(--font-ui); font-style: normal; color: var(--text-3); opacity: .8; }
+.rw-step-bar { flex: 1; height: 2px; min-width: 16px; max-width: 88px; border-radius: 1px; background: var(--border); transition: background .3s ease; }
+.rw-step-bar.on { background: var(--accent); }
+
+.rw-step-done .rw-step-no { border-color: var(--accent); background: var(--accent); color: #fff; }
+.rw-step-done .rw-step-k { color: var(--text-2); }
+.rw-step-active .rw-step-no { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .12); }
+.rw-step-active .rw-step-k { color: var(--accent); }
+.rw-step-active .rw-step-s { color: var(--text-2); }
+
 /* ── Step navigator bar ──────────────────────────────────────────────────── */
 .step-nav {
   display: flex;

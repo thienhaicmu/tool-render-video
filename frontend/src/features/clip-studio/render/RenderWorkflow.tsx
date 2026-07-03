@@ -25,6 +25,7 @@ import { StepRendering } from './steps/StepRendering'
 import { StepResults } from './steps/StepResults'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
+import { IconCheck } from '@/components/icons'
 
 // ── Root component ────────────────────────────────────────────────────────────
 export function RenderWorkflow({ lang }: { lang: Lang }) {
@@ -584,8 +585,34 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     </span>
   ) : null
 
+  // Workflow position for the step indicator: create = Configure, monitor =
+  // Rendering, results = Result. (Source + Configure merged into 'create'.)
+  const wfStep = view === 'results' ? 2 : view === 'monitor' ? 1 : 0
+
   return (
     <div className="rw-root">
+      {/* Step indicator — always orients the user (Configure → Rendering → Result). */}
+      <div className="rw-steps" aria-label="Workflow steps">
+        {[
+          { k: t.stepCfg, s: t.stepCfgSub },
+          { k: t.stepRnd, s: t.stepRndSub },
+          { k: t.stepRes, s: t.stepResSub },
+        ].flatMap((st, i) => {
+          const state = i < wfStep ? 'done' : i === wfStep ? 'active' : 'pending'
+          const out = [
+            <div key={`s${i}`} className={`rw-step rw-step-${state}`}>
+              <span className="rw-step-no">{state === 'done' ? <IconCheck size={12} /> : i + 1}</span>
+              <span className="rw-step-txt">
+                <b className="rw-step-k">{st.k}</b>
+                <i className="rw-step-s">{st.s}</i>
+              </span>
+            </div>,
+          ]
+          if (i < 2) out.push(<span key={`b${i}`} className={`rw-step-bar${i < wfStep ? ' on' : ''}`} />)
+          return out
+        })}
+      </div>
+
       {/* ── CREATE — empty state: hero drop zone ─────────────────────────── */}
       {view === 'create' && sources.length === 0 && (
         <CreateHero
