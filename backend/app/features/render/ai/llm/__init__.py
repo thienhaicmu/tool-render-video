@@ -141,6 +141,69 @@ def _get_editorial_impl(provider_name: str):
         return None
 
 
+def _get_content_impl(provider_name: str):
+    """Return the select_content_plan (Content Mode) callable for the named
+    provider, or None if that provider has no impl. Defensive — never raises."""
+    try:
+        if provider_name == "openai":
+            from app.features.render.ai.llm.providers import openai as _mod
+        elif provider_name == "claude":
+            from app.features.render.ai.llm.providers import claude as _mod
+        else:
+            from app.features.render.ai.llm.providers import gemini as _mod
+        return getattr(_mod, "select_content_plan", None)
+    except Exception as exc:
+        logger.warning("llm: _get_content_impl(%s) import failed %s", provider_name, exc)
+        return None
+
+
+def select_content_plan(
+    *,
+    provider: str = DEFAULT_PROVIDER,
+    script: str,
+    target_duration_sec: float = 90.0,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["ContentPlan"]:
+    """Dispatch Content Mode planning (render_format="content") to a provider.
+
+    The provider reads a raw script and emits a ContentPlan (scenes + narration +
+    emotion/speed/pause + subtitle-style suggestion). Returns a ContentPlan or
+    None (Sacred Contract #3 — never raises). When LLM_FALLBACK_ENABLED=1 and the
+    primary returns None, the remaining providers that HAVE an impl are tried in
+    order. Providers without a select_content_plan are skipped (v1 ships Gemini
+    only; openai/claude add theirs in a later phase)."""
+    if not script or not str(script).strip():
+        return None
+    primary = (provider or DEFAULT_PROVIDER).strip().lower()
+    if primary not in SUPPORTED_PROVIDERS:
+        primary = "gemini"
+    chain = [primary]
+    if _LLM_FALLBACK_ENABLED:
+        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    kwargs = dict(
+        script=script, target_duration_sec=target_duration_sec,
+        target_language=target_language, tone=tone, api_key=api_key, model=model,
+    )
+    for _p in chain:
+        impl = _get_content_impl(_p)
+        if impl is None:
+            continue
+        try:
+            result = impl(**kwargs)
+        except Exception as exc:  # defensive — provider modules already never raise
+            logger.warning("llm: select_content_plan provider=%s raised %s", _p, exc)
+            result = None
+        if result is not None:
+            if _p != primary:
+                logger.info("llm: content fallback succeeded provider=%s (primary=%s None)", _p, primary)
+            return result
+    logger.warning("llm: select_content_plan produced no plan (providers tried=%s)", chain)
+    return None
+
+
 def select_story_model(
     *,
     provider: str = DEFAULT_PROVIDER,

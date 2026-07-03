@@ -27,6 +27,8 @@ from app.features.render.ai.llm.recap_parser import (
     parse_recap_response, parse_story_model_response, parse_editorial_response,
     parse_episode_narration_response,
 )
+from app.features.render.ai.llm.content_prompts import build_content_plan_prompt
+from app.features.render.ai.llm.content_parser import parse_content_plan_response
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.gemini_client")
@@ -545,6 +547,92 @@ def select_recap_plan(
         return plan
     except Exception as exc:
         logger.warning("gemini_client: select_recap_plan unexpected error %s", exc, exc_info=True)
+        return None
+
+
+# ── Content Mode (render_format="content"): AI Content Director ───────────────
+# A content plan is article-sized (a handful of scenes with short narration),
+# so the token budget is modest. Temperature is a touch higher than segment
+# selection (0.2) because narration authoring is a mildly creative task, but
+# lower than the rewrite path (0.85) since the JSON structure must stay strict.
+_CONTENT_MAX_TOKENS = int(os.getenv("GEMINI_CONTENT_MAX_TOKENS", "8192"))
+_CONTENT_TEMPERATURE = float(os.getenv("GEMINI_CONTENT_TEMPERATURE", "0.5"))
+_CONTENT_THINKING_BUDGET = int(os.getenv("GEMINI_CONTENT_THINKING_BUDGET", "1024"))
+
+
+def _call_gemini_content_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _genai.Client(api_key=api_key, http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000})
+    resp = client.models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "response_mime_type": "application/json",
+            "temperature": _CONTENT_TEMPERATURE,
+            "max_output_tokens": _CONTENT_MAX_TOKENS,
+            "thinking_config": {"thinking_budget": _CONTENT_THINKING_BUDGET},
+        },
+    )
+    return resp.text
+
+
+def _call_gemini_content(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Content-plan call with cache + key rotation. Cache namespaced 'gemini-content'."""
+    cached = llm_cache_get("gemini-content", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("gemini_client: content cache HIT model=%s", model)
+        return cached
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_content_once(_k, model, system_prompt, user_prompt),
+        label="gemini-content", seed_key=api_key,
+    )
+    if result is not None:
+        llm_cache_put("gemini-content", model, system_prompt, user_prompt, result)
+    return result
+
+
+def select_content_plan(
+    script: str,
+    target_duration_sec: float = 90.0,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["ContentPlan"]:
+    """Content Mode director — turn a raw script into a ContentPlan (scenes +
+    narration + emotion/speed/pause + subtitle-style suggestion). Returns a
+    ContentPlan or None (Sacred Contract #3 — never raises)."""
+    try:
+        if not _GENAI_SDK:
+            logger.warning("gemini_client: google-genai SDK not installed (content path)")
+            return None
+        if not api_key:
+            logger.warning("gemini_client: no api_key supplied (content path)")
+            return None
+        if not script or not script.strip():
+            logger.warning("gemini_client: empty script (content path)")
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        system_prompt, user_prompt = build_content_plan_prompt(
+            script, target_duration_sec, target_language, tone,
+        )
+        logger.info(
+            "gemini_client: calling content model=%s target_dur=%.0fs lang=%s in_chars=%d",
+            resolved_model, float(target_duration_sec or 0.0), target_language, len(script),
+        )
+        raw = _call_gemini_content(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            logger.warning("gemini_client: empty content response (model=%s)", resolved_model)
+            return None
+        plan = parse_content_plan_response(raw, target_duration_sec)
+        if plan is not None:
+            logger.info(
+                "gemini_client: content OK model=%s scenes=%d total=%.0fs topic=%r",
+                resolved_model, plan.scene_count(), plan.total_target_sec, plan.topic,
+            )
+        return plan
+    except Exception as exc:
+        logger.warning("gemini_client: select_content_plan unexpected error %s", exc, exc_info=True)
         return None
 
 
