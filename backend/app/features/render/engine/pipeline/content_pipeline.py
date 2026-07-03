@@ -259,21 +259,32 @@ def run_content(
                 continue
             audio_path, ndur = narr
 
-            # CS-E: per-scene asset override (Asset Manager) → job-level default.
+            # Visual asset resolution:
+            #  - CS-E: an explicit per-scene override (Asset Manager) WINS and is
+            #    always resolved by the local provider (the user picked it).
+            #  - Otherwise the job-level provider decides. For an online provider
+            #    (CS-G stock/ai_image) that means generating from visual_prompt;
+            #    kind/value carry the job background as the fallback the local
+            #    provider uses if the online one yields nothing.
             _s_source = (getattr(scene, "visual_source", "") or "").strip().lower()
-            _s_kind = _s_source if _s_source in ("color", "image", "video") else bg_kind
-            _s_value = (getattr(scene, "visual_path", "") or "").strip() if _s_source else bg_value
             _s_ken_burns = bool(getattr(scene, "ken_burns", False))
+            if _s_source in ("color", "image", "video"):
+                _prov = "local"
+                _kind = _s_source
+                _value = (getattr(scene, "visual_path", "") or "").strip()
+            else:
+                _prov = visual_provider
+                _kind = bg_kind
+                _value = bg_value
 
-            # Visual asset via the provider seam (v1 provider='local').
             asset = resolve_scene_visual(
                 SceneVisualRequest(
-                    scene_index=i, kind=_s_kind, value=_s_value,
+                    scene_index=i, kind=_kind, value=_value,
                     prompt=(scene.visual_prompt or scene.visual_hint or ""),
                     width=width, height=height,
                     fps=fps, duration_sec=ndur, work_dir=str(scenes_dir),
                 ),
-                provider=visual_provider,
+                provider=_prov,
             )
             if asset is None:
                 failed_parts.append({"part_no": i, "error": "visual_failed"})
@@ -294,8 +305,11 @@ def run_content(
                 width=width, height=height, fps=fps, sample_rate=_SAMPLE_RATE,
                 out_path=scene_out, work_dir=str(scenes_dir), subtitle_enabled=add_subtitle,
                 subtitle_style=_sub_style,
-                # Ken Burns only meaningful on an image background.
-                ken_burns=_s_ken_burns and asset.kind == "image",
+                # Ken Burns on an image background: user-toggled, OR default-on for
+                # a provider-fetched/generated image (CS-G) so it isn't a static still.
+                ken_burns=asset.kind == "image" and (
+                    _s_ken_burns or asset.provider in ("stock", "ai_image")
+                ),
             )
             if ok:
                 scene_clips.append(scene_out)

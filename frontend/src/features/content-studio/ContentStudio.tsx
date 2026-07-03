@@ -46,6 +46,7 @@ interface Config {
   subEnabled: boolean
   subStyle: string
   bgmPath: string
+  visualProvider: 'local' | 'stock' | 'ai_image'
   outputDir: string
   tone: string
 }
@@ -53,7 +54,7 @@ interface Config {
 const DEFAULT_CFG: Config = {
   ratio: 'r916', targetDuration: 90, bgKind: 'color', bgColor: '#101820', bgAssetPath: '',
   voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
-  subEnabled: true, subStyle: 'tiktok_bounce_v1', bgmPath: '', outputDir: '', tone: '',
+  subEnabled: true, subStyle: 'tiktok_bounce_v1', bgmPath: '', visualProvider: 'local', outputDir: '', tone: '',
 }
 
 export function ContentStudio() {
@@ -86,7 +87,7 @@ export function ContentStudio() {
       content_plan_override: JSON.stringify(reindexed),
       content_background_kind: cfg.bgKind,
       content_background_value: bgValue,
-      content_visual_provider: 'local',
+      content_visual_provider: cfg.visualProvider,
       output_dir: cfg.outputDir.trim() || 'output',
       aspect_ratio: RATIO_INFO[cfg.ratio].api,
       target_duration: cfg.targetDuration,
@@ -237,6 +238,18 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
             ) : (
               <input style={{ ...S.input, marginTop: 8 }} value={cfg.bgAssetPath} onChange={(e) => setCfgKey('bgAssetPath', e.target.value)}
                 placeholder={vi ? 'Đường dẫn file trên máy…' : 'Local file path…'} />
+            )}
+          </Field>
+          <Field label={vi ? 'Nguồn hình ảnh (AI/Stock — tuỳ chọn)' : 'Visual source (AI/Stock — optional)'}>
+            <select style={S.input} value={cfg.visualProvider} onChange={(e) => setCfgKey('visualProvider', e.target.value as Config['visualProvider'])}>
+              <option value="local">{vi ? 'Nền tự chọn (offline)' : 'Chosen background (offline)'}</option>
+              <option value="stock">{vi ? 'Ảnh Stock (Pexels/Pixabay — cần API key)' : 'Stock images (Pexels/Pixabay — needs API key)'}</option>
+              <option value="ai_image">{vi ? 'Ảnh AI (Imagen/DALL·E — cần API key)' : 'AI Image (Imagen/DALL·E — needs API key)'}</option>
+            </select>
+            {cfg.visualProvider !== 'local' && (
+              <div style={{ fontSize: 11, color: 'var(--text-3, #999)', marginTop: 4 }}>
+                {vi ? 'Mỗi cảnh sinh/tải ảnh từ "visual prompt". Thiếu key/mạng → tự dùng nền đã chọn.' : 'Each scene fetches/generates an image from its visual prompt. Missing key/network → falls back to your background.'}
+              </div>
             )}
           </Field>
           <Field label={vi ? 'Giọng đọc' : 'Voice'}>

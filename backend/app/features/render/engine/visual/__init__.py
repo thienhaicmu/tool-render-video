@@ -34,8 +34,13 @@ logger = logging.getLogger("app.render.visual")
 # Providers known to this seam. v1 = local only. Adding "ai_image" / "stock" /
 # "ai_video" here + a branch in resolve_scene_visual is the ONLY change needed
 # to introduce a new visual source — the pipeline + scene renderer are untouched.
-SUPPORTED_PROVIDERS = ("local",)
+SUPPORTED_PROVIDERS = ("local", "stock", "ai_image")
 DEFAULT_PROVIDER = "local"
+# Online providers (need network + an API key). They are opt-in — only used when
+# content_visual_provider names them — and ALWAYS fall back to 'local' when they
+# produce nothing (no key / no network / no result / error), so a scene never
+# fails to get an asset.
+_ONLINE_PROVIDERS = ("stock", "ai_image")
 
 
 @dataclass
@@ -72,23 +77,79 @@ def resolve_scene_visual(
 
     Unknown providers fall back to ``local`` so a stale/未来 config value can
     never break a render."""
+    from app.features.render.engine.visual.provider_local import resolve_local
     p = (provider or DEFAULT_PROVIDER).strip().lower()
     if p not in SUPPORTED_PROVIDERS:
         logger.warning("visual: provider %r not supported — falling back to 'local'", provider)
         p = "local"
     try:
         if p == "local":
-            from app.features.render.engine.visual.provider_local import resolve_local
             return resolve_local(request)
-        # Future providers (ai_image / stock / ai_video) branch here.
-        from app.features.render.engine.visual.provider_local import resolve_local
+        # Online providers: try, then fall back to local on None/failure so the
+        # scene always gets an asset (Sacred Contract #3 spirit).
+        asset = None
+        if p == "stock":
+            from app.features.render.engine.visual.provider_stock import resolve_stock
+            asset = resolve_stock(request)
+        elif p == "ai_image":
+            from app.features.render.engine.visual.provider_ai_image import resolve_ai_image
+            asset = resolve_ai_image(request)
+        if asset is not None:
+            return asset
+        logger.info("visual: provider %s produced no asset — falling back to local", p)
         return resolve_local(request)
     except Exception as exc:
-        logger.warning("visual: resolve_scene_visual(%s) error %s — no asset", p, exc)
-        return None
+        logger.warning("visual: resolve_scene_visual(%s) error %s — local fallback", p, exc)
+        try:
+            return resolve_local(request)
+        except Exception:
+            return None
+
+
+# ── Shared helpers for online providers (cache + download) ───────────────────
+
+def visual_cache_dir():
+    """Cache dir for provider-fetched/generated images (under the render cache
+    root so the periodic subdir-agnostic prune reclaims it). Never raises."""
+    from pathlib import Path
+    try:
+        from app.core.config import CACHE_DIR
+        d = Path(CACHE_DIR) / "content_visual"
+    except Exception:
+        from app.core.config import TEMP_DIR
+        d = Path(TEMP_DIR) / "content_visual"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def cache_key(*parts) -> str:
+    """Stable sha1 of the given parts → a filename stem. Used so the same prompt
+    at the same size is fetched/generated once and reused (cost control)."""
+    import hashlib
+    h = hashlib.sha1("|".join(str(x) for x in parts).encode("utf-8", "ignore")).hexdigest()
+    return h[:24]
+
+
+def download_to(url: str, out_path: str, timeout: int = 30) -> bool:
+    """Download ``url`` → ``out_path`` (stdlib urllib, no new dependency). Returns
+    True on a non-empty file, False on any error. Never raises."""
+    from pathlib import Path
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, headers={"User-Agent": "AIVideoStudio/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (opt-in provider)
+            data = resp.read()
+        if not data:
+            return False
+        Path(out_path).write_bytes(data)
+        return Path(out_path).exists() and Path(out_path).stat().st_size > 0
+    except Exception as exc:
+        logger.info("visual: download failed (%s): %s", url[:80], exc)
+        return False
 
 
 __all__ = [
     "SceneVisualRequest", "SceneVisualAsset", "resolve_scene_visual",
     "SUPPORTED_PROVIDERS", "DEFAULT_PROVIDER",
+    "visual_cache_dir", "cache_key", "download_to",
 ]
