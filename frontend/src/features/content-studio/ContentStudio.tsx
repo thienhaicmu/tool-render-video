@@ -22,7 +22,8 @@ import { useRenderStore } from '../../stores/renderStore'
 import { useRenderSocket } from '../../hooks/useRenderSocket'
 import { RATIO_INFO } from '../clip-studio/render/constants'
 import type { Ratio } from '../clip-studio/render/types'
-import { generateContentPlan, type ContentPlan, type ContentScene } from '../../api/content'
+import { generateContentPlan, previewNarration, type ContentPlan, type ContentScene } from '../../api/content'
+import { BASE_URL } from '../../api/client'
 
 type BgKind = 'color' | 'image' | 'video'
 type Phase = 'script' | 'review'
@@ -147,6 +148,7 @@ export function ContentStudio() {
     return (
       <ReviewPhase
         vi={vi} plan={plan} setPlan={setPlan} busy={busy} error={error}
+        voice={{ lang: cfg.voiceLang, gender: cfg.voiceGender, engine: cfg.ttsEngine }}
         onBack={() => setPhase('script')} onApprove={handleApproveRender}
       />
     )
@@ -278,9 +280,11 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
 
 // ── Phase 2: review + edit plan ─────────────────────────────────────────────
 
-function ReviewPhase({ vi, plan, setPlan, busy, error, onBack, onApprove }: {
+interface VoiceCfg { lang: string; gender: 'female' | 'male'; engine: string }
+
+function ReviewPhase({ vi, plan, setPlan, busy, error, voice, onBack, onApprove }: {
   vi: boolean; plan: ContentPlan; setPlan: (p: ContentPlan) => void
-  busy: boolean; error: string | null; onBack: () => void; onApprove: () => void
+  busy: boolean; error: string | null; voice: VoiceCfg; onBack: () => void; onApprove: () => void
 }) {
   function updateScene(i: number, patch: Partial<ContentScene>) {
     setPlan({ ...plan, scenes: plan.scenes.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) })
@@ -316,38 +320,8 @@ function ReviewPhase({ vi, plan, setPlan, busy, error, onBack, onApprove }: {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {plan.scenes.map((s, i) => (
-          <section key={i} style={S.card}>
-            <div style={S.cardHd}>
-              <input style={{ ...S.input, fontWeight: 700, flex: 1 }} value={s.scene_title || ''} placeholder={`${vi ? 'Cảnh' : 'Scene'} ${i + 1}`}
-                onChange={(e) => updateScene(i, { scene_title: e.target.value })} />
-              <div style={{ display: 'flex', gap: 4 }}>
-                <button style={S.iconBtn} title="Up" disabled={i === 0} onClick={() => moveScene(i, -1)}>↑</button>
-                <button style={S.iconBtn} title="Down" disabled={i === plan.scenes.length - 1} onClick={() => moveScene(i, 1)}>↓</button>
-                <button style={{ ...S.iconBtn, color: 'var(--fail, #ef4444)' }} title="Delete" onClick={() => removeScene(i)}>✕</button>
-              </div>
-            </div>
-            <textarea style={{ ...S.textarea, minHeight: 70, marginBottom: 8 }} value={s.narration}
-              placeholder={vi ? 'Lời kể…' : 'Narration…'} onChange={(e) => updateScene(i, { narration: e.target.value })} />
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <label style={S.miniLabel}>{vi ? 'Cảm xúc' : 'Emotion'}
-                <select style={S.inputSm} value={s.emotion || 'normal'} onChange={(e) => updateScene(i, { emotion: e.target.value })}>
-                  {EMOTIONS.map((e2) => <option key={e2} value={e2}>{e2}</option>)}
-                </select>
-              </label>
-              <label style={S.miniLabel}>{vi ? 'Tốc độ' : 'Speed'}
-                <input type="number" step={0.05} min={0.5} max={2} style={S.inputSm} value={s.reading_speed ?? 1}
-                  onChange={(e) => updateScene(i, { reading_speed: Number(e.target.value) || 1 })} />
-              </label>
-              <label style={S.miniLabel}>{vi ? 'Thời lượng (s)' : 'Dur (s)'}
-                <input type="number" step={0.5} min={0} style={S.inputSm} value={s.est_duration_sec ?? 0}
-                  onChange={(e) => updateScene(i, { est_duration_sec: Number(e.target.value) || 0 })} />
-              </label>
-              <label style={{ ...S.miniLabel, flex: 1, minWidth: 200 }}>{vi ? 'Visual prompt' : 'Visual prompt'}
-                <input style={S.inputSm} value={s.visual_prompt || ''} onChange={(e) => updateScene(i, { visual_prompt: e.target.value })}
-                  placeholder={vi ? 'Mô tả hình ảnh cho scene này…' : 'Image/video prompt for this scene…'} />
-              </label>
-            </div>
-          </section>
+          <SceneRow key={i} vi={vi} scene={s} index={i} total={plan.scenes.length} voice={voice}
+            onChange={(patch) => updateScene(i, patch)} onRemove={() => removeScene(i)} onMove={(d) => moveScene(i, d)} />
         ))}
         <button style={{ ...S.btnGhost, alignSelf: 'flex-start' }} onClick={addScene}>+ {vi ? 'Thêm cảnh' : 'Add scene'}</button>
       </div>
@@ -361,6 +335,80 @@ function ReviewPhase({ vi, plan, setPlan, busy, error, onBack, onApprove }: {
         </button>
       </div>
     </div>
+  )
+}
+
+function SceneRow({ vi, scene, index, total, voice, onChange, onRemove, onMove }: {
+  vi: boolean; scene: ContentScene; index: number; total: number; voice: VoiceCfg
+  onChange: (patch: Partial<ContentScene>) => void; onRemove: () => void; onMove: (dir: -1 | 1) => void
+}) {
+  const [previewing, setPreviewing] = useState(false)
+  const [previewErr, setPreviewErr] = useState<string | null>(null)
+  const [dur, setDur] = useState<number | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const hasText = !!(scene.narration || '').trim()
+
+  async function doPreview() {
+    if (!hasText || previewing) return
+    setPreviewErr(null); setPreviewing(true)
+    try {
+      const r = await previewNarration({
+        text: (scene.narration || '').trim(),
+        voice_language: voice.lang, voice_gender: voice.gender,
+        tts_engine: voice.engine, reading_speed: scene.reading_speed ?? 1,
+      })
+      setDur(r.duration_sec)
+      if (audioRef.current) audioRef.current.pause()
+      const a = new Audio(BASE_URL + r.url)
+      audioRef.current = a
+      void a.play().catch(() => {})
+    } catch (err) {
+      setPreviewErr(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
+  return (
+    <section style={S.card}>
+      <div style={S.cardHd}>
+        <input style={{ ...S.input, fontWeight: 700, flex: 1 }} value={scene.scene_title || ''} placeholder={`${vi ? 'Cảnh' : 'Scene'} ${index + 1}`}
+          onChange={(e) => onChange({ scene_title: e.target.value })} />
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button style={{ ...S.iconBtn, color: hasText ? 'var(--accent-primary, #8b5cf6)' : undefined }} title={vi ? 'Nghe thử giọng' : 'Preview voice'}
+            disabled={!hasText || previewing} onClick={doPreview}>{previewing ? '…' : '🔊'}</button>
+          <button style={S.iconBtn} title="Up" disabled={index === 0} onClick={() => onMove(-1)}>↑</button>
+          <button style={S.iconBtn} title="Down" disabled={index === total - 1} onClick={() => onMove(1)}>↓</button>
+          <button style={{ ...S.iconBtn, color: 'var(--fail, #ef4444)' }} title="Delete" onClick={onRemove}>✕</button>
+        </div>
+      </div>
+      <textarea style={{ ...S.textarea, minHeight: 70, marginBottom: 8 }} value={scene.narration}
+        placeholder={vi ? 'Lời kể…' : 'Narration…'} onChange={(e) => onChange({ narration: e.target.value })} />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <label style={S.miniLabel}>{vi ? 'Cảm xúc' : 'Emotion'}
+          <select style={S.inputSm} value={scene.emotion || 'normal'} onChange={(e) => onChange({ emotion: e.target.value })}>
+            {EMOTIONS.map((e2) => <option key={e2} value={e2}>{e2}</option>)}
+          </select>
+        </label>
+        <label style={S.miniLabel}>{vi ? 'Tốc độ' : 'Speed'}
+          <input type="number" step={0.05} min={0.5} max={2} style={S.inputSm} value={scene.reading_speed ?? 1}
+            onChange={(e) => onChange({ reading_speed: Number(e.target.value) || 1 })} />
+        </label>
+        <label style={S.miniLabel}>{vi ? 'Thời lượng (s)' : 'Dur (s)'}
+          <input type="number" step={0.5} min={0} style={S.inputSm} value={scene.est_duration_sec ?? 0}
+            onChange={(e) => onChange({ est_duration_sec: Number(e.target.value) || 0 })} />
+        </label>
+        <label style={{ ...S.miniLabel, flex: 1, minWidth: 200 }}>{vi ? 'Visual prompt' : 'Visual prompt'}
+          <input style={S.inputSm} value={scene.visual_prompt || ''} onChange={(e) => onChange({ visual_prompt: e.target.value })}
+            placeholder={vi ? 'Mô tả hình ảnh cho scene này…' : 'Image/video prompt for this scene…'} />
+        </label>
+      </div>
+      {(dur != null || previewErr) && (
+        <div style={{ fontSize: 11, marginTop: 6, color: previewErr ? 'var(--fail, #ef4444)' : 'var(--text-3, #999)' }}>
+          {previewErr ? previewErr : `${vi ? 'Giọng ~' : 'Voice ~'}${(dur ?? 0).toFixed(1)}s`}
+        </div>
+      )}
+    </section>
   )
 }
 

@@ -98,3 +98,58 @@ def test_plan_endpoint_ai_none_502(monkeypatch):
     monkeypatch.setattr(mod, "select_content_plan", lambda **k: None)
     r = _client().post("/api/content/plan", json={"script": "real script here"})
     assert r.status_code == 502
+
+
+# ── CS-D: narration preview endpoints ────────────────────────────────────────
+
+def test_narration_preview_and_audio(monkeypatch, tmp_path):
+    import app.features.content.router as mod
+    # Redirect the preview dir into the test tmp so we don't touch the real cache.
+    monkeypatch.setattr(mod, "_PREVIEW_DIR", tmp_path / "content_preview", raising=False)
+
+    def _fake_tts(*, text, language, gender, rate, job_id, output_path, content_type, tts_engine):
+        # write a tiny fake mp3 (bytes) to output_path
+        from pathlib import Path as _P
+        _P(output_path).parent.mkdir(parents=True, exist_ok=True)
+        _P(output_path).write_bytes(b"ID3fakeaudio")
+        return output_path
+    monkeypatch.setattr(
+        "app.features.render.engine.audio.tts.generate_narration_audio", _fake_tts,
+    )
+    monkeypatch.setattr(
+        "app.features.render.engine.stages.content_scene_render.probe_audio_duration",
+        lambda p: 1.5,
+    )
+
+    client = _client()
+    r = client.post("/api/content/narration/preview", json={"text": "Xin chao", "voice_language": "vi-VN"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["duration_sec"] == 1.5
+    assert body["url"].startswith("/api/content/narration/audio/")
+    token = body["token"]
+
+    # The audio GET serves the file.
+    a = client.get(f"/api/content/narration/audio/{token}")
+    assert a.status_code == 200 and a.content == b"ID3fakeaudio"
+
+
+def test_narration_preview_empty_text_422():
+    r = _client().post("/api/content/narration/preview", json={"text": "  "})
+    assert r.status_code == 422
+
+
+def test_narration_preview_tts_fail_502(monkeypatch, tmp_path):
+    import app.features.content.router as mod
+    monkeypatch.setattr(mod, "_PREVIEW_DIR", tmp_path / "p", raising=False)
+
+    def _boom(**k):
+        raise RuntimeError("no TTS")
+    monkeypatch.setattr("app.features.render.engine.audio.tts.generate_narration_audio", _boom)
+    r = _client().post("/api/content/narration/preview", json={"text": "hi"})
+    assert r.status_code == 502
+
+
+def test_narration_audio_bad_token_404():
+    r = _client().get("/api/content/narration/audio/not-a-valid-token")
+    assert r.status_code == 404

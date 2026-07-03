@@ -55,3 +55,25 @@ export async function generateContentPlan(req: ContentPlanRequest): Promise<{ pl
     body: JSON.stringify(req),
   })
 }
+
+export interface NarrationPreviewRequest {
+  text: string
+  voice_language?: string
+  voice_gender?: 'female' | 'male'
+  tts_engine?: string
+  reading_speed?: number
+}
+
+export interface NarrationPreviewResult {
+  token: string
+  url: string
+  duration_sec: number
+}
+
+/** Synthesize ONE scene's narration to previewable audio (Review Preview/Regenerate). */
+export async function previewNarration(req: NarrationPreviewRequest): Promise<NarrationPreviewResult> {
+  return apiFetch<NarrationPreviewResult>('/api/content/narration/preview', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
