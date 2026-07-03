@@ -32,7 +32,7 @@ export function useRenderConfig(): RenderConfigApi {
     subHighlight: true, subFontSize: 0, subTranslate: false, subTranslateLang: 'en',
     assetLogoPath: null, assetIntroPath: null, assetOutroPath: null,
     whisperModel: 'auto',
-    narrEnabled: false, voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
+    narrEnabled: false, voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'gemini',
     voiceSource: 'translated_subtitle', voiceText: '', rewriteTone: '', narrationMode: '', reactionIntensity: '', voiceMixMode: 'replace_original',
     outputDir: '',
     renderProfile: 'balanced',
@@ -90,9 +90,9 @@ export function useRenderConfig(): RenderConfigApi {
           }
           if (d.subtitle_style) patch.subStyle = d.subtitle_style
           // voice_provider only patches when it matches one of the
-          // engines cfg.ttsEngine accepts (edge | xtts). 'elevenlabs'
-          // is a valid backend default but no FE field maps yet.
-          if (d.voice_provider === 'edge' || d.voice_provider === 'xtts') {
+          // engines cfg.ttsEngine accepts (edge | xtts | gemini).
+          // 'elevenlabs' is a valid backend default but no FE field maps yet.
+          if (d.voice_provider === 'edge' || d.voice_provider === 'xtts' || d.voice_provider === 'gemini') {
             patch.ttsEngine = d.voice_provider
           }
           if (

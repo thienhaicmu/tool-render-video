@@ -140,7 +140,7 @@ export interface RenderRequest {
   voice_gender?: 'female' | 'male'
   voice_source?: 'manual' | 'subtitle' | 'translated_subtitle' | 'ai_rewrite'
   voice_text?: string | null
-  tts_engine?: 'edge' | 'piper' | 'xtts'
+  tts_engine?: 'edge' | 'piper' | 'xtts' | 'gemini'
   voice_mix_mode?: 'replace_original' | 'keep_original_low'
   rewrite_tone?: string
   narration_mode?: '' | 'reaction'

@@ -922,6 +922,32 @@ function StepConfigureBase({
               </div>
             </div>
 
+            {/* Voice engine picker — surfaced in Quick too (natural voice is the
+                whole point of enabling narration). Gemini 3.1 Flash TTS is the
+                expressive cloud voice; Edge is the fast Microsoft fallback;
+                XTTS is offline. Backend auto-falls back to Edge on any failure. */}
+            {cfg.narrEnabled && (
+              <div className="cfg-section">
+                <div className="cfg-sec-hd"><span>AI Voice</span></div>
+                <div className="seg" style={{ flexDirection: 'column', gap: '3px' }}>
+                  {([
+                    { v: 'gemini' as const, l: '✨ Gemini', d: 'Natural, expressive (recommended)' },
+                    { v: 'edge'   as const, l: 'Edge',      d: 'Microsoft neural · fast, stable' },
+                    { v: 'xtts'   as const, l: 'XTTS',      d: 'Offline · needs GPU' },
+                  ]).map(({ v, l, d }) => (
+                    <div role="button" tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.currentTarget as HTMLElement).click() } }}
+                      key={v} className={`seg-b${cfg.ttsEngine === v ? ' on' : ''}`}
+                      style={{ textAlign: 'left', padding: '7px 10px' }}
+                      onClick={() => setCfgKey('ttsEngine', v)}>
+                      <div>{l}</div>
+                      <div style={{ fontSize: '9px', color: cfg.ttsEngine === v ? 'rgba(255,255,255,.6)' : 'var(--text-3)', marginTop: '1px', fontFamily: 'var(--fb)', fontWeight: 400 }}>{d}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Detailed narration config (voice / gender / mix / source) lives in
                 Advanced; Quick surfaces only the on/off toggle above. */}
             {adv && (<>

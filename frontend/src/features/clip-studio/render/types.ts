@@ -34,7 +34,7 @@ export interface ConfigState {
   narrEnabled:   boolean
   voiceLang:     string
   voiceGender:   'female' | 'male'
-  ttsEngine:     'edge' | 'xtts'
+  ttsEngine:     'edge' | 'xtts' | 'gemini'
   voiceSource:   'subtitle' | 'translated_subtitle' | 'manual' | 'ai_rewrite'
   voiceText:     string
   rewriteTone:   string

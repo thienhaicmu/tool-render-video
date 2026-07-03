@@ -2097,7 +2097,6 @@
 .rs-focus {
   display: flex; align-items: center; gap: 16px; padding: 16px 18px;
   background: var(--mon-card); border: 1px solid var(--mon-line); border-radius: 14px;
-  max-width: 760px;
 }
 .rs-thumb { width: 116px; height: 68px; flex-shrink: 0; border-radius: 9px; overflow: hidden; position: relative; background: var(--mon-media); border: 1px solid var(--mon-line); }
 .rs-thumb-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; z-index: 1; }
@@ -2125,16 +2124,16 @@
 @keyframes rs-sheen { from { background-position: -60% 0; } to { background-position: 170% 0; } }
 .rs-pct { font: 600 13px var(--font-mono); color: var(--mon-txt); min-width: 42px; text-align: right; }
 
-.rs-stats { display: flex; justify-content: space-between; gap: 16px; }
+.rs-stats { display: flex; gap: 48px; flex-wrap: wrap; }
 .rs-stat { display: flex; flex-direction: column; gap: 3px; }
 .rs-stat-k { font: 600 9.5px var(--font-ui); color: var(--mon-txt-3); text-transform: uppercase; letter-spacing: .07em; }
 .rs-stat-v { font: 600 14px var(--font-mono); color: var(--mon-txt); }
 
 /* ── Queue list ─────────────────────────────────────────────────────────── */
-.ct-list { display: flex; flex-direction: column; padding: 6px; background: var(--mon-card); border: 1px solid var(--mon-line); border-radius: 14px; max-width: 760px; }
+.ct-list { display: flex; flex-direction: column; padding: 6px; background: var(--mon-card); border: 1px solid var(--mon-line); border-radius: 14px; }
 .ct-row {
-  display: grid; grid-template-columns: 20px 52px minmax(72px, 1.5fr) 88px minmax(96px, 1fr) 50px 30px;
-  align-items: center; gap: 12px; padding: 8px 10px; border-radius: 9px; cursor: pointer;
+  display: grid; grid-template-columns: 28px 56px minmax(120px, 1fr) 104px 220px 64px 36px;
+  align-items: center; gap: 14px; padding: 9px 12px; border-radius: 9px; cursor: pointer;
   transition: background .15s ease;
 }
 .ct-row + .ct-row { border-top: 1px solid var(--mon-line); }
