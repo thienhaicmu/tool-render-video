@@ -18,6 +18,7 @@ import { validateSources, validateConfig } from './validate'
 import { useRenderConfig } from './useRenderConfig'
 import { loadTerminalResults } from './loadResults'
 import { parseSubmitError } from './submitError'
+import { submitSources } from './submitSources'
 import { CreateHero } from './steps/CreateHero'
 import { StepConfigure } from './steps/StepConfigure'
 import { StepRendering } from './steps/StepRendering'
@@ -386,16 +387,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     //    attached jobId so the user lands on Step 3 monitoring it; the
     //    rest run in the background and appear in ActiveJobsDock.
     if (sources.length > 1) {
-      const submitted: string[] = []
-      const failed: string[] = []
-      for (const s of sources) {
-        try {
-          const id = await submitRender(buildPayloadForSource(s.value))
-          submitted.push(id)
-        } catch {
-          failed.push(s.value)
-        }
-      }
+      // Batch submit loop extracted to submitSources (slice 4b).
+      const { submitted, failed } = await submitSources(sources, buildPayloadForSource, submitRender)
       addNotification({
         type: failed.length === 0 ? 'success' : (submitted.length === 0 ? 'error' : 'warning'),
         title: lang === 'VI'
