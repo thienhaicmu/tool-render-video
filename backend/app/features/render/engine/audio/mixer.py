@@ -211,12 +211,18 @@ def mix_with_bgm(
     bgm_path: str,
     output_path: str,
     bgm_db_gain: float = -18.0,
+    duck: bool = False,
 ) -> str:
     """Mix background music under the video's existing audio track.
 
     bgm_path is looped to fill the full video duration. bgm_db_gain is
     applied to the BGM stream before mixing — default -18 dB keeps it
     clearly below vocals. The existing video audio track stays at 0 dB.
+
+    ``duck`` (CS-F, default False → byte-identical to the legacy behaviour):
+    when True the BGM is side-chain compressed against the video's audio
+    (the narration), so the music drops while the voice speaks and returns
+    in the gaps. Off keeps the plain constant-gain mix.
 
     Raises RuntimeError on FFmpeg failure or missing output.
     """
@@ -233,11 +239,21 @@ def mix_with_bgm(
     _dur_args = ["-t", str(_vdur)] if _vdur > 0 else []
 
     gain = max(-60.0, min(0.0, float(bgm_db_gain)))
-    # Loop BGM to fill video; mix at bgm_db_gain under existing audio
-    filter_graph = (
-        f"[1:a]aloop=loop=-1:size=2147483647,volume={gain:.1f}dB[bgm];"
-        "[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[out]"
-    )
+    if duck:
+        # Duck the BGM under the narration: sidechaincompress lowers [bg] while
+        # the video's audio ([0:a]) is loud, then amix at unity gain (normalize=0
+        # so the music returns to its set level in the gaps).
+        filter_graph = (
+            f"[1:a]aloop=loop=-1:size=2147483647,volume={gain:.1f}dB[bg];"
+            "[bg][0:a]sidechaincompress=threshold=0.03:ratio=6:attack=20:release=400[bgduck];"
+            "[0:a][bgduck]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[out]"
+        )
+    else:
+        # Loop BGM to fill video; mix at bgm_db_gain under existing audio
+        filter_graph = (
+            f"[1:a]aloop=loop=-1:size=2147483647,volume={gain:.1f}dB[bgm];"
+            "[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[out]"
+        )
     cmd = [
         get_ffmpeg_bin(), "-y",
         "-i", str(source_video),

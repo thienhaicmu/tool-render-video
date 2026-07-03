@@ -45,6 +45,7 @@ interface Config {
   ttsEngine: typeof TTS_ENGINES[number]
   subEnabled: boolean
   subStyle: string
+  bgmPath: string
   outputDir: string
   tone: string
 }
@@ -52,7 +53,7 @@ interface Config {
 const DEFAULT_CFG: Config = {
   ratio: 'r916', targetDuration: 90, bgKind: 'color', bgColor: '#101820', bgAssetPath: '',
   voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
-  subEnabled: true, subStyle: 'tiktok_bounce_v1', outputDir: '', tone: '',
+  subEnabled: true, subStyle: 'tiktok_bounce_v1', bgmPath: '', outputDir: '', tone: '',
 }
 
 export function ContentStudio() {
@@ -91,6 +92,7 @@ export function ContentStudio() {
       target_duration: cfg.targetDuration,
       add_subtitle: cfg.subEnabled,
       subtitle_style: cfg.subStyle,
+      content_bgm_path: cfg.bgmPath.trim() || undefined,
       voice_language: cfg.voiceLang,
       voice_gender: cfg.voiceGender,
       tts_engine: cfg.ttsEngine,
@@ -260,6 +262,10 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
                 </select>
               )}
             </div>
+          </Field>
+          <Field label={vi ? 'Nhạc nền (tuỳ chọn)' : 'Background music (optional)'}>
+            <input style={S.input} value={cfg.bgmPath} onChange={(e) => setCfgKey('bgmPath', e.target.value)}
+              placeholder={vi ? 'Đường dẫn file nhạc… (tự ducking dưới giọng đọc)' : 'Music file path… (auto-ducked under narration)'} />
           </Field>
           <Field label={vi ? 'Thư mục lưu' : 'Save folder'}>
             <input style={S.input} value={cfg.outputDir} onChange={(e) => setCfgKey('outputDir', e.target.value)} placeholder={vi ? 'Mặc định: output' : 'Default: output'} />

@@ -327,6 +327,28 @@ def run_content(
         if not _res.get("ok"):
             raise RuntimeError("Content: assembly (concat) failed")
 
+        # 5b. CS-F — mix background music (ducked under the narration) into the
+        #     assembled video. Best-effort: a BGM failure keeps the non-BGM output
+        #     (never fails the render). Runs BEFORE QA so the delivered file is
+        #     validated with its final audio.
+        _bgm = (getattr(payload, "content_bgm_path", "") or "").strip()
+        if _bgm and Path(_bgm).exists():
+            _bgm_tmp = str(final_out) + ".bgm.mp4"
+            try:
+                from app.features.render.engine.audio.mixer import mix_with_bgm
+                mix_with_bgm(
+                    video_path=str(final_out), bgm_path=_bgm,
+                    output_path=_bgm_tmp, duck=True,
+                )
+                Path(_bgm_tmp).replace(final_out)
+                _job_log(effective_channel, job_id, "Content: background music mixed (ducked)")
+            except Exception as exc:
+                logger.warning("content: BGM mix failed (non-fatal): %s", exc)
+                try:
+                    Path(_bgm_tmp).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
         # 6. QA gate (Sacred Contract #8 — never bypassed) ---------------------
         _exp = float(_res.get("expected_duration") or 0.0)
         _qa = _validate_render_output(

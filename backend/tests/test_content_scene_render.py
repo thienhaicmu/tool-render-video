@@ -257,6 +257,29 @@ def test_render_scene_word_by_word_burns_ass(tmp_path, monkeypatch):
     assert info["v"] and info["a"], "scene must have video + audio"
 
 
+# ── CS-F: BGM mix + ducking ──────────────────────────────────────────────────
+
+@needs_ffmpeg
+def test_mix_with_bgm_duck(tmp_path):
+    from app.features.render.engine.audio.mixer import mix_with_bgm
+    from app.services.bin_paths import get_ffmpeg_bin
+    vid = tmp_path / "v.mp4"
+    subprocess.run(
+        [get_ffmpeg_bin(), "-y", "-f", "lavfi", "-i", "color=c=blue:s=320x240:d=2",
+         "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "2",
+         "-c:v", "libx264", "-c:a", "aac", str(vid)],
+        capture_output=True, check=True, timeout=60,
+    )
+    bgm = tmp_path / "bgm.mp3"
+    _make_silent_audio(str(bgm), 3.0)  # shorter/looped BGM path exercised
+    out = tmp_path / "mixed.mp4"
+    res = mix_with_bgm(video_path=str(vid), bgm_path=str(bgm), output_path=str(out), duck=True)
+    assert Path(res).exists()
+    info = _probe(str(out))
+    assert info["v"] is True and info["a"] is True
+    assert 1.6 <= info["dur"] <= 2.6, f"duration off: {info['dur']}"
+
+
 @needs_ffmpeg
 def test_render_content_scene_missing_audio_returns_false(tmp_path):
     scene = ContentScene(index=1, narration="something", reading_speed=1.0)
