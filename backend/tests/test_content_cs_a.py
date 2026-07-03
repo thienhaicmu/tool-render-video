@@ -216,6 +216,39 @@ def test_content_project_crud(monkeypatch, tmp_path):
         close_thread_conn()
 
 
+# ── CU-14: publish intelligence ──────────────────────────────────────────────
+
+def test_publish_meta_endpoint(monkeypatch):
+    import app.features.content.router as mod
+    monkeypatch.setattr(mod, "generate_publish_meta",
+                        lambda **k: {"title": "T", "description": "D", "tags": ["a", "b"], "thumbnail_scene_index": 1})
+    r = _client().post("/api/content/publish-meta", json={"topic": "Mars", "voice_language": "en-US"})
+    assert r.status_code == 200, r.text
+    meta = r.json()["meta"]
+    assert meta["title"] == "T" and meta["tags"] == ["a", "b"]
+
+
+def test_publish_meta_empty_422():
+    r = _client().post("/api/content/publish-meta", json={"topic": "  "})
+    assert r.status_code == 422
+
+
+def test_publish_meta_none_502(monkeypatch):
+    import app.features.content.router as mod
+    monkeypatch.setattr(mod, "generate_publish_meta", lambda **k: None)
+    r = _client().post("/api/content/publish-meta", json={"topic": "a real topic"})
+    assert r.status_code == 502
+
+
+def test_parse_publish_meta_response():
+    from app.features.render.ai.llm.content_parser import parse_publish_meta_response
+    m = parse_publish_meta_response(json.dumps({
+        "title": "T", "description": "D", "tags": ["x", "", "y"], "thumbnail_scene_index": 2,
+    }))
+    assert m["title"] == "T" and m["tags"] == ["x", "y"] and m["thumbnail_scene_index"] == 2
+    assert parse_publish_meta_response("not json") is None
+
+
 def test_get_missing_project_404(monkeypatch, tmp_path):
     db = tmp_path / "app.db"
     monkeypatch.setattr("app.db.connection.DATABASE_PATH", db)

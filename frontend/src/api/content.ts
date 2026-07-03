@@ -132,3 +132,21 @@ export async function listProjects(): Promise<{ projects: ContentProjectSummary[
 export async function deleteProject(id: string): Promise<void> {
   return apiFetch(`/api/content/projects/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
+
+// ── CU-14: publish intelligence ─────────────────────────────────────────────
+
+export interface PublishMeta {
+  title: string
+  description: string
+  tags: string[]
+  thumbnail_scene_index: number
+}
+
+export async function publishMeta(req: {
+  topic?: string; tone?: string; audience?: string
+  voice_language?: string; narration_sample?: string
+}): Promise<{ meta: PublishMeta }> {
+  return apiFetch<{ meta: PublishMeta }>('/api/content/publish-meta', {
+    method: 'POST', body: JSON.stringify(req),
+  })
+}

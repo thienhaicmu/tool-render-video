@@ -244,6 +244,55 @@ def _bible_block(bible) -> str:
         return ""
 
 
+
+# ── CU-14: Publish intelligence (SEO metadata from the finished plan) ─────────
+_SYSTEM_PUBLISH = (
+    "You are a YouTube/TikTok SEO expert. Given a video's topic + a sample of its "
+    "narration, you write a click-worthy TITLE, a compelling DESCRIPTION, relevant "
+    "TAGS, and pick which scene makes the best THUMBNAIL. Output ONLY valid JSON in "
+    "the exact shape requested — no prose, no markdown, no code fences."
+)
+
+_USER_TEMPLATE_PUBLISH = """═══ VIDEO ═══
+TOPIC: {topic}
+TONE: {tone}
+AUDIENCE: {audience}
+LANGUAGE: {lang_name}
+NARRATION SAMPLE:
+{narration_sample}
+
+═══ OUTPUT FORMAT (STRICT — return ONLY this JSON) ═══
+{{
+  "title": "<catchy title in {lang_name}, < 90 chars>",
+  "description": "<2-4 sentence description in {lang_name}>",
+  "tags": ["<tag>", "..."],
+  "thumbnail_scene_index": <int, the 0-based scene index that best represents the video>
+}}
+
+═══ HARD RULES ═══
+1. ONE JSON object. No markdown, no prose, no code fences.
+2. title is < 90 chars; tags is 5-15 short strings.
+
+═══ OUTPUT JSON ═══
+"""
+
+
+def build_publish_meta_prompt(
+    topic: str, tone: str = "", audience: str = "",
+    target_language: str = "vi-VN", narration_sample: str = "",
+) -> tuple[str, str]:
+    """CU-14 — return (system, user) for the publish-metadata call. Never raises."""
+    lang_name = _LANG_NAMES.get(target_language, target_language or "the target language")
+    user = _USER_TEMPLATE_PUBLISH.format(
+        topic=(topic or "").strip() or "(unknown)",
+        tone=(tone or "").strip() or "neutral",
+        audience=(audience or "").strip() or "general",
+        lang_name=lang_name,
+        narration_sample=_fit_script(narration_sample or "", 4000),
+    )
+    return _SYSTEM_PUBLISH, user
+
+
 def build_content_plan_prompt(
     script: str,
     target_duration_sec: float = 90.0,

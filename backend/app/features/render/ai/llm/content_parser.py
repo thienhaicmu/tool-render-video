@@ -177,6 +177,39 @@ def parse_story_bible_response(raw: str) -> Optional["tuple[StoryBible, dict]"]:
         return None
 
 
+def parse_publish_meta_response(raw: str) -> Optional[dict]:
+    """CU-14 — parse the publish-metadata response into a normalised dict, or None
+    on failure (Sacred Contract #3). Never raises."""
+    try:
+        if not raw or not str(raw).strip():
+            return None
+        data = _extract_json_object(_strip_wrappers(str(raw).strip())) or _salvage_json(str(raw))
+        if not isinstance(data, dict):
+            return None
+        title = str(data.get("title", "") or "").strip()
+        desc = str(data.get("description", "") or "").strip()
+        tags_raw = data.get("tags")
+        tags: list[str] = []
+        if isinstance(tags_raw, list):
+            for t in tags_raw:
+                s = str(t or "").strip()
+                if s:
+                    tags.append(s)
+                if len(tags) >= 20:
+                    break
+        try:
+            thumb = int(data.get("thumbnail_scene_index", 0) or 0)
+        except (TypeError, ValueError):
+            thumb = 0
+        if not (title or desc or tags):
+            return None
+        return {"title": title, "description": desc, "tags": tags,
+                "thumbnail_scene_index": max(0, thumb)}
+    except Exception as exc:
+        logger.warning("content_parser: publish-meta parse error %s", exc)
+        return None
+
+
 def parse_content_plan_response(raw: str, target_duration: float = 0.0) -> Optional[ContentPlan]:
     """Parse the Content Director LLM response into a ContentPlan. Returns None on
     any failure or when nothing usable was produced (Sacred Contract #3)."""

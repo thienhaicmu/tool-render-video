@@ -36,7 +36,7 @@ from app.db.content_repo import (
     list_content_projects,
     upsert_content_project,
 )
-from app.features.render.ai.llm import select_content_plan
+from app.features.render.ai.llm import select_content_plan, generate_publish_meta
 
 logger = logging.getLogger("app.content.api")
 
@@ -247,3 +247,36 @@ def get_project(project_id: str) -> dict:
 def delete_project(project_id: str) -> dict:
     delete_content_project(project_id)
     return {"ok": True}
+
+
+# ── CU-14: publish intelligence ──────────────────────────────────────────────
+
+class PublishMetaRequest(BaseModel):
+    topic: str = ""
+    tone: str = ""
+    audience: str = ""
+    voice_language: str = "vi-VN"
+    narration_sample: str = ""
+    ai_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+
+
+@router.post("/publish-meta")
+def publish_meta(req: PublishMetaRequest) -> dict:
+    """Generate SEO publish metadata (title/description/tags/thumbnail) from the
+    finished plan. 422 empty input; 502 when the AI produced nothing."""
+    if not (req.topic or req.narration_sample or "").strip():
+        raise HTTPException(status_code=422, detail="topic or narration_sample is required")
+    from app.core import config as _cfg
+    from app.features.render.engine.pipeline.llm_stage import _resolve_api_key
+    provider = (req.ai_provider or "").strip().lower() or getattr(_cfg, "AI_PROVIDER_DEFAULT", "gemini")
+    api_key, _ = _resolve_api_key(req, provider)
+    meta = generate_publish_meta(
+        provider=provider, topic=req.topic, tone=req.tone, audience=req.audience,
+        target_language=(req.voice_language or "vi-VN"), narration_sample=req.narration_sample,
+        api_key=api_key, model=req.llm_model,
+        resolve_key=lambda _p: _resolve_api_key(req, _p)[0],
+    )
+    if meta is None:
+        raise HTTPException(status_code=502, detail="publish metadata generation failed")
+    return {"meta": meta}

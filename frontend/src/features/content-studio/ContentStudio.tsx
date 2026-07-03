@@ -24,7 +24,7 @@ import { RATIO_INFO } from '../clip-studio/render/constants'
 import type { Ratio } from '../clip-studio/render/types'
 import {
   generateContentPlan, previewNarration, createProject, saveProject, getProject, listProjects,
-  type ContentPlan, type ContentScene, type ContentProjectSummary,
+  publishMeta, type ContentPlan, type ContentScene, type ContentProjectSummary, type PublishMeta,
 } from '../../api/content'
 import { BASE_URL } from '../../api/client'
 
@@ -197,7 +197,7 @@ export function ContentStudio() {
   }
 
   if (jobId) {
-    return <ContentMonitor jobId={jobId} vi={vi} onNew={() => {
+    return <ContentMonitor jobId={jobId} vi={vi} plan={plan} voiceLang={cfg.voiceLang} onNew={() => {
       setJobId(null); setPlan(null); setPhase('script'); setError(null)
       setProjectId(null); setScript('')
       void listProjects().then((r) => setDrafts(r.projects)).catch(() => {})
@@ -544,10 +544,32 @@ function SceneRow({ vi, scene, index, total, voice, onChange, onRemove, onMove }
 
 // ── Phase 3: live monitor ───────────────────────────────────────────────────
 
-function ContentMonitor({ jobId, onNew, vi }: { jobId: string; onNew: () => void; vi: boolean }) {
+function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
+  jobId: string; onNew: () => void; vi: boolean; plan: ContentPlan | null; voiceLang: string
+}) {
   const { stage, jobStatus, jobMessage, progress, liveParts, liveEvents, isTerminal, error } = useRenderSocket(jobId)
   const pct = progress?.overall_progress_percent ?? 0
   const ok = jobStatus === 'completed' || jobStatus === 'completed_with_errors'
+  const [pubBusy, setPubBusy] = useState(false)
+  const [pubMeta, setPubMeta] = useState<PublishMeta | null>(null)
+  const [pubErr, setPubErr] = useState<string | null>(null)
+
+  async function genPublish() {
+    if (pubBusy || !plan) return
+    setPubBusy(true); setPubErr(null)
+    try {
+      const sample = (plan.scenes || []).slice(0, 6).map((s) => s.narration).join(' ')
+      const { meta } = await publishMeta({
+        topic: plan.topic, tone: plan.tone, audience: plan.audience,
+        voice_language: voiceLang, narration_sample: sample,
+      })
+      setPubMeta(meta)
+    } catch (e) {
+      setPubErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPubBusy(false)
+    }
+  }
   const planReady = useMemo(() => liveEvents.some((e) => (e as { event?: string }).event === 'content.plan.ready'), [liveEvents])
 
   return (
@@ -586,7 +608,28 @@ function ContentMonitor({ jobId, onNew, vi }: { jobId: string; onNew: () => void
             </span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-2, #ccc)' }}>{jobMessage || error || ''}</p>
-          <button style={S.btnPrimary} onClick={onNew}>{vi ? 'Tạo video mới' : 'New content video'}</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button style={S.btnPrimary} onClick={onNew}>{vi ? 'Tạo video mới' : 'New content video'}</button>
+            {ok && plan && (
+              <button style={S.btnGhost} disabled={pubBusy} onClick={genPublish}>
+                {pubBusy ? (vi ? 'Đang tạo…' : 'Generating…') : (vi ? 'Tạo tiêu đề/mô tả (AI)' : 'Generate title/description (AI)')}
+              </button>
+            )}
+          </div>
+          {pubErr && <div style={{ fontSize: 12, color: 'var(--fail, #ef4444)', marginTop: 8 }}>{pubErr}</div>}
+          {pubMeta && (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Field label={vi ? 'Tiêu đề' : 'Title'}>
+                <input style={S.input} readOnly value={pubMeta.title} />
+              </Field>
+              <Field label={vi ? 'Mô tả' : 'Description'}>
+                <textarea style={{ ...S.input, minHeight: 70 }} readOnly value={pubMeta.description} />
+              </Field>
+              <Field label={vi ? 'Thẻ' : 'Tags'}>
+                <input style={S.input} readOnly value={(pubMeta.tags || []).join(', ')} />
+              </Field>
+            </div>
+          )}
         </section>
       )}
       {!isTerminal && <div style={{ marginTop: 12 }}><button style={S.btnGhost} onClick={onNew}>{vi ? 'Tạo cái khác' : 'Start another'}</button></div>}

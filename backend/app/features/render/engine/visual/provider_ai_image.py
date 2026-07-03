@@ -29,7 +29,7 @@ def _apply_style(prompt: str, style: str) -> str:
     return f"{prompt}, {style} style" if style else prompt
 
 
-def _gemini_image(prompt: str, negative: str = "", style: str = "") -> Optional[bytes]:
+def _gemini_image(prompt: str, negative: str = "", style: str = "", seed: int = 0) -> Optional[bytes]:
     """Generate a PNG via Gemini Imagen. Lazy SDK import; None on any failure."""
     try:
         key = (os.getenv("GEMINI_API_KEY") or "").strip()
@@ -43,6 +43,8 @@ def _gemini_image(prompt: str, negative: str = "", style: str = "") -> Optional[
         _cfg: dict = {"number_of_images": 1}
         if (negative or "").strip():
             _cfg["negative_prompt"] = negative.strip()  # Imagen supports negative_prompt
+        if seed and int(seed) > 0:
+            _cfg["seed"] = int(seed)                     # CU-11: consistent look
         resp = client.models.generate_images(
             model=model, prompt=_apply_style(prompt, style),
             config=_cfg,
@@ -82,9 +84,46 @@ def _openai_image(prompt: str, w: int, h: int, negative: str = "", style: str = 
         return None
 
 
+# CU-10: media intelligence. When on, a vision model checks the generated image
+# actually matches the prompt; a mismatch triggers a regenerate (up to a cap).
+# Default OFF (a vision call per asset is extra cost/latency). Fail-open: if the
+# check can't run, the image is accepted (never blocks a render on a flaky check).
+_VERIFY_ON = os.getenv("CONTENT_VERIFY_ASSETS", "0") == "1"
+_VERIFY_RETRY = max(0, int(os.getenv("CONTENT_VERIFY_MAX_RETRY", "1") or 1))
+
+
+def _verify_image(path: str, prompt: str) -> bool:
+    """CU-10 — ask a vision model whether the image matches the prompt. Returns
+    True on match OR on any inability to check (fail-open); only an explicit NO
+    returns False. Never raises."""
+    try:
+        key = (os.getenv("GEMINI_API_KEY") or "").strip()
+        if not key:
+            return True
+        from google import genai
+        from google.genai import types
+        from pathlib import Path
+        client = genai.Client(api_key=key)
+        model = (os.getenv("CONTENT_VERIFY_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash")
+        img = Path(path).read_bytes()
+        resp = client.models.generate_content(
+            model=model,
+            contents=[
+                types.Part.from_bytes(data=img, mime_type="image/png"),
+                f"Does this image plausibly depict: {prompt}? Answer only YES or NO.",
+            ],
+        )
+        ans = (getattr(resp, "text", "") or "").strip().upper()
+        return not ans.startswith("NO")  # reject only on an explicit NO
+    except Exception as exc:
+        logger.info("visual.ai_image: verify unavailable (%s) — accepting", exc)
+        return True
+
+
 def resolve_ai_image(request: SceneVisualRequest) -> Optional[SceneVisualAsset]:
     """Generate an AI image for the scene from its visual_prompt. None on no key /
-    no SDK / API error (→ local fallback). Never raises."""
+    no SDK / API error (→ local fallback). When CONTENT_VERIFY_ASSETS is on, a
+    mismatch triggers a regenerate (with a varied seed) up to a cap. Never raises."""
     try:
         prompt = (getattr(request, "prompt", "") or "").strip()
         if not prompt:
@@ -97,15 +136,26 @@ def resolve_ai_image(request: SceneVisualRequest) -> Optional[SceneVisualAsset]:
 
         negative = (getattr(request, "negative_prompt", "") or "").strip()
         style = (getattr(request, "style", "") or "").strip()
-        data = (
-            _openai_image(prompt, w, h, negative, style) if provider == "openai"
-            else _gemini_image(prompt, negative, style)
-        )
-        if not data:
-            return None
-        cached.write_bytes(data)
-        if not (cached.exists() and cached.stat().st_size > 0):
-            return None
+        base_seed = int(getattr(request, "seed", 0) or 0)
+
+        attempts = 1 + (_VERIFY_RETRY if _VERIFY_ON else 0)
+        for attempt in range(attempts):
+            # Vary the seed on retries so a rejected image is not regenerated identically.
+            seed = base_seed + attempt if base_seed else 0
+            data = (
+                _openai_image(prompt, w, h, negative, style) if provider == "openai"
+                else _gemini_image(prompt, negative, style, seed)
+            )
+            if not data:
+                return None
+            cached.write_bytes(data)
+            if not (cached.exists() and cached.stat().st_size > 0):
+                return None
+            if not _VERIFY_ON or _verify_image(str(cached), prompt):
+                return SceneVisualAsset(kind="image", value=str(cached), provider="ai_image")
+            logger.info("visual.ai_image: verify rejected image (attempt %d/%d) — regenerating",
+                        attempt + 1, attempts)
+        # All attempts exhausted — deliver the last image (fail-open, better than none).
         return SceneVisualAsset(kind="image", value=str(cached), provider="ai_image")
     except Exception as exc:
         logger.info("visual.ai_image: error %s", exc)

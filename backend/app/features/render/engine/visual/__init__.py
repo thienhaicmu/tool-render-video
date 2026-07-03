@@ -60,6 +60,10 @@ class SceneVisualRequest:
     # by local/stock. "" = no constraint.
     negative_prompt: str = ""
     style: str = ""
+    # CU-11: a stable generation seed (derived from the scene's character/style)
+    # so a provider that supports_seed reproduces a consistent look across scenes.
+    # 0 = no seed (provider chooses).
+    seed: int = 0
     # MED-2: optional "is this job cancelled?" probe. A slow online provider
     # (e.g. Veo, minutes long) polls this to abort promptly on cancel. None =
     # no cancellation wiring (local + tests).

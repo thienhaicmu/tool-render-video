@@ -86,24 +86,66 @@ def test_ai_image_forwards_negative_and_style(monkeypatch, tmp_path):
     monkeypatch.setattr(ai, "visual_cache_dir", lambda: tmp_path)
     captured: dict = {}
 
-    def _fake_gemini(prompt, negative="", style=""):
-        captured.update(prompt=prompt, negative=negative, style=style)
+    def _fake_gemini(prompt, negative="", style="", seed=0):
+        captured.update(prompt=prompt, negative=negative, style=style, seed=seed)
         return b"PNGDATA"
     monkeypatch.setattr(ai, "_gemini_image", _fake_gemini)
 
     req = _req(prompt="a battlefield at dawn")
     req.negative_prompt = "blurry, cartoon"
     req.style = "cinematic"
+    req.seed = 12345
     a = ai.resolve_ai_image(req)
     assert a is not None and a.kind == "image"
     assert captured["negative"] == "blurry, cartoon"
     assert captured["style"] == "cinematic"
+    assert captured["seed"] == 12345          # CU-11 seed forwarded
 
 
 def test_apply_style_helper():
     from app.features.render.engine.visual.provider_ai_image import _apply_style
     assert _apply_style("a cat", "cinematic") == "a cat, cinematic style"
     assert _apply_style("a cat", "") == "a cat"
+
+
+def test_stable_seed_deterministic_and_distinct():
+    from app.features.render.engine.pipeline.content_pipeline import _stable_seed
+    assert _stable_seed("napoleon") == _stable_seed("napoleon")
+    assert _stable_seed("napoleon") != _stable_seed("caesar")
+    assert _stable_seed("") == 0
+    assert _stable_seed("x") > 0
+
+
+def test_ai_image_verify_regenerates_on_mismatch(monkeypatch, tmp_path):
+    # CU-10: with verify on, a rejected image triggers one regenerate.
+    import app.features.render.engine.visual.provider_ai_image as ai
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setattr(ai, "visual_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(ai, "_VERIFY_ON", True, raising=False)
+    monkeypatch.setattr(ai, "_VERIFY_RETRY", 1, raising=False)
+
+    gen_calls = {"n": 0}
+
+    def _fake_gemini(prompt, negative="", style="", seed=0):
+        gen_calls["n"] += 1
+        return b"PNGDATA"
+    monkeypatch.setattr(ai, "_gemini_image", _fake_gemini)
+
+    verdicts = iter([False, True])  # first image rejected, second accepted
+
+    def _fake_verify(path, prompt):
+        return next(verdicts, True)
+    monkeypatch.setattr(ai, "_verify_image", _fake_verify)
+
+    a = ai.resolve_ai_image(_req(prompt="a red planet", tmp=str(tmp_path)))
+    assert a is not None and a.kind == "image"
+    assert gen_calls["n"] == 2   # regenerated once after the rejection
+
+
+def test_verify_image_fail_open_without_key(monkeypatch):
+    import app.features.render.engine.visual.provider_ai_image as ai
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert ai._verify_image("/nope.png", "anything") is True  # fail-open
 
 
 def test_seam_stock_falls_back_to_local(monkeypatch, tmp_path):

@@ -28,10 +28,10 @@ from app.features.render.ai.llm.recap_parser import (
     parse_episode_narration_response,
 )
 from app.features.render.ai.llm.content_prompts import (
-    build_content_plan_prompt, build_story_bible_prompt,
+    build_content_plan_prompt, build_story_bible_prompt, build_publish_meta_prompt,
 )
 from app.features.render.ai.llm.content_parser import (
-    parse_content_plan_response, parse_story_bible_response,
+    parse_content_plan_response, parse_story_bible_response, parse_publish_meta_response,
 )
 from app.features.render.ai.llm.content_quality import (
     validate_and_repair, inject_character_fragments,
@@ -681,6 +681,33 @@ def select_content_plan(
         return plan
     except Exception as exc:
         logger.warning("gemini_client: select_content_plan unexpected error %s", exc, exc_info=True)
+        return None
+
+
+def generate_publish_meta(
+    topic: str = "",
+    tone: str = "",
+    audience: str = "",
+    target_language: str = "vi-VN",
+    narration_sample: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional[dict]:
+    """CU-14 — SEO publish metadata (title/description/tags/thumbnail) from a
+    finished plan. Returns a dict or None (Sacred Contract #3 — never raises)."""
+    try:
+        if not _GENAI_SDK or not api_key:
+            return None
+        if not (topic or narration_sample).strip():
+            return None
+        rm = model or _DEFAULT_MODEL
+        sys_p, user_p = build_publish_meta_prompt(topic, tone, audience, target_language, narration_sample)
+        raw = _call_gemini_content(api_key, rm, sys_p, user_p)
+        if not raw:
+            return None
+        return parse_publish_meta_response(raw)
+    except Exception as exc:
+        logger.warning("gemini_client: generate_publish_meta error %s", exc)
         return None
 
 

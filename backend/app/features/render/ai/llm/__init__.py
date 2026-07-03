@@ -216,6 +216,57 @@ def select_content_plan(
     return None
 
 
+def generate_publish_meta(
+    *,
+    provider: str = DEFAULT_PROVIDER,
+    topic: str = "",
+    tone: str = "",
+    audience: str = "",
+    target_language: str = "vi-VN",
+    narration_sample: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+    resolve_key: Optional[Callable[[str], str]] = None,
+) -> Optional[dict]:
+    """CU-14 — dispatch publish-metadata generation. Returns a dict or None
+    (Sacred Contract #3). Providers without an impl are skipped (v1 Gemini-only)."""
+    primary = (provider or DEFAULT_PROVIDER).strip().lower()
+    if primary not in SUPPORTED_PROVIDERS:
+        primary = "gemini"
+    chain = [primary]
+    if _LLM_FALLBACK_ENABLED:
+        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    base = dict(topic=topic, tone=tone, audience=audience,
+                target_language=target_language, narration_sample=narration_sample, model=model)
+    for _p in chain:
+        try:
+            if _p == "openai":
+                from app.features.render.ai.llm.providers import openai as _mod
+            elif _p == "claude":
+                from app.features.render.ai.llm.providers import claude as _mod
+            else:
+                from app.features.render.ai.llm.providers import gemini as _mod
+            impl = getattr(_mod, "generate_publish_meta", None)
+        except Exception:
+            impl = None
+        if impl is None:
+            continue
+        _key = api_key
+        if resolve_key is not None:
+            try:
+                _key = resolve_key(_p) or ""
+            except Exception:
+                _key = api_key
+        try:
+            result = impl(api_key=_key, **base)
+        except Exception as exc:
+            logger.warning("llm: generate_publish_meta provider=%s raised %s", _p, exc)
+            result = None
+        if result is not None:
+            return result
+    return None
+
+
 def select_story_model(
     *,
     provider: str = DEFAULT_PROVIDER,

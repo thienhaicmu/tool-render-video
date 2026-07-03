@@ -83,6 +83,16 @@ _SAMPLE_RATE = 48000
 _FS_ILLEGAL_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
+def _stable_seed(key: str) -> int:
+    """CU-11 — a stable 31-bit seed from a key (character id / style) so the same
+    subject reproduces a consistent look across scenes. 0 for an empty key."""
+    key = (key or "").strip().lower()
+    if not key:
+        return 0
+    import hashlib
+    return int(hashlib.sha1(key.encode("utf-8", "ignore")).hexdigest()[:8], 16) & 0x7FFFFFFF
+
+
 def _safe_filename(name: str, max_len: int = 120) -> str:
     """Make an AI-authored title/topic safe to use as a filename stem. Strips
     illegal chars, collapses whitespace, trims trailing dots/spaces (Windows),
@@ -327,6 +337,12 @@ def run_content(
                     prompt=(scene.visual_prompt or scene.visual_hint or ""),
                     negative_prompt=(getattr(scene, "negative_prompt", "") or ""),
                     style=(getattr(plan, "video_style", "") or ""),
+                    # CU-11: seed by the scene's primary character (else the video
+                    # style) so the same subject stays visually consistent.
+                    seed=_stable_seed(
+                        (getattr(scene, "characters", None) or [""])[0]
+                        or (getattr(plan, "video_style", "") or "")
+                    ),
                     width=width, height=height, fps=fps, duration_sec=ndur,
                     work_dir=str(scenes_dir), cancel_check=_cancel_cb,
                 ),
