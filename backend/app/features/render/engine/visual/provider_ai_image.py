@@ -23,7 +23,13 @@ from app.features.render.engine.visual import (
 logger = logging.getLogger("app.render.visual.ai_image")
 
 
-def _gemini_image(prompt: str) -> Optional[bytes]:
+def _apply_style(prompt: str, style: str) -> str:
+    """Prepend a style hint to a prompt (CU-3). No-op when style is empty."""
+    style = (style or "").strip()
+    return f"{prompt}, {style} style" if style else prompt
+
+
+def _gemini_image(prompt: str, negative: str = "", style: str = "") -> Optional[bytes]:
     """Generate a PNG via Gemini Imagen. Lazy SDK import; None on any failure."""
     try:
         key = (os.getenv("GEMINI_API_KEY") or "").strip()
@@ -34,9 +40,12 @@ def _gemini_image(prompt: str) -> Optional[bytes]:
         client = genai.Client(api_key=key)
         model = (os.getenv("CONTENT_IMAGEN_MODEL", "imagen-3.0-generate-002").strip()
                  or "imagen-3.0-generate-002")
+        _cfg: dict = {"number_of_images": 1}
+        if (negative or "").strip():
+            _cfg["negative_prompt"] = negative.strip()  # Imagen supports negative_prompt
         resp = client.models.generate_images(
-            model=model, prompt=prompt,
-            config={"number_of_images": 1},
+            model=model, prompt=_apply_style(prompt, style),
+            config=_cfg,
         )
         imgs = getattr(resp, "generated_images", None) or []
         if not imgs:
@@ -49,7 +58,7 @@ def _gemini_image(prompt: str) -> Optional[bytes]:
         return None
 
 
-def _openai_image(prompt: str, w: int, h: int) -> Optional[bytes]:
+def _openai_image(prompt: str, w: int, h: int, negative: str = "", style: str = "") -> Optional[bytes]:
     """Generate a PNG via OpenAI images (DALL-E). Lazy SDK import; None on failure."""
     try:
         key = (os.getenv("OPENAI_API_KEY") or "").strip()
@@ -60,7 +69,11 @@ def _openai_image(prompt: str, w: int, h: int) -> Optional[bytes]:
         client = OpenAI(api_key=key)
         size = "1024x1792" if h > w else ("1792x1024" if w > h else "1024x1024")
         model = (os.getenv("CONTENT_DALLE_MODEL", "dall-e-3").strip() or "dall-e-3")
-        resp = client.images.generate(model=model, prompt=prompt, size=size, n=1, response_format="b64_json")
+        # DALL-E has no negative-prompt param — fold "avoid" + style into the text.
+        _p = _apply_style(prompt, style)
+        if (negative or "").strip():
+            _p = f"{_p}. Avoid: {negative.strip()}"
+        resp = client.images.generate(model=model, prompt=_p, size=size, n=1, response_format="b64_json")
         import base64
         b64 = resp.data[0].b64_json
         return base64.b64decode(b64) if b64 else None
@@ -82,7 +95,12 @@ def resolve_ai_image(request: SceneVisualRequest) -> Optional[SceneVisualAsset]:
         if cached.exists() and cached.stat().st_size > 0:
             return SceneVisualAsset(kind="image", value=str(cached), provider="ai_image")
 
-        data = _openai_image(prompt, w, h) if provider == "openai" else _gemini_image(prompt)
+        negative = (getattr(request, "negative_prompt", "") or "").strip()
+        style = (getattr(request, "style", "") or "").strip()
+        data = (
+            _openai_image(prompt, w, h, negative, style) if provider == "openai"
+            else _gemini_image(prompt, negative, style)
+        )
         if not data:
             return None
         cached.write_bytes(data)

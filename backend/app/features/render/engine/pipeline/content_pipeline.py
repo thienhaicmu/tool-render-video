@@ -297,6 +297,9 @@ def run_content(
                 SceneVisualRequest(
                     scene_index=i, kind=_kind, value=_value,
                     prompt=(scene.visual_prompt or scene.visual_hint or ""),
+                    # CU-3: feed the AI providers the "avoid" list + overall style.
+                    negative_prompt=(getattr(scene, "negative_prompt", "") or ""),
+                    style=(getattr(plan, "video_style", "") or ""),
                     width=width, height=height,
                     fps=fps, duration_sec=ndur, work_dir=str(scenes_dir),
                     cancel_check=_cancel_cb,

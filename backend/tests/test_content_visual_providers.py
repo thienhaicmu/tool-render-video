@@ -78,6 +78,34 @@ def test_ai_image_no_keys_returns_none(monkeypatch):
     assert resolve_ai_image(_req()) is None
 
 
+def test_ai_image_forwards_negative_and_style(monkeypatch, tmp_path):
+    # CU-3: negative_prompt + style must reach the image generator.
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.delenv("CONTENT_AI_IMAGE_PROVIDER", raising=False)  # default gemini
+    import app.features.render.engine.visual.provider_ai_image as ai
+    monkeypatch.setattr(ai, "visual_cache_dir", lambda: tmp_path)
+    captured: dict = {}
+
+    def _fake_gemini(prompt, negative="", style=""):
+        captured.update(prompt=prompt, negative=negative, style=style)
+        return b"PNGDATA"
+    monkeypatch.setattr(ai, "_gemini_image", _fake_gemini)
+
+    req = _req(prompt="a battlefield at dawn")
+    req.negative_prompt = "blurry, cartoon"
+    req.style = "cinematic"
+    a = ai.resolve_ai_image(req)
+    assert a is not None and a.kind == "image"
+    assert captured["negative"] == "blurry, cartoon"
+    assert captured["style"] == "cinematic"
+
+
+def test_apply_style_helper():
+    from app.features.render.engine.visual.provider_ai_image import _apply_style
+    assert _apply_style("a cat", "cinematic") == "a cat, cinematic style"
+    assert _apply_style("a cat", "") == "a cat"
+
+
 def test_seam_stock_falls_back_to_local(monkeypatch, tmp_path):
     monkeypatch.delenv("PEXELS_API_KEY", raising=False)
     monkeypatch.delenv("PIXABAY_API_KEY", raising=False)

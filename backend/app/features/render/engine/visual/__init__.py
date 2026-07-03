@@ -49,12 +49,17 @@ class SceneVisualRequest:
     scene_index: int
     kind: str                 # local provider: "color" | "image" | "video"
     value: str                # color hex / asset path (local); ignored by AI providers
-    prompt: str               # scene.visual_hint — the AI-authored visual description
+    prompt: str               # scene.visual_prompt — the AI-authored visual description
     width: int
     height: int
     fps: float
     duration_sec: float
     work_dir: str
+    # CU-3: things to AVOID (scene.negative_prompt) + an overall STYLE hint
+    # (plan.video_style). Consumed by the AI-image / AI-video providers; ignored
+    # by local/stock. "" = no constraint.
+    negative_prompt: str = ""
+    style: str = ""
     # MED-2: optional "is this job cancelled?" probe. A slow online provider
     # (e.g. Veo, minutes long) polls this to abort promptly on cancel. None =
     # no cancellation wiring (local + tests).
