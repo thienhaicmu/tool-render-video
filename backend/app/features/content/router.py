@@ -30,6 +30,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.core.config import CACHE_DIR
+from app.db.content_repo import (
+    delete_content_project,
+    get_content_project,
+    list_content_projects,
+    upsert_content_project,
+)
 from app.features.render.ai.llm import select_content_plan
 
 logger = logging.getLogger("app.content.api")
@@ -155,3 +161,89 @@ def narration_audio(token: str):
     if not p.exists() or p.stat().st_size <= 0:
         raise HTTPException(status_code=404, detail="not found")
     return FileResponse(str(p), media_type="audio/mpeg")
+
+
+# ── CU-1: Content Studio project (draft) persistence ─────────────────────────
+
+class ContentProjectPayload(BaseModel):
+    title: str = ""
+    script: str = ""
+    plan: Optional[dict] = None       # the (editable) ContentPlan
+    config: Optional[dict] = None     # studio config (aspect/voice/bg/...)
+    status: str = "draft"             # draft | rendered
+    last_job_id: str = ""
+
+
+def _project_out(p: dict) -> dict:
+    """Parse the stored JSON columns back into objects for the FE."""
+    def _load(s):
+        try:
+            return json.loads(s) if s else None
+        except Exception:
+            return None
+    return {
+        "id": p.get("id"), "title": p.get("title", ""), "script": p.get("script", ""),
+        "plan": _load(p.get("plan_json")), "config": _load(p.get("config_json")),
+        "status": p.get("status", "draft"), "last_job_id": p.get("last_job_id", ""),
+        "created_at": p.get("created_at"), "updated_at": p.get("updated_at"),
+    }
+
+
+def _project_summary(p: dict) -> dict:
+    """Lightweight list entry — no full plan/config payload."""
+    plan = None
+    try:
+        plan = json.loads(p.get("plan_json")) if p.get("plan_json") else None
+    except Exception:
+        plan = None
+    scenes = len((plan or {}).get("scenes") or []) if isinstance(plan, dict) else 0
+    return {
+        "id": p.get("id"), "title": p.get("title", ""),
+        "topic": (plan or {}).get("topic", "") if isinstance(plan, dict) else "",
+        "scenes": scenes, "status": p.get("status", "draft"),
+        "updated_at": p.get("updated_at"),
+    }
+
+
+def _save(project_id: str, body: ContentProjectPayload) -> bool:
+    return upsert_content_project(
+        project_id, title=body.title, script=body.script,
+        plan_json=(json.dumps(body.plan, ensure_ascii=False) if body.plan is not None else None),
+        config_json=(json.dumps(body.config, ensure_ascii=False) if body.config is not None else None),
+        status=(body.status or "draft"), last_job_id=(body.last_job_id or ""),
+    )
+
+
+@router.post("/projects")
+def create_project(body: ContentProjectPayload) -> dict:
+    pid = uuid.uuid4().hex
+    if not _save(pid, body):
+        raise HTTPException(status_code=500, detail="failed to save project")
+    return {"id": pid}
+
+
+@router.put("/projects/{project_id}")
+def save_project(project_id: str, body: ContentProjectPayload) -> dict:
+    """Autosave / update a project (idempotent upsert by id)."""
+    if not _save(project_id, body):
+        raise HTTPException(status_code=500, detail="failed to save project")
+    return {"id": project_id, "ok": True}
+
+
+@router.get("/projects")
+def list_projects(limit: int = 50) -> dict:
+    return {"projects": [_project_summary(p) for p in list_content_projects(limit)]}
+
+
+@router.get("/projects/{project_id}")
+def get_project(project_id: str) -> dict:
+    p = get_content_project(project_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return _project_out(p)
+
+
+@router.delete("/projects/{project_id}")
+def delete_project(project_id: str) -> dict:
+    delete_content_project(project_id)
+    return {"ok": True}

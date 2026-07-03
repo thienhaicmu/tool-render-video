@@ -15,14 +15,17 @@
  * RATIO_INFO, i18n, theme CSS vars). The render runs on the SHARED engine — no
  * pipeline duplication.
  */
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { RenderRequest } from '@/types/api'
 import { useI18n } from '../../i18n/useI18n'
 import { useRenderStore } from '../../stores/renderStore'
 import { useRenderSocket } from '../../hooks/useRenderSocket'
 import { RATIO_INFO } from '../clip-studio/render/constants'
 import type { Ratio } from '../clip-studio/render/types'
-import { generateContentPlan, previewNarration, type ContentPlan, type ContentScene } from '../../api/content'
+import {
+  generateContentPlan, previewNarration, createProject, saveProject, getProject, listProjects,
+  type ContentPlan, type ContentScene, type ContentProjectSummary,
+} from '../../api/content'
 import { BASE_URL } from '../../api/client'
 
 type BgKind = 'color' | 'image' | 'video'
@@ -71,8 +74,52 @@ export function ContentStudio() {
   const [jobId, setJobId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // CU-1: draft persistence
+  const [projectId, setProjectId] = useState<string | null>(null)
+  const [drafts, setDrafts] = useState<ContentProjectSummary[]>([])
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const setCfgKey = <K extends keyof Config>(k: K, v: Config[K]) => setCfg((p) => ({ ...p, [k]: v }))
+
+  // Load recent drafts once.
+  useEffect(() => {
+    void listProjects().then((r) => setDrafts(r.projects)).catch(() => {})
+  }, [])
+
+  // Autosave (debounced) whenever the script/config/plan changes and there is
+  // something worth keeping. Creates the project lazily on first save.
+  useEffect(() => {
+    if (!plan && !script.trim()) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      const body = {
+        title: (plan?.topic || script.trim().slice(0, 48) || 'Untitled'),
+        script, plan: plan || undefined,
+        config: cfg as unknown as Record<string, unknown>,
+        status: (jobId ? 'rendered' : 'draft') as 'draft' | 'rendered',
+        last_job_id: jobId || '',
+      }
+      const p = projectId
+        ? saveProject(projectId, body)
+        : createProject(body).then(({ id }) => { setProjectId(id) })
+      void p.catch(() => {})
+    }, 1200)
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
+  }, [script, cfg, plan, jobId, projectId])
+
+  async function openDraft(id: string) {
+    try {
+      const p = await getProject(id)
+      setScript(p.script || '')
+      if (p.config) setCfg({ ...DEFAULT_CFG, ...(p.config as Partial<Config>) })
+      setProjectId(p.id)
+      if (p.plan && p.plan.scenes?.length) { setPlan(p.plan); setPhase('review') }
+      else { setPlan(null); setPhase('script') }
+      setError(null)
+    } catch {
+      setError(vi ? 'Không mở được bản nháp.' : 'Could not open draft.')
+    }
+  }
 
   function buildPayload(planOverride: ContentPlan): RenderRequest {
     const bgValue = cfg.bgKind === 'color' ? cfg.bgColor : cfg.bgAssetPath.trim()
@@ -150,7 +197,11 @@ export function ContentStudio() {
   }
 
   if (jobId) {
-    return <ContentMonitor jobId={jobId} vi={vi} onNew={() => { setJobId(null); setPlan(null); setPhase('script'); setError(null) }} />
+    return <ContentMonitor jobId={jobId} vi={vi} onNew={() => {
+      setJobId(null); setPlan(null); setPhase('script'); setError(null)
+      setProjectId(null); setScript('')
+      void listProjects().then((r) => setDrafts(r.projects)).catch(() => {})
+    }} />
   }
   if (phase === 'review' && plan) {
     return (
@@ -165,16 +216,18 @@ export function ContentStudio() {
     <ScriptPhase
       vi={vi} script={script} setScript={setScript} cfg={cfg} setCfgKey={setCfgKey}
       busy={busy} error={error} onGenerate={handleGeneratePlan}
+      drafts={drafts} onOpenDraft={openDraft}
     />
   )
 }
 
 // ── Phase 1: script + config ────────────────────────────────────────────────
 
-function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGenerate }: {
+function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGenerate, drafts, onOpenDraft }: {
   vi: boolean; script: string; setScript: (s: string) => void
   cfg: Config; setCfgKey: <K extends keyof Config>(k: K, v: Config[K]) => void
   busy: boolean; error: string | null; onGenerate: () => void
+  drafts: ContentProjectSummary[]; onOpenDraft: (id: string) => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const charCount = script.trim().length
@@ -197,6 +250,22 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
           ? 'Bước 1 — Viết kịch bản. AI Content Director sẽ lập kế hoạch cảnh + lời kể để bạn duyệt trước khi render.'
           : 'Step 1 — Write the script. The AI Content Director drafts scenes + narration for you to review before rendering.'}</p>
       </div>
+
+      {drafts.length > 0 && (
+        <section style={{ ...S.card, marginBottom: 16 }}>
+          <div style={S.cardHd}><span style={S.cardTitle}>{vi ? 'Bản nháp gần đây' : 'Recent drafts'}</span></div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {drafts.slice(0, 8).map((d) => (
+              <button key={d.id} style={S.draftChip} onClick={() => onOpenDraft(d.id)} title={d.updated_at}>
+                <b>{d.title || (vi ? 'Không tên' : 'Untitled')}</b>
+                <span style={{ color: 'var(--text-3, #999)' }}>
+                  {' · '}{d.scenes} {vi ? 'cảnh' : 'sc'}{d.status === 'rendered' ? ' ✓' : ''}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div style={S.grid}>
         <section style={S.card}>
@@ -590,6 +659,7 @@ const S: Record<string, React.CSSProperties> = {
   footer: { display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginTop: 16, flexWrap: 'wrap' },
   btnPrimary: { padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#fff', background: 'var(--brand-gradient, linear-gradient(135deg,#8b5cf6,#6366f1))' },
   btnGhost: { padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, border: '1px solid var(--border-subtle, #2a2a30)', background: 'transparent', color: 'var(--text-2, #ccc)' },
+  draftChip: { padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12, border: '1px solid var(--border-subtle, #2a2a30)', background: 'var(--surface-input, #0f0f13)', color: 'var(--text-1, #fff)' },
   barTrack: { height: 8, borderRadius: 4, background: 'var(--surface-input, #0f0f13)', overflow: 'hidden' },
   barFill: { height: '100%', background: 'var(--brand-gradient, linear-gradient(90deg,#8b5cf6,#6366f1))', transition: 'width .3s ease' },
   partRow: { display: 'flex', gap: 10, alignItems: 'center', fontSize: 12, padding: '4px 0' },

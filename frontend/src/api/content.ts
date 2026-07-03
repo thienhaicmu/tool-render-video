@@ -81,3 +81,54 @@ export async function previewNarration(req: NarrationPreviewRequest): Promise<Na
     body: JSON.stringify(req),
   })
 }
+
+// ── CU-1: draft/project persistence ─────────────────────────────────────────
+
+export interface ContentProjectPayload {
+  title?: string
+  script?: string
+  plan?: ContentPlan | null
+  config?: Record<string, unknown> | null
+  status?: 'draft' | 'rendered'
+  last_job_id?: string
+}
+
+export interface ContentProjectSummary {
+  id: string
+  title: string
+  topic: string
+  scenes: number
+  status: string
+  updated_at: string
+}
+
+export interface ContentProjectFull {
+  id: string
+  title: string
+  script: string
+  plan: ContentPlan | null
+  config: Record<string, unknown> | null
+  status: string
+  last_job_id: string
+  updated_at: string
+}
+
+export async function createProject(body: ContentProjectPayload): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>('/api/content/projects', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function saveProject(id: string, body: ContentProjectPayload): Promise<{ id: string; ok: boolean }> {
+  return apiFetch(`/api/content/projects/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+export async function getProject(id: string): Promise<ContentProjectFull> {
+  return apiFetch<ContentProjectFull>(`/api/content/projects/${encodeURIComponent(id)}`)
+}
+
+export async function listProjects(): Promise<{ projects: ContentProjectSummary[] }> {
+  return apiFetch<{ projects: ContentProjectSummary[] }>('/api/content/projects')
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  return apiFetch(`/api/content/projects/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}

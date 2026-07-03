@@ -171,6 +171,63 @@ def test_narration_audio_bad_token_404():
     assert r.status_code == 404
 
 
+# ── CU-1: content project (draft) persistence ────────────────────────────────
+
+def test_content_project_crud(monkeypatch, tmp_path):
+    db = tmp_path / "app.db"
+    monkeypatch.setattr("app.db.connection.DATABASE_PATH", db)
+    monkeypatch.setattr("app.db.connection._ACTIVE_DB_PATH", None)
+    from app.db.connection import init_db, close_thread_conn
+    init_db()
+    try:
+        client = _client()
+        # create
+        r = client.post("/api/content/projects", json={
+            "title": "My Project", "script": "hello world",
+            "plan": {"topic": "Mars", "scenes": [{"index": 0, "narration": "n"}]},
+            "config": {"ratio": "r916"},
+        })
+        assert r.status_code == 200, r.text
+        pid = r.json()["id"]
+
+        # get → JSON columns parsed back to objects
+        g = client.get(f"/api/content/projects/{pid}").json()
+        assert g["plan"]["topic"] == "Mars"
+        assert g["config"]["ratio"] == "r916"
+        assert g["status"] == "draft"
+
+        # list → summary carries scene count
+        summaries = client.get("/api/content/projects").json()["projects"]
+        me = next(p for p in summaries if p["id"] == pid)
+        assert me["scenes"] == 1 and me["topic"] == "Mars"
+
+        # autosave / update (idempotent upsert)
+        s = client.put(f"/api/content/projects/{pid}", json={
+            "title": "Renamed", "script": "v2", "status": "rendered",
+        })
+        assert s.status_code == 200
+        g2 = client.get(f"/api/content/projects/{pid}").json()
+        assert g2["title"] == "Renamed" and g2["status"] == "rendered"
+
+        # delete
+        assert client.delete(f"/api/content/projects/{pid}").status_code == 200
+        assert client.get(f"/api/content/projects/{pid}").status_code == 404
+    finally:
+        close_thread_conn()
+
+
+def test_get_missing_project_404(monkeypatch, tmp_path):
+    db = tmp_path / "app.db"
+    monkeypatch.setattr("app.db.connection.DATABASE_PATH", db)
+    monkeypatch.setattr("app.db.connection._ACTIVE_DB_PATH", None)
+    from app.db.connection import init_db, close_thread_conn
+    init_db()
+    try:
+        assert _client().get("/api/content/projects/nope").status_code == 404
+    finally:
+        close_thread_conn()
+
+
 # ── LOW-1: per-provider key on fallback ──────────────────────────────────────
 
 def test_select_content_plan_resolves_key_per_provider(monkeypatch):
