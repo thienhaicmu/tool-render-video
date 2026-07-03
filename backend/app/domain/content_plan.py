@@ -44,7 +44,9 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # CS-A: per-scene scene_title/visual_prompt/negative_prompt/
+                    # subtitle_style/asset_suggestion + plan-level video_style.
+                    # v1 blobs load unchanged (new fields default empty).
 
 # Reading-speed clamp — guards against the LLM emitting an absurd multiplier that
 # would make TTS unintelligible or the timeline nonsensical.
@@ -63,6 +65,7 @@ SCENE_ROLES = ("hook", "intro", "explain", "example", "conclusion", "cta")
 class ContentScene:
     """One semantic scene of the content video, in narration order."""
     index: int = 0
+    scene_title: str = ""       # short AI label for the scene (Review UI / timeline)
     role: str = ""              # hook|intro|explain|example|conclusion|cta|""
     narration: str = ""         # AI-authored voice-over spoken over this scene
     emotion: str = "normal"     # normal|excited|calm|suspense|epic|sad|happy|…
@@ -71,8 +74,18 @@ class ContentScene:
     pause_after: float = 0.0
     emphasis: list[str] = field(default_factory=list)
     est_duration_sec: float = 0.0
-    # ── HINT-only v1 — stored, not consumed by the render engine yet ──
+    # Per-scene subtitle style override ("" = use the plan/global style).
+    subtitle_style: str = ""
+    # ── Visual planning (CS-A) — consumed by the Visual Generator provider layer,
+    # NOT by the render engine directly. visual_prompt is the full generator
+    # prompt (AI image/video / stock search); visual_hint is the short human
+    # label kept for back-compat. asset_suggestion is the AI's guess at the best
+    # source ("ai_image"|"ai_video"|"stock"|"upload"|"local"|"" = unspecified). ──
     visual_hint: str = ""
+    visual_prompt: str = ""
+    negative_prompt: str = ""
+    asset_suggestion: str = ""
+    # ── HINT-only — stored, not consumed by the render engine yet ──
     camera_hint: str = ""
     transition_hint: str = ""
     animation_hint: str = ""
@@ -89,6 +102,7 @@ class ContentPlan:
     total_target_sec: float = 0.0
     subtitle_style: str = ""
     bgm_mood: str = ""
+    video_style: str = ""       # AI-detected overall style (documentary|storytelling|…)
     scenes: list[ContentScene] = field(default_factory=list)
 
     # ── Convenience ──────────────────────────────────────────────────────
@@ -141,6 +155,7 @@ class ContentPlan:
             total_target_sec=_coerce_float(data.get("total_target_sec"), 0.0),
             subtitle_style=str(data.get("subtitle_style", "") or "").strip(),
             bgm_mood=str(data.get("bgm_mood", "") or "").strip(),
+            video_style=str(data.get("video_style", "") or "").strip(),
             scenes=scenes,
         )
 
@@ -193,6 +208,7 @@ def _coerce_str_list(value: Any, max_items: int = 24) -> list[str]:
 def _scene_from_dict(d: dict[str, Any], fallback_index: int) -> ContentScene:
     return ContentScene(
         index=_coerce_int(d.get("index"), fallback_index),
+        scene_title=str(d.get("scene_title", d.get("title", "")) or "").strip(),
         role=str(d.get("role", "") or "").strip().lower(),
         narration=str(d.get("narration", "") or "").strip(),
         emotion=(str(d.get("emotion", "") or "").strip().lower() or "normal"),
@@ -203,7 +219,11 @@ def _scene_from_dict(d: dict[str, Any], fallback_index: int) -> ContentScene:
         pause_after=_clamp_float(d.get("pause_after"), 0.0, _PAUSE_MAX, 0.0),
         emphasis=_coerce_str_list(d.get("emphasis")),
         est_duration_sec=max(0.0, _coerce_float(d.get("est_duration_sec"), 0.0)),
+        subtitle_style=str(d.get("subtitle_style", "") or "").strip(),
         visual_hint=str(d.get("visual_hint", "") or "").strip(),
+        visual_prompt=str(d.get("visual_prompt", "") or "").strip(),
+        negative_prompt=str(d.get("negative_prompt", "") or "").strip(),
+        asset_suggestion=str(d.get("asset_suggestion", "") or "").strip().lower(),
         camera_hint=str(d.get("camera_hint", "") or "").strip().lower(),
         transition_hint=str(d.get("transition_hint", "") or "").strip().lower(),
         animation_hint=str(d.get("animation_hint", "") or "").strip().lower(),

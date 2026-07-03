@@ -157,6 +157,9 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # visual provider selector. All inert by default (Sacred Contract #2).
     "content_script", "content_background_kind", "content_background_value",
     "content_bgm_path", "content_visual_provider",
+    # CS-A (2026-07-03) — an edited/approved ContentPlan JSON from the Content
+    # Studio Review step. When set, run_content renders from it and skips AI planning.
+    "content_plan_override",
     # Architecture-review C.1 Phase 1 (2026-06-30) — feature flag for the
     # Clip-path Comprehension stage. Phase 1 ships the field only; Phase 2/3
     # wire it through render_pipeline.py + providers + prompts.

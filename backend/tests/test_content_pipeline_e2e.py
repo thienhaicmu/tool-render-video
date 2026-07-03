@@ -160,6 +160,42 @@ def test_run_content_end_to_end(_content_sandbox, monkeypatch):
 
 
 @_NEEDS_FFMPEG
+def test_run_content_uses_approved_plan_override(_content_sandbox, monkeypatch):
+    """CS-A: when content_plan_override is set, run_content renders FROM it and
+    NEVER calls the AI Director."""
+    from app.models.schemas import RenderRequest
+    import app.features.render.engine.pipeline.content_pipeline as cp
+
+    job_id = str(uuid.uuid4())
+    output_dir = _content_sandbox["output_dir"]
+
+    def _boom(**_k):
+        raise AssertionError("select_content_plan must be skipped when a plan override is present")
+    monkeypatch.setattr(cp, "select_content_plan", _boom)
+    monkeypatch.setattr(cp, "synthesize_scene_narration", _fake_synth_factory())
+
+    approved = _make_plan().to_json()
+    payload = RenderRequest(
+        channel_code="content-e2e",
+        render_format="content",
+        content_script="ignored because a plan override is supplied",
+        content_plan_override=approved,
+        content_background_kind="color",
+        content_background_value="#000000",
+        output_dir=str(output_dir / "content-override"),
+        aspect_ratio="9:16", output_fps=30, add_subtitle=True, voice_enabled=False,
+    )
+    cp.run_content(
+        job_id=job_id, payload=payload, resume_mode=False,
+        load_session_fn=lambda sid: None, cleanup_session_fn=lambda sid: None,
+    )
+    from app.db.jobs_repo import get_job
+    row = get_job(job_id)
+    assert row is not None and row["status"] == "completed"
+    assert list(output_dir.rglob("*.mp4")), "override render produced no output"
+
+
+@_NEEDS_FFMPEG
 def test_run_content_no_plan_fails_cleanly(_content_sandbox, monkeypatch):
     """AI returns None → run_content raises (process_render writes the failed
     row). Sacred Contract #3: no partial 'success' delivered."""

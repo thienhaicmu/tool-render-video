@@ -115,8 +115,11 @@ def test_render_request_field_count_unchanged():
     # content_visual_provider="local"). Sacred Contract #2 verified: a stored
     # clips/recap payload replays with NO content behaviour (content_script=""
     # is the off-switch; Content Mode only activates on render_format=="content").
-    assert field_count == 162, (
-        f"RenderRequest now has {field_count} fields (expected 162 post-Content-Mode). "
+    # 2026-07-03 CS-A: +1 (content_plan_override, default "") → 163. Sacred
+    # Contract #2 verified: "" = AI planning path unchanged; only Content
+    # Studio's Review→Approve flow sets it to render from an edited plan.
+    assert field_count == 163, (
+        f"RenderRequest now has {field_count} fields (expected 163 post-CS-A). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

@@ -375,6 +375,11 @@ class RenderRequest(BaseModel):
     content_background_value: str = "#000000"   # color hex / asset path
     content_bgm_path: str = ""                  # "" = no background music
     content_visual_provider: str = "local"      # engine.visual seam selector
+    # CS-A: an APPROVED/edited ContentPlan JSON from the Review step. When set
+    # (Content Studio's mandatory Review → Approve flow), run_content renders
+    # FROM this plan and SKIPS the AI planning call. "" = generate the plan via
+    # the AI Director as before (Sacred Contract #2: default inert → unchanged).
+    content_plan_override: str = ""
 
     target_duration: int = 90
     output_count: int = 1

@@ -141,9 +141,11 @@ def test_public_field_count_pinned():
     # tab UI: content_script, content_background_kind, content_background_value,
     # content_bgm_path, content_visual_provider. FE 77→82, BE-only 85→80,
     # total stays 162.
-    assert len(FE_FACING_FIELDS) == 82, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    # CS-A (2026-07-03): +1 content_plan_override, FE-facing (Content Studio's
+    # Review flow sends the edited plan on the wire). FE 82→83, BE-only 80, total 163.
+    assert len(FE_FACING_FIELDS) == 83, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
     assert len(BE_ONLY_FIELDS)   == 80, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
-    assert len(RenderRequest.model_fields) == 162, (
+    assert len(RenderRequest.model_fields) == 163, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
     )

@@ -24,6 +24,7 @@ from app.core.logging_setup import configure_logging as _configure_logging
 # Uvicorn's console handlers are not touched — this only adds file handlers.
 _configure_logging(LOGS_DIR)
 from app.features.render.router import router as render_router
+from app.features.content.router import router as content_router
 from app.routes.jobs import router as jobs_router
 from app.routes.voice import router as voice_router
 from app.routes.files import router as files_router
@@ -154,6 +155,7 @@ _assert_main_bind_safe(
 app = FastAPI(title="YT TikTok Desktop Local Platform")
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(render_router)
+app.include_router(content_router)  # Content Studio (CS-A): plan-only endpoint
 app.include_router(jobs_router)
 # Security: POST /api/dev/command executes arbitrary shell commands with no auth.
 # Disabled by default. Set ENABLE_DEVTOOLS=1 only in trusted local dev environments.

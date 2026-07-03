@@ -208,6 +208,9 @@ export interface RenderRequest {
   content_background_value?: string
   content_bgm_path?: string
   content_visual_provider?: string
+  // CS-A: edited/approved ContentPlan JSON from the Review step. When set, the
+  // backend renders from it and skips AI planning.
+  content_plan_override?: string
 
   // Architecture-review C.1 Phase 1 (2026-06-30): Clip-path feature flag
   // for the Comprehension stage. When true AND render_format === 'clips',

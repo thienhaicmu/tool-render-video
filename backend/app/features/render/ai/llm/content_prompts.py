@@ -91,10 +91,19 @@ CREATOR TONE:       {tone_clause}
    engine refines this from the real TTS — your estimate only guides pacing.
 10. **SUBTITLE STYLE** ("subtitle_style", plan-level): suggest one of
     default|capcut|word_by_word|karaoke|highlight|minimal|bold based on the tone.
-11. **VISUAL / BGM / CAMERA / TRANSITION / ANIMATION HINTS**: describe what would
-    suit each scene (e.g. visual_hint "footage of a battlefield"). These are
+11. **SCENE TITLE** ("scene_title"): a short label for this scene (for the review
+    timeline), in {lang_name}.
+12. **VISUAL PROMPT** ("visual_prompt"): a FULL, descriptive prompt an image/video
+    generator (or a stock search) could use for this scene — subject, setting,
+    style, lighting, mood. English is fine here (generators prefer it). Example:
+    "A cinematic battlefield at sunrise, Napoleon leading troops, dramatic
+    lighting, realistic, 4k". Also give a short "negative_prompt" (things to
+    avoid) when useful, else "". "visual_hint" stays a short human label.
+13. **ASSET SUGGESTION** ("asset_suggestion"): your best guess at the visual
+    source for this scene — one of ai_image|ai_video|stock|upload|local|"".
+14. **CAMERA / TRANSITION / ANIMATION / BGM**: suggest what would suit each scene.
     DESCRIPTIVE SUGGESTIONS ONLY — the engine may or may not use them. Leave any
-    hint you have no opinion on as an empty string.
+    field you have no opinion on as an empty string.
 
 ═══ OUTPUT FORMAT (STRICT — return ONLY this JSON) ═══
 {{
@@ -102,12 +111,14 @@ CREATOR TONE:       {tone_clause}
   "tone": "<detected tone, short>",
   "audience": "<target audience, short>",
   "language": "{target_language}",
+  "video_style": "documentary|storytelling|educational|news|explainer|",
   "total_target_sec": <float — your estimated total spoken length>,
   "subtitle_style": "default|capcut|word_by_word|karaoke|highlight|minimal|bold",
   "bgm_mood": "epic|calm|technology|news|sad|funny|dark|happy|corporate|",
   "scenes": [
     {{
       "index": <int, 0-based>,
+      "scene_title": "<short scene label in {lang_name}>",
       "role": "hook|intro|explain|example|conclusion|cta",
       "narration": "<voice-over for this scene in {lang_name}>",
       "emotion": "normal|excited|calm|suspense|epic|sad|happy|curious|motivating|surprise",
@@ -116,7 +127,11 @@ CREATOR TONE:       {tone_clause}
       "pause_after": <float seconds>,
       "emphasis": ["<word or phrase to stress>"],
       "est_duration_sec": <float>,
-      "visual_hint": "<what footage/image would suit this scene, or ''>",
+      "subtitle_style": "<per-scene override, or '' to use the plan style>",
+      "visual_hint": "<short label of what footage/image suits this scene, or ''>",
+      "visual_prompt": "<full image/video generator prompt for this scene, or ''>",
+      "negative_prompt": "<things to avoid in the visual, or ''>",
+      "asset_suggestion": "ai_image|ai_video|stock|upload|local|",
       "camera_hint": "zoom_in|zoom_out|pan|still|",
       "transition_hint": "fade|cut|slide|flash|zoom|",
       "animation_hint": "highlight|popup|title|lower_third|progress_bar|"
