@@ -17,7 +17,7 @@
  * job returned by listJobs.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 // Hoisted so the vi.mock factory (itself hoisted to the top of the file)
@@ -84,7 +84,8 @@ import { useUIStore } from '../src/stores/uiStore'
 beforeEach(() => {
   // Clean handoff state + a cookie-status fetch stub (DownloadTab probes
   // it on mount inside a try/catch — stubbed so it resolves quietly).
-  useUIStore.setState({ sendToRenderSourcePath: null })
+  // lang: 'vi' — the handoff button's title is asserted in Vietnamese.
+  useUIStore.setState({ sendToRenderSourcePath: null, lang: 'vi' })
   globalThis.fetch = vi.fn().mockResolvedValue({
     ok: true,
     json: () => Promise.resolve({ present: false }),
@@ -121,10 +122,13 @@ describe('Pha 1.1 — Download→Render handoff', () => {
     // …RenderWorkflow consumes the seed and clears it…
     await waitFor(() => expect(useUIStore.getState().sendToRenderSourcePath).toBeNull())
 
-    // …and the downloaded file is pre-filled as the render source.
-    // Scope by the full-path title (unique to RenderWorkflow's source
-    // list) — "clip.mp4" alone also matches the still-mounted download row.
-    const sourceItem = await screen.findByTitle('D:\\Videos\\clip.mp4')
-    expect(sourceItem).toHaveTextContent('clip.mp4')
+    // …and the downloaded file is pre-filled as the render source. The
+    // Configure source card lives in the active Render pane — scope to it so
+    // the still-mounted (hidden) Download row's "clip.mp4" doesn't match.
+    await waitFor(() => {
+      const pane = container.querySelector('.cs-tab-pane.active') as HTMLElement
+      expect(pane).toBeTruthy()
+      expect(within(pane).getByText(/clip\.mp4/)).toBeTruthy()
+    })
   })
 })

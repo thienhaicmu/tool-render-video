@@ -8,6 +8,7 @@ export type ActivePanel =
   // Canonical navigation
   | 'home'
   | 'clip-studio'
+  | 'queue'
   | 'library'
   | 'publish'
   | 'settings'
@@ -71,10 +72,6 @@ export interface UIStore {
    *  source on a clean Step 1, then clears it so a second visit doesn't
    *  re-apply a stale path. Mirrors the duplicateSeedJobId handshake. */
   sendToRenderSourcePath: string | null
-  /** Pha 3.3a — whether the Queue drawer (full queue-management overlay)
-   *  is open. Opened from the dock; the dock + drawer communicate through
-   *  this flag since they're sibling-mounted, not parent/child. */
-  queueDrawerOpen: boolean
   /** Pha 4 — explicit "open the Monitor (Step 3) for this job" signal.
    *  RenderWorkflow consumes + clears it. This is the ONLY way a
    *  background/other job opens the monitor now that the broad
@@ -96,7 +93,6 @@ export interface UIStore {
   setLang: (lang: Lang) => void
   setDuplicateSeedJobId: (jobId: string | null) => void
   setSendToRenderSourcePath: (path: string | null) => void
-  setQueueDrawerOpen: (open: boolean) => void
   setMonitorJobId: (jobId: string | null) => void
   requestNewRender: () => void
   /** S4.7 — mark a single history entry as read. */
@@ -141,7 +137,6 @@ export const useUIStore = create<UIStore>((set) => ({
   lang: 'en' as Lang,
   duplicateSeedJobId: null,
   sendToRenderSourcePath: null,
-  queueDrawerOpen: false,
   monitorJobId: null,
   newRenderRequest: 0,
 
@@ -198,7 +193,6 @@ export const useUIStore = create<UIStore>((set) => ({
 
   setSendToRenderSourcePath: (path: string | null) => set({ sendToRenderSourcePath: path }),
 
-  setQueueDrawerOpen: (open: boolean) => set({ queueDrawerOpen: open }),
 
   setMonitorJobId: (jobId: string | null) => set({ monitorJobId: jobId }),
 

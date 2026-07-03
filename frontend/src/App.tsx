@@ -8,12 +8,12 @@
  */
 import React, { Suspense, lazy } from 'react'
 import { AppShell } from './layouts/AppShell'
-import { QueueDrawer } from './layouts/QueueDrawer'
 import { useUIStore } from './stores/uiStore'
 import type { ActivePanel } from './stores/uiStore'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { useJobCompletionNotifier } from './hooks/useJobCompletionNotifier'
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts'
+import { useHashRoute } from './hooks/useHashRoute'
 import { CommandPalette } from './components/CommandPalette'
 import { ConfirmDialogHost } from './components/ui/ConfirmDialog'
 
@@ -27,16 +27,18 @@ const importEditor     = () => import('./features/editor/EditorScreen').then(m =
 const importDownloader = () => import('./features/download/DownloadScreen').then(m => ({ default: m.DownloadScreen }))
 const importClipStudio = () => import('./features/clip-studio/ClipStudio').then(m => ({ default: m.ClipStudio }))
 const importSettings   = () => import('./features/settings/SettingsScreen').then(m => ({ default: m.SettingsScreen }))
+const importQueue      = () => import('./features/queue/QueueScreen').then(m => ({ default: m.QueueScreen }))
 
 const HistoryScreen    = lazy(importHistory)
 const EditorScreen     = lazy(importEditor)
 const DownloadScreen   = lazy(importDownloader)
 const ClipStudio       = lazy(importClipStudio)
 const SettingsScreen   = lazy(importSettings)
+const QueueScreen      = lazy(importQueue)
 
 // Warm screen chunks during browser idle so panel switches are instant (no
 // Suspense flash). ClipStudio is the heaviest → prefetched first.
-const PREFETCH_IMPORTS = [importClipStudio, importHistory, importDownloader, importEditor, importSettings]
+const PREFETCH_IMPORTS = [importClipStudio, importHistory, importDownloader, importEditor, importSettings, importQueue]
 
 function PublishPlaceholder() {
   return (
@@ -50,6 +52,7 @@ const PANEL_MAP: Record<ActivePanel, React.ComponentType> = {
   // Canonical routes
   home:          HistoryScreen,
   'clip-studio': ClipStudio,
+  queue:         QueueScreen,
   library:       HistoryScreen,
   publish:       PublishPlaceholder,
   settings:      SettingsScreen,
@@ -77,6 +80,9 @@ export function App() {
 
   // Global keyboard shortcuts (⌘N / ⌘, / ?).
   useGlobalShortcuts()
+
+  // WP2 — deep-link the top-level panel via the URL hash (safe subset).
+  useHashRoute()
 
   // Prefetch all screen chunks once the browser is idle so the first open of
   // any panel is instant. Best-effort: requestIdleCallback when available,
@@ -109,7 +115,6 @@ export function App() {
           <ActiveScreen />
         </Suspense>
       </AppShell>
-      <QueueDrawer />
       <CommandPalette />
       <ConfirmDialogHost />
     </ErrorBoundary>

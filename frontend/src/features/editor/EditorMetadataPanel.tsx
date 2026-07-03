@@ -58,6 +58,12 @@ export function EditorMetadataPanel({
         title: 'Trim applied',
         message: `Saved ${result.duration_sec.toFixed(1)}s clip`,
       })
+      // WP4 — reveal the trimmed file's folder.
+      if (result.output_file) {
+        const sep = result.output_file.includes('\\') ? '\\' : '/'
+        const dir = result.output_file.slice(0, result.output_file.lastIndexOf(sep))
+        if (dir) window.electronAPI?.openPath?.(dir)
+      }
     } catch (err) {
       addNotification({
         type: 'error',
@@ -77,12 +83,17 @@ export function EditorMetadataPanel({
         start_sec: trimStartSec,
         end_sec: trimEndSec,
       })
+      // WP4 — land on the canonical Queue panel (was the deprecated 'history'
+      // alias) where the new render job is watchable, and make the toast
+      // deep-link to it.
       addNotification({
         type: 'success',
         title: 'Re-render queued',
-        message: `New job: ${result.new_job_id.slice(0, 20)}…`,
+        message: 'Track it in the Queue.',
+        jobId: result.new_job_id,
+        kind: 'render',
       })
-      setActivePanel('history')
+      setActivePanel('queue')
     } catch (err) {
       addNotification({
         type: 'error',
@@ -92,6 +103,11 @@ export function EditorMetadataPanel({
     } finally {
       setRerenderLoading(false)
     }
+  }
+
+  async function handleBrowseDir() {
+    const dir = await window.electronAPI?.pickDirectory?.()
+    if (dir) setExportDir(dir)
   }
 
   async function handleExport() {
@@ -108,6 +124,8 @@ export function EditorMetadataPanel({
         title: 'Export complete',
         message: `Saved to ${result.destination_dir}`,
       })
+      // WP4 — reveal the exported file, matching the Results export UX.
+      window.electronAPI?.openPath?.(result.destination_dir)
     } catch (err) {
       addNotification({
         type: 'error',
@@ -265,25 +283,36 @@ export function EditorMetadataPanel({
             {rerenderLoading ? 'Queuing…' : 'Re-render Selection'}
           </Button>
 
-          {/* Export: destination dir input + button */}
+          {/* Export: destination dir input + Browse + button */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-            <input
-              type="text"
-              placeholder="Destination folder path"
-              value={exportDir}
-              onChange={(e) => setExportDir(e.target.value)}
-              data-testid="export-dir-input"
-              style={{
-                padding: '4px 8px',
-                backgroundColor: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--color-text-primary)',
-                fontSize: 'var(--font-size-xs)',
-                width: '100%',
-                boxSizing: 'border-box',
-              }}
-            />
+            <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+              <input
+                type="text"
+                placeholder="Destination folder path"
+                value={exportDir}
+                onChange={(e) => setExportDir(e.target.value)}
+                data-testid="export-dir-input"
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: 'var(--color-bg-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--color-text-primary)',
+                  fontSize: 'var(--font-size-xs)',
+                  flex: 1,
+                  minWidth: 0,
+                  boxSizing: 'border-box',
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBrowseDir}
+                data-testid="export-browse-btn"
+              >
+                Browse
+              </Button>
+            </div>
             <Button
               variant="secondary"
               size="sm"

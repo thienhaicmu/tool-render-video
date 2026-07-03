@@ -6,16 +6,19 @@ import { useUIStore } from '@/stores/uiStore'
 import { useJobsStore } from '@/stores/jobsStore'
 import { useRenderSocket } from '@/hooks/useRenderSocket'
 import { prepareSource, cancelRender, cancelPrepareSource, retryRender, resumeRender } from '@/api/render'
-import { getRenderDefaults } from '@/api/renderDefaults'
 import { getJob } from '@/api/jobs'
 import type { PrepareSourceResponse } from '@/api/render'
-import { getJobParts, getJobQualitySummary, getJobRanking } from '@/api/jobs'
 import type { JobPart, QualityReport, PartRankResult } from '@/types/api'
 import { useT, ERROR_KIND_KEY, ERROR_FIX_STEPS, inferErrorKind } from './i18n'
-import type { CfgTab, ConfigState, Source } from './types'
-import { PRESETS, RATIO_INFO } from './constants'
+import type { CfgTab, Source } from './types'
+import { RATIO_INFO } from './constants'
 import { buildRenderPayload } from './buildRenderPayload'
 import { payloadToConfig } from './payloadToConfig'
+import { validateSources, validateConfig } from './validate'
+import { useRenderConfig } from './useRenderConfig'
+import { loadTerminalResults } from './loadResults'
+import { parseSubmitError } from './submitError'
+import { submitSources } from './submitSources'
 import { CreateHero } from './steps/CreateHero'
 import { StepConfigure } from './steps/StepConfigure'
 import { StepRendering } from './steps/StepRendering'
@@ -50,112 +53,14 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   const [isSubmitting, setIsSubmitting]   = useState(false)
 
   const [cfgTab, setCfgTab] = useState<CfgTab>('ai')
-  // P4.C — the Configure draft survives reloads. Only ai_provider used to
-  // persist; a reload threw away everything else the user had dialed in.
-  const CFG_DRAFT_KEY = 'rw_cfg_draft_v1'
-  const hadDraftRef = useRef(false)
-  const cfgDefaults: ConfigState = {
-    ratio: 'r916', minSec: 30, maxSec: 60, trimIn: 0, trimOut: 0,
-    style: 'slay_soft_01', platform: 'tiktok',
-    multiVariant: false, ctaEnabled: false, ctaType: 'auto',
-    hookApplyEnabled: false, hookOverlayEnabled: false,
-    clipLock: [], clipExclude: [],
-    subEnabled: true, subStyle: 'opus_pop',
-    subHighlight: true, subFontSize: 0, subTranslate: false, subTranslateLang: 'en',
-    assetLogoPath: null, assetIntroPath: null, assetOutroPath: null,
-    whisperModel: 'auto',
-    narrEnabled: false, voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
-    voiceSource: 'translated_subtitle', voiceText: '', rewriteTone: '', narrationMode: '', reactionIntensity: '', voiceMixMode: 'replace_original',
-    outputDir: '',
-    renderProfile: 'balanced',
-    renderFormat: 'clips',
-    useStoryIntelligence: false,
-    targetDuration: 90, outputCount: 1, focusMode: 'auto',
-    llmEnabled:   true,
-    aiProvider:   (localStorage.getItem('rw_ai_provider') as 'gemini' | 'openai' | 'claude') ?? 'gemini',
-    llmModel:     '',
-    llmLanguage:  'auto',
-  }
-  const [cfg, setCfg] = useState<ConfigState>(() => {
-    try {
-      const raw = localStorage.getItem(CFG_DRAFT_KEY)
-      if (raw) {
-        hadDraftRef.current = true
-        return { ...cfgDefaults, ...(JSON.parse(raw) as Partial<ConfigState>) }
-      }
-    } catch { /* corrupt draft — fall back to defaults */ }
-    return cfgDefaults
-  })
-
-  // Debounced draft save.
-  useEffect(() => {
-    const id = setTimeout(() => {
-      try { localStorage.setItem(CFG_DRAFT_KEY, JSON.stringify(cfg)) } catch { /* ignore */ }
-    }, 800)
-    return () => clearTimeout(id)
-  }, [cfg])
+  // Config state (defaults + localStorage draft + one-shot server-defaults
+  // hydration + setCfgKey/applyPreset) lives in useRenderConfig — slice 2 of
+  // the RenderWorkflow decomposition.
+  const { cfg, setCfg, setCfgKey, applyPreset } = useRenderConfig()
 
   const [jobId, setJobId]               = useState<string | null>(null)
   const [submitError, setSubmitError]   = useState<string | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
-
-  // S2.4 — auto-fill cfg from server-side render defaults on mount.
-  // Fields only patch in if the server has them; null defaults stay
-  // untouched so existing locally-stored choices (e.g. localStorage
-  // ai_provider) still win when the user hasn't configured Settings.
-  // Runs once — user edits to cfg after mount are NOT overwritten.
-  useEffect(() => {
-    let cancelled = false
-    // P4.C — a restored draft is the user's explicit prior state; don't let
-    // server-side defaults overwrite it on mount.
-    if (hadDraftRef.current) return
-    ;(async () => {
-      try {
-        const env = await getRenderDefaults()
-        if (cancelled || !env.is_configured) return
-        const d = env.render_defaults
-        // Reverse-map "9:16" → "r916" etc. Skip when null or unknown.
-        const ratioReverseMap: Record<string, ConfigState['ratio']> = {
-          '9:16': 'r916', '3:4': 'r34', '4:5': 'r45',
-          '1:1':  'r11',  '16:9': 'r169',
-        }
-        setCfg((prev) => {
-          const patch: Partial<ConfigState> = {}
-          if (d.aspect_ratio && ratioReverseMap[d.aspect_ratio]) {
-            patch.ratio = ratioReverseMap[d.aspect_ratio]
-          }
-          if (d.subtitle_style) patch.subStyle = d.subtitle_style
-          // voice_provider only patches when it matches one of the
-          // engines cfg.ttsEngine accepts (edge | xtts). 'elevenlabs'
-          // is a valid backend default but no FE field maps yet.
-          if (d.voice_provider === 'edge' || d.voice_provider === 'xtts') {
-            patch.ttsEngine = d.voice_provider
-          }
-          if (
-            d.llm_provider === 'gemini' ||
-            d.llm_provider === 'openai' ||
-            d.llm_provider === 'claude'
-          ) {
-            patch.aiProvider = d.llm_provider
-          }
-          // Preset = bundle of platform + style + ratio. Apply via
-          // applyPreset semantics: look up PRESET entry, patch platform
-          // + ratio. The user can still override after mount.
-          if (d.preset) {
-            const presetEntry = PRESETS.find((p) => p.id === d.preset)
-            if (presetEntry) {
-              patch.platform = presetEntry.platform
-            }
-          }
-          return Object.keys(patch).length ? { ...prev, ...patch } : prev
-        })
-      } catch {
-        // Defaults endpoint failure must never block the render flow.
-      }
-    })()
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const [parts, setParts]                   = useState<JobPart[]>([])
   const [partScores, setPartScores]         = useState<Record<number, number>>({})
@@ -311,30 +216,15 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     setQualityLoadFailed(false)
     setPartsLoading(true)
     setAllDataLoaded(false)
-
-    const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | undefined> =>
-      Promise.race([p, new Promise<undefined>((resolve) => setTimeout(resolve, ms))])
-
-    const partsP = getJobParts(jobId).then(setParts)
-    const qualityP = getJobQualitySummary(jobId, true)
-      .then((summary) => {
-        const scores: Record<number, number> = {}
-        const reports: Record<number, QualityReport | null> = {}
-        summary.parts?.forEach((p) => {
-          scores[p.part_no] = p.score
-          reports[p.part_no] = p.report ?? null
-        })
-        setPartScores(scores)
-        setQualityReports(reports)
-      })
-      .catch(() => setQualityLoadFailed(true))
-    const rankingP = getJobRanking(jobId).then(setPartRanks).catch(() => {})
-
-    Promise.all([
-      withTimeout(partsP, 12_000),
-      withTimeout(qualityP, 12_000),
-      withTimeout(rankingP, 12_000),
-    ]).finally(() => {
+    // Terminal results fetch (parts + quality + ranking, each with a 12s
+    // timeout) lives in loadTerminalResults — slice 3 of the decomposition.
+    // Only fields that loaded within the timeout are applied.
+    loadTerminalResults(jobId).then((r) => {
+      if (r.parts) setParts(r.parts)
+      if (r.quality) { setPartScores(r.quality.scores); setQualityReports(r.quality.reports) }
+      if (r.qualityLoadFailed) setQualityLoadFailed(true)
+      if (r.partRanks) setPartRanks(r.partRanks)
+    }).finally(() => {
       setPartsLoading(false)
       setAllDataLoaded(true)
     })
@@ -455,15 +345,6 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     setPrepareResult(null)
   }
 
-  function setCfgKey<K extends keyof ConfigState>(k: K, v: ConfigState[K]) {
-    if (k === 'aiProvider')      localStorage.setItem('rw_ai_provider', v as string)
-    setCfg((p) => ({ ...p, [k]: v }))
-  }
-  function applyPreset(id: string) {
-    const p = PRESETS.find((x) => x.id === id)
-    if (!p) return
-    setCfg((prev) => ({ ...prev, platform: p.platform, ratio: 'r916' }))
-  }
   async function pickOutputDir() {
     const dir = await window.electronAPI?.pickDirectory?.()
     if (dir) setCfgKey('outputDir', dir)
@@ -476,18 +357,12 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
   async function handleStartRender() {
     if (isSubmitting) return  // hard guard against double-submit
 
-    // ── Validation: same checks as before, mirrored from the backend
-    //    so failures surface instantly without round-tripping. ─────────
-    if (sources.length === 0) {
-      setSubmitError(lang === 'VI' ? 'Chưa chọn file nguồn.' : 'No source file selected.')
-      return
-    }
-    for (const s of sources) {
-      if (!(s.value || '').trim()) {
-        setSubmitError(lang === 'VI' ? 'File nguồn rỗng.' : 'A source file path is empty.')
-        return
-      }
-    }
+    // ── Validation: same checks as before, mirrored from the backend so
+    //    failures surface instantly without round-tripping. Sync checks are
+    //    extracted into ./validate (unit-tested); the async Electron
+    //    pathExists probe stays inline between them (order preserved). ──────
+    const srcError = validateSources(sources, lang)
+    if (srcError) { setSubmitError(srcError); return }
     if (window.electronAPI?.pathExists) {
       for (const s of sources) {
         const exists = await window.electronAPI.pathExists(s.value)
@@ -501,22 +376,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
         }
       }
     }
-    if (!(cfg.outputDir || '').trim()) {
-      setSubmitError(lang === 'VI' ? 'Chưa chọn thư mục lưu (Save folder).' : 'Save folder is empty.')
-      return
-    }
-    if (cfg.minSec > cfg.maxSec) {
-      setSubmitError(
-        lang === 'VI'
-          ? `Min clip duration (${cfg.minSec}s) lớn hơn max (${cfg.maxSec}s).`
-          : `Min clip duration (${cfg.minSec}s) is greater than max (${cfg.maxSec}s).`,
-      )
-      return
-    }
-    if (cfg.outputCount < 1) {
-      setSubmitError(lang === 'VI' ? 'Số clip xuất ra phải ≥ 1.' : 'Output count must be ≥ 1.')
-      return
-    }
+    const cfgError = validateConfig(cfg, lang)
+    if (cfgError) { setSubmitError(cfgError); return }
     setIsSubmitting(true)
     setSubmitError(null)
     setLastQueuedJobId(null)
@@ -526,16 +387,8 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
     //    attached jobId so the user lands on Step 3 monitoring it; the
     //    rest run in the background and appear in ActiveJobsDock.
     if (sources.length > 1) {
-      const submitted: string[] = []
-      const failed: string[] = []
-      for (const s of sources) {
-        try {
-          const id = await submitRender(buildPayloadForSource(s.value))
-          submitted.push(id)
-        } catch {
-          failed.push(s.value)
-        }
-      }
+      // Batch submit loop extracted to submitSources (slice 4b).
+      const { submitted, failed } = await submitSources(sources, buildPayloadForSource, submitRender)
       addNotification({
         type: failed.length === 0 ? 'success' : (submitted.length === 0 ? 'error' : 'warning'),
         title: lang === 'VI'
@@ -586,31 +439,13 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
       setLastQueuedJobId(newJobId)
       setIsSubmitting(false)
     } catch (e) {
-      // Extract a user-friendly message. Backend dedup (409) returns a
-      // detail string explaining the duplicate is already running; surface
-      // it verbatim instead of "API error 409: …".
-      let msg = 'Failed to start render'
-      let dupJobId: string | null = null
-      if (e && typeof e === 'object' && 'status' in e && 'detail' in e) {
-        const apiErr = e as { status: number; detail: unknown }
-        msg = typeof apiErr.detail === 'string'
-          ? apiErr.detail
-          : JSON.stringify(apiErr.detail)
-        // On 409 dedup the detail looks like:
-        //   "A render job for this source is already in progress
-        //    (job_id=<uuid>). Wait for it to finish or cancel it first."
-        // Extract the uuid and jump straight to that job's rendering
-        // screen — re-using the running job is what the user actually
-        // wants 99% of the time. They can still cancel from there.
-        if (apiErr.status === 409 && typeof apiErr.detail === 'string') {
-          const m = apiErr.detail.match(/job_id=([0-9a-f-]{36})/i)
-          if (m) dupJobId = m[1]
-        }
-      } else if (e instanceof Error) {
-        msg = e.message
-      }
-      if (dupJobId) {
-        setJobId(dupJobId)
+      // Message + 409 dedup-id parsing lives in parseSubmitError (slice 4a);
+      // the navigate/toast state machine stays here. On 409 dedup, jump
+      // straight to the already-running job's monitor — re-using it is what
+      // the user wants 99% of the time (they can still cancel from there).
+      const { message, dedupJobId } = parseSubmitError(e)
+      if (dedupJobId) {
+        setJobId(dedupJobId)
         setView('monitor')
         setIsSubmitting(false)
         addNotification({
@@ -622,7 +457,7 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
           duration: 5000,
         })
       } else {
-        setSubmitError(msg)
+        setSubmitError(message)
         setIsSubmitting(false)  // re-enable on failure so user can retry
       }
     }

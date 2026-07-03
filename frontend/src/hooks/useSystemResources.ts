@@ -10,6 +10,7 @@
 import { create } from 'zustand'
 import { useEffect } from 'react'
 import { getSystemResources, type ResourceSnapshot } from '../api/system'
+import { isTabHidden } from './pollVisibility'
 
 const POLL_MS = 3000
 
@@ -48,7 +49,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     if (next === 1 && get()._intervalId === null) {
       set({ loading: true })
       _fetchAndUpdate(set)
-      const id = setInterval(() => { _fetchAndUpdate(set) }, POLL_MS)
+      const id = setInterval(() => { if (isTabHidden()) return; _fetchAndUpdate(set) }, POLL_MS)
       set({ _intervalId: id })
     }
   },

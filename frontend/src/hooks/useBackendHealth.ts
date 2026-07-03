@@ -15,6 +15,7 @@
 import { create } from 'zustand'
 import { useEffect } from 'react'
 import { apiFetch } from '../api/client'
+import { isTabHidden } from './pollVisibility'
 
 const POLL_MS = 30_000
 
@@ -72,7 +73,7 @@ export const useHealthStore = create<HealthStore>((set, get) => ({
     set({ _refcount: next })
     if (next === 1 && get()._intervalId === null) {
       _fetchAndUpdate(set, get)
-      const id = setInterval(() => { _fetchAndUpdate(set, get) }, POLL_MS)
+      const id = setInterval(() => { if (isTabHidden()) return; _fetchAndUpdate(set, get) }, POLL_MS)
       set({ _intervalId: id })
     }
   },

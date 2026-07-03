@@ -14,6 +14,19 @@ export function fmtDuration(secs: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+// WP3 — accessible switch: same `.tog` visual, now keyboard-operable with a
+// screen-reader role. Behaviour + styling unchanged.
 export function Tog({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return <div className={`tog${checked ? ' on' : ''}`} onClick={() => onChange(!checked)} />
+  return (
+    <div
+      role="switch"
+      aria-checked={checked}
+      tabIndex={0}
+      className={`tog${checked ? ' on' : ''}`}
+      onClick={() => onChange(!checked)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(!checked) }
+      }}
+    />
+  )
 }

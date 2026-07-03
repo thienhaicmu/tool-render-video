@@ -43,7 +43,6 @@ export function ActiveJobsDock() {
   const queueOrder = useJobsStore((s) => s.queueOrder)
   const { t } = useI18n()
   const setActivePanel = useUIStore((s) => s.setActivePanel)
-  const setQueueDrawerOpen = useUIStore((s) => s.setQueueDrawerOpen)
   const setMonitorJobId = useUIStore((s) => s.setMonitorJobId)
 
   // P1.4 — session-scoped dismissals for the attention section.
@@ -189,7 +188,7 @@ export function ActiveJobsDock() {
         {overflow > 0 && (
           <button
             style={styles.overflow}
-            onClick={() => setQueueDrawerOpen(true)}
+            onClick={() => setActivePanel('queue')}
             title={t('queue_manage')}
           >
             +{overflow} {t('dock_running_suffix')}
@@ -198,7 +197,7 @@ export function ActiveJobsDock() {
         {/* Pha 3.3a — always-present entry point to the full queue drawer. */}
         <button
           style={styles.manage}
-          onClick={() => setQueueDrawerOpen(true)}
+          onClick={() => setActivePanel('queue')}
           title={t('queue_manage')}
           aria-label={t('queue_manage')}
         >

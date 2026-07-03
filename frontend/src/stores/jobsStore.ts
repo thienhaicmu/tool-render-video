@@ -21,6 +21,7 @@
  */
 import { create } from 'zustand'
 import { getJobHistory, getQueueStatus } from '@/api/jobs'
+import { isTabHidden } from '@/hooks/pollVisibility'
 import type { HistoryItem } from '@/types/api'
 
 const POLL_MS = 4000
@@ -101,7 +102,12 @@ export const useJobsStore = create<JobsStore>((set, get) => ({
     if (next === 1 && get()._intervalId === null) {
       // First subscriber — kick off an immediate fetch + arm the interval.
       _fetchAndUpdate(set)
-      const id = setInterval(() => { _fetchAndUpdate(set) }, POLL_MS)
+      // WP5.4 — skip the poll while the tab is hidden (no point fetching job
+      // history the user can't see); the next tick after refocus resumes it.
+      const id = setInterval(() => {
+        if (isTabHidden()) return
+        _fetchAndUpdate(set)
+      }, POLL_MS)
       set({ _intervalId: id })
     }
   },

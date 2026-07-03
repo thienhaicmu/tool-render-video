@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import type { JobPart, QualityReport, PartRankResult } from '@/types/api'
-import { getJobAiSummary, deletePartOutput } from '@/api/jobs'
+import { getJobAiSummary, deletePartOutput, getRecapPlan } from '@/api/jobs'
+import type { RecapPlanResponse } from '@/api/jobs'
+import { RecapResults } from './RecapResults'
 import { exportClip } from '@/api/editing'
 import { StoryModelCard } from '@/features/jobs/StoryModelCard'
 import type { JobAiSummary, HybridAnalysis } from '@/api/jobs'
@@ -13,6 +15,8 @@ import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { TIER_VIRAL, TIER_HIGH, TIER_GOOD, scoreColor } from '../scoring'
+import { ScoreRing } from '@/components/ui/ScoreRing'
+import { displayScore, sortDoneParts } from './scoreView'
 import { useEditorStore } from '@/stores/editorStore'
 import { useUIStore } from '@/stores/uiStore'
 import { ClipActionsMenu } from './ClipActionsMenu'
@@ -32,38 +36,17 @@ function confLabel(tier: string, t: Strings): string {
   return tier === 'strong' ? t.confStrong : tier === 'worth_testing' ? t.confTest : t.confExp
 }
 
+// WP3 — delegates to the shared ScoreRing primitive (was a local SVG copy).
 function ScoreRingSm({ score }: { score: number }) {
-  const r = 13, circ = 2 * Math.PI * r
-  const fill = (score / 100) * circ
-  const col = scoreColor(score)
-  return (
-    <div className="sr-wrap">
-      <svg width="34" height="34" viewBox="0 0 34 34" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx="17" cy="17" r={r} fill="none" stroke="rgba(var(--text-rgb),.1)" strokeWidth="3.5" />
-        <circle cx="17" cy="17" r={r} fill="none" stroke={col} strokeWidth="3.5"
-          strokeDasharray={`${fill} ${circ}`} strokeLinecap="round" />
-      </svg>
-      <span className="sr-num" style={{ color: col }}>{Math.round(score)}</span>
-    </div>
-  )
+  return <ScoreRing value={score} size={34} />
 }
 
+// WP3 — composite (ring + tier label); the ring itself is the shared primitive.
 function ScoreRingLg({ score, t }: { score: number; t: Strings }) {
-  const r = 28, circ = 2 * Math.PI * r
-  const fill = (score / 100) * circ
-  const col = scoreColor(score)
   const tier = aiTier(score, t)
   return (
     <div className="srl-wrap">
-      <div style={{ position: 'relative', width: 68, height: 68, flexShrink: 0 }}>
-        <svg width="68" height="68" viewBox="0 0 68 68" style={{ transform: 'rotate(-90deg)' }}>
-          <circle cx="34" cy="34" r={r} fill="none" stroke="rgba(var(--text-rgb),.08)" strokeWidth="6" />
-          <circle cx="34" cy="34" r={r} fill="none" stroke={col} strokeWidth="6"
-            strokeDasharray={`${fill} ${circ}`} strokeLinecap="round"
-            style={{ transition: 'stroke-dasharray 0.5s ease' }} />
-        </svg>
-        <div className="srl-num" style={{ color: col }}>{Math.round(score)}</div>
-      </div>
+      <ScoreRing value={score} size={68} stroke={6} />
       <div className="srl-info">
         <div className={`res-ai-tier ${tier.cls}`}>{tier.label}</div>
         <div className="srl-sub">{t.resAiQualityScore}</div>
@@ -384,17 +367,18 @@ function StepResultsBase({
     getJobAiSummary(jobId).then(s => { if (s.available) setAiSummary(s) }).catch(() => {})
   }, [jobId])
 
+  // Recap detection: a recap job's deliverables are episodes, not clips.
+  // When the persisted recap plan is available, render the episode-grouped
+  // RecapResults instead of the clips grid (below).
+  const [recapPlan, setRecapPlan] = useState<RecapPlanResponse | null>(null)
+  useEffect(() => {
+    if (!jobId) return
+    getRecapPlan(jobId).then((r) => { if (r.available) setRecapPlan(r) }).catch(() => {})
+  }, [jobId])
+
   const doneParts  = parts.filter((p) => p.status === 'done')
   const failedParts = parts.filter((p) => p.status === 'failed')
-  const sortedDone = [...doneParts].sort((a, b) =>
-    sortMode === 'duration'
-      ? (b.duration ?? 0) - (a.duration ?? 0)
-      : sortMode === 'newest'
-        ? b.part_no - a.part_no
-        : Object.keys(partRanks).length > 0
-          ? (partRanks[a.part_no]?.output_rank ?? 999) - (partRanks[b.part_no]?.output_rank ?? 999)
-          : (partScores[b.part_no] ?? 0) - (partScores[a.part_no] ?? 0)
-  )
+  const sortedDone = sortDoneParts(doneParts, sortMode, partRanks, partScores)
 
   const outputDir = (() => {
     const f = doneParts[0]?.output_file
@@ -437,6 +421,22 @@ function StepResultsBase({
           <div className="rw-empty"><span className="rw-empty-icon"><IconInbox size={40} /></span>{t.resNoResults}</div>
         </div>
       </div>
+    )
+  }
+
+  // Recap jobs deliver episodes, not clips — render the episode-grouped view.
+  if (recapPlan) {
+    return (
+      <RecapResults
+        jobId={jobId}
+        parts={parts}
+        recapPlan={recapPlan}
+        jobStatus={jobStatus}
+        aspectRatio={aspectRatio}
+        t={t}
+        onRetry={onRetry}
+        isRetrying={isRetrying}
+      />
     )
   }
 
@@ -682,7 +682,7 @@ function StepResultsBase({
             {sortedDone.map((part, i) => {
               const rank       = partRanks[part.part_no]
               const qualScore  = partScores[part.part_no]
-              const dispScore  = rank?.output_rank_score ?? qualScore
+              const dispScore  = displayScore(rank, qualScore)
               const thumbUrl   = getPartThumbnailUrl(jobId, part.part_no)
               const isSelected = selectedPart?.part_no === part.part_no
               const tier       = dispScore !== undefined ? aiTier(dispScore, t) : null
@@ -916,8 +916,8 @@ function StepResultsBase({
                 />
               </div>
 
-              {(selRank?.output_rank_score ?? selScore) !== undefined && (
-                <ScoreRingLg score={selRank?.output_rank_score ?? selScore!} t={t} />
+              {displayScore(selRank, selScore) !== undefined && (
+                <ScoreRingLg score={displayScore(selRank, selScore)!} t={t} />
               )}
 
               {selRank && (
@@ -943,6 +943,10 @@ function StepResultsBase({
                   {selRank.ranking_reason && (
                     <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8, lineHeight: 1.4 }}>{selRank.ranking_reason}</div>
                   )}
+                  {/* Guard: a degraded AI result carries a rank but no
+                      ranking_components — reading it unguarded crashed the
+                      detail panel (bugfix 2026-07). */}
+                  {selRank.ranking_components && (
                   <div className="player-score-bars">
                     {([
                       [t.resSigViral,     selRank.ranking_components.segment_viral_score, 'psb-viral'],
@@ -955,13 +959,14 @@ function StepResultsBase({
                       <div key={label} className="psb-row">
                         <span className="psb-label">{label}</span>
                         <div className="psb-track">
-                          <div className={`psb-fill ${cls}`} style={{ width: `${val}%` }} />
+                          <div className={`psb-fill ${cls}`} style={{ width: `${val ?? 0}%` }} />
                         </div>
-                        <span className="psb-val">{Math.round(val)}%</span>
+                        <span className="psb-val">{Math.round(val ?? 0)}%</span>
                       </div>
                     ))}
                   </div>
-                  {(selRank.dominant_signal || (selRank.suppressed_signals && selRank.suppressed_signals.length > 0) || selRank.ranking_components.content_type_hint) && (
+                  )}
+                  {(selRank.dominant_signal || (selRank.suppressed_signals && selRank.suppressed_signals.length > 0) || selRank.ranking_components?.content_type_hint) && (
                     <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {selRank.dominant_signal && (
                         <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
@@ -982,9 +987,9 @@ function StepResultsBase({
                           ))}
                         </div>
                       )}
-                      {selRank.ranking_components.content_type_hint && (
+                      {selRank.ranking_components?.content_type_hint && (
                         <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                          Content type: <span style={{ color: 'var(--text-2)' }}>{selRank.ranking_components.content_type_hint.replace(/_/g, ' ')}</span>
+                          Content type: <span style={{ color: 'var(--text-2)' }}>{selRank.ranking_components?.content_type_hint.replace(/_/g, ' ')}</span>
                         </div>
                       )}
                     </div>

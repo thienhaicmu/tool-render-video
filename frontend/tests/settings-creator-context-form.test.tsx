@@ -46,6 +46,7 @@ vi.mock('../src/api/client', async () => {
 
 import { SettingsScreen } from '../src/features/settings/SettingsScreen'
 import * as CC from '../src/api/creatorContext'
+import { useUIStore } from '../src/stores/uiStore'
 
 const mockedGet = CC.getCreatorContext as unknown as ReturnType<typeof vi.fn>
 const mockedPut = CC.putCreatorContext as unknown as ReturnType<typeof vi.fn>
@@ -55,6 +56,8 @@ describe('SettingsScreen — Creator Context form CRUD', () => {
   beforeEach(() => {
     mockedGet.mockReset()
     mockedPut.mockReset()
+    // These assertions pin the Vietnamese labels; default lang is 'en'.
+    useUIStore.setState({ lang: 'vi' })
   })
 
   it('hydrates inputs from getCreatorContext on mount', async () => {

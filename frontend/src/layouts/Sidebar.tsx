@@ -1,28 +1,17 @@
 /**
- * Sidebar — P2.1 single-shell: slim 56px icon-only nav rail, visible on
- * EVERY screen including Clip Studio. The old 220px labeled sidebar was
- * invisible while the user was in Studio (fullscreen shell), which hid
- * the app's primary navigation from its primary workflow.
- *
- * Labels surface via title tooltips + aria-labels; the active item gets
- * an accent background and a left accent bar.
+ * Sidebar — WP2 nav rail: a 72px rail where every destination shows an icon
+ * AND a visible label (discoverability), not a tooltip-only glyph. Adds the
+ * Queue and Editor destinations (Editor previously had no nav home). Visible
+ * on every screen including Studio.
  */
 import React, { useState } from 'react'
 import { useUIStore } from '../stores/uiStore'
 import { useI18n } from '../i18n/useI18n'
 import type { ActivePanel } from '../stores/uiStore'
+import type { TranslationKey } from '../i18n/translations'
+import { IconQueue, IconSpark, IconScissors } from '../components/icons'
 
-// ── SVG Icon set (CapCut-style line icons) ─────────────────────────────────────
-
-function IconScissors() {
-  return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
-      <circle cx="6" cy="6" r="3"/>
-      <circle cx="6" cy="18" r="3"/>
-      <path d="M8.46 7.54L20 19M8.46 16.46L14 12L20 5"/>
-    </svg>
-  )
-}
+// ── Local icons not in the shared set ──────────────────────────────────────────
 
 function IconGrid() {
   return (
@@ -38,9 +27,7 @@ function IconGrid() {
 function IconDownload() {
   return (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3V16"/>
-      <path d="M7 12L12 17L17 12"/>
-      <path d="M3 20H21"/>
+      <path d="M12 3V16"/><path d="M7 12L12 17L17 12"/><path d="M3 20H21"/>
     </svg>
   )
 }
@@ -56,25 +43,27 @@ function IconSettings() {
   )
 }
 
-// ── Nav item definitions ───────────────────────────────────────────────────────
+// ── Nav definitions ─────────────────────────────────────────────────────────────
 
 interface NavItem {
   panel: ActivePanel
-  labelKey: 'nav_studio' | 'nav_library' | 'nav_download' | 'nav_settings'
+  labelKey: TranslationKey
   icon: React.ReactNode
 }
 
 const MAIN_NAV: NavItem[] = [
-  { panel: 'clip-studio', labelKey: 'nav_studio',   icon: <IconScissors /> },
+  { panel: 'clip-studio', labelKey: 'nav_studio',   icon: <IconSpark size={19} /> },
+  { panel: 'queue',       labelKey: 'nav_queue',    icon: <IconQueue size={19} /> },
   { panel: 'library',     labelKey: 'nav_library',  icon: <IconGrid /> },
   { panel: 'download',    labelKey: 'nav_download', icon: <IconDownload /> },
+  { panel: 'editor',      labelKey: 'nav_editor',   icon: <IconScissors size={19} /> },
 ]
 
 const BOTTOM_NAV: NavItem[] = [
   { panel: 'settings', labelKey: 'nav_settings', icon: <IconSettings /> },
 ]
 
-// ── Rail button ────────────────────────────────────────────────────────────────
+// ── Rail button (icon + label) ──────────────────────────────────────────────────
 
 function RailButton({ item, activePanel, hoveredItem, setHoveredItem, setActivePanel }: {
   item: NavItem
@@ -91,12 +80,13 @@ function RailButton({ item, activePanel, hoveredItem, setHoveredItem, setActiveP
     <button
       style={{
         position: 'relative',
-        width: 40,
-        height: 40,
+        width: 60,
         margin: '0 auto',
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
+        gap: 4,
+        padding: '8px 0 6px',
         backgroundColor: isActive
           ? 'var(--accent-subtle)'
           : isHovered ? 'var(--surface-card-hover)' : 'transparent',
@@ -111,27 +101,34 @@ function RailButton({ item, activePanel, hoveredItem, setHoveredItem, setActiveP
       onMouseLeave={() => setHoveredItem(null)}
       aria-current={isActive ? 'page' : undefined}
       aria-label={t(item.labelKey)}
-      title={t(item.labelKey)}
     >
-      {/* Left accent bar */}
       {isActive && (
         <span style={{
           position: 'absolute',
-          left: -8,
+          left: -6,
           top: '50%',
           transform: 'translateY(-50%)',
           width: 3,
-          height: 20,
+          height: 22,
           background: 'linear-gradient(180deg, var(--ai-active), var(--accent-primary))',
           borderRadius: '0 2px 2px 0',
         }} />
       )}
       {item.icon}
+      <span style={{
+        fontSize: 10,
+        fontWeight: isActive ? 700 : 500,
+        letterSpacing: '.01em',
+        lineHeight: 1,
+        whiteSpace: 'nowrap',
+      }}>
+        {t(item.labelKey)}
+      </span>
     </button>
   )
 }
 
-// ── Sidebar (slim rail) ────────────────────────────────────────────────────────
+// ── Sidebar ──────────────────────────────────────────────────────────────────
 
 export function Sidebar() {
   const { activePanel, setActivePanel } = useUIStore()
@@ -141,7 +138,6 @@ export function Sidebar() {
 
   return (
     <aside style={styles.sidebar}>
-      {/* Logo mark (wordmark lives in the Topbar) */}
       <div style={styles.header}>
         <span style={styles.logoMark} title="AI Clip Studio">✦</span>
       </div>
@@ -199,7 +195,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     padding: 'var(--space-3) 0',
     flex: 1,
-    gap: 6,
+    gap: 4,
     overflow: 'hidden',
   },
 }

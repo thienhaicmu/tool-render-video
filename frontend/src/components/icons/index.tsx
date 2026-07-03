@@ -105,3 +105,31 @@ export function IconFilm({ size = 16, strokeWidth = 1.75 }: IconProps) {
     <path d="M7 6l2 4M12 6l2 4M17 6l2 4" />
   </>)
 }
+
+/** Check mark — done state (replaces the ✓ glyph). WP0.2. */
+export function IconCheck({ size = 16, strokeWidth = 1.75 }: IconProps) {
+  return base(size, strokeWidth, <path d="M20 6L9 17l-5-5" />)
+}
+
+/** Scissors — the "Cut" pipeline node. WP0.2. */
+export function IconScissors({ size = 16, strokeWidth = 1.75 }: IconProps) {
+  return base(size, strokeWidth, <>
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <path d="M8.46 7.54L20 19M8.46 16.46L14 12L20 5" />
+  </>)
+}
+
+/** Captions — the "Sub" pipeline node. WP0.2. */
+export function IconCaptions({ size = 16, strokeWidth = 1.75 }: IconProps) {
+  return base(size, strokeWidth, <>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="M7 15h4M7 11h2M13 15h4M14 11h3" />
+  </>)
+}
+
+/** Four-point spark — AI identity (replaces the ✦ / ⚡ glyphs). WP0.2. */
+export function IconSpark({ size = 16, strokeWidth = 1.75 }: IconProps) {
+  return base(size, strokeWidth,
+    <path d="M12 3l1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7z" />)
+}

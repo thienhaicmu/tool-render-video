@@ -6,7 +6,8 @@ import type { WsLogEvent } from '@/websocket/events'
 import { estimateRenderEtaSec } from '../eta'
 import { stageBlendedPercent } from '../progress'
 import { RecapLiveView } from './RecapLiveView'
-import { RenderStage, clipStateKey } from './RenderStage'
+import { RenderStage } from './RenderStage'
+import { IconCheck } from '@/components/icons'
 import { extendJob } from '@/api/jobs'
 
 function buildClipSlots(liveParts: JobPart[], progress: WsProgressSummary | null): ClipSlot[] {
@@ -35,7 +36,7 @@ function getActivePhaseIdx(stage: string, jobStatus: string): number {
   if (s === 'done') return 4
   if (s.includes('render') || s.includes('writing')) return 3
   if (s.includes('transcrib')) return 2
-  if (s.includes('scene') || s.includes('segment')) return 1
+  if (s.includes('scene') || s.includes('segment') || s.includes('analyz')) return 1
   if (s.includes('download')) return 0
   return -1
 }
@@ -181,8 +182,6 @@ function StepRenderingBase({
   const displayMsg = jobMessage
     || (isTerminal ? (isFailed ? '✕ ' + t.rndStatusFailed : '✓ ' + t.rndComplete) : t.rndPreparing)
 
-  void phases
-
   return (
     <div className="rnd-screen">
 
@@ -216,14 +215,20 @@ function StepRenderingBase({
             : displayMsg}
         </div>
 
-        {clipSlots.length > 0 && (
-          <div className="rd-seg-bar">
-            {clipSlots.map(slot => (
-              <div key={slot.part_no} className={`rd-seg rd-seg-${clipStateKey(slot.status)}`}
-                title={`Clip ${slot.part_no}: ${slot.status}`} />
-            ))}
-          </div>
-        )}
+        {/* WP1 — phase rail replaces the redundant per-clip segmented bar
+            (per-clip status now lives in the ClipTile grid below). */}
+        <div className="rd-phases">
+          {phases.map((ph, i) => {
+            if (ph.key === 'download') return null
+            const state = i < activePhaseIdx ? 'done' : i === activePhaseIdx ? 'active' : 'pending'
+            return (
+              <span key={ph.key} className={`rd-ph rd-ph-${state}`}>
+                <span className="rd-ph-dot">{state === 'done' && <IconCheck size={10} />}</span>
+                <span className="rd-ph-lbl">{ph.label}</span>
+              </span>
+            )
+          })}
+        </div>
 
         <div className="rd-overall">
           <span className="rd-overall-pct">
@@ -409,23 +414,6 @@ function StepRenderingBase({
 
       {/* S4.5 — event log tail panel */}
       <EventLogPanel events={liveEvents || []} t={t} />
-
-      <div className="rd-abp-toolbar">
-        <div className="rd-abp-job">
-          <div className="rd-abp-title">{jobId ? jobId.slice(-12) : '—'}</div>
-          <div className="rd-abp-meta">{isRecap && effTotal > 0 ? t.rndRecapMeta(effTotal, recapEpisodes || 1, aspectRatio) : totalCount > 0 ? `${totalCount} clips · ${aspectRatio}` : aspectRatio}</div>
-        </div>
-        <div className="rd-abp-progress">
-          <div className="rd-abp-bar-track">
-            <div className="rd-abp-bar-fill" style={{ width: `${displayPct}%` }} />
-          </div>
-          <div className="rd-abp-msg">{displayMsg}</div>
-        </div>
-        <span className="rd-abp-pct">{Math.round(displayPct)}%</span>
-        <span className={`rd-abp-badge rd-status-${isFailed ? 'failed' : isTerminal ? 'done' : 'running'}`}>
-          {isFailed ? 'FAILED' : isTerminal ? 'DONE' : 'RUNNING'}
-        </span>
-      </div>
 
     </div>
   )
