@@ -38,8 +38,10 @@ output passes qa_pipeline before DONE).
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable
 
@@ -234,30 +236,52 @@ def run_content(
                 message=(s.role or ""),
             )
 
-        # 4. Render each scene (sequential compose — no source to cut) ---------
-        _set_stage(JobStage.RENDERING, 40, f"Rendering {total_parts} scene(s)")
-        scene_clips: list[str] = []
+        # 4. Render scenes — PARALLEL (CU-2) with disk-truth resume ------------
+        # Each worker composes one scene end-to-end (TTS → visual → subtitle →
+        # mux). Whisper access is already lock-serialised inside transcribe_to_srt,
+        # and word-by-word is opt-in (default off = no Whisper), so parallel
+        # scenes are safe. Results are collected in THIS thread and ordered by
+        # scene index for a correct concat. Per-scene status writes use each
+        # worker's own thread-local DB connection.
         failed_parts: list[dict] = []
+        _results: dict[int, str] = {}
 
-        # MED-2: a cheap cancel probe threaded into the slow online providers
-        # (Veo polls it) + checked between each scene sub-step, so a cancelled job
-        # stops promptly instead of finishing a minutes-long generation.
+        # MED-2: cancel probe (Veo polls it; checked between sub-steps).
         def _cancel_cb() -> bool:
             return cancel_registry.is_cancelled(job_id)
 
-        # MED-3: word-by-word subtitles are opt-in via the existing highlight_per_word
-        # flag (the FE Content Studio defaults it on). Off → the faster sentence
-        # SRT path, so a content render doesn't silently pay the Whisper cost.
+        # MED-3: word-by-word opt-in via highlight_per_word (FE defaults it on).
         _word_by_word = bool(getattr(payload, "highlight_per_word", False))
 
-        for i, scene in enumerate(scenes, start=1):
-            if cancel_registry.is_cancelled(job_id):
-                raise cancel_registry.JobCancelledError()
+        try:
+            _user_req = int(getattr(payload, "max_parallel_parts", 0) or 0)
+        except Exception:
+            _user_req = 0
+        _cpu = os.cpu_count() or 4
+        _cap = max(1, min(int(os.getenv("CONTENT_MAX_PARALLEL", "3") or 3), _cpu))
+        max_workers = max(1, min(_user_req, _cpu)) if _user_req > 0 else _cap
+
+        def _render_one_scene(i: int, scene) -> dict:
+            """Compose one scene → {idx, clip|None, error|None}. Resumes from a
+            valid existing scene clip. Raises JobCancelledError on cancel."""
             part_name = f"scene_{i:03d}"
-            upsert_job_part(
-                job_id, i, part_name, JobPartStage.RENDERING,
-                progress_percent=20, message="synthesizing narration",
-            )
+            scene_out = str(scenes_dir / f"{part_name}.mp4")
+
+            # Resume (disk-truth): reuse a scene clip that already passes QA
+            # (retry keeps scenes_dir since it's only cleaned on success).
+            if Path(scene_out).exists() and Path(scene_out).stat().st_size > 0:
+                _rq = _validate_render_output(Path(scene_out), expect_audio=True)
+                if _rq.get("ok"):
+                    upsert_job_part(job_id, i, part_name, JobPartStage.DONE,
+                                    progress_percent=100,
+                                    duration=float(_rq["metadata"].get("duration") or 0.0),
+                                    output_file=scene_out, message=(scene.role or ""))
+                    return {"idx": i, "clip": scene_out, "error": None}
+
+            if _cancel_cb():
+                raise cancel_registry.JobCancelledError()
+            upsert_job_part(job_id, i, part_name, JobPartStage.RENDERING,
+                            progress_percent=20, message="synthesizing narration")
 
             narr = synthesize_scene_narration(
                 scene=scene, job_id=job_id, language=language, gender=gender,
@@ -265,57 +289,41 @@ def run_content(
                 out_path=str(scenes_dir / f"narr_{i:03d}.mp3"),
             )
             if narr is None:
-                failed_parts.append({"part_no": i, "error": "tts_failed"})
                 upsert_job_part(job_id, i, part_name, JobPartStage.FAILED,
                                 progress_percent=0, message="TTS failed")
                 _job_log(effective_channel, job_id,
                          f"Content scene {i} TTS failed — skipped", kind="warning")
-                continue
+                return {"idx": i, "clip": None, "error": "tts_failed"}
             audio_path, ndur = narr
-            if _cancel_cb():  # MED-2: TTS may have taken a while
+            if _cancel_cb():
                 raise cancel_registry.JobCancelledError()
 
-            # Visual asset resolution:
-            #  - CS-E: an explicit per-scene override (Asset Manager) WINS and is
-            #    always resolved by the local provider (the user picked it).
-            #  - Otherwise the job-level provider decides. For an online provider
-            #    (CS-G stock/ai_image) that means generating from visual_prompt;
-            #    kind/value carry the job background as the fallback the local
-            #    provider uses if the online one yields nothing.
+            # Per-scene override (Asset Manager) WINS via local; else job provider.
             _s_source = (getattr(scene, "visual_source", "") or "").strip().lower()
             _s_ken_burns = bool(getattr(scene, "ken_burns", False))
             if _s_source in ("color", "image", "video"):
-                _prov = "local"
-                _kind = _s_source
-                _value = (getattr(scene, "visual_path", "") or "").strip()
+                _prov, _kind, _value = "local", _s_source, (getattr(scene, "visual_path", "") or "").strip()
             else:
-                _prov = visual_provider
-                _kind = bg_kind
-                _value = bg_value
+                _prov, _kind, _value = visual_provider, bg_kind, bg_value
 
             asset = resolve_scene_visual(
                 SceneVisualRequest(
                     scene_index=i, kind=_kind, value=_value,
                     prompt=(scene.visual_prompt or scene.visual_hint or ""),
-                    # CU-3: feed the AI providers the "avoid" list + overall style.
                     negative_prompt=(getattr(scene, "negative_prompt", "") or ""),
                     style=(getattr(plan, "video_style", "") or ""),
-                    width=width, height=height,
-                    fps=fps, duration_sec=ndur, work_dir=str(scenes_dir),
-                    cancel_check=_cancel_cb,
+                    width=width, height=height, fps=fps, duration_sec=ndur,
+                    work_dir=str(scenes_dir), cancel_check=_cancel_cb,
                 ),
                 provider=_prov,
             )
             if asset is None:
-                failed_parts.append({"part_no": i, "error": "visual_failed"})
                 upsert_job_part(job_id, i, part_name, JobPartStage.FAILED,
                                 progress_percent=0, message="visual resolve failed")
-                continue
-            if _cancel_cb():  # MED-2: an online provider may have taken minutes
+                return {"idx": i, "clip": None, "error": "visual_failed"}
+            if _cancel_cb():
                 raise cancel_registry.JobCancelledError()
 
-            scene_out = str(scenes_dir / f"{part_name}.mp4")
-            # Subtitle style: per-scene override → plan-level → payload default.
             _sub_style = (
                 (getattr(scene, "subtitle_style", "") or "").strip()
                 or (getattr(plan, "subtitle_style", "") or "").strip()
@@ -327,27 +335,64 @@ def run_content(
                 width=width, height=height, fps=fps, sample_rate=_SAMPLE_RATE,
                 out_path=scene_out, work_dir=str(scenes_dir), subtitle_enabled=add_subtitle,
                 subtitle_style=_sub_style, word_by_word=_word_by_word,
-                # Ken Burns on an image background: user-toggled, OR default-on for
-                # a provider-fetched/generated image (CS-G) so it isn't a static still.
                 ken_burns=asset.kind == "image" and (
                     _s_ken_burns or asset.provider in ("stock", "ai_image")
                 ),
             )
             if ok:
-                scene_clips.append(scene_out)
                 upsert_job_part(job_id, i, part_name, JobPartStage.DONE,
                                 progress_percent=100, duration=ndur,
                                 output_file=scene_out, message=(scene.role or ""))
-            else:
-                failed_parts.append({"part_no": i, "error": "render_failed"})
-                upsert_job_part(job_id, i, part_name, JobPartStage.FAILED,
-                                progress_percent=0, message="scene render failed")
-            _set_stage(
-                JobStage.RENDERING, 40 + int(45 * i / max(1, total_parts)),
-                f"Rendered scene {i}/{total_parts}",
-            )
+                return {"idx": i, "clip": scene_out, "error": None}
+            upsert_job_part(job_id, i, part_name, JobPartStage.FAILED,
+                            progress_percent=0, message="scene render failed")
+            return {"idx": i, "clip": None, "error": "render_failed"}
 
-        # Partial-success handling: proceed as long as ≥1 scene rendered.
+        def _collect(r: dict) -> None:
+            if r.get("clip"):
+                _results[int(r["idx"])] = r["clip"]
+            elif r.get("error"):
+                failed_parts.append({"part_no": int(r["idx"]), "error": r["error"]})
+
+        _done = 0
+        if max_workers == 1:
+            _set_stage(JobStage.RENDERING, 40, f"Rendering {total_parts} scene(s)")
+            for i, scene in enumerate(scenes, start=1):
+                if _cancel_cb():
+                    raise cancel_registry.JobCancelledError()
+                _collect(_render_one_scene(i, scene))
+                _done += 1
+                _set_stage(JobStage.RENDERING, 40 + int(45 * _done / max(1, total_parts)),
+                           f"Rendered scene {_done}/{total_parts}")
+        else:
+            _set_stage(JobStage.RENDERING_PARALLEL, 40,
+                       f"Rendering {total_parts} scene(s) ×{max_workers}")
+            _fut: dict = {}
+            with ThreadPoolExecutor(max_workers=max_workers) as _ex:
+                for i, scene in enumerate(scenes, start=1):
+                    if _cancel_cb():
+                        break  # stop submitting; running futures self-check cancel
+                    _fut[_ex.submit(_render_one_scene, i, scene)] = i
+                for _f in as_completed(_fut):
+                    _i = _fut[_f]
+                    try:
+                        _collect(_f.result())
+                    except cancel_registry.JobCancelledError:
+                        raise
+                    except Exception as _exc:
+                        upsert_job_part(job_id, _i, f"scene_{_i:03d}", JobPartStage.FAILED,
+                                        progress_percent=0, message="scene render error")
+                        failed_parts.append({"part_no": _i, "error": f"exc: {_exc}"})
+                    _done += 1
+                    _set_stage(JobStage.RENDERING_PARALLEL,
+                               40 + int(45 * _done / max(1, total_parts)),
+                               f"Rendered {_done}/{total_parts}")
+            if _cancel_cb():
+                raise cancel_registry.JobCancelledError()
+
+        # Ordered by scene index → correct concat order (Partial-success: proceed
+        # as long as ≥1 scene rendered).
+        scene_clips: list[str] = [_results[i] for i in sorted(_results)]
         if not scene_clips:
             raise RuntimeError("Content: no scene rendered successfully")
 

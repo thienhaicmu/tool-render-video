@@ -268,6 +268,52 @@ def test_run_content_honors_cancel(_content_sandbox, monkeypatch):
     assert not list((output_dir / "content-cancel").rglob("*.mp4"))
 
 
+def _make_av(path: str, dur: float = 3.0) -> None:
+    # testsrc (animated) so even a short clip clears the QA 10 KB floor — a static
+    # colour clip compresses below it.
+    from app.services.bin_paths import get_ffmpeg_bin
+    subprocess.run(
+        [get_ffmpeg_bin(), "-y", "-f", "lavfi", "-i", f"testsrc=size=320x568:rate=30:duration={dur}",
+         "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", f"{dur}",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", path],
+        capture_output=True, check=True, timeout=60,
+    )
+
+
+@_NEEDS_FFMPEG
+def test_run_content_resumes_existing_scenes(_content_sandbox, monkeypatch):
+    """CU-2: valid scene clips already on disk are reused — TTS is NOT re-run."""
+    import app.features.render.engine.pipeline.content_pipeline as cp
+    from app.models.schemas import RenderRequest
+
+    job_id = str(uuid.uuid4())
+    tmp_path = _content_sandbox["tmp_path"]
+    output_dir = _content_sandbox["output_dir"]
+    scenes_dir = tmp_path / "tmp" / job_id / "content_scenes"
+    scenes_dir.mkdir(parents=True, exist_ok=True)
+    _make_av(str(scenes_dir / "scene_001.mp4"))
+    _make_av(str(scenes_dir / "scene_002.mp4"))
+
+    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())
+
+    def _boom_synth(**k):
+        raise AssertionError("resume must skip TTS for already-rendered scenes")
+    monkeypatch.setattr(cp, "synthesize_scene_narration", _boom_synth)
+
+    payload = RenderRequest(
+        channel_code="content-e2e", render_format="content", content_script="x",
+        output_dir=str(output_dir / "content-resume"), aspect_ratio="9:16",
+        output_fps=30, add_subtitle=False, voice_enabled=False,
+    )
+    cp.run_content(job_id=job_id, payload=payload, resume_mode=True,
+                   load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None)
+
+    from app.db.jobs_repo import get_job
+    row = get_job(job_id)
+    assert row is not None and row["status"] == "completed"
+    assert list((output_dir / "content-resume").rglob("*.mp4"))
+
+
 @_NEEDS_FFMPEG
 def test_run_content_no_plan_fails_cleanly(_content_sandbox, monkeypatch):
     """AI returns None → run_content raises (process_render writes the failed
