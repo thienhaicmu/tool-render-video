@@ -1,49 +1,31 @@
 /**
- * RenderStage — clips-mode live view: one FOCUS card for the clip being
- * rendered right now (large preview area, animated border, big progress,
- * Cut→Sub→Render pipeline, activity line, per-clip ETA) + a filmstrip of
- * every other clip. Click a filmstrip chip to focus it.
+ * RenderStage — clips-mode live view (WP1 redesign).
  *
- * Owner-approved redesign (2026-07-02) replacing the flat ClipRow list —
- * same pattern as RecapLiveView's focus card so both render modes read
- * identically. CSS lives in RenderWorkflow.css under `.rs-*`.
+ * One FOCUS card for the clip rendering right now (large ConicRing progress
+ * while active, real thumbnail once done, Cut→Sub→Render pipeline, activity
+ * line, per-clip ETA) + a GRID of rich ClipTiles for every clip. Click a tile
+ * to focus it. Same visual language as the Results grid so monitor→results
+ * reads as one surface.
+ *
+ * CSS lives in RenderWorkflow.css under `.rs-*` (focus card) and `.ct-*` (tiles).
  */
 import React, { useRef, useState } from 'react'
 import type { ClipSlot } from '../types'
 import type { Strings } from '../i18n'
-import type { JobPartStageEnum } from '@/types/enums'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
+import { ConicRing } from '@/components/ui/ConicRing'
+import { IconCheck, IconScissors, IconCaptions, IconFilm, IconPlay } from '@/components/icons'
+import { ClipTile } from './ClipTile'
+import { clipStateKey, STEP_NODES, activityLabel } from './clipState'
 
-export function clipStateKey(status: string): 'done' | 'failed' | 'active' | 'waiting' {
-  const s = status.toLowerCase()
-  if (s === 'done') return 'done'
-  if (s === 'failed' || s === 'cancelled') return 'failed'
-  if (s === 'waiting' || s === 'queued') return 'waiting'
-  return 'active'
-}
+// Re-export so existing consumers (StepRendering) keep importing from here.
+export { clipStateKey }
 
-// Activity labels via the Strings table (tool names kept as detail).
-function activityLabel(status: string, t: Strings): string {
-  switch (status.toLowerCase()) {
-    case 'cutting':      return `${t.actCutting} · FFmpeg`
-    case 'transcribing': return `${t.actTranscribing} · Whisper AI`
-    case 'rendering':    return `${t.actRendering} · FFmpeg`
-    default:             return ''
-  }
-}
-
-const STEP_NODES = [
-  { key: 'cutting',      label: 'Cut' },
-  { key: 'transcribing', label: 'Sub' },
-  { key: 'rendering',    label: 'Render' },
-] as const satisfies readonly { key: JobPartStageEnum; label: string }[]
-
-const ACCENT: Record<string, string> = {
-  done:    'var(--status-success)',
-  failed:  'var(--color-error)',
-  active:  'var(--ai-active)',
-  waiting: 'var(--status-waiting)',
-}
+const STEP_ICON = {
+  cutting: IconScissors,
+  transcribing: IconCaptions,
+  rendering: IconFilm,
+} as const
 
 function fmtDur(sec?: number): string | null {
   if (sec == null || sec <= 0) return null
@@ -65,8 +47,7 @@ export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
     ?? slots[slots.length - 1]
   const focus = slots.find((s) => s.part_no === focusOverride) ?? auto
 
-  // Per-clip ETA — anchored to when the FOCUSED clip entered its active
-  // state (reset whenever a different clip takes focus / turns active).
+  // Per-clip ETA — anchored to when the FOCUSED clip entered its active state.
   const startRef = useRef<{ no: number; at: number } | null>(null)
   const focusState = focus ? clipStateKey(focus.status) : 'waiting'
   if (focus && focusState === 'active') {
@@ -89,7 +70,6 @@ export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
   if (!focus) return null
 
   const pct = focusState === 'done' ? 100 : focusState === 'active' ? focus.progress_percent : 0
-  const accent = ACCENT[focusState]
   const activeStepIdx = STEP_NODES.findIndex((n) => n.key === focus.status.toLowerCase())
   const activity = focus.message || activityLabel(focus.status, t)
   const thumbUrl = jobId && focusState === 'done' ? getPartThumbnailUrl(jobId, focus.part_no) : null
@@ -99,7 +79,7 @@ export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
     <div className="rs-root">
       {/* ── FOCUS CARD ─────────────────────────────────────────────────── */}
       <div className={`rs-focus${focusState === 'active' ? ' rs-focus-live' : ''}`}>
-        {/* Preview area */}
+        {/* Preview / progress area */}
         <div className="rs-thumb" style={{ aspectRatio: thumbRatio }}>
           {thumbUrl ? (
             <>
@@ -113,16 +93,19 @@ export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
                   className="rs-thumb-play"
                   href={getPartMediaUrl(jobId, focus.part_no)}
                   target="_blank" rel="noreferrer"
-                >▶</a>
+                  aria-label="Play clip"
+                ><IconPlay size={26} /></a>
               )}
             </>
           ) : (
             <div className={`rs-thumb-ph rs-ph-${focusState}`}>
-              <span className="rs-thumb-no">#{String(focus.part_no).padStart(2, '0')}</span>
-              {focusState === 'active' && (
-                <span className="rs-thumb-pct">{Math.round(pct)}%</span>
+              {focusState === 'active' ? (
+                <ConicRing progress={Math.round(pct)} size={92} />
+              ) : focusState === 'failed' ? (
+                <span className="rs-thumb-x">✕</span>
+              ) : (
+                <span className="rs-thumb-no">#{String(focus.part_no).padStart(2, '0')}</span>
               )}
-              {focusState === 'failed' && <span className="rs-thumb-x">✕</span>}
             </div>
           )}
         </div>
@@ -130,8 +113,8 @@ export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
         {/* Detail column */}
         <div className="rs-body">
           <div className="rs-head">
-            <span className={`rs-badge rs-badge-${focusState}`} style={{ color: accent }}>
-              {focusState === 'active' && <span className="rs-badge-dot" style={{ background: accent }} />}
+            <span className={`rs-badge rs-badge-${focusState}`}>
+              {focusState === 'active' && <span className="rs-badge-dot" />}
               {getStatusLabel(focus.status)}
             </span>
             <span className="rs-title">
@@ -148,71 +131,60 @@ export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
                 width: `${pct}%`,
                 background: focusState === 'failed'
                   ? 'var(--color-error)'
-                  : `linear-gradient(90deg, ${accent}, var(--accent-primary))`,
+                  : 'linear-gradient(90deg, var(--ai-active), var(--accent-primary))',
               }}
             />
           </div>
 
-          {/* Pipeline */}
+          {/* Pipeline — line-icon nodes */}
           <div className="rs-pipe">
             {STEP_NODES.map((n, i) => {
-              const st = focusState === 'done' ? 'done'
+              const stt = focusState === 'done' ? 'done'
                 : i < activeStepIdx ? 'done'
                 : i === activeStepIdx ? 'active'
                 : 'pending'
-              const col = st === 'done' ? 'var(--status-success)' : st === 'active' ? 'var(--ai-active)' : 'var(--status-waiting)'
+              const Ico = STEP_ICON[n.key]
               return (
                 <React.Fragment key={n.key}>
-                  <span className="rs-pipe-node" style={{ borderColor: col, background: st === 'done' ? col : 'transparent' }}>
-                    {st === 'done' && <span className="rs-pipe-check">✓</span>}
-                    {st === 'active' && <span className="rs-pipe-pulse" style={{ background: col }} />}
+                  <span className={`rs-pipe-node rs-pipe-${stt}`}>
+                    {stt === 'done' ? <IconCheck size={12} /> : <Ico size={12} />}
                   </span>
-                  <span className="rs-pipe-lbl" style={{ color: col, fontWeight: st === 'active' ? 700 : 500 }}>{n.label}</span>
-                  {i < STEP_NODES.length - 1 && <span className="rs-pipe-line" style={{ background: i < activeStepIdx || focusState === 'done' ? 'var(--status-success)' : 'var(--border)' }} />}
+                  <span className={`rs-pipe-lbl rs-pipe-lbl-${stt}`}>{n.label}</span>
+                  {i < STEP_NODES.length - 1 && (
+                    <span className={`rs-pipe-line${i < activeStepIdx || focusState === 'done' ? ' rs-pipe-line-done' : ''}`} />
+                  )}
                 </React.Fragment>
               )
             })}
           </div>
 
           {activity && focusState !== 'done' && (
-            <div className="rs-activity" style={{ color: focusState === 'failed' ? 'var(--fail)' : 'var(--text-3)' }}>
+            <div className={`rs-activity${focusState === 'failed' ? ' rs-activity-fail' : ''}`}>
               {activity}
             </div>
           )}
           {focusState === 'done' && jobId && (
             <a className="rs-preview-link" href={getPartMediaUrl(jobId, focus.part_no)} target="_blank" rel="noreferrer">
-              ▶ {t.btnPlay.replace('▶ ', '')}
+              <IconPlay size={12} /> {t.btnPlay.replace('▶ ', '')}
             </a>
           )}
         </div>
       </div>
 
-      {/* ── FILMSTRIP ──────────────────────────────────────────────────── */}
-      <div className="rs-strip" role="listbox" aria-label="Clips">
-        {slots.map((s) => {
-          const st = clipStateKey(s.status)
-          const isFocus = s.part_no === focus.part_no
-          return (
-            <button
-              key={s.part_no}
-              className={`rs-chip rs-chip-${st}${isFocus ? ' rs-chip-focus' : ''}`}
-              onClick={() => setFocusOverride(s.part_no)}
-              title={`Clip ${s.part_no}: ${getStatusLabel(s.status)}`}
-              role="option"
-              aria-selected={isFocus}
-            >
-              {/* key forces remount on state change → pop animation plays */}
-              <span key={st} className={`rs-chip-glyph${st === 'done' ? ' rs-pop' : ''}`}>
-                {st === 'done' ? '✓' : st === 'failed' ? '✕' : st === 'active' ? '▶' : '○'}
-              </span>
-              <span className="rs-chip-no">#{String(s.part_no).padStart(2, '0')}</span>
-              {st === 'active' && <span className="rs-chip-pct">{Math.round(s.progress_percent)}%</span>}
-              {st === 'active' && (
-                <span className="rs-chip-bar"><span style={{ width: `${s.progress_percent}%` }} /></span>
-              )}
-            </button>
-          )
-        })}
+      {/* ── CLIP GRID ──────────────────────────────────────────────────── */}
+      <div className="ct-grid" role="listbox" aria-label="Clips">
+        {slots.map((s) => (
+          <ClipTile
+            key={s.part_no}
+            slot={s}
+            jobId={jobId}
+            thumbRatio={thumbRatio}
+            isFocus={s.part_no === focus.part_no}
+            onFocus={setFocusOverride}
+            t={t}
+            getStatusLabel={getStatusLabel}
+          />
+        ))}
       </div>
     </div>
   )

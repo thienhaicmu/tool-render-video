@@ -25,6 +25,8 @@ import type {
   RecapEpisodeInfo as EpisodeInfo,
 } from '@/websocket/events'
 import { StoryModelCard } from '@/features/jobs/StoryModelCard'
+import { ConicRing } from '@/components/ui/ConicRing'
+import { IconCheck } from '@/components/icons'
 import type { Strings } from '../i18n'
 
 type EpState = 'done' | 'active' | 'pending'
@@ -252,15 +254,18 @@ function FocusCard({ sc, part, preview, epTitle, t }: {
     : (preview || (_isActive(part?.status) ? t.rndRecapNarrWriting : t.rndRecapNarrWaiting))
   return (
     <>
-      {/* Preview placeholder (a real scene frame isn't available mid-render) */}
+      {/* Preview area — WP1 parity: a live ConicRing (no scene frame exists
+          mid-render) matching the clips-mode focus card. */}
       <div style={{
         aspectRatio: '16 / 9', borderRadius: 10, border: '1px solid var(--border)',
         background: 'linear-gradient(135deg, rgba(245,158,11,.10), rgba(168,85,247,.10))',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
         position: 'relative', overflow: 'hidden',
       }}>
-        <span style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-1)', opacity: 0.9 }}>#{sc.n}</span>
-        <span style={{ fontSize: 18 }}>{isOrig ? '🔊' : '🎙'}</span>
+        <ConicRing progress={pct} size={76}>
+          {_isDone(part?.status) ? <IconCheck size={24} /> : undefined}
+        </ConicRing>
+        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 12, color: 'var(--text-2)' }}>#{sc.n}</span>
         <span style={{
           position: 'absolute', top: 8, right: 10, fontSize: 9, fontWeight: 700, color: '#fff',
           background: si.color, borderRadius: 4, padding: '2px 6px', fontFamily: 'var(--fb)',

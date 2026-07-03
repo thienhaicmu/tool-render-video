@@ -1344,12 +1344,16 @@
 
 .rd-step-text { font-size: 11px; color: var(--text-3); margin-bottom: 9px; min-height: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.rd-seg-bar { display: flex; gap: 3px; margin-bottom: 10px; }
-.rd-seg { flex: 1; height: 4px; border-radius: 2px; transition: background .3s; }
-.rd-seg-done    { background: var(--ok); }
-.rd-seg-active  { background: #4d7cff; animation: pulse-running 1.2s ease infinite; }
-.rd-seg-waiting { background: rgba(var(--text-rgb),.12); }
-.rd-seg-failed  { background: var(--fail); }
+/* WP1 — phase rail (Analyze · Transcribe · Render · Done). Replaces the
+   per-clip segmented bar; per-clip status now lives in the ClipTile grid. */
+.rd-phases { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 10px; }
+.rd-ph { display: inline-flex; align-items: center; gap: 6px; }
+.rd-ph-dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--border); display: inline-flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; transition: background .25s, border-color .25s, box-shadow .25s; }
+.rd-ph-done .rd-ph-dot   { background: var(--status-success); border-color: var(--status-success); }
+.rd-ph-active .rd-ph-dot { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .14); }
+.rd-ph-lbl { font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.rd-ph-done .rd-ph-lbl   { color: var(--status-success); }
+.rd-ph-active .rd-ph-lbl { color: var(--accent); font-weight: 700; }
 
 .rd-overall { display: flex; align-items: center; gap: 14px; }
 .rd-overall-pct { font-family: var(--fo, monospace); font-size: 32px; font-weight: 800; background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; flex-shrink: 0; line-height: 1; }
@@ -1409,22 +1413,8 @@
 }
 .rd-row-btn:hover { background: rgba(var(--text-rgb),.1); color: var(--text-1); }
 
-/* abpToolbar */
-.rd-abp-toolbar {
-  flex-shrink: 0; height: 48px;
-  display: flex; align-items: center; gap: 10px;
-  padding: 0 14px; background: var(--bg-panel);
-  border-top: 1.5px solid #4d7cff;
-}
-.rd-abp-job { flex: 0 0 auto; max-width: 180px; display: flex; flex-direction: column; gap: 1px; }
-.rd-abp-title { font-family: var(--fo, monospace); font-size: 11px; font-weight: 700; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rd-abp-meta  { font-size: 10px; color: var(--text-3); white-space: nowrap; }
-.rd-abp-progress { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.rd-abp-bar-track { height: 3px; background: rgba(var(--text-rgb),.08); border-radius: 2px; overflow: hidden; }
-.rd-abp-bar-fill  { height: 100%; background: var(--grad); transition: width .4s; }
-.rd-abp-msg { font-size: 10px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rd-abp-pct { font-family: var(--fo, monospace); font-size: 15px; font-weight: 800; color: var(--text-1); flex-shrink: 0; }
-.rd-abp-badge { font-family: var(--fh); font-size: 10px; font-weight: 700; letter-spacing: 1px; padding: 2px 8px; border-radius: 2px; flex-shrink: 0; }
+/* WP1 — the .rd-abp-* bottom toolbar was removed: it duplicated the hero
+   progress card (bar + % + status badge) at the bottom of the monitor. */
 
 /* Pipeline strip */
 .rnd-pipeline {
@@ -2123,38 +2113,82 @@
 .rs-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
 .rs-head { display: flex; align-items: center; gap: 10px; }
 .rs-badge { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 6px; }
-.rs-badge-dot { width: 7px; height: 7px; border-radius: 50%; animation: rndv-badge-pulse 1.3s ease-in-out infinite; }
+.rs-badge-active  { color: var(--ai-active); }
+.rs-badge-done    { color: var(--status-success); }
+.rs-badge-failed  { color: var(--color-error); }
+.rs-badge-waiting { color: var(--status-waiting); }
+.rs-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ai-active); animation: rndv-badge-pulse 1.3s ease-in-out infinite; }
 .rs-title { font-size: 14px; font-weight: 700; color: var(--text-1); }
 .rs-dur { font-weight: 400; color: var(--text-3); font-family: monospace; font-size: 12px; }
 .rs-eta { margin-left: auto; font-family: monospace; font-size: 12px; color: var(--text-2); }
 .rs-bar { height: 8px; border-radius: 99px; background: rgba(var(--text-rgb), .08); overflow: hidden; }
 .rs-bar-fill { height: 100%; border-radius: 99px; transition: width .4s ease; }
 .rs-pipe { display: flex; align-items: center; gap: 6px; }
-.rs-pipe-node { width: 18px; height: 18px; border-radius: 50%; border: 2px solid; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.rs-pipe-check { font-size: 10px; color: #fff; }
-.rs-pipe-pulse { width: 7px; height: 7px; border-radius: 50%; animation: rndv-badge-pulse 1.2s ease-in-out infinite; }
-.rs-pipe-lbl { font-size: 11px; }
-.rs-pipe-line { flex: 0 1 34px; height: 2px; border-radius: 1px; }
-.rs-activity { font-size: 11px; line-height: 1.5; }
-.rs-preview-link { font-size: 11px; font-weight: 700; color: var(--status-success); text-decoration: none; letter-spacing: .04em; }
+.rs-pipe-node { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--border); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--status-waiting); background: var(--bg-card); transition: color .2s, border-color .2s, box-shadow .2s; }
+.rs-pipe-node.rs-pipe-done   { border-color: var(--status-success); background: var(--status-success); color: #fff; }
+.rs-pipe-node.rs-pipe-active { border-color: var(--ai-active); color: var(--ai-active); box-shadow: 0 0 0 3px rgba(var(--ai-rgb), .14); }
+.rs-pipe-lbl { font-size: 11px; color: var(--status-waiting); }
+.rs-pipe-lbl-done   { color: var(--status-success); font-weight: 600; }
+.rs-pipe-lbl-active { color: var(--ai-active); font-weight: 700; }
+.rs-pipe-line { flex: 0 1 34px; height: 2px; border-radius: 1px; background: var(--border); }
+.rs-pipe-line-done { background: var(--status-success); }
+.rs-activity { font-size: 11px; line-height: 1.5; color: var(--text-3); }
+.rs-activity-fail { color: var(--fail); }
+.rs-preview-link { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--status-success); text-decoration: none; letter-spacing: .04em; }
 
-.rs-strip { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; flex-shrink: 0; }
-.rs-chip {
-  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
-  padding: 6px 10px; border-radius: 99px; position: relative; overflow: hidden;
-  border: 1px solid var(--border); background: var(--bg-card);
-  font-size: 11px; font-weight: 600; color: var(--text-2); cursor: pointer;
-  transition: border-color .12s, background .12s;
+/* ── Clip tile grid (WP1 — replaces the flat .rs-chip filmstrip) ──────────── */
+.ct-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px; padding: 2px;
 }
-.rs-chip:hover { border-color: var(--border-hi); }
-.rs-chip-focus { border-color: var(--accent); background: var(--accent-dim); }
-.rs-chip-done .rs-chip-glyph { color: var(--status-success); }
-.rs-chip-failed .rs-chip-glyph { color: var(--fail); }
-.rs-chip-active .rs-chip-glyph { color: var(--ai-active); }
-.rs-chip-waiting { opacity: .65; }
-.rs-chip-no { font-family: monospace; }
-.rs-chip-pct { font-family: monospace; color: var(--accent); }
-.rs-chip-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(var(--text-rgb), .08); }
-.rs-chip-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--ai-active), var(--accent-primary)); transition: width .4s ease; }
-.rs-pop { display: inline-block; animation: rs-pop .35s var(--ease-spring, cubic-bezier(.34,1.56,.64,1)); }
-@keyframes rs-pop { from { transform: scale(.3); opacity: .2; } to { transform: scale(1); opacity: 1; } }
+.ct {
+  position: relative; border-radius: 12px; overflow: hidden; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-card);
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.ct:hover { transform: translateY(-2px); border-color: var(--border-hi); }
+.ct:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.ct-focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 6px 18px rgba(var(--accent-rgb), .18); }
+
+/* done — real thumbnail */
+.ct-done { animation: ct-pop .35s var(--ease-spring, cubic-bezier(.34,1.56,.64,1)); }
+@keyframes ct-pop { from { transform: scale(.94); opacity: .4; } to { transform: scale(1); opacity: 1; } }
+.ct-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ct-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(0,0,0,.55)); pointer-events: none; }
+.ct-chip { position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+.ct-chip-done { background: var(--status-success); color: #fff; }
+.ct-dur { position: absolute; bottom: 6px; right: 6px; font: 600 10px var(--font-mono); color: #fff; background: rgba(0,0,0,.55); padding: 1px 5px; border-radius: 5px; }
+.ct-no-over { position: absolute; bottom: 6px; left: 8px; font: 700 11px var(--font-display); color: #fff; letter-spacing: .02em; text-shadow: 0 1px 2px rgba(0,0,0,.55); }
+.ct-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.28); opacity: 0; transition: opacity .15s; text-decoration: none; }
+.ct:hover .ct-play { opacity: 1; }
+
+/* shared body (active / waiting / failed) */
+.ct-body { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 6px; }
+.ct-no-c { font: 700 12px var(--font-display); color: var(--text-2); letter-spacing: .02em; }
+.ct-no-dim { color: var(--text-3); }
+
+/* active */
+.ct-active { border-color: rgba(var(--ai-rgb), .35); animation: ct-glow 2.4s ease-in-out infinite; }
+@keyframes ct-glow { 0%, 100% { box-shadow: 0 0 10px rgba(var(--accent-rgb), .08); } 50% { box-shadow: 0 0 20px rgba(var(--accent-rgb), .20); } }
+.ct-body-active { background: radial-gradient(120% 120% at 50% 0%, rgba(var(--accent-rgb), .16), transparent 70%); }
+.ct-pipe { display: flex; align-items: center; gap: 8px; }
+.ct-pipe-node { display: inline-flex; align-items: center; justify-content: center; color: var(--status-waiting); opacity: .4; }
+.ct-pipe-node.past { color: var(--status-success); opacity: 1; }
+.ct-pipe-node.on   { color: var(--ai-active); opacity: 1; }
+
+/* waiting — ghost shimmer */
+.ct-waiting { opacity: .82; }
+.ct-body-wait { }
+.ct-shimmer { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(var(--text-rgb), .06) 50%, transparent 70%); background-size: 200% 100%; animation: rs-shimmer 1.8s linear infinite; }
+.ct-wait-lbl { font: 600 10px var(--font-ui); color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; }
+
+/* failed */
+.ct-failed { border-color: rgba(var(--fail-rgb), .4); }
+.ct-body-failed { background: rgba(var(--fail-rgb), .08); color: var(--fail); }
+.ct-x { color: var(--fail); }
+.ct-failmsg { font: 500 9px var(--font-ui); color: var(--text-3); max-width: 92%; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ct-active, .ct-shimmer, .ct-done { animation: none; }
+}
