@@ -166,6 +166,7 @@ def select_content_plan(
     tone: str = "",
     api_key: str = "",
     model: Optional[str] = None,
+    resolve_key: Optional[Callable[[str], str]] = None,
 ) -> Optional["ContentPlan"]:
     """Dispatch Content Mode planning (render_format="content") to a provider.
 
@@ -174,7 +175,12 @@ def select_content_plan(
     None (Sacred Contract #3 — never raises). When LLM_FALLBACK_ENABLED=1 and the
     primary returns None, the remaining providers that HAVE an impl are tried in
     order. Providers without a select_content_plan are skipped (v1 ships Gemini
-    only; openai/claude add theirs in a later phase)."""
+    only; openai/claude add theirs in a later phase).
+
+    ``resolve_key`` (review LOW-1): when given, the api_key for EACH provider tried
+    is resolved via ``resolve_key(provider)`` so a cross-provider fallback uses the
+    right key (a Gemini fallback must not receive an OpenAI key). Falls back to the
+    fixed ``api_key`` when not supplied."""
     if not script or not str(script).strip():
         return None
     primary = (provider or DEFAULT_PROVIDER).strip().lower()
@@ -183,16 +189,22 @@ def select_content_plan(
     chain = [primary]
     if _LLM_FALLBACK_ENABLED:
         chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
-    kwargs = dict(
+    base_kwargs = dict(
         script=script, target_duration_sec=target_duration_sec,
-        target_language=target_language, tone=tone, api_key=api_key, model=model,
+        target_language=target_language, tone=tone, model=model,
     )
     for _p in chain:
         impl = _get_content_impl(_p)
         if impl is None:
             continue
+        _key = api_key
+        if resolve_key is not None:
+            try:
+                _key = resolve_key(_p) or ""
+            except Exception:
+                _key = api_key
         try:
-            result = impl(**kwargs)
+            result = impl(api_key=_key, **base_kwargs)
         except Exception as exc:  # defensive — provider modules already never raise
             logger.warning("llm: select_content_plan provider=%s raised %s", _p, exc)
             result = None

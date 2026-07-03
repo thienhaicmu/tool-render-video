@@ -169,3 +169,27 @@ def test_narration_preview_tts_fail_502(monkeypatch, tmp_path):
 def test_narration_audio_bad_token_404():
     r = _client().get("/api/content/narration/audio/not-a-valid-token")
     assert r.status_code == 404
+
+
+# ── LOW-1: per-provider key on fallback ──────────────────────────────────────
+
+def test_select_content_plan_resolves_key_per_provider(monkeypatch):
+    captured = {}
+
+    def _fake_gemini(**kw):
+        captured["api_key"] = kw.get("api_key")
+        return ContentPlan(scenes=[ContentScene(index=0, narration="x")])
+
+    import app.features.render.ai.llm.providers.gemini as gem
+    monkeypatch.setattr(gem, "select_content_plan", _fake_gemini)
+
+    from app.features.render.ai.llm import select_content_plan
+    # primary "openai" has no content impl → skipped; fallback reaches gemini,
+    # which must receive the GEMINI key (not openai's).
+    plan = select_content_plan(
+        provider="openai", script="hello world",
+        api_key="wrong-openai-key",
+        resolve_key=lambda p: f"key-{p}",
+    )
+    assert plan is not None
+    assert captured["api_key"] == "key-gemini"

@@ -78,6 +78,8 @@ def generate_content_plan(req: ContentPlanRequest) -> dict:
         tone=(req.tone or ""),
         api_key=api_key,
         model=req.llm_model,
+        # LOW-1: correct key per provider on cross-provider fallback.
+        resolve_key=lambda _prov: _resolve_api_key(req, _prov)[0],
     )
     if plan is None or plan.scene_count() == 0:
         raise HTTPException(status_code=502, detail="AI Content Director returned no usable plan")

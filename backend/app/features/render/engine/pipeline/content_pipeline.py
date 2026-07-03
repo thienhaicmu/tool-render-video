@@ -192,6 +192,8 @@ def run_content(
                 target_duration_sec=float(getattr(payload, "target_duration", 90) or 90),
                 target_language=language, tone=(getattr(payload, "rewrite_tone", "") or ""),
                 api_key=api_key, model=getattr(payload, "llm_model", None),
+                # LOW-1: resolve the right key per provider on cross-provider fallback.
+                resolve_key=lambda _prov: _resolve_api_key(payload, _prov)[0],
             )
         if plan is None or plan.scene_count() == 0:
             raise RuntimeError("Content: no usable content plan")

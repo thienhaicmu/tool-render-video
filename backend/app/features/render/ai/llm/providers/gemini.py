@@ -555,7 +555,12 @@ def select_recap_plan(
 # so the token budget is modest. Temperature is a touch higher than segment
 # selection (0.2) because narration authoring is a mildly creative task, but
 # lower than the rewrite path (0.85) since the JSON structure must stay strict.
-_CONTENT_MAX_TOKENS = int(os.getenv("GEMINI_CONTENT_MAX_TOKENS", "8192"))
+# Review LOW-2: a rich ContentPlan (many scenes × ~16 fields incl. narration +
+# visual_prompt) can exceed 8192 tokens → the JSON is truncated and the parser
+# salvages only the complete prefix (dropping tail scenes). 16384 gives the plan
+# real headroom; thinking budget (below) stays well under it so output is never
+# starved. Override via GEMINI_CONTENT_MAX_TOKENS.
+_CONTENT_MAX_TOKENS = int(os.getenv("GEMINI_CONTENT_MAX_TOKENS", "16384"))
 _CONTENT_TEMPERATURE = float(os.getenv("GEMINI_CONTENT_TEMPERATURE", "0.5"))
 _CONTENT_THINKING_BUDGET = int(os.getenv("GEMINI_CONTENT_THINKING_BUDGET", "1024"))
 

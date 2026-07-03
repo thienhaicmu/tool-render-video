@@ -30,6 +30,40 @@ def test_download_to_bad_url_returns_false(tmp_path):
     assert download_to("http://127.0.0.1:1/nope.jpg", str(tmp_path / "x.jpg"), timeout=1) is False
 
 
+class _FakeResp:
+    def __init__(self, body: bytes):
+        self._body = body
+        self.headers = {}
+
+    def read(self, n: int = -1) -> bytes:
+        return self._body if n < 0 else self._body[:n]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_download_to_size_cap_rejects_oversized(monkeypatch, tmp_path):
+    # LOW-3: cap at 10 bytes; an 11-byte body must be rejected.
+    monkeypatch.setenv("CONTENT_MAX_ASSET_BYTES", "10")
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _FakeResp(b"x" * 11))
+    out = tmp_path / "big.jpg"
+    assert download_to("http://example/big.jpg", str(out), timeout=1) is False
+    assert not out.exists()
+
+
+def test_download_to_under_cap_succeeds(monkeypatch, tmp_path):
+    monkeypatch.setenv("CONTENT_MAX_ASSET_BYTES", "1000")
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _FakeResp(b"okbytes"))
+    out = tmp_path / "ok.jpg"
+    assert download_to("http://example/ok.jpg", str(out), timeout=1) is True
+    assert out.read_bytes() == b"okbytes"
+
+
 def test_stock_no_keys_returns_none(monkeypatch):
     monkeypatch.delenv("PEXELS_API_KEY", raising=False)
     monkeypatch.delenv("PIXABAY_API_KEY", raising=False)

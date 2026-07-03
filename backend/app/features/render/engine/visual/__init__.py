@@ -139,14 +139,31 @@ def cache_key(*parts) -> str:
 
 def download_to(url: str, out_path: str, timeout: int = 30) -> bool:
     """Download ``url`` → ``out_path`` (stdlib urllib, no new dependency). Returns
-    True on a non-empty file, False on any error. Never raises."""
+    True on a non-empty file, False on any error. Never raises.
+
+    Review LOW-3: caps the download at CONTENT_MAX_ASSET_BYTES (default 25 MB) —
+    both via the Content-Length header (early reject) and by reading at most
+    cap+1 bytes — so a provider (or a compromised URL) can't fill the disk."""
+    import os
     from pathlib import Path
+    try:
+        max_bytes = int(os.getenv("CONTENT_MAX_ASSET_BYTES", str(25 * 1024 * 1024)))
+    except Exception:
+        max_bytes = 25 * 1024 * 1024
     try:
         import urllib.request
         req = urllib.request.Request(url, headers={"User-Agent": "AIVideoStudio/1.0"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (opt-in provider)
-            data = resp.read()
-        if not data:
+            try:
+                clen = int(resp.headers.get("Content-Length") or 0)
+            except Exception:
+                clen = 0
+            if clen and clen > max_bytes:
+                logger.info("visual: asset too large (%d > %d bytes) — skipping", clen, max_bytes)
+                return False
+            data = resp.read(max_bytes + 1)
+        if not data or len(data) > max_bytes:
+            logger.info("visual: asset exceeds cap (%d bytes) — skipping", max_bytes)
             return False
         Path(out_path).write_bytes(data)
         return Path(out_path).exists() and Path(out_path).stat().st_size > 0
