@@ -54,6 +54,14 @@ def _content_sandbox(tmp_path, monkeypatch):
         temp_dir, raising=False,
     )
 
+    # Keep these composition tests fast + deterministic: the sentence-SRT path,
+    # not word-by-word (which would load Whisper on silent audio). CS-C's
+    # word-by-word path has its own focused test in test_content_scene_render.py.
+    monkeypatch.setattr(
+        "app.features.render.engine.stages.content_scene_render._CONTENT_WORD_BY_WORD",
+        False, raising=False,
+    )
+
     from app.db.connection import init_db
     init_db()
     yield {"db_path": db_path, "output_dir": output_dir, "tmp_path": tmp_path}

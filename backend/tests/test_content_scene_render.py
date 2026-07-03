@@ -168,6 +168,71 @@ def test_render_content_scene_composites_av(tmp_path):
     assert abs(info["dur"] - expected) <= 0.6, f"scene duration {info['dur']} vs ~{expected}"
 
 
+# ── CS-C: word-by-word subtitle ──────────────────────────────────────────────
+
+def test_shift_srt(tmp_path):
+    srt = tmp_path / "w.srt"
+    srt.write_text(
+        "1\n00:00:00,000 --> 00:00:00,400\nHello\n\n"
+        "2\n00:00:00,400 --> 00:00:00,900\nworld\n\n",
+        encoding="utf-8",
+    )
+    csr._shift_srt(str(srt), 0.5)
+    body = srt.read_text(encoding="utf-8")
+    assert "00:00:00,500 --> 00:00:00,900" in body  # first cue shifted +0.5
+    assert "00:00:00,900 --> 00:00:01,400" in body  # second cue shifted +0.5
+
+
+def test_build_word_ass_returns_false_when_whisper_unavailable(tmp_path, monkeypatch):
+    def _boom(*a, **k):
+        raise RuntimeError("whisper not installed")
+    monkeypatch.setattr(
+        "app.features.render.engine.subtitle.transcription.whisper.transcribe_to_srt", _boom,
+    )
+    ok = csr._build_word_ass(
+        str(tmp_path / "a.mp3"), str(tmp_path / "o.ass"),
+        1080, 1920, "capcut_box", "base", 0.0,
+    )
+    assert ok is False
+
+
+@needs_ffmpeg
+def test_render_scene_word_by_word_burns_ass(tmp_path, monkeypatch):
+    """With word-by-word ON and Whisper mocked to emit a word-level SRT, the scene
+    renders via the CapCut ASS path (real srt_to_ass_capcut) → valid A/V."""
+    narration_dur = 2.0
+    audio = tmp_path / "narr.mp3"
+    _make_silent_audio(str(audio), narration_dur, sr=48000)
+
+    def _fake_transcribe(video_path, srt_path, model_name="base", retry_count=2, highlight_per_word=False):
+        # Word-level SRT (what highlight_per_word=True would produce).
+        Path(srt_path).write_text(
+            "1\n00:00:00,000 --> 00:00:00,500\nXin\n\n"
+            "2\n00:00:00,500 --> 00:00:01,000\nchao\n\n"
+            "3\n00:00:01,000 --> 00:00:01,800\nban\n\n",
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(
+        "app.features.render.engine.subtitle.transcription.whisper.transcribe_to_srt",
+        _fake_transcribe,
+    )
+    monkeypatch.setattr(csr, "_CONTENT_WORD_BY_WORD", True, raising=False)
+
+    scene = ContentScene(index=0, role="hook", narration="Xin chao ban",
+                         reading_speed=1.0, pause_before=0.3)
+    out = tmp_path / "scene_wbw.mp4"
+    ok = csr.render_content_scene(
+        scene=scene, background_kind="color", background_value="#000000",
+        narration_audio_path=str(audio), narration_dur=narration_dur,
+        width=320, height=568, fps=30, sample_rate=48000,
+        out_path=str(out), work_dir=str(tmp_path / "work"), subtitle_enabled=True,
+        subtitle_style="capcut_box",
+    )
+    assert ok and out.exists(), "word-by-word scene render must succeed"
+    info = _probe(str(out))
+    assert info["v"] and info["a"], "scene must have video + audio"
+
+
 @needs_ffmpeg
 def test_render_content_scene_missing_audio_returns_false(tmp_path):
     scene = ContentScene(index=1, narration="something", reading_speed=1.0)

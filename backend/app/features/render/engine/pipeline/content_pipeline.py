@@ -275,11 +275,18 @@ def run_content(
                 continue
 
             scene_out = str(scenes_dir / f"{part_name}.mp4")
+            # Subtitle style: per-scene override → plan-level → payload default.
+            _sub_style = (
+                (getattr(scene, "subtitle_style", "") or "").strip()
+                or (getattr(plan, "subtitle_style", "") or "").strip()
+                or (getattr(payload, "subtitle_style", "") or "").strip()
+            )
             ok = render_content_scene(
                 scene=scene, background_kind=asset.kind, background_value=asset.value,
                 narration_audio_path=audio_path, narration_dur=ndur,
                 width=width, height=height, fps=fps, sample_rate=_SAMPLE_RATE,
                 out_path=scene_out, work_dir=str(scenes_dir), subtitle_enabled=add_subtitle,
+                subtitle_style=_sub_style,
             )
             if ok:
                 scene_clips.append(scene_out)

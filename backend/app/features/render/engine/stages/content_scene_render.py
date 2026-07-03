@@ -47,6 +47,17 @@ _PROBE_TIMEOUT_SEC: int = 30
 _MAX_CUES_PER_SCENE: int = max(1, int(os.getenv("CONTENT_MAX_CUES_PER_SCENE", "6")))
 _MIN_CUE_SEC: float = 0.6
 
+# CS-C — word-by-word ("chữ động") subtitle. Transcribe the scene's TTS audio
+# with Whisper word timestamps → a CapCut word-level ASS. Default ON with a
+# graceful fallback to the sentence-level SRT when Whisper is unavailable or
+# fails. Whisper models are LRU-cached across scenes, so only the first scene
+# pays the model-load cost. CONTENT_WHISPER_MODEL picks the model (base = a good
+# speed/accuracy trade-off for short TTS clips).
+_CONTENT_WORD_BY_WORD: bool = os.getenv("CONTENT_WORD_BY_WORD", "1") == "1"
+_CONTENT_WHISPER_MODEL: str = (os.getenv("CONTENT_WHISPER_MODEL", "base").strip() or "base")
+
+_SRT_TIME_LINE_RE = re.compile(r"(\d\d:\d\d:\d\d,\d\d\d)\s*-->\s*(\d\d:\d\d:\d\d,\d\d\d)")
+
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…。！？])\s+")
 
 
@@ -180,6 +191,65 @@ def _build_scene_srt(narration: str, start_sec: float, dur_sec: float, out_srt: 
         return False
 
 
+def _srt_to_sec(ts: str) -> float:
+    h, m, rest = ts.split(":")
+    s, ms = rest.split(",")
+    return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000.0
+
+
+def _shift_srt(srt_path: str, offset_sec: float) -> None:
+    """Add ``offset_sec`` to every cue time in an SRT in place. Used to shift the
+    Whisper word timings (0-based on the TTS audio) by the scene's pause_before so
+    the burned captions stay in sync with the ``adelay``-delayed narration."""
+    lines = Path(srt_path).read_text(encoding="utf-8").splitlines()
+    out: list[str] = []
+    for ln in lines:
+        m = _SRT_TIME_LINE_RE.match(ln.strip())
+        if m:
+            a = _srt_to_sec(m.group(1)) + offset_sec
+            b = _srt_to_sec(m.group(2)) + offset_sec
+            out.append(f"{_srt_time(a)} --> {_srt_time(b)}")
+        else:
+            out.append(ln)
+    Path(srt_path).write_text("\n".join(out), encoding="utf-8")
+
+
+def _build_word_ass(
+    audio_path: str, out_ass: str, width: int, height: int,
+    style: str, model_name: str, offset_sec: float,
+) -> bool:
+    """Transcribe the narration audio with Whisper word timestamps → word-level
+    SRT → CapCut word-by-word ASS (shifted by offset_sec so it syncs with the
+    delayed narration). Returns False on any failure (Whisper missing /
+    transcription error / empty result) so the caller falls back to the sentence
+    SRT. Never raises (Sacred Contract #3 spirit)."""
+    tmp_srt = str(Path(out_ass).with_suffix(".word.srt"))
+    try:
+        from app.features.render.engine.subtitle.transcription.whisper import transcribe_to_srt
+        from app.features.render.engine.subtitle.generator.ass_capcut import srt_to_ass_capcut
+        transcribe_to_srt(str(audio_path), tmp_srt, model_name=model_name, highlight_per_word=True)
+        if not Path(tmp_srt).exists() or Path(tmp_srt).stat().st_size <= 0:
+            return False
+        if offset_sec and offset_sec > 0:
+            _shift_srt(tmp_srt, float(offset_sec))
+        srt_to_ass_capcut(
+            tmp_srt, out_ass, style=(style or ""),
+            play_res_x=int(width), play_res_y=int(height),
+        )
+        return Path(out_ass).exists() and Path(out_ass).stat().st_size > 0
+    except Exception as exc:
+        logger.info(
+            "content_scene_render: word-by-word subtitle unavailable (%s) — sentence SRT fallback",
+            exc,
+        )
+        return False
+    finally:
+        try:
+            Path(tmp_srt).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 def render_content_scene(
     *,
     scene,
@@ -194,15 +264,19 @@ def render_content_scene(
     out_path: str,
     work_dir: str,
     subtitle_enabled: bool = True,
+    subtitle_style: str = "",
 ) -> bool:
     """Compose one Content-Mode scene → ``out_path``. Returns True on success.
 
     Given a pre-synthesized narration audio (path + measured duration), builds the
-    background, burns a simple subtitle, and muxes the delayed/padded narration.
+    background, burns the subtitle, and muxes the delayed/padded narration. The
+    subtitle is word-by-word (CapCut ASS via Whisper alignment on the TTS) when
+    CONTENT_WORD_BY_WORD is on, falling back to a sentence-level SRT otherwise.
     The scene runs for pause_before + narration_dur + pause_after seconds.
     Returns False on any failure (never raises — Sacred Contract #3)."""
     bg_path = ""
     srt_path = ""
+    ass_path = ""
     try:
         pause_before = max(0.0, float(getattr(scene, "pause_before", 0.0) or 0.0))
         pause_after = max(0.0, float(getattr(scene, "pause_after", 0.0) or 0.0))
@@ -220,6 +294,7 @@ def render_content_scene(
         work.mkdir(parents=True, exist_ok=True)
         bg_path = str(work / f"content_bg_{idx:03d}.mp4")
         srt_path = str(work / f"content_sub_{idx:03d}.srt")
+        ass_path = str(work / f"content_sub_{idx:03d}.ass")
 
         # 1. Background video (scene-length, no audio).
         if not build_background_clip(
@@ -230,10 +305,20 @@ def render_content_scene(
             logger.warning("content_scene_render: background build failed (scene idx=%s)", idx)
             return False
 
-        # 2. Subtitle (optional) — spans the narration window inside the scene.
-        want_subtitle = bool(subtitle_enabled) and _build_scene_srt(
-            str(getattr(scene, "narration", "") or ""), pause_before, ndur, srt_path,
-        )
+        # 2. Subtitle (optional). Prefer word-by-word CapCut ASS (Whisper aligned
+        #    on the TTS); fall back to the sentence SRT if that is off/unavailable.
+        want_ass = False
+        want_srt = False
+        if subtitle_enabled:
+            if _CONTENT_WORD_BY_WORD:
+                want_ass = _build_word_ass(
+                    narration_audio_path, ass_path, int(width), int(height),
+                    subtitle_style, _CONTENT_WHISPER_MODEL, pause_before,
+                )
+            if not want_ass:
+                want_srt = _build_scene_srt(
+                    str(getattr(scene, "narration", "") or ""), pause_before, ndur, srt_path,
+                )
 
         # 3. Compose: burn subtitle (-vf) + delay/pad narration (-af) + mux.
         pb_ms = int(round(pause_before * 1000))
@@ -244,7 +329,10 @@ def render_content_scene(
             "-i", str(narration_audio_path),
             "-map", "0:v:0", "-map", "1:a:0",
         ]
-        if want_subtitle:
+        if want_ass:
+            cmd += ["-vf", f"ass='{safe_filter_path(ass_path)}'"]
+            cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-bf", "0"]
+        elif want_srt:
             cmd += ["-vf", f"subtitles='{safe_filter_path(srt_path)}'"]
             cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-bf", "0"]
         else:
@@ -277,6 +365,7 @@ def render_content_scene(
     finally:
         _cleanup(bg_path)
         _cleanup(srt_path)
+        _cleanup(ass_path)
 
 
 def _cleanup(path: str) -> None:
