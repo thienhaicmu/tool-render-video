@@ -124,6 +124,14 @@ trả "success", không hạ ngưỡng để cho qua một render hỏng.
 - **Helper đường dẫn FFmpeg bắt buộc dùng**: `safe_filter_path()`,
   `get_ffmpeg_bin()`, `get_ffprobe_bin()`. Không nối chuỗi path thô vào filter
   graph (path Windows có space/ngoặc làm FFmpeg lỗi im lặng).
+- **Motion-crop stderr drain** (`motion/crop.py`, fix 2026-07-03): vòng lặp bơm
+  rawvideo vào `ffmpeg` stdin PHẢI rút `stderr` song song bằng daemon thread
+  (`_drain_pipe`). Nếu không, buffer stderr đầy → ffmpeg chặn ghi stderr → ngừng
+  đọc stdin → `stdin.write()` chặn → **deadlock treo cả render, log câm**. Fix
+  cũng log `argv` ffmpeg + heartbeat frame để chẩn đoán khi treo.
+- **Recap episode concat** (`recap_assembler.py`): title card phải khớp fps +
+  audio sample-rate của scene (probe qua `probe_av_spec`) để concat **copy-stream**
+  (nhanh) thay vì bị `_demuxer_output_sane` loại rồi re-encode chậm mỗi lần.
 
 ## 8. Không bao giờ làm (Render Never-Do)
 

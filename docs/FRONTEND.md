@@ -60,8 +60,8 @@ features/
 ├── downloader/           # màn tải độc lập
 ├── editor/               # chỉnh sửa clip sau render
 ├── jobs/                 # danh sách/chi tiết job
-├── progress/             # hiển thị tiến trình
-├── quality/              # chất lượng output
+├── queue/                # QueueScreen — hàng đợi job
+├── progress/, quality/   # chỉ còn *.utils.ts / *.types.ts (component React cũ đã gỡ)
 └── settings/             # cài đặt + creator context
 ```
 
@@ -69,6 +69,27 @@ features/
 > + `RenderWorkflow.css`. File `render-flow.html` / `prototype.html` ở gốc repo chỉ
 > là **prototype trực quan** — đổi prototype chưa tính là xong cho tới khi port
 > sang file React thật.
+
+### Màn render — monitor & kết quả (redesign 2026-07)
+
+`RenderWorkflow.tsx` điều phối 3 view: **create** (Source + Configure gộp làm
+một), **monitor** (đang render), **results**. Đầu màn có **step indicator**
+(Configure → Rendering → Result) highlight theo view — luôn biết đang ở bước nào.
+
+`steps/` — các thành phần chính:
+- `StepRendering.tsx` — khung: card tổng (stage rail + % tổng), banner trạng
+  thái, event log; recap dùng `RecapLiveView`.
+- `RenderStage.tsx` — kiểu **render-dashboard desktop**: một *Current Rendering*
+  card (thumbnail landscape · tên clip AI đặt · status pill · progress gradient ·
+  hàng stats ETA/Elapsed/Progress/Duration) + danh sách **Queue** dạng row
+  (`ClipTile.tsx`: idx · thumb · tên · status màu · progress · time · play).
+  Full-width, cuộn khi nhiều clip.
+- `useCountUp.ts` — đếm % mượt cho card focus.
+- `StepConfigure.tsx` (tab Narration) — ô **AI Voice** (Gemini / Edge / XTTS,
+  mặc định Gemini); AI auto-select + bật/tắt Narration hiện cả ở Quick mode.
+
+Toàn bộ dùng token theme (`--bg-card`, `--text-*`, `--accent`, `--status-*`) →
+**tự đổi sáng/tối** theo `[data-theme]` trên `<html>`.
 
 ## 4. Vỏ Electron (`desktop-shell/`)
 

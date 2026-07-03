@@ -15,12 +15,37 @@ Runs fully on-device. No cloud API required for core rendering.
 | **AI scoring** | Viral score, retention score, hook score, market score per clip |
 | **LLM segment selection** | Gemini / OpenAI / Claude picks best clips + builds RenderPlan |
 | **Render** | Parallel FFmpeg encode — subtitles, motion crop, color grade, zoom burst |
+| **Recap mode** | Long-form, act-structured recap/review from a full film — AI picks scenes → episodes, title cards, timed narration |
 | **Subtitles** | Whisper / faster-whisper / WhisperX → SRT → ASS karaoke or bounce |
-| **Voice** | Edge TTS or XTTS local voice cloning, mixed per part |
+| **Voice** | **Gemini TTS** (natural, expressive — default) · Edge TTS · XTTS local clone — picked per render, auto-fallback to Edge |
 | **BGM** | Background music library with mood-based pick and auto-ducking |
 | **Cover frame** | AI-directed cover frame extracted at `cover_offset_ratio` |
 | **A/B scores** | Per-output quality ratings stored for AI Director feedback loop |
 | **Upload** | Playwright browser automation to TikTok (optional) |
+
+---
+
+## What's new (2026-07)
+
+- **Gemini TTS voice** — `gemini-3.1-flash-tts-preview` for natural, expressive
+  narration (fixes the "robot voice" of Edge). Default engine, selectable in the
+  **AI Voice** picker (Gemini / Edge / XTTS); auto-falls back to Edge on any
+  failure. Reuses the Gemini API key (shared with the AI Director).
+- **Render monitor redesigned** — desktop render-dashboard: a *Current Rendering*
+  card (thumbnail · title · status · progress · ETA/Elapsed/Duration) and a dense
+  *Queue* row list (per-clip status colour, progress, play). Full-width,
+  **theme-aware (light + dark)**, clip rows show the AI-chosen title, and a
+  **workflow step indicator** (Configure → Rendering → Result) shows where you are.
+- **Recap reliability** — recap honours the UI subtitle toggle (subtitles off =
+  no burned captions), and episode assembly now uses the fast stream-copy concat
+  (title cards match the scene fps + audio rate) instead of a slow full re-encode
+  every run.
+- **Render reliability** — the motion-aware crop encode no longer deadlocks on a
+  full ffmpeg stderr pipe; ffmpeg output + a frame heartbeat are now logged so a
+  hang is diagnosable instead of silent.
+- **Multi-machine dev** — `psutil` + `nvidia-ml-py` are now declared in
+  `requirements.txt` so the CPU/GPU/RAM status dots work after a plain install;
+  see *"Cloning to a new machine"* below.
 
 ---
 

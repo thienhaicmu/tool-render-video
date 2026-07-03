@@ -1,9 +1,10 @@
 # Recap / Review Film — Build & Test Guide
 
 > Hướng dẫn build + chạy thử feature **Recap/Review** (render_format="recap")
-> end-to-end. Spec thiết kế: [RECAP_REVIEW_SPEC.md](RECAP_REVIEW_SPEC.md).
-> Trạng thái: R1–R5 đã code + test (backend 1815 / FE 510), **chưa render thật**
-> — guide này để bạn kiểm chứng trọn vẹn.
+> end-to-end. (Spec thiết kế gốc `RECAP_REVIEW_SPEC.md` đã được gỡ khỏi `docs/`
+> — còn trong git history nếu cần.) Feature đã render thật; xem thêm cấu hình
+> recap ở [CONFIGURATION.md](CONFIGURATION.md) và pipeline ở
+> [RENDER_PIPELINE.md](RENDER_PIPELINE.md).
 
 ## 0. Yêu cầu
 - Python venv backend đã cài (`backend/.venv`) + **AI extras** (Whisper):

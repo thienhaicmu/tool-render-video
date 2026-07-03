@@ -1,8 +1,11 @@
 # Documentation — AI Video Render Studio
 
-> Bộ tài liệu này được viết lại từ đầu ngày **2026-06-29** bằng cách đọc trực
-> tiếp source code hiện tại (không dựa trên audit cũ). Khi tài liệu và code mâu
-> thuẫn: **tin code**.
+> Bộ tài liệu này viết từ source code hiện tại (không dựa audit cũ). Khi tài
+> liệu và code mâu thuẫn: **tin code**. Cập nhật gần nhất **2026-07-03** — bổ
+> sung: giọng đọc **Gemini TTS**, **render monitor** thiết kế lại (dashboard,
+> step indicator, theme-aware), recap tôn trọng `add_subtitle` + ghép tập nhanh,
+> vá deadlock motion-crop. Các doc phase/plan/audit đã xong được gỡ khỏi `docs/`
+> (còn trong git history).
 
 AI Video Render Studio là một ứng dụng desktop **offline-first** để biến video
 dài (file local hoặc tải về từ YouTube/TikTok) thành các clip ngắn dạng dọc
@@ -23,7 +26,8 @@ cho desktop.
 | [CONFIGURATION.md](CONFIGURATION.md) | Toàn bộ biến môi trường + đường dẫn dữ liệu |
 | [API_CONTRACT.md](API_CONTRACT.md) | REST + WebSocket API, các contract đóng băng |
 | [FRONTEND.md](FRONTEND.md) | Cấu trúc frontend React + vỏ Electron |
-| [architecture-review-2026-06-30.md](architecture-review-2026-06-30.md) | Closure record cho session architecture review 6-batch (commits `eebcfe0..0caf895`): backlog đã ship, operator knobs mới, schema versions mới, các item deferred sang sprint sau |
+| [CONTENT_STRATEGY.md](CONTENT_STRATEGY.md) | Chiến lược nội dung / các lớp "intelligence" chọn & xếp hạng clip |
+| [RECAP_TESTING.md](RECAP_TESTING.md) | Hướng dẫn kiểm thử chế độ recap (video dài, act-structured) |
 
 ## Đọc theo nhu cầu
 

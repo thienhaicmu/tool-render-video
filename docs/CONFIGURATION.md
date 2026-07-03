@@ -91,6 +91,18 @@ một key cạn quota không còn làm render rớt về giọng Edge giữa vid
 `gemini_tts_cache/` được prune định kỳ (TTL 30 ngày, cùng lớp với
 `xtts_cache`).
 
+2026-07-03: UI mặc định chọn `tts_engine="gemini"` (ô **AI Voice** ở tab
+Narration — Gemini / Edge / XTTS). Backend `RenderRequest.tts_engine` vẫn mặc
+định `"edge"` (Sacred Contract #2) — chỉ FE đổi default.
+
+### Recap — phụ đề & narration
+
+| Biến | Default | Ý nghĩa |
+|------|---------|---------|
+| `RECAP_BURN_NARRATION_SUBTITLE` | `0` (tắt) | Bật lớp caption tự động của recap (đốt lời narrator, style riêng). Mặc định OFF — recap chỉ dùng phụ đề theo nút `add_subtitle` của UI. `=1` để bật lại |
+| `RECAP_SUBTITLE_STYLE` | dark-card | Ghi đè `force_style` ASS cho caption narration recap (khi bật lớp trên) |
+| `RECAP_CONCAT_GPU` | `1` | Cho phép re-encode concat episode dùng NVENC (fallback libx264). Bước ghép giờ ưu tiên copy-stream (title card khớp fps/sample-rate scene) nên hiếm khi cần re-encode |
+
 ## 6. AI / LLM
 
 Xem bảng đầy đủ trong [AI_INTEGRATION.md](AI_INTEGRATION.md). Chính:
