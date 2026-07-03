@@ -12,7 +12,11 @@ import { ConicRing } from '@/components/ui/ConicRing'
 import { Toggle } from '@/components/ui/Toggle'
 import { IconFilm, IconScissors, IconCaptions, IconCheck, IconSpark } from '@/components/icons'
 import { ClipTile } from '@/features/clip-studio/render/steps/ClipTile'
+import { RecapResults } from '@/features/clip-studio/render/steps/RecapResults'
+import { useT } from '@/features/clip-studio/render/i18n'
 import type { ClipSlot } from '@/features/clip-studio/render/types'
+import type { JobPart } from '@/types/api'
+import type { RecapPlanResponse } from '@/api/jobs'
 import type { Strings } from '@/features/clip-studio/render/i18n'
 import '@/features/clip-studio/render/RenderWorkflow.css'
 
@@ -122,6 +126,40 @@ function ToggleCase() {
   )
 }
 
+// WP (gated) — recap-aware Results: episode-grouped view for a recap job.
+const RECAP_PLAN: RecapPlanResponse = {
+  job_id: 'preview', available: true,
+  story_summary: 'A quick recap: the host opens with warm-up questions, sets up the central tension, then lands the big reveal before the aftermath and close.',
+  episodes: [
+    { title: 'The Opening Questions', acts: 2, scenes: 3 },
+    { title: 'The Turn', acts: 1, scenes: 2 },
+  ],
+  scenes: [
+    { n: 1, ep: 0, act: 0, start: 0,  end: 12, dur: 12, title: 'Warm-up questions', mode: 'narration', climax: false },
+    { n: 2, ep: 0, act: 0, start: 12, end: 30, dur: 18, title: 'The setup',         mode: 'original',  climax: false },
+    { n: 3, ep: 0, act: 1, start: 30, end: 48, dur: 18, title: 'The big reveal',    mode: 'narration', climax: true },
+    { n: 4, ep: 1, act: 0, start: 48, end: 60, dur: 12, title: 'Aftermath',         mode: 'narration', climax: false },
+    { n: 5, ep: 1, act: 0, start: 60, end: 75, dur: 15, title: 'Closing thoughts',  mode: 'narration', climax: false },
+  ],
+}
+const RECAP_PARTS = RECAP_PLAN.scenes!.map((s) => ({
+  part_no: s.n, status: 'done', duration: s.dur,
+  output_file: `D:\\out\\episode_${s.ep + 1}.mp4`, clip_name: `episode_${s.ep + 1}.mp4`,
+})) as unknown as JobPart[]
+
+function RecapResultsCase() {
+  const t = useT('EN')
+  return (
+    <div style={{ height: '80vh', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+      <RecapResults
+        jobId="preview" parts={RECAP_PARTS} recapPlan={RECAP_PLAN}
+        jobStatus="completed" aspectRatio="16:9" t={t}
+        onRetry={() => {}} isRetrying={false}
+      />
+    </div>
+  )
+}
+
 const CASES: Record<string, React.ComponentType> = {
   primitives: () => (<><ScoreRingCase /><ConicRingCase /><ToggleCase /><IconCase /></>),
   scorering: ScoreRingCase,
@@ -129,6 +167,7 @@ const CASES: Record<string, React.ComponentType> = {
   toggle: ToggleCase,
   icons: IconCase,
   cliptile: ClipTileCase,
+  recapresults: RecapResultsCase,
 }
 
 export function PreviewHarness({ name }: { name: string }) {

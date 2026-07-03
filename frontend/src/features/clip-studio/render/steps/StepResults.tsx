@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import type { JobPart, QualityReport, PartRankResult } from '@/types/api'
-import { getJobAiSummary, deletePartOutput } from '@/api/jobs'
+import { getJobAiSummary, deletePartOutput, getRecapPlan } from '@/api/jobs'
+import type { RecapPlanResponse } from '@/api/jobs'
+import { RecapResults } from './RecapResults'
 import { exportClip } from '@/api/editing'
 import { StoryModelCard } from '@/features/jobs/StoryModelCard'
 import type { JobAiSummary, HybridAnalysis } from '@/api/jobs'
@@ -365,6 +367,15 @@ function StepResultsBase({
     getJobAiSummary(jobId).then(s => { if (s.available) setAiSummary(s) }).catch(() => {})
   }, [jobId])
 
+  // Recap detection: a recap job's deliverables are episodes, not clips.
+  // When the persisted recap plan is available, render the episode-grouped
+  // RecapResults instead of the clips grid (below).
+  const [recapPlan, setRecapPlan] = useState<RecapPlanResponse | null>(null)
+  useEffect(() => {
+    if (!jobId) return
+    getRecapPlan(jobId).then((r) => { if (r.available) setRecapPlan(r) }).catch(() => {})
+  }, [jobId])
+
   const doneParts  = parts.filter((p) => p.status === 'done')
   const failedParts = parts.filter((p) => p.status === 'failed')
   const sortedDone = sortDoneParts(doneParts, sortMode, partRanks, partScores)
@@ -410,6 +421,22 @@ function StepResultsBase({
           <div className="rw-empty"><span className="rw-empty-icon"><IconInbox size={40} /></span>{t.resNoResults}</div>
         </div>
       </div>
+    )
+  }
+
+  // Recap jobs deliver episodes, not clips — render the episode-grouped view.
+  if (recapPlan) {
+    return (
+      <RecapResults
+        jobId={jobId}
+        parts={parts}
+        recapPlan={recapPlan}
+        jobStatus={jobStatus}
+        aspectRatio={aspectRatio}
+        t={t}
+        onRetry={onRetry}
+        isRetrying={isRetrying}
+      />
     )
   }
 
