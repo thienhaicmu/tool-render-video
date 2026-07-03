@@ -259,11 +259,18 @@ def run_content(
                 continue
             audio_path, ndur = narr
 
+            # CS-E: per-scene asset override (Asset Manager) → job-level default.
+            _s_source = (getattr(scene, "visual_source", "") or "").strip().lower()
+            _s_kind = _s_source if _s_source in ("color", "image", "video") else bg_kind
+            _s_value = (getattr(scene, "visual_path", "") or "").strip() if _s_source else bg_value
+            _s_ken_burns = bool(getattr(scene, "ken_burns", False))
+
             # Visual asset via the provider seam (v1 provider='local').
             asset = resolve_scene_visual(
                 SceneVisualRequest(
-                    scene_index=i, kind=bg_kind, value=bg_value,
-                    prompt=(scene.visual_hint or ""), width=width, height=height,
+                    scene_index=i, kind=_s_kind, value=_s_value,
+                    prompt=(scene.visual_prompt or scene.visual_hint or ""),
+                    width=width, height=height,
                     fps=fps, duration_sec=ndur, work_dir=str(scenes_dir),
                 ),
                 provider=visual_provider,
@@ -287,6 +294,8 @@ def run_content(
                 width=width, height=height, fps=fps, sample_rate=_SAMPLE_RATE,
                 out_path=scene_out, work_dir=str(scenes_dir), subtitle_enabled=add_subtitle,
                 subtitle_style=_sub_style,
+                # Ken Burns only meaningful on an image background.
+                ken_burns=_s_ken_burns and asset.kind == "image",
             )
             if ok:
                 scene_clips.append(scene_out)

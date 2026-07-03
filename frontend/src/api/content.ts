@@ -21,6 +21,10 @@ export interface ContentScene {
   visual_prompt?: string
   negative_prompt?: string
   asset_suggestion?: string
+  // CS-E per-scene Asset Manager
+  visual_source?: '' | 'color' | 'image' | 'video'
+  visual_path?: string
+  ken_burns?: boolean
   camera_hint?: string
   transition_hint?: string
   animation_hint?: string

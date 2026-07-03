@@ -132,6 +132,30 @@ def test_build_background_clip_color(tmp_path):
     assert 1.6 <= info["dur"] <= 2.6, f"duration off: {info['dur']}"
 
 
+def _make_image(path: str, w: int = 640, h: int = 480) -> None:
+    from app.services.bin_paths import get_ffmpeg_bin
+    subprocess.run(
+        [get_ffmpeg_bin(), "-y", "-f", "lavfi", "-i", f"color=c=red:s={w}x{h}",
+         "-frames:v", "1", path],
+        capture_output=True, check=True, timeout=30,
+    )
+
+
+@needs_ffmpeg
+def test_build_background_clip_image_ken_burns(tmp_path):
+    img = tmp_path / "bg.png"
+    _make_image(str(img))
+    out = tmp_path / "kb.mp4"
+    ok = cbg.build_background_clip(
+        kind="image", value=str(img), width=320, height=568, fps=30,
+        duration_sec=2.0, out_path=str(out), ken_burns=True,
+    )
+    assert ok and out.exists()
+    info = _probe(str(out))
+    assert info["v"] is True and info["a"] is False
+    assert 1.5 <= info["dur"] <= 2.6, f"duration off: {info['dur']}"
+
+
 @needs_ffmpeg
 def test_build_background_clip_missing_asset_returns_false(tmp_path):
     out = tmp_path / "bg2.mp4"

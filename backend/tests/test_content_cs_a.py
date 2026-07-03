@@ -47,6 +47,22 @@ def test_content_plan_v2_roundtrip_preserves_new_fields():
     assert s.subtitle_style == "word_by_word"
 
 
+def test_content_plan_cs_e_asset_fields_roundtrip():
+    plan = ContentPlan(scenes=[
+        ContentScene(index=0, narration="hi", visual_source="image",
+                     visual_path="/tmp/pic.png", ken_burns=True),
+    ])
+    back = ContentPlan.from_json(plan.to_json())
+    assert back is not None
+    s = back.scenes[0]
+    assert s.visual_source == "image" and s.visual_path == "/tmp/pic.png"
+    assert s.ken_burns is True
+    # ken_burns coerces from strings ("true"/"1") too
+    from app.domain.content_plan import _scene_from_dict
+    assert _scene_from_dict({"narration": "x", "ken_burns": "true"}, 0).ken_burns is True
+    assert _scene_from_dict({"narration": "x", "ken_burns": "0"}, 0).ken_burns is False
+
+
 def test_content_plan_v1_blob_still_loads():
     # A pre-CS-A blob with none of the new keys must load with empty defaults.
     v1 = json.dumps({

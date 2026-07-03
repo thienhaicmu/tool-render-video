@@ -63,6 +63,19 @@ def _scale_crop_vf(width: int, height: int, fps: float) -> str:
     )
 
 
+def _ken_burns_vf(width: int, height: int, fps: float, frames: int) -> str:
+    """CS-E — a slow Ken Burns zoom on a still image. Upscales the source 2× and
+    cover-crops (so zoompan samples a clean, aspect-correct frame) then zooms
+    from 1.0 → 1.30 across ``frames`` output frames. zoompan generates the frames
+    from a SINGLE input frame — the caller must NOT use ``-loop`` for this path."""
+    w2, h2 = int(width) * 2, int(height) * 2
+    return (
+        f"scale={w2}:{h2}:force_original_aspect_ratio=increase,crop={w2}:{h2},"
+        f"zoompan=z='min(zoom+0.0006,1.30)':d={max(1, int(frames))}:s={width}x{height}:"
+        f"fps={fps:.3f}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',setsar=1"
+    )
+
+
 def build_background_clip(
     *,
     kind: str,
@@ -72,13 +85,15 @@ def build_background_clip(
     fps: float,
     duration_sec: float,
     out_path: str,
+    ken_burns: bool = False,
 ) -> bool:
     """Render a video-only background clip → ``out_path``. Returns True on success.
 
     kind:
       "color" — solid color (``value`` = "#RRGGBB" / named color). No asset needed.
       "image" — still image at ``value`` (path), scaled+cropped to WxH, held for
-                the whole scene.
+                the whole scene. When ``ken_burns`` is True, a slow zoom/pan is
+                applied instead of a static hold (CS-E).
       "video" — looping video at ``value`` (path), scaled+cropped to WxH, cut to
                 the scene duration.
 
@@ -119,12 +134,22 @@ def build_background_clip(
             if not src.exists() or src.stat().st_size <= 0:
                 logger.warning("content_background: image not found: %r", value)
                 return False
-            cmd = [
-                get_ffmpeg_bin(), "-y",
-                "-loop", "1", "-i", str(src),
-                "-vf", _scale_crop_vf(w, h, r),
-                *common_tail,
-            ]
+            if ken_burns:
+                # zoompan generates the frames from ONE input frame — no -loop.
+                frames = int(dur * r) + 1
+                cmd = [
+                    get_ffmpeg_bin(), "-y",
+                    "-i", str(src),
+                    "-vf", _ken_burns_vf(w, h, r, frames),
+                    *common_tail,
+                ]
+            else:
+                cmd = [
+                    get_ffmpeg_bin(), "-y",
+                    "-loop", "1", "-i", str(src),
+                    "-vf", _scale_crop_vf(w, h, r),
+                    *common_tail,
+                ]
         else:  # KIND_VIDEO
             src = Path(value or "")
             if not src.exists() or src.stat().st_size <= 0:

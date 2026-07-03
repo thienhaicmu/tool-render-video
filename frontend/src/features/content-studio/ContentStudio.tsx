@@ -403,6 +403,36 @@ function SceneRow({ vi, scene, index, total, voice, onChange, onRemove, onMove }
             placeholder={vi ? 'Mô tả hình ảnh cho scene này…' : 'Image/video prompt for this scene…'} />
         </label>
       </div>
+      {/* CS-E: per-scene background (Asset Manager). "" = dùng nền chung của project. */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, alignItems: 'flex-end' }}>
+        <label style={S.miniLabel}>{vi ? 'Nền riêng' : 'Scene background'}
+          <select style={S.inputSm} value={scene.visual_source || ''}
+            onChange={(e) => onChange({ visual_source: e.target.value as ContentScene['visual_source'] })}>
+            <option value="">{vi ? 'Nền chung' : 'Project default'}</option>
+            <option value="color">{vi ? 'Màu' : 'Color'}</option>
+            <option value="image">{vi ? 'Ảnh' : 'Image'}</option>
+            <option value="video">Video</option>
+          </select>
+        </label>
+        {scene.visual_source === 'color' && (
+          <label style={S.miniLabel}>{vi ? 'Màu' : 'Color'}
+            <input type="color" value={scene.visual_path || '#101820'} onChange={(e) => onChange({ visual_path: e.target.value })}
+              style={{ width: 40, height: 28, border: 'none', background: 'none', cursor: 'pointer' }} />
+          </label>
+        )}
+        {(scene.visual_source === 'image' || scene.visual_source === 'video') && (
+          <label style={{ ...S.miniLabel, flex: 1, minWidth: 200 }}>{vi ? 'Đường dẫn file' : 'File path'}
+            <input style={S.inputSm} value={scene.visual_path || ''} onChange={(e) => onChange({ visual_path: e.target.value })}
+              placeholder={vi ? 'Đường dẫn ảnh/video trên máy…' : 'Local image/video path…'} />
+          </label>
+        )}
+        {scene.visual_source === 'image' && (
+          <label style={{ ...S.miniLabel, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={!!scene.ken_burns} onChange={(e) => onChange({ ken_burns: e.target.checked })} />
+            Ken Burns
+          </label>
+        )}
+      </div>
       {(dur != null || previewErr) && (
         <div style={{ fontSize: 11, marginTop: 6, color: previewErr ? 'var(--fail, #ef4444)' : 'var(--text-3, #999)' }}>
           {previewErr ? previewErr : `${vi ? 'Giọng ~' : 'Voice ~'}${(dur ?? 0).toFixed(1)}s`}

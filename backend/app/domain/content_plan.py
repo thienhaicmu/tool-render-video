@@ -85,6 +85,13 @@ class ContentScene:
     visual_prompt: str = ""
     negative_prompt: str = ""
     asset_suggestion: str = ""
+    # ── CS-E Asset Manager (per-scene visual, consumed by the render) ──
+    # visual_source: "" = use the job-level background | "color"|"image"|"video".
+    # visual_path: color hex or local asset path. ken_burns: slow zoom/pan on an
+    # image background (offline, via FFmpeg zoompan).
+    visual_source: str = ""
+    visual_path: str = ""
+    ken_burns: bool = False
     # ── HINT-only — stored, not consumed by the render engine yet ──
     camera_hint: str = ""
     transition_hint: str = ""
@@ -177,6 +184,20 @@ def _coerce_float(value: Any, default: float) -> float:
         return default
 
 
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("true", "1", "yes", "on"):
+            return True
+        if v in ("false", "0", "no", "off", ""):
+            return False
+    return default
+
+
 def _clamp_float(value: Any, lo: float, hi: float, default: float) -> float:
     v = _coerce_float(value, default)
     if v < lo:
@@ -224,6 +245,9 @@ def _scene_from_dict(d: dict[str, Any], fallback_index: int) -> ContentScene:
         visual_prompt=str(d.get("visual_prompt", "") or "").strip(),
         negative_prompt=str(d.get("negative_prompt", "") or "").strip(),
         asset_suggestion=str(d.get("asset_suggestion", "") or "").strip().lower(),
+        visual_source=str(d.get("visual_source", "") or "").strip().lower(),
+        visual_path=str(d.get("visual_path", "") or "").strip(),
+        ken_burns=_coerce_bool(d.get("ken_burns"), False),
         camera_hint=str(d.get("camera_hint", "") or "").strip().lower(),
         transition_hint=str(d.get("transition_hint", "") or "").strip().lower(),
         animation_hint=str(d.get("animation_hint", "") or "").strip().lower(),
