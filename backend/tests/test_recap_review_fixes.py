@@ -98,6 +98,74 @@ def test_recap_subtitle_map_empty_scored():
 
 
 # ---------------------------------------------------------------------------
+# 2026-07-03 — recap honours the UI add_subtitle toggle
+# ---------------------------------------------------------------------------
+
+
+def test_recap_subtitle_map_all_off_when_add_subtitle_false():
+    # User turned subtitles OFF → NO scene gets source-dialogue subs, even the
+    # "original audio" ones that would otherwise be True. The narration-caption
+    # layer is suppressed in lockstep by part_voice_mix's add_subtitle gate.
+    scored = [
+        {"audio_mode": "narrate"},
+        {"audio_mode": "original"},
+        {"audio_mode": "ORIGINAL"},
+    ]
+    assert _recap_subtitle_map(scored, False) == {1: False, 2: False, 3: False}
+
+
+def test_recap_subtitle_map_default_and_true_preserve_fix_b():
+    # Default arg (True) and explicit True are identical to Fix B behaviour.
+    scored = [{"audio_mode": "narrate"}, {"audio_mode": "original"}]
+    expected = {1: False, 2: True}
+    assert _recap_subtitle_map(scored) == expected
+    assert _recap_subtitle_map(scored, True) == expected
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-03 — recap concat: probe_av_spec (title cards must match scene A/V)
+#
+# Root cause of the "recap stuck at Assembling" perf bug: act title cards
+# defaulted to 30 fps / 48 kHz while scenes were e.g. 25 fps / 96 kHz. The
+# sample-rate mismatch made the concat-demuxer stream-copy double the container
+# duration → _demuxer_output_sane rejected it → slow re-encode every run.
+# probe_av_spec feeds the scene's real spec back into make_act_title_card so the
+# fast copy path works. These pin its parsing + fail-safe contract.
+# ---------------------------------------------------------------------------
+
+
+def test_probe_av_spec_parses_fps_and_sample_rate(monkeypatch):
+    from app.features.render.engine.stages import recap_assembler as ra
+
+    class _R:
+        stdout = ""
+
+    def fake_run(cmd, **kw):
+        r = _R()
+        joined = " ".join(str(c) for c in cmd)
+        if "r_frame_rate" in joined:
+            r.stdout = "25/1\n"
+        elif "sample_rate" in joined:
+            r.stdout = "96000\n"
+        return r
+
+    monkeypatch.setattr(ra.subprocess, "run", fake_run)
+    fps, sr = ra.probe_av_spec("scene.mp4")
+    assert abs(fps - 25.0) < 1e-6
+    assert sr == 96000
+
+
+def test_probe_av_spec_never_raises_returns_zeros(monkeypatch):
+    from app.features.render.engine.stages import recap_assembler as ra
+
+    def boom(*a, **k):
+        raise RuntimeError("ffprobe missing")
+
+    monkeypatch.setattr(ra.subprocess, "run", boom)
+    assert ra.probe_av_spec("scene.mp4") == (0.0, 0)
+
+
+# ---------------------------------------------------------------------------
 # Fix C — _filter_voiced_segments
 # ---------------------------------------------------------------------------
 

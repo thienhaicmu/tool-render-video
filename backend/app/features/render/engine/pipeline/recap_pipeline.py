@@ -66,7 +66,7 @@ from app.features.render.engine.pipeline.render_pipeline import (
     _render_active_count,
 )
 from app.features.render.engine.stages.part_renderer import PartRenderContext
-from app.features.render.engine.stages.recap_assembler import concat_clips
+from app.features.render.engine.stages.recap_assembler import concat_clips, probe_av_spec
 from app.features.render.engine.stages.recap_title_card import make_act_title_card
 
 logger = logging.getLogger("app.render.recap")
@@ -199,19 +199,24 @@ def _repoint_scene_parts_to_episodes(
         return 0
 
 
-def _recap_subtitle_map(scored: list[dict]) -> "dict[int, bool]":
-    """Fix B (2026-07-02): per-part source-dialogue subtitle map for recap.
+def _recap_subtitle_map(scored: list[dict], add_subtitle: bool = True) -> "dict[int, bool]":
+    """Per-part source-dialogue subtitle map for recap.
 
     Narrate scenes NEVER get source-dialogue subtitles — the R3b narration
     caption burn is the recap's subtitle layer, and burning both stacked two
-    subtitle rows at the bottom of every narrated scene whenever the UI's
-    add_subtitle toggle was on. "Original audio" scenes ALWAYS get the
-    source-dialogue subtitles (unchanged R6 behaviour) so the viewer can
+    subtitle rows at the bottom of every narrated scene. "Original audio"
+    scenes get the source-dialogue subtitles (R6 behaviour) so the viewer can
     follow the raw dialogue the AI chose to let play.
 
-    The UI add_subtitle flag therefore has no effect on the recap path; the
-    clips path is untouched.
+    2026-07-03: the recap path now RESPECTS the UI add_subtitle toggle. When
+    the user turns subtitles OFF, NO scene gets burned captions — this is the
+    source-dialogue layer; the R3b narration-caption layer is suppressed in
+    lockstep by part_voice_mix (both gated on add_subtitle). The narration
+    AUDIO still plays; only the on-screen text is removed. When ON (default),
+    behaviour is unchanged from Fix B (2026-07-02).
     """
+    if not add_subtitle:
+        return {i: False for i in range(1, len(scored) + 1)}
     return {
         i: str(scored[i - 1].get("audio_mode", "")) == "original"
         for i in range(1, len(scored) + 1)
@@ -660,7 +665,12 @@ def run_recap(
         # Fix B (2026-07-02): source-dialogue subtitles burn ONLY on
         # "original audio" scenes; narrate scenes rely on the R3b narration
         # captions (previously add_subtitle=True double-burned both layers).
-        subtitle_enabled_by_idx = _recap_subtitle_map(scored)
+        # 2026-07-03: honour the UI add_subtitle toggle — subtitles OFF now
+        # suppresses BOTH the source-dialogue layer (here) and the R3b
+        # narration-caption layer (part_voice_mix), so "off" is truly off.
+        subtitle_enabled_by_idx = _recap_subtitle_map(
+            scored, bool(getattr(payload, "add_subtitle", True))
+        )
         try:
             _src_stat_for_motion = source_path.stat()
         except Exception:
@@ -881,6 +891,24 @@ def _assemble_recap_episodes(
     for ep_i in sorted(by_episode.keys()):
         ordered_clips: list[str] = []
         _seen_acts: set[int] = set()
+        # Probe the first rendered scene of this episode for its ACTUAL video fps
+        # + audio sample-rate, and generate the act title cards to match. Without
+        # this the cards default to 30 fps / 48 kHz while the scenes can be e.g.
+        # 25 fps / 96 kHz — the concat-demuxer stream-copy then emits a doubled
+        # container duration (sample-rate mismatch), which _demuxer_output_sane
+        # rejects, forcing a slow re-encode of every episode. Match → copy path.
+        _card_fps = fps
+        _card_sr = 48000
+        for _pidx, _pseg in by_episode[ep_i]:
+            _prow = parts.get(_pidx)
+            _pfile = (_prow or {}).get("output_file") if _prow else None
+            if _pfile and Path(_pfile).exists() and Path(_pfile).stat().st_size > 0:
+                _probe_fps, _probe_sr = probe_av_spec(str(_pfile))
+                if _probe_fps > 0:
+                    _card_fps = _probe_fps
+                if _probe_sr > 0:
+                    _card_sr = _probe_sr
+                break
         for idx, seg in by_episode[ep_i]:
             act_i = int(seg.get("act_index", 0))
             if act_i not in _seen_acts:
@@ -889,7 +917,8 @@ def _assemble_recap_episodes(
                 if make_act_title_card(
                     source_video=str(source_path), at_sec=float(seg.get("start", 0.0)),
                     title_text=str(seg.get("act_title") or f"Act {act_i + 1}"),
-                    out_path=str(_card), width=width, height=height, fps=fps,
+                    out_path=str(_card), width=width, height=height,
+                    fps=_card_fps, sample_rate=_card_sr,
                 ):
                     ordered_clips.append(str(_card))
             _row = parts.get(idx)

@@ -1046,12 +1046,19 @@ def run_part_voice_mix(
             )
 
     # ── R3b: burn the spoken narration as captions (recap only) ─────────────
-    # Recap shows the narrator's words on-screen. Burns AFTER the voice mix and
-    # BEFORE the BGM/freeze passes so the freeze re-times the captions with the
-    # video. Gated on render_format=="recap" (no new payload field; clips path
-    # unaffected). Sacred Contract #3 spirit: failure leaves the clip uncaptioned.
+    # 2026-07-03: DISABLED BY DEFAULT. This is a recap-specific auto-caption
+    # layer (the narrator's rewritten words, with its own force_style) that is
+    # SEPARATE from the UI subtitle system. Per user request, recap now relies
+    # solely on the UI subtitle toggle (add_subtitle + subtitle_style) via
+    # _recap_subtitle_map; this automatic layer is opt-in only.
+    # Re-enable by setting RECAP_BURN_NARRATION_SUBTITLE=1. When on, it still
+    # honours add_subtitle and burns AFTER the voice mix / BEFORE the BGM/freeze
+    # passes so the freeze re-times the captions with the video.
+    # Sacred Contract #3 spirit: failure leaves the clip uncaptioned.
     if (
-        str(getattr(ctx.payload, "render_format", "clips") or "clips").strip().lower() == "recap"
+        os.getenv("RECAP_BURN_NARRATION_SUBTITLE", "0") == "1"
+        and str(getattr(ctx.payload, "render_format", "clips") or "clips").strip().lower() == "recap"
+        and bool(getattr(ctx.payload, "add_subtitle", True))
         and _reaction_segments
         and final_part.exists()
     ):

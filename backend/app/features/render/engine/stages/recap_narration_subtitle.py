@@ -1,6 +1,10 @@
 """Burn the spoken narration as on-screen subtitles (Phase R3b).
 
-Recap videos show the narrator's words as captions (user-chosen default).
+OPT-IN ONLY (2026-07-03): this separate recap auto-caption layer is disabled
+by default — recap relies on the UI subtitle system (add_subtitle +
+subtitle_style) instead. Enable via RECAP_BURN_NARRATION_SUBTITLE=1 (gate lives
+in part_voice_mix). When enabled, recap videos show the narrator's words as
+captions.
 The narration segments produced by the ai_rewrite path ({start, end, text} in
 SOURCE-clip seconds) are written to a temp SRT — timestamps mapped to the
 final, speed-adjusted timeline (source/speed) — then burned with FFmpeg's
@@ -35,9 +39,23 @@ logger = logging.getLogger("app.render.recap_narration_subtitle")
 
 _FFMPEG_TIMEOUT_SEC: int = max(120, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "1800")))
 # force_style override (ASS style fields). Override via RECAP_SUBTITLE_STYLE.
+#
+# 2026-07-03: default upgraded from a bare white-outline look to a "dark card"
+# caption — white Montserrat text inside a semi-transparent dark box — so recap
+# narration reads cleanly and matches the polish of the clips-path presets
+# (see subtitle/processing/styles.py:dark_card). ASS colours are &HAABBGGRR
+# where AA is inverted alpha (00 = opaque, FF = transparent).
+#   BorderStyle=3  → opaque box behind the text (BackColour fills it)
+#   BackColour=&H60000000 → black box, ~62% opaque (0x60 = 96/255 transparent)
+#   Outline=8      → box padding around the glyphs (px on the SRT virtual canvas)
+#   Shadow=0       → no drop shadow (the box already separates text from video)
+#   MarginV=55     → lifts the caption off the very bottom edge
+#   Alignment=2    → bottom-centre
 _FORCE_STYLE: str = os.getenv(
     "RECAP_SUBTITLE_STYLE",
-    "Fontsize=18,Outline=2,Shadow=1,MarginV=40,Alignment=2,BorderStyle=1",
+    "Fontname=Montserrat,Fontsize=16,Bold=1,"
+    "PrimaryColour=&H00FFFFFF,OutlineColour=&H00101010,BackColour=&H60000000,"
+    "BorderStyle=3,Outline=8,Shadow=0,MarginV=55,Alignment=2",
 )
 
 

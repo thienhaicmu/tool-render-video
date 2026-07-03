@@ -83,6 +83,9 @@ def make_act_title_card(
             "-vf", vf,
             "-frames:v", str(int(dur * fps) + 1),
             "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+            # No B-frames: a 2.5 s card needs none, and DTS==PTS guarantees a
+            # monotonic timestamp at the concat-demuxer boundary with the scenes.
+            "-bf", "0",
             "-r", f"{fps:.3f}",
             "-c:a", "aac", "-b:a", "192k", "-ar", str(sample_rate),
             "-t", f"{dur:.3f}",

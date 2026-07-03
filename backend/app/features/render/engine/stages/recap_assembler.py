@@ -39,6 +39,50 @@ def _probe_duration(path: str) -> float:
         return 0.0
 
 
+def probe_av_spec(path: str) -> "tuple[float, int]":
+    """Probe a rendered clip for (video_fps, audio_sample_rate).
+
+    Used by the recap assembler's caller to generate act title cards that MATCH
+    the scenes exactly. A mismatch (e.g. 48 kHz card audio vs 96 kHz scene audio)
+    makes the concat-demuxer stream-copy emit a doubled container duration, which
+    _demuxer_output_sane then rejects — forcing an expensive re-encode every run.
+
+    Returns (0.0, 0) on any error so the caller falls back to its own defaults.
+    Never raises."""
+    fps = 0.0
+    sr = 0
+    try:
+        out = subprocess.run(
+            [get_ffprobe_bin(), "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=r_frame_rate",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, encoding="utf-8", timeout=30,
+        )
+        raw = (out.stdout or "").strip().splitlines()[0].strip() if (out.stdout or "").strip() else ""
+        if "/" in raw:
+            num, den = raw.split("/", 1)
+            den_f = float(den)
+            if den_f > 0:
+                fps = float(num) / den_f
+        elif raw:
+            fps = float(raw)
+    except Exception:
+        pass
+    try:
+        out = subprocess.run(
+            [get_ffprobe_bin(), "-v", "error", "-select_streams", "a:0",
+             "-show_entries", "stream=sample_rate",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, encoding="utf-8", timeout=30,
+        )
+        raw = (out.stdout or "").strip().splitlines()[0].strip() if (out.stdout or "").strip() else ""
+        if raw:
+            sr = int(raw)
+    except Exception:
+        pass
+    return (fps if fps > 0 else 0.0), (sr if sr > 0 else 0)
+
+
 def _demuxer_output_sane(out_path: str, expected_sec: float) -> bool:
     """Stream-copy concat exits 0 even when input specs differ (NVENC scene
     clips + libx264 caption-burned clips + title cards), silently emitting
