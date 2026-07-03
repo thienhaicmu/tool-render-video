@@ -26,6 +26,7 @@ const importEditor     = () => import('./features/editor/EditorScreen').then(m =
 // DownloadScreen wrapper). The parallel features/downloader/ screen is gone.
 const importDownloader = () => import('./features/download/DownloadScreen').then(m => ({ default: m.DownloadScreen }))
 const importClipStudio = () => import('./features/clip-studio/ClipStudio').then(m => ({ default: m.ClipStudio }))
+const importContentStudio = () => import('./features/content-studio/ContentStudio').then(m => ({ default: m.ContentStudio }))
 const importSettings   = () => import('./features/settings/SettingsScreen').then(m => ({ default: m.SettingsScreen }))
 const importQueue      = () => import('./features/queue/QueueScreen').then(m => ({ default: m.QueueScreen }))
 
@@ -33,6 +34,7 @@ const HistoryScreen    = lazy(importHistory)
 const EditorScreen     = lazy(importEditor)
 const DownloadScreen   = lazy(importDownloader)
 const ClipStudio       = lazy(importClipStudio)
+const ContentStudio    = lazy(importContentStudio)
 const SettingsScreen   = lazy(importSettings)
 const QueueScreen      = lazy(importQueue)
 
@@ -52,6 +54,7 @@ const PANEL_MAP: Record<ActivePanel, React.ComponentType> = {
   // Canonical routes
   home:          HistoryScreen,
   'clip-studio': ClipStudio,
+  'content-studio': ContentStudio,
   queue:         QueueScreen,
   library:       HistoryScreen,
   publish:       PublishPlaceholder,

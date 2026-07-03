@@ -5,6 +5,7 @@ export const translations = {
     // Navigation
     nav_home: 'Home',
     nav_studio: 'Studio',
+    nav_content: 'Content',
     nav_queue: 'Queue',
     nav_library: 'Library',
     nav_download: 'Download',
@@ -400,6 +401,7 @@ export const translations = {
     // Navigation
     nav_home: 'Trang chủ',
     nav_studio: 'Studio',
+    nav_content: 'Nội dung',
     nav_queue: 'Hàng đợi',
     nav_library: 'Thư viện',
     nav_download: 'Tải xuống',
