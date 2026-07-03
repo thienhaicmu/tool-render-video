@@ -27,8 +27,15 @@ from app.features.render.ai.llm.recap_parser import (
     parse_recap_response, parse_story_model_response, parse_editorial_response,
     parse_episode_narration_response,
 )
-from app.features.render.ai.llm.content_prompts import build_content_plan_prompt
-from app.features.render.ai.llm.content_parser import parse_content_plan_response
+from app.features.render.ai.llm.content_prompts import (
+    build_content_plan_prompt, build_story_bible_prompt,
+)
+from app.features.render.ai.llm.content_parser import (
+    parse_content_plan_response, parse_story_bible_response,
+)
+from app.features.render.ai.llm.content_quality import (
+    validate_and_repair, inject_character_fragments,
+)
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.gemini_client")
@@ -563,6 +570,10 @@ def select_recap_plan(
 _CONTENT_MAX_TOKENS = int(os.getenv("GEMINI_CONTENT_MAX_TOKENS", "16384"))
 _CONTENT_TEMPERATURE = float(os.getenv("GEMINI_CONTENT_TEMPERATURE", "0.5"))
 _CONTENT_THINKING_BUDGET = int(os.getenv("GEMINI_CONTENT_THINKING_BUDGET", "1024"))
+# CU-4: two-pass Content Director. Pass A commits a Story Bible (characters +
+# through-line); Pass B writes the plan GROUNDED in it → consistent narration +
+# visuals. Default on. CONTENT_MULTIPASS=0 → legacy single call.
+_CONTENT_MULTIPASS = os.getenv("CONTENT_MULTIPASS", "1") == "1"
 
 
 def _call_gemini_content_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
@@ -618,23 +629,55 @@ def select_content_plan(
             logger.warning("gemini_client: empty script (content path)")
             return None
         resolved_model = model or _DEFAULT_MODEL
+
+        # ── CU-4 Pass A — Story Bible (best-effort; failure → single-pass) ────
+        bible = None
+        meta: dict = {}
+        if _CONTENT_MULTIPASS:
+            try:
+                _bsys, _buser = build_story_bible_prompt(script, target_language, tone)
+                _braw = _call_gemini_content(api_key, resolved_model, _bsys, _buser)
+                _parsed = parse_story_bible_response(_braw) if _braw else None
+                if _parsed is not None:
+                    bible, meta = _parsed
+                    logger.info(
+                        "gemini_client: content pass-A bible OK characters=%d",
+                        len(bible.characters),
+                    )
+            except Exception as _be:
+                logger.info("gemini_client: content pass-A bible failed (%s) — single-pass", _be)
+                bible = None
+
+        # ── Pass B — the plan, GROUNDED in the Bible when available ──────────
         system_prompt, user_prompt = build_content_plan_prompt(
-            script, target_duration_sec, target_language, tone,
+            script, target_duration_sec, target_language, tone, bible=bible,
         )
         logger.info(
-            "gemini_client: calling content model=%s target_dur=%.0fs lang=%s in_chars=%d",
+            "gemini_client: calling content model=%s target_dur=%.0fs lang=%s in_chars=%d grounded=%s",
             resolved_model, float(target_duration_sec or 0.0), target_language, len(script),
+            bible is not None,
         )
         raw = _call_gemini_content(api_key, resolved_model, system_prompt, user_prompt)
         if not raw:
             logger.warning("gemini_client: empty content response (model=%s)", resolved_model)
             return None
         plan = parse_content_plan_response(raw, target_duration_sec)
-        if plan is not None:
-            logger.info(
-                "gemini_client: content OK model=%s scenes=%d total=%.0fs topic=%r",
-                resolved_model, plan.scene_count(), plan.total_target_sec, plan.topic,
-            )
+        if plan is None:
+            return None
+
+        # Assemble: stamp the Bible + pass-A metadata, then deterministic CU-5/CU-6.
+        if bible is not None and plan.story_bible.is_empty():
+            plan.story_bible = bible
+        for _k in ("topic", "tone", "audience", "video_style"):
+            if meta.get(_k) and not (getattr(plan, _k, "") or "").strip():
+                setattr(plan, _k, meta[_k])
+        plan = validate_and_repair(plan, plan.story_bible)       # CU-5
+        plan = inject_character_fragments(plan, plan.story_bible)  # CU-6
+        logger.info(
+            "gemini_client: content OK model=%s scenes=%d total=%.0fs topic=%r chars=%d",
+            resolved_model, plan.scene_count(), plan.total_target_sec, plan.topic,
+            len(plan.story_bible.characters),
+        )
         return plan
     except Exception as exc:
         logger.warning("gemini_client: select_content_plan unexpected error %s", exc, exc_info=True)

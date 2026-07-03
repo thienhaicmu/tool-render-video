@@ -37,7 +37,7 @@ def test_content_plan_v2_roundtrip_preserves_new_fields():
     )
     back = ContentPlan.from_json(plan.to_json())
     assert back is not None
-    assert back.schema_version == 2
+    assert back.schema_version == 3  # CU-4 bumped v2 → v3 (StoryBible)
     assert back.video_style == "documentary"
     s = back.scenes[0]
     assert s.scene_title == "Mở màn"

@@ -68,7 +68,7 @@ _USER_TEMPLATE_CONTENT = """═══ SOURCE SCRIPT / CONTENT ═══
 NARRATION LANGUAGE: {lang_name}
 TARGET DURATION:    ~{target_seconds:.0f} seconds (~{target_minutes:.1f} min) — a GUIDE, not a hard cap
 CREATOR TONE:       {tone_clause}
-
+{bible_block}
 ═══ HOW TO WORK ═══
 1. Read the WHOLE script above and understand it before planning.
 2. Detect the metadata: topic, tone, target audience.
@@ -126,6 +126,8 @@ CREATOR TONE:       {tone_clause}
       "pause_before": <float seconds>,
       "pause_after": <float seconds>,
       "emphasis": ["<word or phrase to stress>"],
+      "characters": ["<Story Bible character id/name appearing in this scene>"],
+      "continuity": "<what carries over from the previous scene, or ''>",
       "est_duration_sec": <float>,
       "subtitle_style": "<per-scene override, or '' to use the plan style>",
       "visual_hint": "<short label of what footage/image suits this scene, or ''>",
@@ -151,17 +153,110 @@ CREATOR TONE:       {tone_clause}
 """
 
 
+# ── CU-4 Pass A: Story Bible (whole-script understanding, BEFORE the plan) ────
+_SYSTEM_BIBLE = (
+    "You are an expert STORY EDITOR. You READ THE WHOLE script/article and "
+    "reconstruct a compact 'story bible' BEFORE any scripting: the topic, tone "
+    "and audience; the overall SETTING; the opening HOOK and the closing CTA; and "
+    "the recurring CHARACTERS/subjects with a CANONICAL description of each (their "
+    "look + role) so every later scene depicts them consistently. Output ONLY "
+    "valid JSON in the exact shape requested — no prose, no markdown, no code fences."
+)
+
+_USER_TEMPLATE_BIBLE = """═══ SOURCE SCRIPT / CONTENT ═══
+{script}
+
+═══ TASK ═══
+Reconstruct the story bible of this content BEFORE writing it. Language: {lang_name}.
+CREATOR TONE: {tone_clause}. Base everything on the script; never invent facts.
+
+═══ OUTPUT FORMAT (STRICT — return ONLY this JSON) ═══
+{{
+  "topic": "<detected topic, short, in {lang_name}>",
+  "tone": "<detected tone, short>",
+  "audience": "<target audience, short>",
+  "video_style": "documentary|storytelling|educational|news|explainer|",
+  "setting": "<the overall setting / world, one line>",
+  "hook": "<the opening hook, one line in {lang_name}>",
+  "cta": "<the closing call-to-action, one line in {lang_name}>",
+  "characters": [
+    {{ "id": "<short stable id, e.g. 'napoleon'>",
+       "name": "<display name>",
+       "description": "<CANONICAL look + role, reused for visual consistency>" }}
+  ]
+}}
+
+═══ HARD RULES ═══
+1. ONE JSON object. No markdown, no prose, no code fences.
+2. characters may be an empty array for abstract topics (no recurring subject).
+3. Each character description is CANONICAL (age, appearance, attire, role) so an
+   image generator draws the SAME character every scene.
+
+═══ OUTPUT JSON ═══
+"""
+
+
+def build_story_bible_prompt(
+    script: str,
+    target_language: str = "vi-VN",
+    tone: str = "",
+) -> tuple[str, str]:
+    """CU-4 Pass A — return (system, user) for the Story Bible call. Never raises."""
+    cleaned = _fit_script(script, MAX_CONTENT_SCRIPT_CHARS)
+    lang_name = _LANG_NAMES.get(target_language, target_language or "the target language")
+    tone_clause = (tone or "").strip() or "engaging / natural"
+    user = _USER_TEMPLATE_BIBLE.format(script=cleaned, lang_name=lang_name, tone_clause=tone_clause)
+    return _SYSTEM_BIBLE, user
+
+
+def _bible_block(bible) -> str:
+    """Render a StoryBible into a plain-text context block for the plan prompt
+    (Pass B). Passed as a str.format VALUE (brace-neutralised) → format-safe.
+    Returns "" for an empty/None bible. Never raises."""
+    if bible is None:
+        return ""
+    try:
+        setting = (getattr(bible, "setting", "") or "").strip()
+        hook = (getattr(bible, "hook", "") or "").strip()
+        cta = (getattr(bible, "cta", "") or "").strip()
+        chars = getattr(bible, "characters", []) or []
+        if not (setting or hook or cta or chars):
+            return ""
+        lines = ["", "═══ STORY BIBLE (plan FROM this — keep it consistent) ═══"]
+        if setting:
+            lines.append(f"SETTING: {setting}")
+        if hook:
+            lines.append(f"HOOK: {hook}")
+        if cta:
+            lines.append(f"CTA: {cta}")
+        if chars:
+            lines.append("CHARACTERS (use the SAME description every scene they appear in):")
+            for c in chars:
+                cid = (getattr(c, "id", "") or getattr(c, "name", "") or "").strip()
+                name = (getattr(c, "name", "") or "").strip()
+                desc = (getattr(c, "description", "") or "").strip()
+                if cid or name or desc:
+                    lines.append(f"  - [{cid}] {name}: {desc}")
+            lines.append("For each scene, set \"characters\" to the ids present.")
+        block = "\n".join(lines) + "\n"
+        return block.replace("{", "(").replace("}", ")")
+    except Exception:
+        return ""
+
+
 def build_content_plan_prompt(
     script: str,
     target_duration_sec: float = 90.0,
     target_language: str = "vi-VN",
     tone: str = "",
+    bible=None,
 ) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for the Content Director LLM call.
 
-    ``script`` is the raw user text (article / news / outline). It is injected as
-    a ``str.format`` VALUE — braces inside it are NOT re-parsed, so arbitrary
-    user text is format-safe. Never raises."""
+    ``script`` is the raw user text; ``bible`` (CU-4 Pass A StoryBible) is injected
+    as context so narration + visuals are grounded/consistent. Both are ``str.format``
+    VALUES — braces inside are NOT re-parsed, so arbitrary text is format-safe.
+    Never raises."""
     cleaned = _fit_script(script, MAX_CONTENT_SCRIPT_CHARS)
     lang_name = _LANG_NAMES.get(target_language, target_language or "the target language")
     tone_clause = (tone or "").strip() or "engaging / natural"
@@ -173,5 +268,6 @@ def build_content_plan_prompt(
         target_seconds=dur,
         target_minutes=dur / 60.0,
         tone_clause=tone_clause,
+        bible_block=_bible_block(bible),
     )
     return _SYSTEM_CONTENT, user

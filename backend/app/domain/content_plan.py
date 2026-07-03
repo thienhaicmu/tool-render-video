@@ -44,9 +44,10 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
-SCHEMA_VERSION = 2  # CS-A: per-scene scene_title/visual_prompt/negative_prompt/
+SCHEMA_VERSION = 3  # CS-A(v2): per-scene scene_title/visual_prompt/negative_prompt/
                     # subtitle_style/asset_suggestion + plan-level video_style.
-                    # v1 blobs load unchanged (new fields default empty).
+                    # CU-4(v3): plan-level StoryBible (characters/setting/hook/cta) +
+                    # per-scene characters[]/continuity. v1/v2 blobs load unchanged.
 
 # Reading-speed clamp — guards against the LLM emitting an absurd multiplier that
 # would make TTS unintelligible or the timeline nonsensical.
@@ -62,6 +63,39 @@ SCENE_ROLES = ("hook", "intro", "explain", "example", "conclusion", "cta")
 
 
 @dataclass
+class BibleCharacter:
+    """A recurring character in the Story Bible (CU-4). ``description`` is the
+    CANONICAL visual/role description injected into every scene the character
+    appears in — the basis of visual consistency (CU-6)."""
+    id: str = ""
+    name: str = ""
+    description: str = ""
+
+
+@dataclass
+class StoryBible:
+    """CU-4 — whole-script understanding committed BEFORE the plan is written, so
+    narration + visuals stay consistent across scenes (mirrors recap's StoryModel).
+    Plan-level topic/tone/audience/video_style live on ContentPlan; the Bible adds
+    the through-line + character canon. Every field defaults empty → a legacy plan
+    (no bible) loads fine (Sacred Contract #3 spirit)."""
+    setting: str = ""
+    hook: str = ""
+    cta: str = ""
+    characters: list[BibleCharacter] = field(default_factory=list)
+
+    def is_empty(self) -> bool:
+        return not (self.setting or self.hook or self.cta or self.characters)
+
+    def character(self, key: str) -> "Optional[BibleCharacter]":
+        k = (key or "").strip().lower()
+        for c in self.characters:
+            if c.id.strip().lower() == k or c.name.strip().lower() == k:
+                return c
+        return None
+
+
+@dataclass
 class ContentScene:
     """One semantic scene of the content video, in narration order."""
     index: int = 0
@@ -74,6 +108,10 @@ class ContentScene:
     pause_after: float = 0.0
     emphasis: list[str] = field(default_factory=list)
     est_duration_sec: float = 0.0
+    # CU-4: which StoryBible character ids appear in this scene (drives CU-6
+    # consistency injection) + a short continuity note (what carries over).
+    characters: list[str] = field(default_factory=list)
+    continuity: str = ""
     # Per-scene subtitle style override ("" = use the plan/global style).
     subtitle_style: str = ""
     # ── Visual planning (CS-A) — consumed by the Visual Generator provider layer,
@@ -110,6 +148,7 @@ class ContentPlan:
     subtitle_style: str = ""
     bgm_mood: str = ""
     video_style: str = ""       # AI-detected overall style (documentary|storytelling|…)
+    story_bible: StoryBible = field(default_factory=StoryBible)  # CU-4
     scenes: list[ContentScene] = field(default_factory=list)
 
     # ── Convenience ──────────────────────────────────────────────────────
@@ -163,6 +202,7 @@ class ContentPlan:
             subtitle_style=str(data.get("subtitle_style", "") or "").strip(),
             bgm_mood=str(data.get("bgm_mood", "") or "").strip(),
             video_style=str(data.get("video_style", "") or "").strip(),
+            story_bible=_story_bible_from_dict(data.get("story_bible")),
             scenes=scenes,
         )
 
@@ -226,6 +266,42 @@ def _coerce_str_list(value: Any, max_items: int = 24) -> list[str]:
     return out
 
 
+def _bible_character_from_dict(d: Any) -> Optional[BibleCharacter]:
+    if isinstance(d, str):
+        s = d.strip()
+        return BibleCharacter(name=s, id=s) if s else None
+    if not isinstance(d, dict):
+        return None
+    name = str(d.get("name", "") or "").strip()
+    cid = str(d.get("id", name) or "").strip()
+    desc = str(d.get("description", d.get("desc", "")) or "").strip()
+    if not (name or cid or desc):
+        return None
+    return BibleCharacter(id=(cid or name), name=(name or cid), description=desc)
+
+
+def _story_bible_from_dict(d: Any) -> StoryBible:
+    """Defensive StoryBible loader. Unknown keys dropped, missing default-empty.
+    Never raises."""
+    if not isinstance(d, dict):
+        return StoryBible()
+    chars: list[BibleCharacter] = []
+    raw = d.get("characters")
+    if isinstance(raw, list):
+        for entry in raw:
+            c = _bible_character_from_dict(entry)
+            if c is not None:
+                chars.append(c)
+            if len(chars) >= 24:
+                break
+    return StoryBible(
+        setting=str(d.get("setting", "") or "").strip(),
+        hook=str(d.get("hook", "") or "").strip(),
+        cta=str(d.get("cta", "") or "").strip(),
+        characters=chars,
+    )
+
+
 def _scene_from_dict(d: dict[str, Any], fallback_index: int) -> ContentScene:
     return ContentScene(
         index=_coerce_int(d.get("index"), fallback_index),
@@ -240,6 +316,8 @@ def _scene_from_dict(d: dict[str, Any], fallback_index: int) -> ContentScene:
         pause_after=_clamp_float(d.get("pause_after"), 0.0, _PAUSE_MAX, 0.0),
         emphasis=_coerce_str_list(d.get("emphasis")),
         est_duration_sec=max(0.0, _coerce_float(d.get("est_duration_sec"), 0.0)),
+        characters=_coerce_str_list(d.get("characters")),
+        continuity=str(d.get("continuity", "") or "").strip(),
         subtitle_style=str(d.get("subtitle_style", "") or "").strip(),
         visual_hint=str(d.get("visual_hint", "") or "").strip(),
         visual_prompt=str(d.get("visual_prompt", "") or "").strip(),

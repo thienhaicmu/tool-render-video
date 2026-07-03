@@ -16,7 +16,7 @@ import logging
 import re
 from typing import Optional
 
-from app.domain.content_plan import ContentPlan
+from app.domain.content_plan import ContentPlan, StoryBible, _story_bible_from_dict
 
 logger = logging.getLogger("app.render.llm_content_parser")
 
@@ -148,6 +148,33 @@ def _clean(data: dict, target_duration: float) -> Optional[ContentPlan]:
     normalised["total_target_sec"] = round(total, 3)
     # ContentPlan.from_json applies all per-field defensive coercion + clamps.
     return ContentPlan.from_json(json.dumps(normalised, ensure_ascii=False))
+
+
+def parse_story_bible_response(raw: str) -> Optional["tuple[StoryBible, dict]"]:
+    """CU-4 Pass A — parse the Story Bible response. Returns (StoryBible, meta) or
+    None on any failure, where meta carries plan-level {topic,tone,audience,
+    video_style} the caller stamps onto the plan. Never raises (Sacred #3)."""
+    try:
+        if not raw or not str(raw).strip():
+            return None
+        text = _strip_wrappers(str(raw).strip())
+        data = _extract_json_object(text) or _salvage_json(text)
+        if not isinstance(data, dict):
+            logger.warning("content_parser: no story-bible JSON found")
+            return None
+        bible = _story_bible_from_dict(data)
+        meta = {
+            "topic": str(data.get("topic", "") or "").strip(),
+            "tone": str(data.get("tone", "") or "").strip(),
+            "audience": str(data.get("audience", "") or "").strip(),
+            "video_style": str(data.get("video_style", "") or "").strip(),
+        }
+        if bible.is_empty() and not any(meta.values()):
+            return None
+        return bible, meta
+    except Exception as exc:
+        logger.warning("content_parser: story-bible parse error %s", exc, exc_info=True)
+        return None
 
 
 def parse_content_plan_response(raw: str, target_duration: float = 0.0) -> Optional[ContentPlan]:
