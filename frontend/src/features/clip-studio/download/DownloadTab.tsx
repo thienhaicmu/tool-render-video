@@ -8,6 +8,7 @@ import type { DownloadJob } from '@/api/platformDownloader'
 import { getDefaultOutputDir, putDefaultOutputDir } from '@/api/outputDir'
 import { useUIStore } from '@/stores/uiStore'
 import { useI18n } from '@/i18n/useI18n'
+import { isTabHidden } from '@/hooks/pollVisibility'
 import { IconFolder, IconClipboard } from '@/components/icons'
 import './DownloadTab.css'
 
@@ -237,7 +238,8 @@ export function DownloadTab({ lang: _lang }: { lang: Lang }) {
 
   useEffect(() => {
     refresh(); fetchCookieStatus()
-    pollRef.current = setInterval(refresh, POLL_MS)
+    // WP5.4 — skip the downloader poll while the tab is hidden.
+    pollRef.current = setInterval(() => { if (isTabHidden()) return; refresh() }, POLL_MS)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [refresh, fetchCookieStatus])
 
