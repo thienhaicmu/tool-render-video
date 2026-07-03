@@ -46,7 +46,7 @@ interface Config {
   subEnabled: boolean
   subStyle: string
   bgmPath: string
-  visualProvider: 'local' | 'stock' | 'ai_image'
+  visualProvider: 'local' | 'stock' | 'ai_image' | 'ai_video'
   outputDir: string
   tone: string
 }
@@ -245,6 +245,7 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
               <option value="local">{vi ? 'Nền tự chọn (offline)' : 'Chosen background (offline)'}</option>
               <option value="stock">{vi ? 'Ảnh Stock (Pexels/Pixabay — cần API key)' : 'Stock images (Pexels/Pixabay — needs API key)'}</option>
               <option value="ai_image">{vi ? 'Ảnh AI (Imagen/DALL·E — cần API key)' : 'AI Image (Imagen/DALL·E — needs API key)'}</option>
+              <option value="ai_video">{vi ? 'Video AI (Veo — cần API key, chậm)' : 'AI Video (Veo — needs API key, slow)'}</option>
             </select>
             {cfg.visualProvider !== 'local' && (
               <div style={{ fontSize: 11, color: 'var(--text-3, #999)', marginTop: 4 }}>

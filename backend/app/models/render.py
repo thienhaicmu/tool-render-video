@@ -510,13 +510,14 @@ class RenderRequest(BaseModel):
     @field_validator("content_visual_provider", mode="before")
     @classmethod
     def _validate_content_visual_provider(cls, v) -> str:
-        # engine.visual providers: "local" (offline default) | "stock" | "ai_image"
-        # (CS-G, online + opt-in). Unknown/future values coerce to "local" so a
-        # payload for a not-yet-shipped provider still renders offline instead of
-        # failing (Sacred Contract #2). Online providers always fall back to local
-        # at render time when their API key / network is unavailable.
+        # engine.visual providers: "local" (offline default) | "stock" |
+        # "ai_image" | "ai_video" (CS-G, online + opt-in). Unknown/future values
+        # coerce to "local" so a payload for a not-yet-shipped provider still
+        # renders offline instead of failing (Sacred Contract #2). Online
+        # providers always fall back to local at render time when their API key /
+        # network is unavailable.
         v = str(v or "local").strip().lower()
-        return v if v in {"local", "stock", "ai_image"} else "local"
+        return v if v in {"local", "stock", "ai_image", "ai_video"} else "local"
 
     @field_validator("ai_clip_min_duration_sec")
     @classmethod

@@ -59,6 +59,20 @@ def test_seam_ai_image_falls_back_to_local(monkeypatch, tmp_path):
     assert a is not None and a.provider == "local" and a.value == "#abcdef"
 
 
+def test_ai_video_no_keys_returns_none(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    from app.features.render.engine.visual.provider_ai_video import resolve_ai_video
+    assert resolve_ai_video(_req()) is None
+
+
+def test_seam_ai_video_falls_back_to_local(monkeypatch, tmp_path):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    a = resolve_scene_visual(_req(kind="color", value="#010203", tmp=str(tmp_path)), provider="ai_video")
+    assert a is not None and a.provider == "local" and a.value == "#010203"
+
+
 def test_seam_unknown_provider_falls_back_to_local(tmp_path):
     a = resolve_scene_visual(_req(tmp=str(tmp_path)), provider="midjourney")
     assert a is not None and a.provider == "local"

@@ -79,6 +79,7 @@ def test_content_field_validators_coerce():
     assert RenderRequest(content_background_kind=None, output_dir="").content_background_kind == "color"
     # engine.visual providers: local (offline) | stock | ai_image (CS-G, online).
     assert RenderRequest(content_visual_provider="ai_image", output_dir="").content_visual_provider == "ai_image"
+    assert RenderRequest(content_visual_provider="ai_video", output_dir="").content_visual_provider == "ai_video"
     assert RenderRequest(content_visual_provider="STOCK", output_dir="").content_visual_provider == "stock"
     assert RenderRequest(content_visual_provider="LOCAL", output_dir="").content_visual_provider == "local"
     # Unknown/future provider still coerces to local (never raises).
