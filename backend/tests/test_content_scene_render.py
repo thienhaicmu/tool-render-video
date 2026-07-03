@@ -257,6 +257,34 @@ def test_render_scene_word_by_word_burns_ass(tmp_path, monkeypatch):
     assert info["v"] and info["a"], "scene must have video + audio"
 
 
+# ── MED-3: word_by_word opt-in ───────────────────────────────────────────────
+
+@needs_ffmpeg
+def test_word_by_word_off_skips_whisper(tmp_path, monkeypatch):
+    """word_by_word=False must NOT invoke the Whisper word-alignment path, even
+    with CONTENT_WORD_BY_WORD on — the render uses the fast sentence SRT."""
+    audio = tmp_path / "n.mp3"
+    _make_silent_audio(str(audio), 2.0)
+
+    def _boom(*a, **k):
+        raise AssertionError("_build_word_ass must not run when word_by_word=False")
+    monkeypatch.setattr(csr, "_build_word_ass", _boom)
+    monkeypatch.setattr(csr, "_CONTENT_WORD_BY_WORD", True, raising=False)
+
+    scene = ContentScene(index=0, narration="hello there friends", reading_speed=1.0)
+    out = tmp_path / "o.mp4"
+    ok = csr.render_content_scene(
+        scene=scene, background_kind="color", background_value="#000000",
+        narration_audio_path=str(audio), narration_dur=2.0,
+        width=320, height=568, fps=30, sample_rate=48000,
+        out_path=str(out), work_dir=str(tmp_path / "w"),
+        subtitle_enabled=True, word_by_word=False,
+    )
+    assert ok and out.exists()
+    info = _probe(str(out))
+    assert info["v"] and info["a"]
+
+
 # ── CS-F: BGM mix + ducking ──────────────────────────────────────────────────
 
 @needs_ffmpeg

@@ -204,6 +204,71 @@ def test_run_content_uses_approved_plan_override(_content_sandbox, monkeypatch):
 
 
 @_NEEDS_FFMPEG
+def test_run_content_partial_success_status(_content_sandbox, monkeypatch):
+    """MED-1: when a scene fails but ≥1 succeeds the job is completed_with_errors
+    and result_json flags the partial success."""
+    from app.models.schemas import RenderRequest
+    import app.features.render.engine.pipeline.content_pipeline as cp
+    from app.services.bin_paths import get_ffmpeg_bin
+
+    job_id = str(uuid.uuid4())
+    output_dir = _content_sandbox["output_dir"]
+    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())
+
+    def _synth_fail_first(*, scene, job_id, out_path, **kwargs):
+        if getattr(scene, "index", 0) == 0:
+            return None  # first scene's TTS fails
+        # Surviving scene long enough that the concatenated output clears the QA
+        # 10 KB floor (a 2 s static clip is below it).
+        subprocess.run(
+            [get_ffmpeg_bin(), "-y", "-f", "lavfi",
+             "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+             "-t", "6", "-c:a", "libmp3lame", out_path],
+            capture_output=True, check=True, timeout=60,
+        )
+        return (out_path, 6.0)
+    monkeypatch.setattr(cp, "synthesize_scene_narration", _synth_fail_first)
+
+    payload = RenderRequest(
+        channel_code="content-e2e", render_format="content",
+        content_script="x", content_background_kind="color", content_background_value="#000000",
+        output_dir=str(output_dir / "content-partial"), aspect_ratio="9:16",
+        output_fps=30, add_subtitle=True, voice_enabled=False,
+    )
+    cp.run_content(job_id=job_id, payload=payload, resume_mode=False,
+                   load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None)
+
+    from app.db.jobs_repo import get_job
+    row = get_job(job_id)
+    assert row is not None and row["status"] == "completed_with_errors", row and row["status"]
+    result = json.loads(row.get("result_json") or "{}")
+    assert result.get("is_partial_success") is True
+    assert result.get("failed_parts") == [1]  # scene index 0 → part_no 1
+
+
+@_NEEDS_FFMPEG
+def test_run_content_honors_cancel(_content_sandbox, monkeypatch):
+    """MED-2: a cancelled job raises JobCancelledError and delivers no output."""
+    from app.models.schemas import RenderRequest
+    import app.features.render.engine.pipeline.content_pipeline as cp
+
+    job_id = str(uuid.uuid4())
+    output_dir = _content_sandbox["output_dir"]
+    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())
+    monkeypatch.setattr(cp, "synthesize_scene_narration", _fake_synth_factory())
+    monkeypatch.setattr(cp.cancel_registry, "is_cancelled", lambda jid: True)
+
+    payload = RenderRequest(
+        channel_code="content-e2e", render_format="content", content_script="x",
+        output_dir=str(output_dir / "content-cancel"), voice_enabled=False,
+    )
+    with pytest.raises(cp.cancel_registry.JobCancelledError):
+        cp.run_content(job_id=job_id, payload=payload, resume_mode=False,
+                       load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None)
+    assert not list((output_dir / "content-cancel").rglob("*.mp4"))
+
+
+@_NEEDS_FFMPEG
 def test_run_content_no_plan_fails_cleanly(_content_sandbox, monkeypatch):
     """AI returns None → run_content raises (process_render writes the failed
     row). Sacred Contract #3: no partial 'success' delivered."""

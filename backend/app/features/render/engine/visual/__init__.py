@@ -26,8 +26,8 @@ provider always yields an asset (falling back to opaque black on bad input).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Callable, Optional
 
 logger = logging.getLogger("app.render.visual")
 
@@ -55,6 +55,10 @@ class SceneVisualRequest:
     fps: float
     duration_sec: float
     work_dir: str
+    # MED-2: optional "is this job cancelled?" probe. A slow online provider
+    # (e.g. Veo, minutes long) polls this to abort promptly on cancel. None =
+    # no cancellation wiring (local + tests).
+    cancel_check: Optional[Callable[[], bool]] = field(default=None)
 
 
 @dataclass

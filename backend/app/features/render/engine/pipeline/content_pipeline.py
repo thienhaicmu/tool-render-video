@@ -236,6 +236,18 @@ def run_content(
         _set_stage(JobStage.RENDERING, 40, f"Rendering {total_parts} scene(s)")
         scene_clips: list[str] = []
         failed_parts: list[dict] = []
+
+        # MED-2: a cheap cancel probe threaded into the slow online providers
+        # (Veo polls it) + checked between each scene sub-step, so a cancelled job
+        # stops promptly instead of finishing a minutes-long generation.
+        def _cancel_cb() -> bool:
+            return cancel_registry.is_cancelled(job_id)
+
+        # MED-3: word-by-word subtitles are opt-in via the existing highlight_per_word
+        # flag (the FE Content Studio defaults it on). Off → the faster sentence
+        # SRT path, so a content render doesn't silently pay the Whisper cost.
+        _word_by_word = bool(getattr(payload, "highlight_per_word", False))
+
         for i, scene in enumerate(scenes, start=1):
             if cancel_registry.is_cancelled(job_id):
                 raise cancel_registry.JobCancelledError()
@@ -258,6 +270,8 @@ def run_content(
                          f"Content scene {i} TTS failed — skipped", kind="warning")
                 continue
             audio_path, ndur = narr
+            if _cancel_cb():  # MED-2: TTS may have taken a while
+                raise cancel_registry.JobCancelledError()
 
             # Visual asset resolution:
             #  - CS-E: an explicit per-scene override (Asset Manager) WINS and is
@@ -283,6 +297,7 @@ def run_content(
                     prompt=(scene.visual_prompt or scene.visual_hint or ""),
                     width=width, height=height,
                     fps=fps, duration_sec=ndur, work_dir=str(scenes_dir),
+                    cancel_check=_cancel_cb,
                 ),
                 provider=_prov,
             )
@@ -291,6 +306,8 @@ def run_content(
                 upsert_job_part(job_id, i, part_name, JobPartStage.FAILED,
                                 progress_percent=0, message="visual resolve failed")
                 continue
+            if _cancel_cb():  # MED-2: an online provider may have taken minutes
+                raise cancel_registry.JobCancelledError()
 
             scene_out = str(scenes_dir / f"{part_name}.mp4")
             # Subtitle style: per-scene override → plan-level → payload default.
@@ -304,7 +321,7 @@ def run_content(
                 narration_audio_path=audio_path, narration_dur=ndur,
                 width=width, height=height, fps=fps, sample_rate=_SAMPLE_RATE,
                 out_path=scene_out, work_dir=str(scenes_dir), subtitle_enabled=add_subtitle,
-                subtitle_style=_sub_style,
+                subtitle_style=_sub_style, word_by_word=_word_by_word,
                 # Ken Burns on an image background: user-toggled, OR default-on for
                 # a provider-fetched/generated image (CS-G) so it isn't a static still.
                 ken_burns=asset.kind == "image" and (
@@ -411,11 +428,16 @@ def run_content(
             "is_partial_success": bool(failed_parts),
             "ai_director": {"enabled": True, "mode": "content"},
         }
+        # MED-1: a partial success (some scenes failed but ≥1 delivered) reports
+        # "completed_with_errors" so the UI/history flag it — matching the clips /
+        # recap convention. Job STAGE stays DONE (Sacred Contract #4).
+        _terminal_status = "completed_with_errors" if failed_parts else "completed"
         upsert_job(
-            job_id, "render", effective_channel, "completed", payload.model_dump(), _result,
+            job_id, "render", effective_channel, _terminal_status, payload.model_dump(), _result,
             stage=JobStage.DONE, progress_percent=100,
             message=(
                 f"Content complete: {len(scene_clips)}/{total_parts} scenes, {_final_dur:.0f}s"
+                + (f" ({len(failed_parts)} failed)" if failed_parts else "")
             ),
         )
         _emit_render_event(

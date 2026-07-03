@@ -45,6 +45,7 @@ interface Config {
   ttsEngine: typeof TTS_ENGINES[number]
   subEnabled: boolean
   subStyle: string
+  wordByWord: boolean
   bgmPath: string
   visualProvider: 'local' | 'stock' | 'ai_image' | 'ai_video'
   outputDir: string
@@ -54,7 +55,8 @@ interface Config {
 const DEFAULT_CFG: Config = {
   ratio: 'r916', targetDuration: 90, bgKind: 'color', bgColor: '#101820', bgAssetPath: '',
   voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
-  subEnabled: true, subStyle: 'tiktok_bounce_v1', bgmPath: '', visualProvider: 'local', outputDir: '', tone: '',
+  subEnabled: true, subStyle: 'tiktok_bounce_v1', wordByWord: true,
+  bgmPath: '', visualProvider: 'local', outputDir: '', tone: '',
 }
 
 export function ContentStudio() {
@@ -93,6 +95,9 @@ export function ContentStudio() {
       target_duration: cfg.targetDuration,
       add_subtitle: cfg.subEnabled,
       subtitle_style: cfg.subStyle,
+      // Word-by-word (Whisper-aligned) subtitles are opt-in — off = faster
+      // sentence-level subtitles (no per-scene Whisper pass).
+      highlight_per_word: cfg.subEnabled && cfg.wordByWord ? true : undefined,
       content_bgm_path: cfg.bgmPath.trim() || undefined,
       voice_language: cfg.voiceLang,
       voice_gender: cfg.voiceGender,
@@ -274,6 +279,12 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
                 <select style={S.input} value={cfg.subStyle} onChange={(e) => setCfgKey('subStyle', e.target.value)}>
                   {SUB_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
+              )}
+              {cfg.subEnabled && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2, #ccc)' }}>
+                  <input type="checkbox" checked={cfg.wordByWord} onChange={(e) => setCfgKey('wordByWord', e.target.checked)} />
+                  {vi ? 'Chữ động (Whisper — chậm hơn)' : 'Word-by-word (Whisper — slower)'}
+                </label>
               )}
             </div>
           </Field>

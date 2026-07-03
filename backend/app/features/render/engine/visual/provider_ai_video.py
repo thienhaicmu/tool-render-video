@@ -32,9 +32,10 @@ _TIMEOUT = int(os.getenv("CONTENT_VEO_TIMEOUT", "300"))
 _POLL = max(2, int(os.getenv("CONTENT_VEO_POLL", "10")))
 
 
-def _veo_generate_to(prompt: str, w: int, h: int, out_path: str) -> bool:
+def _veo_generate_to(prompt: str, w: int, h: int, out_path: str, cancel_check=None) -> bool:
     """Generate a Veo clip for ``prompt`` → ``out_path``. True on success, False on
-    no key / no SDK / timeout / error. Never raises."""
+    no key / no SDK / timeout / cancel / error. Never raises. ``cancel_check`` (if
+    given) is polled each tick so a cancelled job aborts the minutes-long op."""
     try:
         key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
         if not key:
@@ -54,6 +55,9 @@ def _veo_generate_to(prompt: str, w: int, h: int, out_path: str) -> bool:
         op = client.models.generate_videos(model=model, prompt=prompt, config=config)
         waited = 0
         while not getattr(op, "done", False) and waited < _TIMEOUT:
+            if callable(cancel_check) and cancel_check():
+                logger.info("visual.ai_video: cancelled — aborting Veo poll")
+                return False
             time.sleep(_POLL)
             waited += _POLL
             try:
@@ -102,7 +106,7 @@ def resolve_ai_video(request: SceneVisualRequest) -> Optional[SceneVisualAsset]:
         cached = visual_cache_dir() / f"{cache_key('ai_video', prompt, w, h)}.mp4"
         if cached.exists() and cached.stat().st_size > 0:
             return SceneVisualAsset(kind="video", value=str(cached), provider="ai_video")
-        if not _veo_generate_to(prompt, w, h, str(cached)):
+        if not _veo_generate_to(prompt, w, h, str(cached), cancel_check=getattr(request, "cancel_check", None)):
             return None
         if not (cached.exists() and cached.stat().st_size > 0):
             return None

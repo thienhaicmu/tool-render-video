@@ -266,6 +266,7 @@ def render_content_scene(
     subtitle_enabled: bool = True,
     subtitle_style: str = "",
     ken_burns: bool = False,
+    word_by_word: bool = True,
 ) -> bool:
     """Compose one Content-Mode scene → ``out_path``. Returns True on success.
 
@@ -312,7 +313,7 @@ def render_content_scene(
         want_ass = False
         want_srt = False
         if subtitle_enabled:
-            if _CONTENT_WORD_BY_WORD:
+            if word_by_word and _CONTENT_WORD_BY_WORD:
                 want_ass = _build_word_ass(
                     narration_audio_path, ass_path, int(width), int(height),
                     subtitle_style, _CONTENT_WHISPER_MODEL, pause_before,
