@@ -195,9 +195,19 @@ export interface RenderRequest {
   // Vision v2 — surviving wired fields
   target_duration?: number
   output_count?: number
-  render_format?: 'clips' | 'recap'
+  render_format?: 'clips' | 'recap' | 'content'
   video_type?: string
   hook_strength?: string
+
+  // Content Mode (render_format="content"): Script → AI narration → Video.
+  // v1 visual provider = 'local' (user-chosen background: color/image/video).
+  // All optional + inert by default so existing clips/recap payloads are
+  // unaffected (Sacred Contract #2).
+  content_script?: string
+  content_background_kind?: 'color' | 'image' | 'video'
+  content_background_value?: string
+  content_bgm_path?: string
+  content_visual_provider?: string
 
   // Architecture-review C.1 Phase 1 (2026-06-30): Clip-path feature flag
   // for the Comprehension stage. When true AND render_format === 'clips',

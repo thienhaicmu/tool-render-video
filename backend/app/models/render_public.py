@@ -150,8 +150,13 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # New vision (v2)
     "target_duration", "output_count", "video_type",
     "hook_strength",
-    # Recap/Review mode ("clips" | "recap")
+    # Recap/Review mode ("clips" | "recap" | "content")
     "render_format",
+    # Content Mode (render_format="content", 2026-07-03) — Script → AI narration
+    # → Video. The user-facing knobs: the script + the chosen background + the
+    # visual provider selector. All inert by default (Sacred Contract #2).
+    "content_script", "content_background_kind", "content_background_value",
+    "content_bgm_path", "content_visual_provider",
     # Architecture-review C.1 Phase 1 (2026-06-30) — feature flag for the
     # Clip-path Comprehension stage. Phase 1 ships the field only; Phase 2/3
     # wire it through render_pipeline.py + providers + prompts.

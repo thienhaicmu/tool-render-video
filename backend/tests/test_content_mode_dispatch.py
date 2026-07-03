@@ -82,14 +82,14 @@ def test_content_field_validators_coerce():
     assert RenderRequest(content_visual_provider="LOCAL", output_dir="").content_visual_provider == "local"
 
 
-def test_content_fields_are_be_only_not_public():
-    # Sacred Contract / MT-3: content fields are BE-only until the Content-tab
-    # UI phase adds them to the FE wire surface together with api.ts.
+def test_content_fields_are_fe_facing():
+    # Phase 4 (MT-3 coordinated migration): the 5 content fields are promoted to
+    # the FE wire surface together with api.ts so the Content tab can send them.
     from app.models.render_public import FE_FACING_FIELDS, BE_ONLY_FIELDS
     for f in ("content_script", "content_background_kind", "content_background_value",
               "content_bgm_path", "content_visual_provider"):
-        assert f in BE_ONLY_FIELDS, f"{f} must be BE-only in Phase 3"
-        assert f not in FE_FACING_FIELDS, f"{f} must NOT be on the FE wire yet"
+        assert f in FE_FACING_FIELDS, f"{f} must be FE-facing after Phase 4"
+        assert f not in BE_ONLY_FIELDS, f"{f} must NOT also be BE-only (partition)"
 
 
 # ── engine.visual provider seam ──────────────────────────────────────────────
