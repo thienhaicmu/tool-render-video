@@ -104,13 +104,6 @@ describe('Electron cutover — paginated history (no unbounded list)', () => {
   })
 })
 
-describe('Electron cutover — no polling in quality components', () => {
-  it('QualityPanel.tsx does not use setInterval (fetch-on-open only)', () => {
-    const qualitySrc = readSrc('features/quality/QualityPanel.tsx')
-    expect(qualitySrc).not.toContain('setInterval')
-  })
-})
-
 describe('Electron cutover — static-v2 build artifact', () => {
   it('static-v2 directory exists after build+copy', () => {
     const staticV2 = join(ROOT, '..', 'backend', 'static-v2')

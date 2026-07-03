@@ -101,7 +101,12 @@ export const useJobsStore = create<JobsStore>((set, get) => ({
     if (next === 1 && get()._intervalId === null) {
       // First subscriber — kick off an immediate fetch + arm the interval.
       _fetchAndUpdate(set)
-      const id = setInterval(() => { _fetchAndUpdate(set) }, POLL_MS)
+      // WP5.4 — skip the poll while the tab is hidden (no point fetching job
+      // history the user can't see); the next tick after refocus resumes it.
+      const id = setInterval(() => {
+        if (typeof document !== 'undefined' && document.hidden) return
+        _fetchAndUpdate(set)
+      }, POLL_MS)
       set({ _intervalId: id })
     }
   },
