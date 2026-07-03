@@ -103,11 +103,11 @@
   --ease-spring:      cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* ── Layout ───────────────────────────────────────────────────────────── */
-  /* P2.1 single-shell: the nav rail is slim (icon-only) everywhere —
-     including Studio — so the primary navigation is never hidden. The
-     old 220px labeled sidebar is gone. */
-  --sidebar-width:           56px;
-  --sidebar-collapsed-width: 56px;
+  /* P2.1 single-shell: the nav rail is visible everywhere. WP2 widened it to
+     72px so each icon carries a visible label (discoverability) instead of a
+     tooltip-only glyph. */
+  --sidebar-width:           72px;
+  --sidebar-collapsed-width: 72px;
   --inspector-width:         320px;
   --topbar-height:           48px;
   --step-strip-height:       40px;
@@ -438,10 +438,14 @@
   --warn:        var(--status-warning);
   --fail:        var(--status-error);
 
-  /* Fonts */
-  --fh:          'Rajdhani', sans-serif;
-  --fb:          'Inter', sans-serif;
-  --fo:          'Orbitron', monospace;
+  /* Fonts — P1/WP0.1 (2026-07-03): the prototype HUD faces (Rajdhani /
+     Orbitron) read as "gamer overlay", not premium. --fh/--fo now point at
+     the semantic display face (Space Grotesk); --fb stays the UI face
+     (Inter). Numerals that need alignment set font-variant-numeric:tabular
+     at the call site. */
+  --fh:          var(--font-display);
+  --fb:          var(--font-ui);
+  --fo:          var(--font-display);
 }
 
 [data-theme="light"] {
