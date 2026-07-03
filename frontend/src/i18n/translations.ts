@@ -5,8 +5,10 @@ export const translations = {
     // Navigation
     nav_home: 'Home',
     nav_studio: 'Studio',
+    nav_queue: 'Queue',
     nav_library: 'Library',
     nav_download: 'Download',
+    nav_editor: 'Editor',
     nav_publish: 'Publish',
     nav_settings: 'Settings',
     nav_lang_toggle: 'VI',
@@ -398,8 +400,10 @@ export const translations = {
     // Navigation
     nav_home: 'Trang chủ',
     nav_studio: 'Studio',
+    nav_queue: 'Hàng đợi',
     nav_library: 'Thư viện',
     nav_download: 'Tải xuống',
+    nav_editor: 'Chỉnh sửa',
     nav_publish: 'Xuất bản',
     nav_settings: 'Cài đặt',
     nav_lang_toggle: 'EN',
