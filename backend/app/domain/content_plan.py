@@ -58,6 +58,11 @@ _READING_SPEED_DEFAULT = 1.0
 # Pause clamp (seconds) — a single inter-scene pause should never dwarf the scene.
 _PAUSE_MAX = 5.0
 
+# Rough narration reading rate at reading_speed=1.0, used only to ESTIMATE a
+# scene's spoken seconds when the AI omitted ``est_duration_sec``. Deliberately
+# language-agnostic + conservative; the engine always refines from real TTS.
+_CHARS_PER_SEC_AT_1X = 15.0
+
 # Allowed scene roles (free-form tolerated, but normalised toward this set).
 SCENE_ROLES = ("hook", "intro", "explain", "example", "conclusion", "cta")
 
@@ -163,6 +168,179 @@ class ContentPlan:
 
     def total_narration_chars(self) -> int:
         return sum(len((s.narration or "")) for s in self.scenes)
+
+    def _scene_spoken_sec(self, scene: "ContentScene") -> float:
+        """Best estimate of a scene's SPOKEN (non-pause) seconds.
+
+        Trusts the AI's ``est_duration_sec`` when present; otherwise estimates
+        from narration length at the scene's reading speed
+        (``_CHARS_PER_SEC_AT_1X`` chars/sec at speed 1.0). Never raises."""
+        try:
+            est = float(getattr(scene, "est_duration_sec", 0.0) or 0.0)
+            if est > 0:
+                return est
+            chars = len((getattr(scene, "narration", "") or ""))
+            spd = float(getattr(scene, "reading_speed", 1.0) or 1.0) or 1.0
+            if chars <= 0:
+                return 0.0
+            return (chars / _CHARS_PER_SEC_AT_1X) / spd
+        except Exception:
+            return 0.0
+
+    def estimated_total_sec(self) -> float:
+        """Estimated final length: spoken time (all scenes) + inter-scene pauses.
+        Pure estimate; the engine refines spoken time from real TTS. Never raises."""
+        try:
+            spoken = sum(self._scene_spoken_sec(s) for s in self.scenes)
+            pauses = sum(
+                max(0.0, float(getattr(s, "pause_before", 0.0) or 0.0))
+                + max(0.0, float(getattr(s, "pause_after", 0.0) or 0.0))
+                for s in self.scenes
+            )
+            return spoken + pauses
+        except Exception:
+            return 0.0
+
+    def fit_to_target_duration(self, target_sec: float, tolerance: float = 0.15) -> dict:
+        """Deterministically nudge the plan toward ``target_sec`` WITHOUT dropping
+        any scene (content is narrative — every scene carries meaning, unlike a
+        recap's redundant coverage).
+
+        Lever: uniformly scale every scene's ``reading_speed`` (clamped
+        ``_READING_SPEED_MIN``–``_READING_SPEED_MAX``) so the summed spoken time
+        + fixed pauses land near the target. Faster speed → shorter video, and
+        vice-versa. ``est_duration_sec`` is recomputed from the applied speed so
+        the persisted plan stays coherent; ``total_target_sec`` is refreshed.
+
+        Mirrors the SPIRIT of ``RecapPlan.trim_to_duration_band``
+        (deterministic, no LLM trust, pure mutation, never raises) but is
+        SCALE-based not TRIM-based, and non-destructive.
+
+        No-op when the target is unknown, the plan is empty, there is no spoken
+        content, or the current estimate is already within ``tolerance`` of the
+        target. Returns metrics: ``{changed, before_sec, after_sec, target_sec,
+        ratio, applied_scale, in_tolerance, scaled_scenes}``."""
+        result = {
+            "changed": False, "before_sec": 0.0, "after_sec": 0.0,
+            "target_sec": round(max(0.0, float(target_sec or 0.0)), 1),
+            "ratio": None, "applied_scale": None, "in_tolerance": None,
+            "scaled_scenes": 0,
+        }
+        try:
+            target = float(target_sec or 0.0)
+            if target <= 0 or not self.scenes:
+                return result
+            spoken_total = sum(self._scene_spoken_sec(s) for s in self.scenes)
+            pause_total = sum(
+                max(0.0, float(getattr(s, "pause_before", 0.0) or 0.0))
+                + max(0.0, float(getattr(s, "pause_after", 0.0) or 0.0))
+                for s in self.scenes
+            )
+            before = spoken_total + pause_total
+            result["before_sec"] = round(before, 1)
+            if spoken_total <= 0:
+                return result  # nothing to scale (all pause / empty)
+            result["ratio"] = round(before / target, 3) if target > 0 else None
+            # Already close enough? (measured on the full estimate incl. pauses)
+            if abs(before - target) <= tolerance * target:
+                result["after_sec"] = round(before, 1)
+                result["in_tolerance"] = True
+                return result
+            # Desired spoken time = target minus the fixed pauses. Ratio<1 → need
+            # to SPEED UP (shorten); ratio>1 → slow down (lengthen).
+            desired_spoken = target - pause_total
+            if desired_spoken <= 0:
+                # Pauses alone exceed the target — compress spoken as much as the
+                # clamp allows (max speed) and report out-of-tolerance.
+                ratio = _READING_SPEED_MIN / _READING_SPEED_MAX  # smallest achievable
+            else:
+                ratio = desired_spoken / spoken_total
+            result["applied_scale"] = round(ratio, 3)
+            scaled = 0
+            for s in self.scenes:
+                try:
+                    old_speed = float(getattr(s, "reading_speed", 1.0) or 1.0) or 1.0
+                    # new_speed = old_speed / ratio (shorter when ratio<1 ⇒ faster)
+                    new_speed = old_speed / ratio if ratio > 0 else old_speed
+                    new_speed = min(_READING_SPEED_MAX, max(_READING_SPEED_MIN, new_speed))
+                    if abs(new_speed - old_speed) < 1e-6:
+                        continue
+                    # Recompute est_duration_sec coherently from the applied speed.
+                    old_spoken = self._scene_spoken_sec(s)
+                    actual_ratio = old_speed / new_speed if new_speed > 0 else 1.0
+                    s.reading_speed = round(new_speed, 3)
+                    s.est_duration_sec = round(max(0.0, old_spoken * actual_ratio), 3)
+                    scaled += 1
+                except Exception:
+                    continue
+            after = self.estimated_total_sec()
+            result["after_sec"] = round(after, 1)
+            result["scaled_scenes"] = scaled
+            result["in_tolerance"] = abs(after - target) <= tolerance * target
+            result["changed"] = scaled > 0
+            if result["changed"]:
+                self.total_target_sec = round(after, 1)
+            return result
+        except Exception:
+            return result
+
+    def narration_audit(
+        self,
+        cps: float = _CHARS_PER_SEC_AT_1X,
+        overload_ratio: float = 1.3,
+        sparse_ratio: float = 0.6,
+    ) -> dict:
+        """Deterministic per-scene narration/timing sanity check (no LLM, never
+        raises). For each scene with an AI-provided ``est_duration_sec``, compare
+        the narration length to the character CAPACITY of that window at the
+        scene's reading speed (``cps × reading_speed × est_duration_sec``):
+
+          load = narration_chars / capacity_chars
+            · load > ``overload_ratio``  → "overloaded" (TTS will rush / overflow
+              the scene — the AI under-estimated the time it needs)
+            · load < ``sparse_ratio``    → "sparse" (awkward silence — over-estimated)
+            · otherwise                  → "ok"
+
+        Scenes without an estimate (or empty narration) are reported "no_estimate"
+        and excluded from the ``weak`` verdict. ``weak`` is True when ANY scene is
+        overloaded, or more than 40% of rated scenes are sparse. Diagnostic only —
+        mirrors recap's coverage check; the caller emits it as an event so the
+        operator sees a weak plan without the render being blocked."""
+        out: dict = {
+            "weak": False, "rated": 0, "overloaded": 0, "sparse": 0, "scenes": [],
+        }
+        try:
+            n_over = n_sparse = n_rated = 0
+            for i, s in enumerate(self.scenes, start=1):
+                chars = len((getattr(s, "narration", "") or "").strip())
+                est = float(getattr(s, "est_duration_sec", 0.0) or 0.0)
+                spd = float(getattr(s, "reading_speed", 1.0) or 1.0) or 1.0
+                if est <= 0 or chars <= 0:
+                    out["scenes"].append({"n": i, "chars": chars, "load": None, "flag": "no_estimate"})
+                    continue
+                capacity = cps * spd * est
+                load = (chars / capacity) if capacity > 0 else None
+                if load is None:
+                    flag = "no_estimate"
+                elif load > overload_ratio:
+                    flag = "overloaded"; n_over += 1; n_rated += 1
+                elif load < sparse_ratio:
+                    flag = "sparse"; n_sparse += 1; n_rated += 1
+                else:
+                    flag = "ok"; n_rated += 1
+                out["scenes"].append({
+                    "n": i, "chars": chars,
+                    "capacity_chars": round(capacity) if capacity else 0,
+                    "load": round(load, 2) if load is not None else None,
+                    "flag": flag,
+                })
+            out["rated"] = n_rated
+            out["overloaded"] = n_over
+            out["sparse"] = n_sparse
+            out["weak"] = bool(n_over > 0 or (n_rated > 0 and n_sparse / n_rated > 0.4))
+            return out
+        except Exception:
+            return out
 
     # ── Serialisation ────────────────────────────────────────────────────
 

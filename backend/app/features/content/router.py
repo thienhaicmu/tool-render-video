@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import uuid
 from pathlib import Path
@@ -89,7 +90,91 @@ def generate_content_plan(req: ContentPlanRequest) -> dict:
     )
     if plan is None or plan.scene_count() == 0:
         raise HTTPException(status_code=502, detail="AI Content Director returned no usable plan")
-    return {"plan": json.loads(plan.to_json())}
+    # Deterministic duration fit so the Review screen shows (and lets the user
+    # edit) the plan that will actually be rendered. Same env kill-switch as the
+    # render path (content_pipeline). Best-effort — never fails the request.
+    _fit = None
+    if os.getenv("CONTENT_FIT_DURATION", "1") == "1":
+        try:
+            _f = plan.fit_to_target_duration(float(req.target_duration or 0))
+            if _f.get("changed"):
+                _fit = _f
+        except Exception:
+            _fit = None
+    _audit = None
+    try:
+        _a = plan.narration_audit()
+        if _a.get("rated"):
+            _audit = _a
+    except Exception:
+        _audit = None
+    return {"plan": json.loads(plan.to_json()), "duration_fit": _fit, "narration_audit": _audit}
+
+
+class ContentEstimateRequest(BaseModel):
+    plan: Optional[dict] = None          # an already-generated ContentPlan
+    script: str = ""                     # or a raw script to plan-then-estimate
+    target_duration: int = 90
+    voice_language: str = "vi-VN"
+    tone: str = ""
+    visual_provider: str = "local"       # job-level content_visual_provider
+    budget_cap: float = 0.0              # CONTENT_AI_BUDGET-equivalent (0 = unlimited)
+    ai_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+
+
+@router.post("/estimate")
+def estimate_content_cost(req: ContentEstimateRequest) -> dict:
+    """Preflight AI cost/provider estimate BEFORE rendering (Content uses paid
+    visual providers). Runs the SAME deterministic decision tree + budget guard
+    the render uses (``decide_provider`` / ``BudgetTracker``) read-only over the
+    plan — no render, no paid API call. Accepts an existing ``plan`` or a
+    ``script`` (planned first). Returns per-scene provider choices + estimated
+    paid cost. 422 when neither plan nor script is usable."""
+    from app.domain.content_plan import ContentPlan
+    from app.features.render.engine.visual.decision import (
+        BudgetTracker, decide_provider, estimate_cost,
+    )
+
+    plan = ContentPlan.from_json(json.dumps(req.plan)) if req.plan else None
+    if plan is None or plan.scene_count() == 0:
+        script = (req.script or "").strip()
+        if not script:
+            raise HTTPException(status_code=422, detail="plan or script is required")
+        from app.core import config as _cfg
+        from app.features.render.engine.pipeline.llm_stage import _resolve_api_key
+        provider = (req.ai_provider or "").strip().lower() or getattr(_cfg, "AI_PROVIDER_DEFAULT", "gemini")
+        api_key, _ = _resolve_api_key(req, provider)
+        plan = select_content_plan(
+            provider=provider, script=script,
+            target_duration_sec=float(req.target_duration or 90),
+            target_language=(req.voice_language or "vi-VN"), tone=(req.tone or ""),
+            api_key=api_key, model=req.llm_model,
+            resolve_key=lambda _p: _resolve_api_key(req, _p)[0],
+        )
+    if plan is None or plan.scene_count() == 0:
+        raise HTTPException(status_code=502, detail="no usable plan to estimate")
+
+    budget = BudgetTracker(float(req.budget_cap or 0))
+    per_scene: list[dict] = []
+    for i, s in enumerate(plan.scenes, start=1):
+        prov = decide_provider(
+            s, req.visual_provider, budget,
+            float(getattr(s, "est_duration_sec", 0.0) or 0.0),
+        )
+        per_scene.append({"scene": i, "provider": prov, "cost": round(estimate_cost(prov), 3)})
+    by_provider: dict[str, int] = {}
+    for e in per_scene:
+        by_provider[e["provider"]] = by_provider.get(e["provider"], 0) + 1
+    return {
+        "estimated_cost": round(budget.spent, 3),
+        "budget_cap": budget.cap,
+        "scenes": plan.scene_count(),
+        "by_provider": by_provider,
+        "per_scene": per_scene,
+        "estimated_duration_sec": round(plan.estimated_total_sec(), 1),
+        "narration_audit": plan.narration_audit(),
+    }
 
 
 # ── CS-D: per-scene narration preview / regenerate ───────────────────────────

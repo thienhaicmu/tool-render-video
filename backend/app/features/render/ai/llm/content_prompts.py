@@ -320,3 +320,62 @@ def build_content_plan_prompt(
         bible_block=_bible_block(bible),
     )
     return _SYSTEM_CONTENT, user
+
+
+# ── Content per-scene narration refine (opt-in, CONTENT_REFINE_NARRATION) ─────
+# A focused SECOND pass that re-authors the narration for the whole scene set at
+# once, so voice-over flows scene→scene and each scene's length matches its
+# planned duration. Mirrors the recap per-episode narration refine. Returns the
+# same {"narration":[{index,text}]} shape → reuse parse_episode_narration_response.
+
+_SYSTEM_CONTENT_NARRATION = (
+    "You are a senior scriptwriter polishing the voice-over of a short-form "
+    "video. You are given the ordered scenes of ONE video (topic, tone, each "
+    "scene's role, planned seconds and current narration). Rewrite ONLY the "
+    "narration text so the whole script flows as ONE continuous piece: smooth "
+    "transitions between scenes, no repetition, a strong hook first and a clear "
+    "close last, and each scene's length roughly matching its planned seconds "
+    "(~15 characters per second at normal pace). Keep the SAME number of scenes "
+    "and the SAME indexes — never add, drop, split or merge scenes. Write in the "
+    "requested language only. Return STRICT JSON: "
+    '{"narration":[{"index":<int>,"text":"<rewritten narration>"}, ...]} '
+    "with one entry per input scene, and nothing else."
+)
+
+
+def build_content_narration_refine_prompt(
+    scenes: list,
+    topic: str = "",
+    tone: str = "",
+    target_language: str = "vi-VN",
+) -> "tuple[str, str]":
+    """Return (system, user) to re-author narration for a Content plan's scenes.
+
+    ``scenes`` is a list of dicts ``{index, role, seconds, narration}`` built by
+    the caller from ContentScene. Every field is inserted as a plain string (not
+    via ``str.format`` on the values), so arbitrary narration text — including
+    braces — is format-safe. Never raises."""
+    lang_name = _LANG_NAMES.get(target_language, target_language or "the target language")
+    tone_clause = (tone or "").strip() or "engaging / natural"
+    header_lines = [
+        f"Topic: {(topic or '').strip() or '(unspecified)'}",
+        f"Tone: {tone_clause}",
+        f"Language: {lang_name}",
+        "",
+        "Scenes (rewrite each scene's narration, keep index + count):",
+    ]
+    body: list[str] = []
+    for sc in scenes or []:
+        try:
+            idx = int(sc.get("index"))
+        except (TypeError, ValueError):
+            continue
+        role = str(sc.get("role", "") or "").strip() or "scene"
+        try:
+            secs = float(sc.get("seconds", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            secs = 0.0
+        narration = str(sc.get("narration", "") or "").strip()
+        body.append(f"[{idx}] role={role} target={secs:.0f}s\ncurrent: {narration}")
+    user = "\n".join(header_lines) + "\n\n" + "\n\n".join(body)
+    return _SYSTEM_CONTENT_NARRATION, user

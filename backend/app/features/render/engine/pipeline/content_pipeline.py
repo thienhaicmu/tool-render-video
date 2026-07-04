@@ -210,6 +210,111 @@ def run_content(
             )
         if plan is None or plan.scene_count() == 0:
             raise RuntimeError("Content: no usable content plan")
+
+        # Content per-scene narration refine (opt-in, CONTENT_REFINE_NARRATION=1
+        # — default OFF because it costs +1 LLM call). A focused second pass
+        # re-authors the whole scene set's narration so voice-over flows
+        # scene→scene and each scene's length matches its planned seconds.
+        # Best-effort: any failure keeps the original narration (Sacred #3 spirit).
+        # Runs BEFORE the duration fit so the fit measures the final narration.
+        if os.getenv("CONTENT_REFINE_NARRATION", "0") == "1":
+            try:
+                from app.features.render.ai.llm import select_content_narration
+                from app.core import config as _cfg2
+                from app.features.render.engine.pipeline.llm_stage import _resolve_api_key
+                _prov = (getattr(payload, "ai_provider", "") or "").strip().lower() \
+                    or getattr(_cfg2, "AI_PROVIDER_DEFAULT", "gemini")
+                _key, _ = _resolve_api_key(payload, _prov)
+                _scene_payload = [
+                    {
+                        "index": i, "role": (s.role or ""),
+                        "seconds": float(getattr(s, "est_duration_sec", 0.0) or 0.0),
+                        "narration": (s.narration or ""),
+                    }
+                    for i, s in enumerate(plan.scenes)
+                ]
+                _refined = select_content_narration(
+                    provider=_prov, scenes=_scene_payload,
+                    topic=(plan.topic or ""), tone=(plan.tone or getattr(payload, "rewrite_tone", "") or ""),
+                    target_language=language, api_key=_key,
+                    model=getattr(payload, "llm_model", None),
+                )
+                if _refined:
+                    _n_refined = 0
+                    for i, s in enumerate(plan.scenes):
+                        _txt = _refined.get(i)
+                        if _txt and _txt.strip():
+                            s.narration = _txt.strip()
+                            _n_refined += 1
+                    if _n_refined:
+                        _job_log(effective_channel, job_id,
+                                 f"Content: narration refined ({_n_refined} scene(s))")
+                        _emit_render_event(
+                            channel_code=effective_channel, job_id=job_id,
+                            event="content.narration.refined", level="INFO",
+                            message=f"Per-scene narration refined ({_n_refined} scene(s))",
+                            step="render.content", context={"scenes_refined": _n_refined},
+                        )
+            except Exception as _refine_exc:
+                logger.warning("content: narration refine failed (non-fatal): %s", _refine_exc)
+
+        # Deterministic duration fit (mirrors recap's trim_to_duration_band in
+        # spirit): the AI's est_duration_sec often drifts from the requested
+        # target. Uniformly scale reading_speed (clamped) so the video lands near
+        # target WITHOUT dropping any narrative scene. Non-destructive, never
+        # raises, env kill-switch CONTENT_FIT_DURATION (default ON). Runs BEFORE
+        # persist + part seeding so narration/TTS use the fitted speeds.
+        if os.getenv("CONTENT_FIT_DURATION", "1") == "1":
+            try:
+                _target = float(getattr(payload, "target_duration", 0) or 0)
+                _fit = plan.fit_to_target_duration(_target)
+                if _fit.get("changed"):
+                    _job_log(
+                        effective_channel, job_id,
+                        f"Content: fitted to target — {_fit['before_sec']:.0f}s → "
+                        f"{_fit['after_sec']:.0f}s (target {_fit['target_sec']:.0f}s, "
+                        f"speed ×{_fit.get('applied_scale')}, {_fit['scaled_scenes']} scene(s))",
+                    )
+                    _emit_render_event(
+                        channel_code=effective_channel, job_id=job_id,
+                        event="content.timing.fit", level="INFO",
+                        message=(
+                            f"Content fitted to target: {_fit['before_sec']:.0f}s → "
+                            f"{_fit['after_sec']:.0f}s"
+                        ),
+                        step="render.content", context=_fit,
+                    )
+            except Exception as _fit_exc:
+                logger.warning("content: duration fit failed (non-fatal): %s", _fit_exc)
+
+        # Deterministic narration/timing audit (diagnostic only — mirrors recap's
+        # coverage check). Flags scenes whose narration is too long ("overloaded"
+        # → TTS rushes/overflows) or too short ("sparse" → silence) for their
+        # planned duration. Never blocks the render; emits a WS event + logs a
+        # warning so a weak plan is visible. Runs on the FITTED plan.
+        try:
+            _audit = plan.narration_audit()
+            _emit_render_event(
+                channel_code=effective_channel, job_id=job_id,
+                event="content.narration.audit",
+                level=("WARNING" if _audit.get("weak") else "INFO"),
+                message=(
+                    f"Narration audit: {_audit['overloaded']} overloaded, "
+                    f"{_audit['sparse']} sparse of {_audit['rated']} rated scene(s)"
+                    + (" — weak plan" if _audit.get("weak") else "")
+                ),
+                step="render.content", context=_audit,
+            )
+            if _audit.get("weak"):
+                _job_log(
+                    effective_channel, job_id,
+                    f"content_narration_weak overloaded={_audit['overloaded']} "
+                    f"sparse={_audit['sparse']}/{_audit['rated']} — narration/timing mismatch",
+                    kind="warning",
+                )
+        except Exception as _audit_exc:
+            logger.warning("content: narration audit failed (non-fatal): %s", _audit_exc)
+
         update_content_plan(job_id, plan.to_json())
 
         scenes = plan.scenes

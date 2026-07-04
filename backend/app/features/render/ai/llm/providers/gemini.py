@@ -29,6 +29,7 @@ from app.features.render.ai.llm.recap_parser import (
 )
 from app.features.render.ai.llm.content_prompts import (
     build_content_plan_prompt, build_story_bible_prompt, build_publish_meta_prompt,
+    build_content_narration_refine_prompt,
 )
 from app.features.render.ai.llm.content_parser import (
     parse_content_plan_response, parse_story_bible_response, parse_publish_meta_response,
@@ -772,6 +773,67 @@ def select_episode_narration(
         return parse_episode_narration_response(raw) or None
     except Exception as exc:
         logger.warning("gemini_client: select_episode_narration error %s", exc, exc_info=True)
+        return None
+
+
+def _call_gemini_content_narration_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _genai.Client(api_key=api_key, http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000})
+    resp = client.models.generate_content(
+        model=model, contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "response_mime_type": "application/json",
+            "temperature": _CONTENT_TEMPERATURE,
+            "max_output_tokens": _CONTENT_MAX_TOKENS,
+            # Narration authoring is creative, not reasoning-heavy — no thinking
+            # budget so the answer tokens can't be starved (same class as the
+            # story / episode-narration calls).
+            "thinking_config": {"thinking_budget": 0},
+        },
+    )
+    return resp.text
+
+
+def _call_gemini_content_narration(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    cached = llm_cache_get("gemini-content-narration", model, system_prompt, user_prompt)
+    if cached is not None:
+        return cached
+    result = call_gemini_with_rotation(
+        lambda _k: _call_gemini_content_narration_once(_k, model, system_prompt, user_prompt),
+        label="gemini-content-narration", seed_key=api_key,
+    )
+    if result is not None:
+        llm_cache_put("gemini-content-narration", model, system_prompt, user_prompt, result)
+    return result
+
+
+def select_content_narration(
+    scenes: list,
+    topic: str = "",
+    tone: str = "",
+    target_language: str = "vi-VN",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional[dict]:
+    """Content per-scene narration refine — re-author the whole scene set's
+    narration in ONE focused call so it flows scene→scene and each scene's length
+    matches its planned seconds. ``scenes`` is a list of
+    ``{index, role, seconds, narration}`` dicts. Returns ``{index: text}`` or None
+    (Sacred Contract #3 — never raises). None / empty leaves the original
+    narration untouched. Reuses the recap ``{"narration":[...]}`` response shape."""
+    try:
+        if not _GENAI_SDK or not api_key or not scenes:
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        system_prompt, user_prompt = build_content_narration_refine_prompt(
+            scenes, topic=topic, tone=tone, target_language=target_language,
+        )
+        raw = _call_gemini_content_narration(api_key, resolved_model, system_prompt, user_prompt)
+        if not raw:
+            return None
+        return parse_episode_narration_response(raw) or None
+    except Exception as exc:
+        logger.warning("gemini_client: select_content_narration error %s", exc, exc_info=True)
         return None
 
 

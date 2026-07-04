@@ -37,13 +37,14 @@ _LLM_FALLBACK_ENABLED: bool = os.getenv("LLM_FALLBACK_ENABLED", "1") == "1"
 # Pass 1 — Story Understanding (StoryModel). When ON, the binding pass plans
 # FROM a committed whole-film understanding. Default ON — set RECAP_TWO_PASS=0
 # (legacy env name kept for back-compat) for the pre-R7 single-pass behaviour.
-_RECAP_TWO_PASS: bool = os.getenv("RECAP_TWO_PASS", "1") == "1"
+from app.features.render.ai.llm.recap_profile import recap_flag as _recap_flag
+_RECAP_TWO_PASS: bool = _recap_flag("RECAP_TWO_PASS")
 
 # Pass 2 — Editorial Blueprint. When ON (and pass-1 produced a StoryModel), a
 # cheap LLM call (NO transcript) plans HOW to tell the recap FROM the Story
 # Model before scene binding. Default OFF — set RECAP_EDITORIAL_PASS=1 to
 # enable. Binding proceeds without the blueprint if pass-2 fails.
-_RECAP_EDITORIAL_PASS: bool = os.getenv("RECAP_EDITORIAL_PASS", "0") == "1"
+_RECAP_EDITORIAL_PASS: bool = _recap_flag("RECAP_EDITORIAL_PASS")
 
 
 def _inc_recap_pass(phase: str, status: str) -> None:
@@ -397,6 +398,53 @@ def select_episode_narration(
         )
     except Exception as exc:
         logger.warning("llm: select_episode_narration provider=%s raised %s", primary, exc)
+        return None
+
+
+def _get_content_narration_impl(provider_name: str):
+    """Return the select_content_narration callable for a provider, or None when
+    that provider has no impl. Defensive — never raises."""
+    try:
+        if provider_name == "openai":
+            from app.features.render.ai.llm.providers import openai as _mod
+        elif provider_name == "claude":
+            from app.features.render.ai.llm.providers import claude as _mod
+        else:
+            from app.features.render.ai.llm.providers import gemini as _mod
+        return getattr(_mod, "select_content_narration", None)
+    except Exception as exc:
+        logger.warning("llm: _get_content_narration_impl(%s) import failed %s", provider_name, exc)
+        return None
+
+
+def select_content_narration(
+    *,
+    provider: str = DEFAULT_PROVIDER,
+    scenes: list,
+    topic: str = "",
+    tone: str = "",
+    target_language: str = "vi-VN",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional[dict]:
+    """Content per-scene narration refine — dispatch to the named provider.
+
+    Returns ``{index: text}`` or None (the caller keeps its original narration).
+    No cross-provider fallback — this is an OPTIONAL refinement; a provider
+    without an impl simply yields None. Never raises (Sacred Contract #3)."""
+    primary = (provider or DEFAULT_PROVIDER).strip().lower()
+    if primary not in SUPPORTED_PROVIDERS:
+        primary = "gemini"
+    impl = _get_content_narration_impl(primary)
+    if impl is None:
+        return None
+    try:
+        return impl(
+            scenes=scenes, topic=topic, tone=tone,
+            target_language=target_language, api_key=api_key, model=model,
+        )
+    except Exception as exc:
+        logger.warning("llm: select_content_narration provider=%s raised %s", primary, exc)
         return None
 
 
