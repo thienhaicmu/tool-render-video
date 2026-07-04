@@ -238,9 +238,9 @@
 
 /* ── AI Insights (review) ───────────────────────────────────────────────── */
 .cs-insights {
-  background: var(--ai-subtle, var(--surface-card));
-  border-color: var(--ai-border, var(--border-subtle));
-  animation: panel-slide-up var(--duration-panel, .22s) var(--ease-out, ease) both;
+  background: var(--bg-card, var(--surface-card));
+  border-color: var(--border);
+  border-left: 2px solid var(--accent);
 }
 .cs-insight-list { display: flex; flex-direction: column; gap: var(--space-3); }
 .cs-insight {
@@ -290,9 +290,9 @@
 }
 .cs-director {
   width: 100%; max-width: 440px;
-  background: var(--surface-card); border: 1px solid var(--ai-border, var(--border-subtle));
-  border-radius: var(--radius-xl, 16px); padding: var(--space-5);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  background: var(--bg-panel, var(--surface-panel)); border: 1px solid var(--border);
+  border-radius: 10px; padding: var(--space-5);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
   animation: panel-slide-up var(--duration-panel, .22s) var(--ease-out, ease) both;
 }
 .cs-director-hd { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
@@ -300,8 +300,8 @@
 .cs-director-sub { font-size: var(--text-xs); color: var(--text-3); margin-top: 2px; }
 .cs-director-orb {
   flex: none; width: 40px; height: 40px; border-radius: 50%;
-  background: var(--brand-gradient, radial-gradient(circle, var(--accent-primary), var(--accent-pressed)));
-  box-shadow: 0 0 0 4px var(--ai-subtle, rgba(var(--accent-rgb), .2));
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-dim, var(--accent-subtle));
   animation: status-pulse 1.4s ease-in-out infinite;
 }
 .cs-director-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
