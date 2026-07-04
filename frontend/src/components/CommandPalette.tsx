@@ -19,6 +19,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useUIStore } from '../stores/uiStore'
+import { openRenderMonitor } from '../lib/openRenderMonitor'
 import { useRenderStore } from '../stores/renderStore'
 import { useJobsStore } from '../stores/jobsStore'
 import { useThemeStore } from '../stores/themeStore'
@@ -229,8 +230,7 @@ export function CommandPalette() {
         available: !!runningRender,
         run: () => {
           if (!runningRender) return
-          setMonitorJobId(runningRender.job_id)
-          setActivePanel('clip-studio')
+          openRenderMonitor(runningRender)
         },
       },
       {

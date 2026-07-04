@@ -16,6 +16,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useUIStore } from '../stores/uiStore'
+import { openRenderMonitor } from '../lib/openRenderMonitor'
 import { useI18n } from '../i18n/useI18n'
 import type { Lang } from '../i18n/translations'
 import { confirmDialog } from './ui/ConfirmDialog'
@@ -61,7 +62,6 @@ export function NotificationCenter() {
   const markNotificationRead     = useUIStore((s) => s.markNotificationRead)
   const markAllNotificationsRead = useUIStore((s) => s.markAllNotificationsRead)
   const clearNotificationHistory = useUIStore((s) => s.clearNotificationHistory)
-  const setMonitorJobId          = useUIStore((s) => s.setMonitorJobId)
   const setActivePanel           = useUIStore((s) => s.setActivePanel)
 
   // P1.4 — entries carrying a jobId deep-link to that job's surface.
@@ -71,8 +71,8 @@ export function NotificationCenter() {
       setActivePanel('download')
       return
     }
-    setMonitorJobId(jobId)
-    setActivePanel('clip-studio')
+    // Route to the right studio by render_format (looked up from the jobs store).
+    openRenderMonitor(jobId)
   }
 
   const unreadCount = history.filter((n) => !n.read).length

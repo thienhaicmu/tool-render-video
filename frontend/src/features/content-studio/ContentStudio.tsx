@@ -25,6 +25,7 @@ import type { RenderRequest, JobPart } from '@/types/api'
 import type { WsLogEvent } from '../../websocket/events'
 import { useI18n } from '../../i18n/useI18n'
 import { useRenderStore } from '../../stores/renderStore'
+import { useUIStore } from '../../stores/uiStore'
 import { useRenderSocket } from '../../hooks/useRenderSocket'
 import { Button } from '../../components/ui/Button'
 import { ProgressBar } from '../../components/ui/ProgressBar'
@@ -94,6 +95,16 @@ export function ContentStudio() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const setCfgKey = <K extends keyof Config>(k: K, v: Config[K]) => setCfg((p) => ({ ...p, [k]: v }))
+
+  // Reattach an active content render when opened from the topbar badge / dock /
+  // notification (openRenderMonitor routes content jobs here, not to Clip Studio).
+  const contentMonitorJobId = useUIStore((s) => s.contentMonitorJobId)
+  const setContentMonitorJobId = useUIStore((s) => s.setContentMonitorJobId)
+  useEffect(() => {
+    if (!contentMonitorJobId) return
+    setJobId(contentMonitorJobId)   // renders <ContentMonitor> for this job
+    setContentMonitorJobId(null)
+  }, [contentMonitorJobId, setContentMonitorJobId])
 
   // Load recent drafts once.
   useEffect(() => {

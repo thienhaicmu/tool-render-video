@@ -450,6 +450,9 @@ export interface UploadFileResponse {
 export interface HistoryItem {
   job_id: string
   kind: 'render' | 'download'
+  /** Render mode — routes an active render to the right studio (content →
+   *  Content Studio; clips/recap → Clip Studio). Default 'clips'. */
+  render_format?: 'clips' | 'recap' | 'content'
   status: string
   stage: string
   title: string
