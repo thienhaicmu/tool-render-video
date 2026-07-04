@@ -667,6 +667,11 @@ function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
   const { stage, jobStatus, jobMessage, progress, liveParts, liveEvents, isTerminal, error } = useRenderSocket(jobId)
   const pct = progress?.overall_progress_percent ?? 0
   const ok = jobStatus === 'completed' || jobStatus === 'completed_with_errors'
+  // The finished video — content repoints every scene part at the assembled
+  // output, so the first part with an output_file is the deliverable.
+  const outputPart = liveParts.find((p) => p.output_file)
+  const outputFile = outputPart?.output_file || ''
+  const streamUrl = outputPart ? `${BASE_URL}/api/jobs/${jobId}/parts/${outputPart.part_no}/stream` : ''
   const [pubBusy, setPubBusy] = useState(false)
   const [pubMeta, setPubMeta] = useState<PublishMeta | null>(null)
   const [pubErr, setPubErr] = useState<string | null>(null)
@@ -725,26 +730,40 @@ function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
             </span>
           </div>
           <p className="cs-terminal-msg">{jobMessage || error || ''}</p>
+
+          {ok && streamUrl && (
+            <video className="cs-preview" controls src={streamUrl} />
+          )}
+
           <div className="cs-row">
             <Button variant="primary" onClick={onNew}>{vi ? 'Tạo video mới' : 'New content video'}</Button>
+            {ok && outputFile && window.electronAPI?.openPath && (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => window.electronAPI?.openPath?.(outputFile)}>
+                  {vi ? '▶ Phát' : '▶ Play'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => window.electronAPI?.openPath?.(outputFile.replace(/[\\/][^\\/]+$/, ''))}>
+                  {vi ? '📁 Mở thư mục' : '📁 Open folder'}
+                </Button>
+              </>
+            )}
             {ok && plan && (
-              <Button variant="ghost" disabled={pubBusy} onClick={genPublish}>
-                {pubBusy ? (vi ? 'Đang tạo…' : 'Generating…') : (vi ? 'Tạo tiêu đề/mô tả (AI)' : 'Generate title/description (AI)')}
+              <Button variant="ghost" size="sm" disabled={pubBusy} onClick={genPublish}>
+                {pubBusy ? (vi ? 'Đang tạo…' : 'Generating…') : (vi ? '✨ Tạo tiêu đề/mô tả (AI)' : '✨ Generate title/description (AI)')}
               </Button>
             )}
           </div>
           {pubErr && <div className="cs-hint" style={{ color: 'var(--fail)' }}>{pubErr}</div>}
           {pubMeta && (
-            <div style={{ marginTop: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              <Field label={vi ? 'Tiêu đề' : 'Title'}>
-                <input className="cs-input" readOnly value={pubMeta.title} />
-              </Field>
-              <Field label={vi ? 'Mô tả' : 'Description'}>
-                <textarea className="cs-textarea cs-textarea--sm" readOnly value={pubMeta.description} />
-              </Field>
-              <Field label={vi ? 'Thẻ' : 'Tags'}>
-                <input className="cs-input" readOnly value={(pubMeta.tags || []).join(', ')} />
-              </Field>
+            <div className="cs-publish">
+              <PublishField vi={vi} label={vi ? 'Tiêu đề' : 'Title'} value={pubMeta.title} />
+              <PublishField vi={vi} label={vi ? 'Mô tả' : 'Description'} value={pubMeta.description} multiline />
+              <PublishField vi={vi} label={vi ? 'Thẻ' : 'Tags'} value={(pubMeta.tags || []).join(', ')} />
+              {typeof pubMeta.thumbnail_scene_index === 'number' && pubMeta.thumbnail_scene_index >= 0 && (
+                <div className="cs-hint">
+                  {vi ? 'Ảnh bìa gợi ý: cảnh ' : 'Suggested thumbnail: scene '}<b>{pubMeta.thumbnail_scene_index + 1}</b>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -1016,6 +1035,30 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="cs-field">
       <div className="cs-field-label">{label}</div>
       {children}
+    </div>
+  )
+}
+
+function PublishField({ vi, label, value, multiline }: {
+  vi: boolean; label: string; value: string; multiline?: boolean
+}) {
+  const [copied, setCopied] = useState(false)
+  function copy() {
+    navigator.clipboard?.writeText(value).then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 1500)
+    }).catch(() => {})
+  }
+  return (
+    <div className="cs-field">
+      <div className="cs-field-label cs-pub-label">
+        <span>{label}</span>
+        <button className="cs-copy-btn" onClick={copy} disabled={!value}>
+          {copied ? (vi ? '✓ Đã copy' : '✓ Copied') : (vi ? 'Copy' : 'Copy')}
+        </button>
+      </div>
+      {multiline
+        ? <textarea className="cs-textarea cs-textarea--sm" readOnly value={value} />
+        : <input className="cs-input" readOnly value={value} />}
     </div>
   )
 }

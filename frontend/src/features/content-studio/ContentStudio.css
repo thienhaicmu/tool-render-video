@@ -310,6 +310,26 @@
 .cs-part-msg { flex: 1; color: var(--text-3); }
 .cs-terminal-msg { font-size: var(--text-sm); color: var(--text-2); }
 
+/* ── Terminal: video preview + publish (P6) ─────────────────────────────── */
+.cs-preview {
+  width: 100%; max-height: 420px; border-radius: var(--radius-md);
+  background: #000; margin-bottom: var(--space-3); display: block;
+  border: 1px solid var(--border-subtle);
+}
+.cs-publish {
+  margin-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2);
+}
+.cs-pub-label { display: flex; justify-content: space-between; align-items: center; }
+.cs-copy-btn {
+  font-size: 11px; font-weight: 600; padding: 2px 10px; cursor: pointer;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);
+  background: transparent; color: var(--accent-primary);
+  transition: background var(--duration-fast, .12s) var(--ease-out, ease),
+              border-color var(--duration-fast, .12s) var(--ease-out, ease);
+}
+.cs-copy-btn:hover:not(:disabled) { background: var(--accent-subtle); border-color: var(--accent-primary); }
+.cs-copy-btn:disabled { opacity: .4; cursor: not-allowed; }
+
 .cs-status-ok { color: var(--ok); }
 .cs-status-fail { color: var(--fail); }
 .cs-status-run { color: var(--accent-primary); }
