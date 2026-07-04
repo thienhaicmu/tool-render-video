@@ -341,129 +341,135 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
           </div>
         </section>
 
-        <section className="cs-card cs-card--flush">
-          <div className="cs-card-hd"><span className="cs-card-title">{vi ? 'Cấu hình' : 'Configuration'}</span></div>
+        <div className="cs-config-col">
+          <SectionCard icon="🎨" title={vi ? 'Định dạng' : 'Format'}>
+            <Field label={vi ? 'Tỉ lệ khung' : 'Aspect ratio'}>
+              <RatioPreview value={cfg.ratio} onChange={(r) => setCfgKey('ratio', r)} />
+            </Field>
+            <Field label={vi ? 'Thời lượng mục tiêu' : 'Target duration'}>
+              <DurationSlider value={cfg.targetDuration} onChange={(v) => setCfgKey('targetDuration', v)} />
+            </Field>
+          </SectionCard>
 
-          <Field label={vi ? 'Tỉ lệ khung' : 'Aspect ratio'}>
-            <div className="cs-seg-row">
-              {RATIOS.map((r) => <button key={r} className={seg(cfg.ratio === r)} onClick={() => setCfgKey('ratio', r)}>{RATIO_INFO[r].label}</button>)}
-            </div>
-          </Field>
-          <Field label={vi ? 'Thời lượng mục tiêu (giây)' : 'Target duration (sec)'}>
-            <input type="number" min={15} max={600} className="cs-input" value={cfg.targetDuration}
-              onChange={(e) => setCfgKey('targetDuration', Math.max(15, Math.min(600, Number(e.target.value) || 90)))} />
-          </Field>
-          <Field label={vi ? 'Nền' : 'Background'}>
-            <div className="cs-seg-row">
-              {(['color', 'image', 'video'] as BgKind[]).map((k) => (
-                <button key={k} className={seg(cfg.bgKind === k)} onClick={() => setCfgKey('bgKind', k)}>
-                  {k === 'color' ? (vi ? 'Màu' : 'Color') : k === 'image' ? (vi ? 'Ảnh' : 'Image') : 'Video'}
-                </button>
-              ))}
-            </div>
-            {cfg.bgKind === 'color' ? (
-              <div className="cs-row cs-row--top">
-                <input type="color" className="cs-color-swatch" value={cfg.bgColor} onChange={(e) => setCfgKey('bgColor', e.target.value)} />
-                <input className="cs-input" value={cfg.bgColor} onChange={(e) => setCfgKey('bgColor', e.target.value)} />
-              </div>
-            ) : (
-              <input className="cs-input cs-row--top" value={cfg.bgAssetPath} onChange={(e) => setCfgKey('bgAssetPath', e.target.value)}
-                placeholder={vi ? 'Đường dẫn file trên máy…' : 'Local file path…'} />
+          <SectionCard icon="🖼️" title={vi ? 'Hình ảnh' : 'Visuals'}>
+            <Field label={vi ? 'Nguồn hình ảnh' : 'Visual source'}>
+              <select className="cs-input" value={cfg.visualProvider} onChange={(e) => setCfgKey('visualProvider', e.target.value as Config['visualProvider'])}>
+                <option value="local">{vi ? 'Nền tự chọn (offline)' : 'Chosen background (offline)'}</option>
+                <option value="stock">{vi ? 'Ảnh Stock (Pexels/Pixabay — cần API key)' : 'Stock images (Pexels/Pixabay — needs API key)'}</option>
+                <option value="ai_image">{vi ? 'Ảnh AI (Imagen/DALL·E — cần API key)' : 'AI Image (Imagen/DALL·E — needs API key)'}</option>
+                <option value="ai_video">{vi ? 'Video AI (Veo — cần API key, chậm)' : 'AI Video (Veo — needs API key, slow)'}</option>
+              </select>
+              {cfg.visualProvider !== 'local' && (
+                <div className="cs-hint">
+                  {vi ? 'Mỗi cảnh lấy ảnh theo nội dung. Thiếu key/mạng → tự dùng nền đã chọn.' : 'Each scene fetches an image by its content. Missing key/network → falls back to your background.'}
+                </div>
+              )}
+            </Field>
+            {cfg.visualProvider === 'ai_image' && (
+              <Field label={vi ? 'Chất lượng ảnh AI' : 'AI image quality'}>
+                <div className="cs-seg-row">
+                  {(['fast', 'standard', 'ultra'] as ImagenTier[]).map((tier) => (
+                    <button key={tier} className={seg(cfg.imagenTier === tier)} onClick={() => setCfgKey('imagenTier', tier)}>
+                      {tier === 'fast' ? (vi ? 'Nhanh' : 'Fast') : tier === 'standard' ? (vi ? 'Tiêu chuẩn' : 'Standard') : 'Ultra'}
+                    </button>
+                  ))}
+                </div>
+                <div className="cs-hint">
+                  {cfg.imagenTier === 'fast'
+                    ? (vi ? 'Imagen 4 Fast — cần key có Imagen 4.' : 'Imagen 4 Fast — needs Imagen 4 access.')
+                    : cfg.imagenTier === 'ultra'
+                    ? (vi ? 'Imagen 4 Ultra — cao nhất, cần key có Imagen 4.' : 'Imagen 4 Ultra — top quality, needs Imagen 4 access.')
+                    : (vi ? 'Imagen 3 (mặc định, phổ biến). Cần key Gemini có bật billing.' : 'Imagen 3 (default, broadly available). Needs a billing-enabled Gemini key.')}
+                </div>
+              </Field>
             )}
-          </Field>
-          <Field label={vi ? 'Nguồn hình ảnh (AI/Stock — tuỳ chọn)' : 'Visual source (AI/Stock — optional)'}>
-            <select className="cs-input" value={cfg.visualProvider} onChange={(e) => setCfgKey('visualProvider', e.target.value as Config['visualProvider'])}>
-              <option value="local">{vi ? 'Nền tự chọn (offline)' : 'Chosen background (offline)'}</option>
-              <option value="stock">{vi ? 'Ảnh Stock (Pexels/Pixabay — cần API key)' : 'Stock images (Pexels/Pixabay — needs API key)'}</option>
-              <option value="ai_image">{vi ? 'Ảnh AI (Imagen/DALL·E — cần API key)' : 'AI Image (Imagen/DALL·E — needs API key)'}</option>
-              <option value="ai_video">{vi ? 'Video AI (Veo — cần API key, chậm)' : 'AI Video (Veo — needs API key, slow)'}</option>
-            </select>
-            {cfg.visualProvider !== 'local' && (
-              <div className="cs-hint">
-                {vi ? 'Mỗi cảnh sinh/tải ảnh từ "visual prompt". Thiếu key/mạng → tự dùng nền đã chọn.' : 'Each scene fetches/generates an image from its visual prompt. Missing key/network → falls back to your background.'}
-              </div>
-            )}
-          </Field>
-          {cfg.visualProvider === 'ai_image' && (
-            <Field label={vi ? 'Chất lượng ảnh Imagen 4' : 'Imagen 4 quality'}>
+            <Field label={vi ? 'Nền (khi không có ảnh)' : 'Background (fallback)'}>
               <div className="cs-seg-row">
-                {(['fast', 'standard', 'ultra'] as ImagenTier[]).map((tier) => (
-                  <button key={tier} className={seg(cfg.imagenTier === tier)} onClick={() => setCfgKey('imagenTier', tier)}>
-                    {tier === 'fast' ? (vi ? 'Nhanh' : 'Fast') : tier === 'standard' ? (vi ? 'Tiêu chuẩn' : 'Standard') : 'Ultra'}
+                {(['color', 'image', 'video'] as BgKind[]).map((k) => (
+                  <button key={k} className={seg(cfg.bgKind === k)} onClick={() => setCfgKey('bgKind', k)}>
+                    {k === 'color' ? (vi ? 'Màu' : 'Color') : k === 'image' ? (vi ? 'Ảnh' : 'Image') : 'Video'}
                   </button>
                 ))}
               </div>
-              <div className="cs-hint">
-                {cfg.imagenTier === 'fast'
-                  ? (vi ? 'Nhanh & rẻ nhất — hợp bản nháp / nhiều ảnh.' : 'Fastest & cheapest — good for drafts / many images.')
-                  : cfg.imagenTier === 'ultra'
-                  ? (vi ? 'Chất lượng cao nhất, chậm & tốn key hơn — chỉ 1 ảnh/cảnh.' : 'Highest quality, slower & costs more — 1 image/scene.')
-                  : (vi ? 'Cân bằng chất lượng / chi phí (khuyến nghị).' : 'Balanced quality / cost (recommended).')}
+              {cfg.bgKind === 'color' ? (
+                <div className="cs-row cs-row--top">
+                  <input type="color" className="cs-color-swatch" value={cfg.bgColor} onChange={(e) => setCfgKey('bgColor', e.target.value)} />
+                  <input className="cs-input" value={cfg.bgColor} onChange={(e) => setCfgKey('bgColor', e.target.value)} />
+                </div>
+              ) : (
+                <input className="cs-input cs-row--top" value={cfg.bgAssetPath} onChange={(e) => setCfgKey('bgAssetPath', e.target.value)}
+                  placeholder={vi ? 'Đường dẫn file trên máy…' : 'Local file path…'} />
+              )}
+            </Field>
+          </SectionCard>
+
+          <SectionCard icon="🎙️" title={vi ? 'Giọng & Phụ đề' : 'Voice & Subtitles'}>
+            <Field label={vi ? 'Giọng đọc' : 'Voice'}>
+              <div className="cs-row">
+                <select className="cs-input" value={cfg.voiceLang} onChange={(e) => setCfgKey('voiceLang', e.target.value as typeof VOICE_LANGS[number])}>
+                  {VOICE_LANGS.map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+                <select className="cs-input" value={cfg.voiceGender} onChange={(e) => setCfgKey('voiceGender', e.target.value as 'female' | 'male')}>
+                  <option value="female">{vi ? 'Nữ' : 'Female'}</option>
+                  <option value="male">{vi ? 'Nam' : 'Male'}</option>
+                </select>
+                <select className="cs-input" value={cfg.ttsEngine} onChange={(e) => setCfgKey('ttsEngine', e.target.value as typeof TTS_ENGINES[number])}>
+                  {TTS_ENGINES.map((e2) => <option key={e2} value={e2}>{e2}</option>)}
+                </select>
               </div>
             </Field>
-          )}
-          <Field label={vi ? 'Giọng đọc' : 'Voice'}>
-            <div className="cs-row">
-              <select className="cs-input" value={cfg.voiceLang} onChange={(e) => setCfgKey('voiceLang', e.target.value as typeof VOICE_LANGS[number])}>
-                {VOICE_LANGS.map((l) => <option key={l} value={l}>{l}</option>)}
-              </select>
-              <select className="cs-input" value={cfg.voiceGender} onChange={(e) => setCfgKey('voiceGender', e.target.value as 'female' | 'male')}>
-                <option value="female">{vi ? 'Nữ' : 'Female'}</option>
-                <option value="male">{vi ? 'Nam' : 'Male'}</option>
-              </select>
-              <select className="cs-input" value={cfg.ttsEngine} onChange={(e) => setCfgKey('ttsEngine', e.target.value as typeof TTS_ENGINES[number])}>
-                {TTS_ENGINES.map((e2) => <option key={e2} value={e2}>{e2}</option>)}
-              </select>
-            </div>
-          </Field>
-          <Field label={vi ? 'Phụ đề' : 'Subtitles'}>
-            <div className="cs-row">
-              <button className={seg(cfg.subEnabled)} onClick={() => setCfgKey('subEnabled', !cfg.subEnabled)}>{cfg.subEnabled ? (vi ? 'Bật' : 'On') : (vi ? 'Tắt' : 'Off')}</button>
-              {cfg.subEnabled && (
-                <select className="cs-input" value={cfg.subStyle} onChange={(e) => setCfgKey('subStyle', e.target.value)}>
-                  {SUB_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              )}
-              {cfg.subEnabled && (
-                <label className="cs-mini-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <input type="checkbox" checked={cfg.wordByWord} onChange={(e) => setCfgKey('wordByWord', e.target.checked)} />
-                  {vi ? 'Chữ động (Whisper)' : 'Word-by-word (Whisper)'}
-                </label>
-              )}
-            </div>
-            {cfg.subEnabled && cfg.wordByWord && (
-              <div className="cs-hint">
-                {vi ? '⚠ Chữ động chạy Whisper cho MỖI cảnh — render chậm hơn đáng kể. Tắt để phụ đề theo câu (nhanh hơn).' : '⚠ Word-by-word runs Whisper per scene — noticeably slower. Turn off for faster sentence-level subtitles.'}
+            <Field label={vi ? 'Phụ đề' : 'Subtitles'}>
+              <div className="cs-row">
+                <button className={seg(cfg.subEnabled)} onClick={() => setCfgKey('subEnabled', !cfg.subEnabled)}>{cfg.subEnabled ? (vi ? 'Bật' : 'On') : (vi ? 'Tắt' : 'Off')}</button>
+                {cfg.subEnabled && (
+                  <select className="cs-input" value={cfg.subStyle} onChange={(e) => setCfgKey('subStyle', e.target.value)}>
+                    {SUB_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                )}
+                {cfg.subEnabled && (
+                  <label className="cs-mini-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                    <input type="checkbox" checked={cfg.wordByWord} onChange={(e) => setCfgKey('wordByWord', e.target.checked)} />
+                    {vi ? 'Chữ động (Whisper)' : 'Word-by-word (Whisper)'}
+                  </label>
+                )}
               </div>
-            )}
-          </Field>
-          <Field label={vi ? 'Nhạc nền (tuỳ chọn)' : 'Background music (optional)'}>
-            <input className="cs-input" value={cfg.bgmPath} onChange={(e) => setCfgKey('bgmPath', e.target.value)}
-              placeholder={vi ? 'Đường dẫn file nhạc… (tự ducking dưới giọng đọc)' : 'Music file path… (auto-ducked under narration)'} />
-          </Field>
-          <Field label={vi ? 'Thư mục lưu *' : 'Save folder *'}>
-            <div className="cs-row">
-              <input className="cs-input" value={cfg.outputDir}
-                onChange={(e) => { setCfgKey('outputDir', e.target.value); setDefaultSaved(false) }}
-                placeholder={vi ? 'Chọn nơi lưu video…' : 'Choose where to save…'} />
-              {hasPicker && (
-                <Button variant="secondary" size="sm" onClick={pickOutputDir}>{vi ? '📁 Chọn…' : '📁 Browse…'}</Button>
+              {cfg.subEnabled && cfg.wordByWord && (
+                <div className="cs-hint">
+                  {vi ? '⚠ Chữ động chạy Whisper cho MỖI cảnh — render chậm hơn đáng kể. Tắt để phụ đề theo câu (nhanh hơn).' : '⚠ Word-by-word runs Whisper per scene — noticeably slower. Turn off for faster sentence-level subtitles.'}
+                </div>
               )}
-            </div>
-            {cfg.outputDir.trim() ? (
-              <div className="cs-row cs-row--top">
-                <Button variant="ghost" size="sm" disabled={defaultSaved} onClick={saveAsDefaultDir}>
-                  {defaultSaved ? (vi ? '✓ Đã đặt mặc định' : '✓ Set as default') : (vi ? 'Đặt làm mặc định' : 'Set as default')}
-                </Button>
+            </Field>
+          </SectionCard>
+
+          <SectionCard icon="⚙️" title={vi ? 'Khác' : 'More'}>
+            <Field label={vi ? 'Nhạc nền (tuỳ chọn)' : 'Background music (optional)'}>
+              <input className="cs-input" value={cfg.bgmPath} onChange={(e) => setCfgKey('bgmPath', e.target.value)}
+                placeholder={vi ? 'Đường dẫn file nhạc… (tự ducking dưới giọng đọc)' : 'Music file path… (auto-ducked under narration)'} />
+            </Field>
+            <Field label={vi ? 'Thư mục lưu *' : 'Save folder *'}>
+              <div className="cs-row">
+                <input className="cs-input" value={cfg.outputDir}
+                  onChange={(e) => { setCfgKey('outputDir', e.target.value); setDefaultSaved(false) }}
+                  placeholder={vi ? 'Chọn nơi lưu video…' : 'Choose where to save…'} />
+                {hasPicker && (
+                  <Button variant="secondary" size="sm" onClick={pickOutputDir}>{vi ? '📁 Chọn…' : '📁 Browse…'}</Button>
+                )}
               </div>
-            ) : (
-              <div className="cs-hint">{vi ? '⚠ Chưa chọn thư mục — bắt buộc trước khi render.' : '⚠ No folder chosen — required before rendering.'}</div>
-            )}
-            {!hasPicker && (
-              <div className="cs-hint">{vi ? 'Nút chọn thư mục chỉ có trong app desktop — nhập đường dẫn tay khi dùng trình duyệt.' : 'The folder picker is desktop-app only — type a path when using the browser.'}</div>
-            )}
-          </Field>
-        </section>
+              {cfg.outputDir.trim() ? (
+                <div className="cs-row cs-row--top">
+                  <Button variant="ghost" size="sm" disabled={defaultSaved} onClick={saveAsDefaultDir}>
+                    {defaultSaved ? (vi ? '✓ Đã đặt mặc định' : '✓ Set as default') : (vi ? 'Đặt làm mặc định' : 'Set as default')}
+                  </Button>
+                </div>
+              ) : (
+                <div className="cs-hint">{vi ? '⚠ Chưa chọn thư mục — bắt buộc trước khi render.' : '⚠ No folder chosen — required before rendering.'}</div>
+              )}
+              {!hasPicker && (
+                <div className="cs-hint">{vi ? 'Nút chọn thư mục chỉ có trong app desktop — nhập đường dẫn tay khi dùng trình duyệt.' : 'The folder picker is desktop-app only — type a path when using the browser.'}</div>
+              )}
+            </Field>
+          </SectionCard>
+        </div>
       </div>
 
       <div className="cs-footer">
@@ -1109,6 +1115,44 @@ function HeroHeader({ icon, title, subtitle }: { icon: string; title: string; su
           {subtitle != null && <p className="cs-hero-sub">{subtitle}</p>}
         </div>
       </div>
+    </div>
+  )
+}
+
+// V2 Bold — a grouped config section with an icon chip + bold title.
+function SectionCard({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
+  return (
+    <section className="cs-section">
+      <div className="cs-section-hd">
+        <span className="cs-section-icon" aria-hidden>{icon}</span>
+        <span className="cs-section-title">{title}</span>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+// V2 Bold — visual aspect-ratio picker (real frames instead of 3 text buttons).
+function RatioPreview({ value, onChange }: { value: Ratio; onChange: (r: Ratio) => void }) {
+  return (
+    <div className="cs-ratio-row">
+      {RATIOS.map((r) => (
+        <button key={r} type="button" className={`cs-ratio${value === r ? ' is-on' : ''}`} onClick={() => onChange(r)}>
+          <span className={`cs-ratio-frame cs-ratio-frame--${r}`} />
+          <span className="cs-ratio-label">{RATIO_INFO[r].label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// V2 Bold — target-duration slider with a live value pill.
+function DurationSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="cs-dur">
+      <input className="cs-dur-range" type="range" min={15} max={600} step={5}
+        value={value} onChange={(e) => onChange(Math.max(15, Math.min(600, Number(e.target.value) || 90)))} />
+      <span className="cs-dur-val">{value}s</span>
     </div>
   )
 }
