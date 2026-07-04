@@ -21,7 +21,8 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import './ContentStudio.css'
-import type { RenderRequest } from '@/types/api'
+import type { RenderRequest, JobPart } from '@/types/api'
+import type { WsLogEvent } from '../../websocket/events'
 import { useI18n } from '../../i18n/useI18n'
 import { useRenderStore } from '../../stores/renderStore'
 import { useRenderSocket } from '../../hooks/useRenderSocket'
@@ -702,20 +703,20 @@ function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
           {vi ? 'Giai đoạn' : 'Stage'}: <b>{stage || '—'}</b>{planReady && <> · {vi ? 'kế hoạch sẵn sàng' : 'plan ready'}</>}
         </div>
       </section>
-      {liveParts.length > 0 && (
-        <section className="cs-card">
-          <div className="cs-card-hd"><span className="cs-card-title">{vi ? 'Cảnh' : 'Scenes'} ({liveParts.length})</span></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {liveParts.map((p) => (
-              <div key={p.part_no} className="cs-part-row">
-                <span>#{p.part_no}</span>
-                <span className="cs-part-msg">{p.message || p.status}</span>
-                <span className={statusClass(p.status)}>{p.status} {p.progress_percent ? `${p.progress_percent}%` : ''}</span>
-              </div>
-            ))}
-          </div>
+
+      <div className="cs-live-grid">
+        <AiActivityFeed vi={vi} events={liveEvents} done={isTerminal} />
+        <section className="cs-card cs-card--flush">
+          <div className="cs-card-hd"><span className="cs-card-title">{vi ? 'Cảnh' : 'Scenes'} {liveParts.length ? `(${liveParts.length})` : ''}</span></div>
+          {liveParts.length === 0 ? (
+            <div className="cs-hint">{vi ? 'Chờ AI lập kế hoạch cảnh…' : 'Waiting for the AI scene plan…'}</div>
+          ) : (
+            <div className="cs-scene-grid">
+              {liveParts.map((p) => <LiveSceneCard key={p.part_no} vi={vi} part={p} />)}
+            </div>
+          )}
         </section>
-      )}
+      </div>
       {isTerminal && (
         <section className="cs-card" style={{ borderColor: ok ? 'var(--ok)' : 'var(--fail)' }}>
           <div className="cs-card-hd">
@@ -905,6 +906,86 @@ function CostEstimatePanel({ vi, plan, visualProvider, targetDuration }: {
         </div>
       )}
     </section>
+  )
+}
+
+// ── Live render: AI Activity Feed + Scene grid (P4) ─────────────────────────
+
+// Icon + tone for a live render event so the feed reads as "what the AI is
+// doing", not a raw log. Falls back to the backend's own message text.
+function eventMeta(ev: WsLogEvent): { icon: string; tone: 'ai' | 'ok' | 'warn' | 'info' } {
+  const e = ev.event || ''
+  const lvl = (ev.level || '').toUpperCase()
+  if (lvl === 'ERROR') return { icon: '✕', tone: 'warn' }
+  if (lvl === 'WARNING') return { icon: '⚠', tone: 'warn' }
+  if (e === 'render.complete') return { icon: '✓', tone: 'ok' }
+  if (e === 'content.plan.ready') return { icon: '📋', tone: 'ai' }
+  if (e === 'content.timing.fit') return { icon: '⏱', tone: 'ai' }
+  if (e === 'content.narration.audit') return { icon: '🔎', tone: 'ai' }
+  if (e === 'content.narration.refined') return { icon: '✍', tone: 'ai' }
+  if (e.startsWith('content.')) return { icon: '✨', tone: 'ai' }
+  return { icon: '⚙', tone: 'info' }
+}
+
+function AiActivityFeed({ vi, events, done }: { vi: boolean; events: WsLogEvent[]; done: boolean }) {
+  // Collapse consecutive duplicate messages, keep the last ~40, so the feed
+  // reads as distinct AI steps rather than a spammy log.
+  const items = useMemo(() => {
+    const out: WsLogEvent[] = []
+    for (const ev of events) {
+      const prev = out[out.length - 1]
+      if (prev && prev.event === ev.event && (prev.message || '') === (ev.message || '')) continue
+      out.push(ev)
+    }
+    return out.slice(-40)
+  }, [events])
+  const endRef = useRef<HTMLLIElement | null>(null)
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }) }, [items.length])
+
+  return (
+    <section className="cs-card cs-card--flush cs-feed">
+      <div className="cs-card-hd"><span className="cs-card-title">{vi ? '✨ AI đang làm' : '✨ AI activity'}</span></div>
+      {items.length === 0 ? (
+        <div className="cs-hint">{vi ? 'Đang khởi động…' : 'Starting…'}</div>
+      ) : (
+        <ol className="cs-feed-list">
+          {items.map((ev, i) => {
+            const { icon, tone } = eventMeta(ev)
+            const active = !done && i === items.length - 1
+            return (
+              <li key={i} ref={i === items.length - 1 ? endRef : undefined}
+                className={`cs-feed-item tone-${tone}${active ? ' is-active' : ''}`}>
+                <span className="cs-feed-icon">{active ? <span className="cs-feed-spinner" /> : icon}</span>
+                <span className="cs-feed-msg">{ev.message || ev.event}</span>
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </section>
+  )
+}
+
+function LiveSceneCard({ vi, part }: { vi: boolean; part: JobPart }) {
+  const st = String(part.status)
+  const pct = part.progress_percent || 0
+  const running = st !== 'done' && st !== 'failed' && st !== 'skipped'
+  const label = st === 'done' ? (vi ? 'Xong' : 'Done')
+    : st === 'failed' ? (vi ? 'Lỗi' : 'Failed')
+    : st === 'rendering' ? (vi ? 'Đang dựng' : 'Rendering')
+    : st === 'queued' ? (vi ? 'Chờ' : 'Queued')
+    : st
+  return (
+    <div className={`cs-scene-tile status-${st}${running ? ' is-running' : ''}`}>
+      <div className="cs-scene-tile-hd">
+        <b>#{part.part_no}</b>
+        <span className={statusClass(st)}>{label}</span>
+      </div>
+      {part.message && <div className="cs-scene-tile-msg">{part.message}</div>}
+      {running && (
+        <div className="cs-mini-track"><div className="cs-mini-fill" style={{ width: `${pct}%` }} /></div>
+      )}
+    </div>
   )
 }
 

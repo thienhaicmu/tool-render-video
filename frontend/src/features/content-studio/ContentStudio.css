@@ -227,6 +227,81 @@
   color: var(--text-2); background: var(--surface-input); border-color: var(--border-subtle);
 }
 
+/* ── Live render: AI Activity Feed + Scene grid (P4) ────────────────────── */
+.cs-live-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (max-width: 900px) { .cs-live-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.cs-feed { max-height: 460px; display: flex; flex-direction: column; }
+.cs-feed-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--space-1);
+  overflow-y: auto;
+}
+.cs-feed-item {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: 7px 9px; border-radius: var(--radius-md);
+  font-size: var(--text-sm); color: var(--text-2); line-height: 1.4;
+  animation: cs-feed-in var(--duration-panel, .22s) var(--ease-out, ease) both;
+}
+.cs-feed-item.is-active {
+  background: var(--ai-subtle, var(--surface-input));
+  color: var(--text-1); font-weight: 600;
+}
+.cs-feed-icon {
+  flex: none; width: 20px; text-align: center;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.cs-feed-msg { flex: 1; min-width: 0; word-break: break-word; }
+.cs-feed-item.tone-ai .cs-feed-icon { color: var(--ai-active, var(--accent-primary)); }
+.cs-feed-item.tone-ok .cs-feed-icon { color: var(--ok); }
+.cs-feed-item.tone-warn { color: var(--fail); }
+.cs-feed-item.tone-warn .cs-feed-icon { color: var(--fail); }
+
+.cs-feed-spinner {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--ai-active, var(--accent-primary));
+  animation: spin .7s linear infinite;
+}
+
+@keyframes cs-feed-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.cs-scene-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--space-3);
+}
+.cs-scene-tile {
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  padding: var(--space-3); background: var(--surface-input);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  animation: clip-card-appear var(--duration-card, .3s) var(--ease-out, ease) both;
+}
+.cs-scene-tile.is-running { border-color: var(--ai-border, var(--accent-primary)); }
+.cs-scene-tile.status-done { border-color: rgba(var(--ok-rgb), .4); }
+.cs-scene-tile.status-failed { border-color: rgba(var(--fail-rgb), .4); }
+.cs-scene-tile-hd { display: flex; justify-content: space-between; align-items: center; font-size: var(--text-sm); }
+.cs-scene-tile-msg { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+.cs-mini-track { height: 5px; border-radius: 3px; background: var(--surface-card); overflow: hidden; }
+.cs-mini-fill {
+  height: 100%; border-radius: 3px;
+  background: var(--brand-gradient, var(--accent-primary));
+  transition: width .3s var(--ease-out, ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-feed-item, .cs-scene-tile { animation: none; }
+  .cs-feed-spinner { animation: none; }
+}
+
 /* ── Progress / parts (monitor) ─────────────────────────────────────────── */
 .cs-part-row {
   display: flex; gap: var(--space-3); align-items: center;
