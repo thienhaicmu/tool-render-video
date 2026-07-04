@@ -1,1 +1,0 @@
-import{l as e}from"./index-bzXH48aO.js";async function r(){return e("/api/settings/render-defaults")}async function s(t){return e("/api/settings/render-defaults",{method:"PUT",body:JSON.stringify(t)})}async function a(){return e("/api/settings/render-defaults",{method:"PUT",body:JSON.stringify({})})}export{a as c,r as g,s as p};
