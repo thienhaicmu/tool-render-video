@@ -471,9 +471,11 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
       <div className="cs-footer">
         {error && <span className="cs-error">{error}</span>}
         <Button variant="primary" disabled={!charCount || busy} onClick={onGenerate}>
-          {busy ? (vi ? 'AI đang phân tích…' : 'AI analyzing…') : (vi ? 'Tạo kế hoạch (AI)' : 'Generate Content Plan')}
+          {busy ? (vi ? 'AI đang phân tích…' : 'AI analyzing…') : (vi ? '✨ Tạo kế hoạch (AI)' : '✨ Generate Content Plan')}
         </Button>
       </div>
+
+      {busy && <AiDirectorConsole vi={vi} />}
     </div>
   )
 }
@@ -925,6 +927,62 @@ function CostEstimatePanel({ vi, plan, visualProvider, targetDuration }: {
         </div>
       )}
     </section>
+  )
+}
+
+// ── AI Director console (planning overlay, P5) ──────────────────────────────
+
+const _DIRECTOR_STEPS_VI = [
+  'Đọc & hiểu kịch bản',
+  'Xác định chủ đề · giọng · khán giả',
+  'Chia cảnh theo ý nghĩa',
+  'Viết lời kể + cảm xúc + nhịp đọc',
+  'Cân chỉnh thời lượng',
+]
+const _DIRECTOR_STEPS_EN = [
+  'Reading & understanding the script',
+  'Detecting topic · tone · audience',
+  'Splitting into meaningful scenes',
+  'Writing narration + emotion + pacing',
+  'Fitting the duration',
+]
+
+// Shown while POST /api/content/plan is in flight. /plan is a single synchronous
+// call with no sub-events, so we walk the AI's REAL internal steps on a timer
+// and hold on the last one until the plan returns (this component unmounts) —
+// honest progress framing, never a fake percentage.
+function AiDirectorConsole({ vi }: { vi: boolean }) {
+  const steps = vi ? _DIRECTOR_STEPS_VI : _DIRECTOR_STEPS_EN
+  const [step, setStep] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setStep((s) => Math.min(s + 1, steps.length - 1)), 1300)
+    return () => clearInterval(id)
+  }, [steps.length])
+  return (
+    <div className="cs-director-overlay">
+      <div className="cs-director">
+        <div className="cs-director-hd">
+          <span className="cs-director-orb" />
+          <div>
+            <div className="cs-director-title">AI Content Director</div>
+            <div className="cs-director-sub">{vi ? 'Đang lập kế hoạch video…' : 'Planning your video…'}</div>
+          </div>
+        </div>
+        <ol className="cs-director-steps">
+          {steps.map((label, i) => {
+            const state = i < step ? 'done' : i === step ? 'active' : 'pending'
+            return (
+              <li key={i} className={`cs-director-step is-${state}`}>
+                <span className="cs-director-mark">
+                  {state === 'done' ? '✓' : state === 'active' ? <span className="cs-feed-spinner" /> : ''}
+                </span>
+                <span>{label}</span>
+              </li>
+            )
+          })}
+        </ol>
+      </div>
+    </div>
   )
 }
 
