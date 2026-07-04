@@ -437,10 +437,18 @@ def run_content(
             else:
                 _kind, _value = bg_kind, bg_value
 
+            # Stock search (Pexels/Pixabay) wants SHORT keywords, not a full
+            # cinematic prompt — prefer the short visual_hint for stock; AI
+            # generators (Imagen/DALL·E/Veo) want the rich visual_prompt.
+            _visual_query = (
+                (scene.visual_hint or scene.visual_prompt or "")
+                if _prov == "stock"
+                else (scene.visual_prompt or scene.visual_hint or "")
+            )
             asset = resolve_scene_visual(
                 SceneVisualRequest(
                     scene_index=i, kind=_kind, value=_value,
-                    prompt=(scene.visual_prompt or scene.visual_hint or ""),
+                    prompt=_visual_query,
                     negative_prompt=(getattr(scene, "negative_prompt", "") or ""),
                     style=(getattr(plan, "video_style", "") or ""),
                     # CU-11: seed by the scene's primary character (else the video
