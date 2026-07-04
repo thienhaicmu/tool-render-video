@@ -715,7 +715,7 @@ function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
             <div className="cs-hint">{vi ? 'Chờ AI lập kế hoạch cảnh…' : 'Waiting for the AI scene plan…'}</div>
           ) : (
             <div className="cs-scene-grid">
-              {liveParts.map((p) => <LiveSceneCard key={p.part_no} vi={vi} part={p} />)}
+              {liveParts.map((p) => <LiveSceneCard key={p.part_no} vi={vi} part={p} jobId={jobId} />)}
             </div>
           )}
         </section>
@@ -1039,10 +1039,14 @@ function AiActivityFeed({ vi, events, done }: { vi: boolean; events: WsLogEvent[
   )
 }
 
-function LiveSceneCard({ vi, part }: { vi: boolean; part: JobPart }) {
+function LiveSceneCard({ vi, part, jobId }: { vi: boolean; part: JobPart; jobId: string }) {
   const st = String(part.status)
   const pct = part.progress_percent || 0
   const running = st !== 'done' && st !== 'failed' && st !== 'skipped'
+  const done = st === 'done'
+  // A finished scene has its rendered clip on output_file → show its first frame
+  // as a thumbnail via the part-stream endpoint. Others get a placeholder.
+  const thumbUrl = done && part.output_file ? `${BASE_URL}/api/jobs/${jobId}/parts/${part.part_no}/stream#t=0.1` : ''
   const label = st === 'done' ? (vi ? 'Xong' : 'Done')
     : st === 'failed' ? (vi ? 'Lỗi' : 'Failed')
     : st === 'rendering' ? (vi ? 'Đang dựng' : 'Rendering')
@@ -1050,9 +1054,17 @@ function LiveSceneCard({ vi, part }: { vi: boolean; part: JobPart }) {
     : st
   return (
     <div className={`cs-scene-tile status-${st}${running ? ' is-running' : ''}`}>
+      <div className="cs-scene-thumb">
+        {thumbUrl
+          ? <video className="cs-scene-thumb-vid" src={thumbUrl} muted playsInline preload="metadata" />
+          : <div className={`cs-scene-thumb-ph${running ? ' is-running' : ''}`}>
+              {st === 'failed' ? '⚠' : running ? <span className="cs-feed-spinner" /> : '🎬'}
+            </div>}
+        <span className="cs-scene-thumb-no">#{part.part_no}</span>
+      </div>
       <div className="cs-scene-tile-hd">
-        <b>#{part.part_no}</b>
         <span className={statusClass(st)}>{label}</span>
+        {running ? <span className="cs-scene-pct">{pct}%</span> : null}
       </div>
       {part.message && <div className="cs-scene-tile-msg">{part.message}</div>}
       {running && (

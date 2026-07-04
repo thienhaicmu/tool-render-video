@@ -10,9 +10,9 @@
  */
 
 .cs-screen {
-  padding: var(--space-6);
-  max-width: 1040px;
-  margin: 0 auto;
+  padding: var(--space-6) var(--space-8, 32px);
+  max-width: none;          /* V2: use the full window width */
+  margin: 0;
   width: 100%;
 
   /* ── V2 Bold token layer (2026-07-04) ─────────────────────────────────
@@ -411,19 +411,38 @@
 
 .cs-scene-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
 }
 .cs-scene-tile {
-  border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
-  padding: var(--space-3); background: var(--surface-input);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  padding: var(--space-3); background: var(--surface-card);
+  box-shadow: var(--cs-card-shadow);
   display: flex; flex-direction: column; gap: var(--space-2);
   animation: clip-card-appear var(--duration-card, .3s) var(--ease-out, ease) both;
+  transition: border-color var(--duration-fast,.12s) var(--ease-out,ease),
+              box-shadow var(--duration-fast,.12s) var(--ease-out,ease);
 }
-.cs-scene-tile.is-running { border-color: var(--ai-border, var(--accent-primary)); }
+.cs-scene-tile.is-running { border-color: var(--ai-border, var(--accent-primary)); box-shadow: var(--cs-card-shadow), var(--cs-glow-accent); }
 .cs-scene-tile.status-done { border-color: rgba(var(--ok-rgb), .4); }
 .cs-scene-tile.status-failed { border-color: rgba(var(--fail-rgb), .4); }
+
+/* Scene thumbnail (rendered clip first-frame, or a placeholder) */
+.cs-scene-thumb {
+  position: relative; aspect-ratio: 16 / 9; border-radius: var(--radius-md);
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--surface-input), var(--surface-base));
+}
+.cs-scene-thumb-vid { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.cs-scene-thumb-ph { font-size: 22px; color: var(--text-3); }
+.cs-scene-thumb-ph.is-running { color: var(--accent-primary); }
+.cs-scene-thumb-no {
+  position: absolute; top: 6px; left: 6px; font-size: 11px; font-weight: 800;
+  color: #fff; background: rgba(0, 0, 0, .55); padding: 1px 8px;
+  border-radius: var(--radius-full, 999px);
+}
 .cs-scene-tile-hd { display: flex; justify-content: space-between; align-items: center; font-size: var(--text-sm); }
+.cs-scene-pct { font-size: 11px; color: var(--accent-primary); font-weight: 800; }
 .cs-scene-tile-msg { font-size: 11px; color: var(--text-3); line-height: 1.4; }
 .cs-mini-track { height: 5px; border-radius: 3px; background: var(--surface-card); overflow: hidden; }
 .cs-mini-fill {
