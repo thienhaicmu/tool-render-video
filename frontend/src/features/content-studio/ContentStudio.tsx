@@ -27,11 +27,13 @@ import { useRenderStore } from '../../stores/renderStore'
 import { useRenderSocket } from '../../hooks/useRenderSocket'
 import { Button } from '../../components/ui/Button'
 import { ProgressBar } from '../../components/ui/ProgressBar'
+import { AIChip } from '../../components/ui/AIChip'
 import { RATIO_INFO } from '../clip-studio/render/constants'
 import type { Ratio } from '../clip-studio/render/types'
 import {
   generateContentPlan, previewNarration, createProject, saveProject, getProject, listProjects,
   publishMeta, type ContentPlan, type ContentScene, type ContentProjectSummary, type PublishMeta,
+  type DurationFit,
 } from '../../api/content'
 import { getDefaultOutputDir, putDefaultOutputDir } from '../../api/outputDir'
 import { BASE_URL } from '../../api/client'
@@ -81,6 +83,7 @@ export function ContentStudio() {
   const [script, setScript] = useState('')
   const [cfg, setCfg] = useState<Config>(DEFAULT_CFG)
   const [plan, setPlan] = useState<ContentPlan | null>(null)
+  const [durationFit, setDurationFit] = useState<DurationFit | null>(null)
   const [jobId, setJobId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -188,7 +191,7 @@ export function ContentStudio() {
     setError(null)
     setBusy(true)
     try {
-      const { plan: p } = await generateContentPlan({
+      const { plan: p, duration_fit } = await generateContentPlan({
         script: script.trim(),
         target_duration: cfg.targetDuration,
         voice_language: cfg.voiceLang,
@@ -198,6 +201,7 @@ export function ContentStudio() {
         setError(vi ? 'AI không tạo được kế hoạch. Kiểm tra API key / thử lại.' : 'AI produced no plan. Check API key / retry.')
       } else {
         setPlan(p)
+        setDurationFit(duration_fit ?? null)
         setPhase('review')
       }
     } catch (err) {
@@ -240,7 +244,7 @@ export function ContentStudio() {
 
   if (jobId) {
     return <ContentMonitor jobId={jobId} vi={vi} plan={plan} voiceLang={cfg.voiceLang} onNew={() => {
-      setJobId(null); setPlan(null); setPhase('script'); setError(null)
+      setJobId(null); setPlan(null); setDurationFit(null); setPhase('script'); setError(null)
       setProjectId(null); setScript('')
       void listProjects().then((r) => setDrafts(r.projects)).catch(() => {})
     }} />
@@ -249,6 +253,7 @@ export function ContentStudio() {
     return (
       <ReviewPhase
         vi={vi} plan={plan} setPlan={setPlan} busy={busy} error={error}
+        durationFit={durationFit} visualProvider={cfg.visualProvider} targetDuration={cfg.targetDuration}
         voice={{ lang: cfg.voiceLang, gender: cfg.voiceGender, engine: cfg.ttsEngine }}
         onBack={() => setPhase('script')} onApprove={handleApproveRender}
       />
@@ -476,9 +481,11 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
 
 interface VoiceCfg { lang: string; gender: 'female' | 'male'; engine: string }
 
-function ReviewPhase({ vi, plan, setPlan, busy, error, voice, onBack, onApprove }: {
+function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvider, targetDuration, voice, onBack, onApprove }: {
   vi: boolean; plan: ContentPlan; setPlan: (p: ContentPlan) => void
-  busy: boolean; error: string | null; voice: VoiceCfg; onBack: () => void; onApprove: () => void
+  busy: boolean; error: string | null
+  durationFit: DurationFit | null; visualProvider: Config['visualProvider']; targetDuration: number
+  voice: VoiceCfg; onBack: () => void; onApprove: () => void
 }) {
   function updateScene(i: number, patch: Partial<ContentScene>) {
     setPlan({ ...plan, scenes: plan.scenes.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) })
@@ -512,6 +519,8 @@ function ReviewPhase({ vi, plan, setPlan, busy, error, voice, onBack, onApprove 
         </p>
       </div>
 
+      <AiInsights vi={vi} plan={plan} durationFit={durationFit} visualProvider={visualProvider} targetDuration={targetDuration} />
+
       <div className="cs-scene-list">
         {plan.scenes.map((s, i) => (
           <SceneRow key={i} vi={vi} scene={s} index={i} total={plan.scenes.length} voice={voice}
@@ -540,6 +549,7 @@ function SceneRow({ vi, scene, index, total, voice, onChange, onRemove, onMove }
   const [dur, setDur] = useState<number | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const hasText = !!(scene.narration || '').trim()
+  const audit = sceneAudit(scene)
 
   async function doPreview() {
     if (!hasText || previewing) return
@@ -567,6 +577,16 @@ function SceneRow({ vi, scene, index, total, voice, onChange, onRemove, onMove }
       <div className="cs-card-hd">
         <input className="cs-input cs-scene-title-input" value={scene.scene_title || ''} placeholder={`${vi ? 'Cảnh' : 'Scene'} ${index + 1}`}
           onChange={(e) => onChange({ scene_title: e.target.value })} />
+        {audit.flag === 'overloaded' && (
+          <span className="cs-audit-badge is-over" title={vi ? 'Lời kể dài hơn thời lượng — TTS sẽ bị hụt/tràn. Rút gọn hoặc tăng thời lượng.' : 'Narration too long for the duration — TTS will rush/overflow. Shorten it or raise the duration.'}>
+            {vi ? '⚠ Quá tải' : '⚠ Overloaded'}
+          </span>
+        )}
+        {audit.flag === 'sparse' && (
+          <span className="cs-audit-badge is-sparse" title={vi ? 'Lời kể ngắn so với thời lượng — sẽ có khoảng lặng. Thêm lời hoặc giảm thời lượng.' : 'Narration short for the duration — expect silence. Add narration or lower the duration.'}>
+            {vi ? 'Thưa' : 'Sparse'}
+          </span>
+        )}
         <div className="cs-row" style={{ gap: 4 }}>
           <button className={`cs-icon-btn${hasText ? ' is-accent' : ''}`} title={vi ? 'Nghe thử giọng' : 'Preview voice'}
             disabled={!hasText || previewing} onClick={doPreview}>{previewing ? '…' : '🔊'}</button>
@@ -726,6 +746,98 @@ function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
       )}
       {!isTerminal && <div style={{ marginTop: 'var(--space-3)' }}><Button variant="ghost" onClick={onNew}>{vi ? 'Tạo cái khác' : 'Start another'}</Button></div>}
     </div>
+  )
+}
+
+// ── AI Insights (Review) ────────────────────────────────────────────────────
+
+// Client-side mirror of the backend narration_audit so the badges stay accurate
+// as the user edits narration / speed / duration in Review. Same thresholds as
+// ContentPlan.narration_audit (chars vs capacity at ~15 chars/sec × speed).
+const _CPS = 15
+type AuditFlag = 'overloaded' | 'sparse' | 'ok' | 'none'
+function sceneAudit(s: ContentScene): { load: number | null; flag: AuditFlag } {
+  const chars = (s.narration || '').trim().length
+  const est = s.est_duration_sec ?? 0
+  const spd = s.reading_speed ?? 1
+  if (est <= 0 || chars <= 0) return { load: null, flag: 'none' }
+  const cap = _CPS * spd * est
+  const load = cap > 0 ? chars / cap : null
+  if (load == null) return { load: null, flag: 'none' }
+  if (load > 1.3) return { load, flag: 'overloaded' }
+  if (load < 0.6) return { load, flag: 'sparse' }
+  return { load, flag: 'ok' }
+}
+
+function AiInsights({ vi, plan, durationFit, visualProvider, targetDuration }: {
+  vi: boolean; plan: ContentPlan; durationFit: DurationFit | null
+  visualProvider: Config['visualProvider']; targetDuration: number
+}) {
+  const audit = useMemo(() => {
+    let over = 0, sparse = 0, rated = 0
+    for (const s of plan.scenes) {
+      const { flag } = sceneAudit(s)
+      if (flag === 'none') continue
+      rated++
+      if (flag === 'overloaded') over++
+      else if (flag === 'sparse') sparse++
+    }
+    return { over, sparse, rated, weak: over > 0 || (rated > 0 && sparse / rated > 0.4) }
+  }, [plan])
+  const chars = (plan.story_bible?.characters || []).filter((c) => (c.name || c.id))
+  const estTotal = plan.scenes.reduce((sum, s) => sum + (s.est_duration_sec || 0), 0)
+
+  return (
+    <section className="cs-card cs-insights">
+      <div className="cs-card-hd"><span className="cs-card-title">{vi ? '✨ AI đã làm gì' : '✨ What the AI did'}</span></div>
+      <div className="cs-insight-list">
+        {durationFit?.changed ? (
+          <div className="cs-insight">
+            <AIChip variant="applied" label={vi ? 'Chỉnh nhịp đọc' : 'Paced to target'} />
+            <span>{vi ? 'Điều chỉnh tốc độ đọc để vừa mục tiêu' : 'Adjusted reading speed to hit the target'}:{' '}
+              <b>{durationFit.before_sec.toFixed(0)}s → {durationFit.after_sec.toFixed(0)}s</b>
+              {durationFit.applied_scale ? ` (×${durationFit.applied_scale})` : ''}</span>
+          </div>
+        ) : (
+          <div className="cs-insight">
+            <AIChip variant="advisory" label={vi ? 'Thời lượng' : 'Duration'} />
+            <span>{vi ? 'Ước tính' : 'Estimated'} <b>~{estTotal.toFixed(0)}s</b> {vi ? '/ mục tiêu' : '/ target'} {targetDuration}s</span>
+          </div>
+        )}
+
+        {(plan.topic || chars.length > 0) && (
+          <div className="cs-insight">
+            <AIChip variant="applied" label={vi ? 'Hiểu nội dung' : 'Understood'} />
+            <span>
+              {plan.topic ? <><b>{plan.topic}</b>{plan.video_style ? ` · ${plan.video_style}` : ''}</> : null}
+              {chars.length > 0 && <>{' · '}{vi ? 'Nhân vật' : 'Characters'}: {chars.map((c, i) => (
+                <span key={i} className="cs-char-chip">{c.name || c.id}</span>
+              ))}</>}
+            </span>
+          </div>
+        )}
+
+        {audit.rated > 0 && (
+          <div className="cs-insight">
+            <AIChip variant={audit.weak ? 'advisory' : 'applied'} label={vi ? 'Kiểm tra lời kể' : 'Narration check'} />
+            <span>
+              {audit.weak
+                ? (vi ? `${audit.over} cảnh quá tải, ${audit.sparse} cảnh thưa — chỉnh lời kể/thời lượng bên dưới.`
+                      : `${audit.over} overloaded, ${audit.sparse} sparse — tweak narration/duration below.`)
+                : (vi ? 'Lời kể cân đối với thời lượng từng cảnh.' : "Narration length matches each scene's duration.")}
+            </span>
+          </div>
+        )}
+
+        {visualProvider !== 'local' && (
+          <div className="cs-insight">
+            <AIChip variant="advisory" label={vi ? 'Nguồn ảnh' : 'Visuals'} />
+            <span>{vi ? 'Dùng nguồn ảnh AI/Stock — cần API key. Thiếu key/mạng → tự dùng nền đã chọn.'
+                       : 'Using an AI/Stock visual source — needs an API key. Missing key/network → falls back to your background.'}</span>
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
 
