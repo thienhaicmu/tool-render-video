@@ -30,6 +30,8 @@ import { useRenderSocket } from '../../hooks/useRenderSocket'
 import { Button } from '../../components/ui/Button'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { AIChip } from '../../components/ui/AIChip'
+import { ConicRing } from '../../components/ui/ConicRing'
+import { IconCheck } from '../../components/icons'
 import { RATIO_INFO } from '../clip-studio/render/constants'
 import type { Ratio } from '../clip-studio/render/types'
 import {
@@ -724,19 +726,9 @@ function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
         </div>
       </section>
 
-      <div className="cs-live-grid">
-        <AiActivityFeed vi={vi} events={liveEvents} done={isTerminal} />
-        <section className="cs-card cs-card--flush">
-          <div className="cs-card-hd"><span className="cs-card-title">{vi ? 'Cảnh' : 'Scenes'} {liveParts.length ? `(${liveParts.length})` : ''}</span></div>
-          {liveParts.length === 0 ? (
-            <div className="cs-hint">{vi ? 'Chờ AI lập kế hoạch cảnh…' : 'Waiting for the AI scene plan…'}</div>
-          ) : (
-            <div className="cs-scene-grid">
-              {liveParts.map((p) => <LiveSceneCard key={p.part_no} vi={vi} part={p} jobId={jobId} />)}
-            </div>
-          )}
-        </section>
-      </div>
+      <section className="cs-card cs-card--flush cs-live-wrap">
+        <ContentLiveView vi={vi} liveParts={liveParts} liveEvents={liveEvents} />
+      </section>
       {isTerminal && (
         <section className="cs-card" style={{ borderColor: ok ? 'var(--ok)' : 'var(--fail)' }}>
           <div className="cs-card-hd">
@@ -1003,91 +995,101 @@ function AiDirectorConsole({ vi }: { vi: boolean }) {
 
 // Icon + tone for a live render event so the feed reads as "what the AI is
 // doing", not a raw log. Falls back to the backend's own message text.
-function eventMeta(ev: WsLogEvent): { icon: string; tone: 'ai' | 'ok' | 'warn' | 'info' } {
-  const e = ev.event || ''
-  const lvl = (ev.level || '').toUpperCase()
-  if (lvl === 'ERROR') return { icon: '✕', tone: 'warn' }
-  if (lvl === 'WARNING') return { icon: '⚠', tone: 'warn' }
-  if (e === 'render.complete') return { icon: '✓', tone: 'ok' }
-  if (e === 'content.plan.ready') return { icon: '📋', tone: 'ai' }
-  if (e === 'content.timing.fit') return { icon: '⏱', tone: 'ai' }
-  if (e === 'content.narration.audit') return { icon: '🔎', tone: 'ai' }
-  if (e === 'content.narration.refined') return { icon: '✍', tone: 'ai' }
-  if (e.startsWith('content.')) return { icon: '✨', tone: 'ai' }
-  return { icon: '⚙', tone: 'info' }
+// Scene status helpers (mirror RecapLiveView semantics).
+function _lvNorm(s: string | undefined): string { return (s || '').toLowerCase() }
+function _lvActive(s: string | undefined): boolean { return ['rendering', 'cutting', 'transcribing'].includes(_lvNorm(s)) }
+function _lvDone(s: string | undefined): boolean { return _lvNorm(s) === 'done' }
+function _lvFailed(s: string | undefined): boolean { return ['failed', 'cancelled', 'skipped'].includes(_lvNorm(s)) }
+function _lvGlyph(s: string | undefined): string {
+  if (_lvDone(s)) return '✓'
+  if (_lvActive(s)) return '◉'
+  if (_lvFailed(s)) return '✕'
+  return '○'
 }
 
-function AiActivityFeed({ vi, events, done }: { vi: boolean; events: WsLogEvent[]; done: boolean }) {
-  // Collapse consecutive duplicate messages, keep the last ~40, so the feed
-  // reads as distinct AI steps rather than a spammy log.
-  const items = useMemo(() => {
-    const out: WsLogEvent[] = []
-    for (const ev of events) {
-      const prev = out[out.length - 1]
-      if (prev && prev.event === ev.event && (prev.message || '') === (ev.message || '')) continue
-      out.push(ev)
-    }
-    return out.slice(-40)
-  }, [events])
-  const endRef = useRef<HTMLLIElement | null>(null)
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }) }, [items.length])
+interface SceneMeta { n: number; role?: string; narration?: string; scene_title?: string }
+
+// ContentLiveView — "Now Rendering" view modelled on RecapLiveView: a LEFT focus
+// column (the scene rendering now — ConicRing + title + narration) and a RIGHT
+// queue (compact scene rows). Content has no episodes, so the queue is a flat
+// scene list. Data comes from liveParts + the content.plan.ready event.
+function ContentLiveView({ vi, liveParts, liveEvents }: {
+  vi: boolean; liveParts: JobPart[]; liveEvents: WsLogEvent[]
+}) {
+  const planEv = [...liveEvents].reverse().find((e) => e.event === 'content.plan.ready')
+  const metaByN = new Map<number, SceneMeta>(
+    (((planEv?.context?.scenes) as SceneMeta[] | undefined) ?? [])
+      .filter(Boolean).map((s) => [Number(s.n), s]),
+  )
+  const parts = liveParts
+  if (parts.length === 0) {
+    return <div className="cs-hint" style={{ padding: '14px 16px' }}>{vi ? 'Chờ AI lập kế hoạch cảnh…' : 'Waiting for the AI scene plan…'}</div>
+  }
+  const actives = [...parts].filter((p) => _lvActive(p.status))
+    .sort((a, b) => (b.progress_percent ?? 0) - (a.progress_percent ?? 0))
+  const focus = actives[0] ?? parts.find((p) => !_lvDone(p.status)) ?? parts[parts.length - 1]
+  const doneCount = parts.filter((p) => _lvDone(p.status)).length
+
+  const roleOf = (p: JobPart) => (metaByN.get(p.part_no)?.role || metaByN.get(p.part_no)?.scene_title || `${vi ? 'Cảnh' : 'Scene'} ${p.part_no}`)
+  const statusLabel = (p: JobPart) => _lvDone(p.status) ? (vi ? 'Xong' : 'Done')
+    : _lvFailed(p.status) ? (vi ? 'Lỗi' : 'Failed')
+    : _lvActive(p.status) ? (vi ? 'Đang dựng' : 'Rendering') : (vi ? 'Chờ' : 'Waiting')
 
   return (
-    <section className="cs-card cs-card--flush cs-feed">
-      <div className="cs-card-hd"><span className="cs-card-title">{vi ? '✨ AI đang làm' : '✨ AI activity'}</span></div>
-      {items.length === 0 ? (
-        <div className="cs-hint">{vi ? 'Đang khởi động…' : 'Starting…'}</div>
-      ) : (
-        <ol className="cs-feed-list">
-          {items.map((ev, i) => {
-            const { icon, tone } = eventMeta(ev)
-            const active = !done && i === items.length - 1
+    <div className="cs-live">
+      {/* LEFT — the scene being rendered now */}
+      <div className="cs-live-focus">
+        <div className="cs-live-label">{vi ? 'ĐANG DỰNG CẢNH' : 'BUILDING SCENE'}</div>
+        {focus && <ContentFocusCard vi={vi} part={focus} meta={metaByN.get(focus.part_no)} roleLabel={roleOf(focus)} />}
+      </div>
+      {/* RIGHT — compact scene queue */}
+      <div className="cs-live-queue">
+        <div className="cs-live-queue-hd">{(vi ? 'Cảnh' : 'Scenes')} {doneCount}/{parts.length}</div>
+        <div className="cs-live-rows">
+          {parts.map((p) => {
+            const st = _lvNorm(p.status)
+            const isFocus = focus?.part_no === p.part_no
             return (
-              <li key={i} ref={i === items.length - 1 ? endRef : undefined}
-                className={`cs-feed-item tone-${tone}${active ? ' is-active' : ''}`}>
-                <span className="cs-feed-icon">{active ? <span className="cs-feed-spinner" /> : icon}</span>
-                <span className="cs-feed-msg">{ev.message || ev.event}</span>
-              </li>
+              <div key={p.part_no} className={`cs-live-row${isFocus ? ' is-focus' : ''}`}>
+                <span className={`cs-live-glyph st-${st}`}>{_lvGlyph(p.status)}</span>
+                <div className="cs-live-row-main">
+                  <div className="cs-live-row-title"><span className="cs-live-row-n">#{p.part_no}</span> {roleOf(p)}</div>
+                  {p.message && <div className="cs-live-row-sub">{p.message}</div>}
+                </div>
+                <span className={`cs-live-row-pct st-${st}`}>
+                  {_lvActive(p.status) && (p.progress_percent ?? 0) > 0 ? `${Math.round(p.progress_percent ?? 0)}%` : statusLabel(p)}
+                </span>
+              </div>
             )
           })}
-        </ol>
-      )}
-    </section>
+        </div>
+      </div>
+    </div>
   )
 }
 
-function LiveSceneCard({ vi, part, jobId }: { vi: boolean; part: JobPart; jobId: string }) {
-  const st = String(part.status)
-  const pct = part.progress_percent || 0
-  const running = st !== 'done' && st !== 'failed' && st !== 'skipped'
-  const done = st === 'done'
-  // A finished scene has its rendered clip on output_file → show its first frame
-  // as a thumbnail via the part-stream endpoint. Others get a placeholder.
-  const thumbUrl = done && part.output_file ? `${BASE_URL}/api/jobs/${jobId}/parts/${part.part_no}/stream#t=0.1` : ''
-  const label = st === 'done' ? (vi ? 'Xong' : 'Done')
-    : st === 'failed' ? (vi ? 'Lỗi' : 'Failed')
-    : st === 'rendering' ? (vi ? 'Đang dựng' : 'Rendering')
-    : st === 'queued' ? (vi ? 'Chờ' : 'Queued')
-    : st
+function ContentFocusCard({ vi, part, meta, roleLabel }: {
+  vi: boolean; part: JobPart; meta?: SceneMeta; roleLabel: string
+}) {
+  const done = _lvDone(part.status)
+  const active = _lvActive(part.status)
+  const pct = active ? Math.max(2, Math.round(part.progress_percent ?? 0)) : (done ? 100 : 0)
+  const statusLabel = done ? (vi ? 'Xong' : 'Done') : active ? (vi ? 'Đang dựng' : 'Rendering') : (vi ? 'Chờ' : 'Waiting')
+  const narr = (meta?.narration || '').trim()
   return (
-    <div className={`cs-scene-tile status-${st}${running ? ' is-running' : ''}`}>
-      <div className="cs-scene-thumb">
-        {thumbUrl
-          ? <video className="cs-scene-thumb-vid" src={thumbUrl} muted playsInline preload="metadata" />
-          : <div className={`cs-scene-thumb-ph${running ? ' is-running' : ''}`}>
-              {st === 'failed' ? '⚠' : running ? <span className="cs-feed-spinner" /> : '🎬'}
-            </div>}
-        <span className="cs-scene-thumb-no">#{part.part_no}</span>
+    <>
+      <div className="cs-focus-preview">
+        <ConicRing progress={pct} size={76}>{done ? <IconCheck size={24} /> : undefined}</ConicRing>
+        <span className="cs-focus-n">#{part.part_no}</span>
+        <span className={`cs-focus-status st-${_lvNorm(part.status)}`}>{statusLabel}</span>
       </div>
-      <div className="cs-scene-tile-hd">
-        <span className={statusClass(st)}>{label}</span>
-        {running ? <span className="cs-scene-pct">{pct}%</span> : null}
+      <div>
+        <div className="cs-focus-title">{roleLabel}</div>
+        <div className="cs-focus-sub">{part.message || (vi ? 'Đang xử lý…' : 'Processing…')}</div>
       </div>
-      {part.message && <div className="cs-scene-tile-msg">{part.message}</div>}
-      {running && (
-        <div className="cs-mini-track"><div className="cs-mini-fill" style={{ width: `${pct}%` }} /></div>
-      )}
-    </div>
+      <div className="cs-focus-track"><div className="cs-focus-fill" style={{ width: `${pct}%` }} /></div>
+      {narr && <div className="cs-focus-narr">💬 {narr}</div>}
+    </>
   )
 }
 
@@ -1199,13 +1201,6 @@ function PublishField({ vi, label, value, multiline }: {
         : <input className="cs-input" readOnly value={value} />}
     </div>
   )
-}
-
-function statusClass(status: string): string {
-  if (status === 'done') return 'cs-status-ok'
-  if (status === 'failed') return 'cs-status-fail'
-  if (status === 'rendering') return 'cs-status-run'
-  return 'cs-status-idle'
 }
 
 function seg(on: boolean): string {
