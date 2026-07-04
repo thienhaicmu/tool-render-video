@@ -303,12 +303,10 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
   return (
     <div className="cs-screen">
       <Stepper vi={vi} step={1} />
-      <div className="cs-header">
-        <h1 className="cs-h1">Content Studio</h1>
-        <p className="cs-sub">{vi
-          ? 'Bước 1 — Viết kịch bản. AI Content Director sẽ lập kế hoạch cảnh + lời kể để bạn duyệt trước khi render.'
-          : 'Step 1 — Write the script. The AI Content Director drafts scenes + narration for you to review before rendering.'}</p>
-      </div>
+      <HeroHeader icon="✨" title="Content Studio"
+        subtitle={vi
+          ? 'Biến kịch bản thành video — AI lo cảnh, lời kể & hình ảnh để bạn duyệt trước khi render.'
+          : 'Turn a script into a video — the AI drafts scenes, narration & visuals for you to review before rendering.'} />
 
       {drafts.length > 0 && (
         <section className="cs-card">
@@ -470,8 +468,8 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
 
       <div className="cs-footer">
         {error && <span className="cs-error">{error}</span>}
-        <Button variant="primary" disabled={!charCount || busy} onClick={onGenerate}>
-          {busy ? (vi ? 'AI đang phân tích…' : 'AI analyzing…') : (vi ? '✨ Tạo kế hoạch (AI)' : '✨ Generate Content Plan')}
+        <Button variant="primary" className="cs-cta" disabled={!charCount || busy} onClick={onGenerate}>
+          {busy ? (vi ? 'AI đang phân tích…' : 'AI analyzing…') : (vi ? '✨ Tạo kế hoạch (AI) →' : '✨ Generate Content Plan →')}
         </Button>
       </div>
 
@@ -512,15 +510,15 @@ function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvid
   return (
     <div className="cs-screen">
       <Stepper vi={vi} step={2} />
-      <div className="cs-header">
-        <h1 className="cs-h1">{vi ? 'Duyệt kế hoạch AI' : 'Review AI Plan'}</h1>
-        <p className="cs-sub">
-          {plan.topic ? <b>{plan.topic}</b> : null}
-          {plan.video_style ? ` · ${plan.video_style}` : ''}
-          {' · '}{plan.scenes.length} {vi ? 'cảnh' : 'scenes'}
-          {' · '}{vi ? 'Sửa lời kể / cảm xúc / thời lượng, thêm-xoá-đổi thứ tự cảnh trước khi render.' : 'Edit narration / emotion / duration, add-remove-reorder before rendering.'}
-        </p>
-      </div>
+      <HeroHeader icon="🎬" title={vi ? 'Duyệt kế hoạch AI' : 'Review AI Plan'}
+        subtitle={
+          <>
+            {plan.topic ? <b>{plan.topic}</b> : null}
+            {plan.video_style ? ` · ${plan.video_style}` : ''}
+            {' · '}{plan.scenes.length} {vi ? 'cảnh' : 'scenes'}
+            {' · '}{vi ? 'Sửa lời kể / cảm xúc / thời lượng, thêm-xoá-đổi thứ tự cảnh trước khi render.' : 'Edit narration / emotion / duration, add-remove-reorder before rendering.'}
+          </>
+        } />
 
       <AiInsights vi={vi} plan={plan} durationFit={durationFit} visualProvider={visualProvider} targetDuration={targetDuration} />
 
@@ -539,8 +537,8 @@ function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvid
       <div className="cs-footer">
         <Button variant="ghost" onClick={onBack} disabled={busy}>{vi ? '← Quay lại kịch bản' : '← Back to script'}</Button>
         {error && <span className="cs-error">{error}</span>}
-        <Button variant="primary" disabled={!canRender} onClick={onApprove}>
-          {busy ? (vi ? 'Đang gửi…' : 'Starting…') : (vi ? 'Duyệt & Render' : 'Approve & Render')}
+        <Button variant="primary" className="cs-cta" disabled={!canRender} onClick={onApprove}>
+          {busy ? (vi ? 'Đang gửi…' : 'Starting…') : (vi ? 'Duyệt & Render →' : 'Approve & Render →')}
         </Button>
       </div>
     </div>
@@ -699,10 +697,8 @@ function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
   return (
     <div className="cs-screen">
       <Stepper vi={vi} step={3} />
-      <div className="cs-header">
-        <h1 className="cs-h1">{vi ? 'Đang render…' : 'Rendering…'}</h1>
-        <p className="cs-sub">{jobMessage || stage || ''}</p>
-      </div>
+      <HeroHeader icon="🎞️" title={vi ? 'Đang render…' : 'Rendering…'}
+        subtitle={jobMessage || stage || ''} />
       <section className="cs-card">
         <div className="cs-card-hd"><span className="cs-card-title">{vi ? 'Tiến độ' : 'Progress'}</span></div>
         <ProgressBar value={pct} variant={isTerminal ? (ok ? 'success' : 'error') : 'default'} />
@@ -1084,6 +1080,23 @@ function Stepper({ vi, step }: { vi: boolean; step: 1 | 2 | 3 }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// V2 Bold — gradient hero header (icon + bold title + subtitle). Shared across
+// the Compose / Review / Render screens. Strings are passed in (already i18n'd
+// by callers) and all colours come from tokens → dark + light both work.
+function HeroHeader({ icon, title, subtitle }: { icon: string; title: string; subtitle?: React.ReactNode }) {
+  return (
+    <div className="cs-hero">
+      <div className="cs-hero-row">
+        <span className="cs-hero-icon" aria-hidden>{icon}</span>
+        <div>
+          <h1 className="cs-hero-h1">{title}</h1>
+          {subtitle != null && <p className="cs-hero-sub">{subtitle}</p>}
+        </div>
+      </div>
     </div>
   )
 }

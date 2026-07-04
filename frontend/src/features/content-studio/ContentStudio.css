@@ -14,16 +14,63 @@
   max-width: 1040px;
   margin: 0 auto;
   width: 100%;
+
+  /* ── V2 Bold token layer (2026-07-04) ─────────────────────────────────
+     All built from theme tokens so dark + light both work. Light-mode
+     softens shadows/glows below so the bold look isn't harsh on white. */
+  --cs-card-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  --cs-glow-accent: 0 0 24px rgba(var(--accent-rgb), 0.35);
+  --cs-glow-pink:   0 0 24px rgba(var(--brand-pink-rgb), 0.30);
+  --cs-hero-grad:   linear-gradient(135deg, rgba(var(--accent-rgb), 0.18), rgba(var(--brand-pink-rgb), 0.12));
+}
+[data-theme="light"] .cs-screen {
+  --cs-card-shadow: 0 6px 20px rgba(0, 0, 0, 0.10);
+  --cs-glow-accent: 0 0 18px rgba(var(--accent-rgb), 0.22);
+  --cs-glow-pink:   0 0 18px rgba(var(--brand-pink-rgb), 0.20);
+  --cs-hero-grad:   linear-gradient(135deg, rgba(var(--accent-rgb), 0.10), rgba(var(--brand-pink-rgb), 0.07));
 }
 
-/* ── Header ─────────────────────────────────────────────────────────────── */
+/* ── Hero header (V2 Bold) ──────────────────────────────────────────────── */
+.cs-hero {
+  position: relative;
+  border-radius: var(--radius-xl, 16px);
+  padding: var(--space-5) var(--space-5);
+  margin-bottom: var(--space-5);
+  background: var(--cs-hero-grad), var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  animation: cs-hero-in var(--duration-panel, .24s) var(--ease-out, ease) both;
+}
+.cs-hero-row { display: flex; align-items: center; gap: var(--space-4); }
+.cs-hero-icon {
+  flex: none; width: 46px; height: 46px; border-radius: var(--radius-lg, 12px);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 24px;
+  background: var(--brand-gradient, linear-gradient(135deg, var(--accent-primary), var(--accent-pressed)));
+  box-shadow: var(--cs-glow-accent);
+}
+.cs-hero-h1 {
+  font-size: var(--text-2xl); font-weight: 800; margin: 0;
+  color: var(--text-1); letter-spacing: -0.02em; line-height: 1.15;
+}
+.cs-hero-sub {
+  font-size: var(--text-sm); color: var(--text-2);
+  margin: 4px 0 0; max-width: 720px; line-height: 1.5;
+}
+
+@keyframes cs-hero-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Header (legacy, still used by some sub-screens) ─────────────────────── */
 .cs-header { margin-bottom: var(--space-5); }
 .cs-h1 {
   font-size: var(--text-2xl);
-  font-weight: 700;
+  font-weight: 800;
   margin: 0;
   color: var(--text-1);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 .cs-sub {
   font-size: var(--text-sm);
@@ -31,6 +78,41 @@
   margin-top: var(--space-2);
   max-width: 760px;
   line-height: 1.55;
+}
+
+/* ── Section card (V2 Bold — grouped config with an icon) ────────────────── */
+.cs-section {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background: var(--surface-card);
+  box-shadow: var(--cs-card-shadow);
+  margin-bottom: var(--space-4);
+}
+.cs-section-hd { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+.cs-section-icon {
+  flex: none; width: 30px; height: 30px; border-radius: var(--radius-md);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 16px;
+  background: var(--accent-subtle); color: var(--accent-primary);
+}
+.cs-section-title { font-size: var(--text-md); font-weight: 800; color: var(--text-1); }
+
+/* ── Bold CTA (big gradient action + glow) ──────────────────────────────── */
+.cs-cta {
+  font-size: var(--text-md) !important;
+  font-weight: 800 !important;
+  padding: 12px 26px !important;
+  border-radius: var(--radius-lg, 12px) !important;
+  box-shadow: var(--cs-glow-accent);
+  transition: transform var(--duration-fast, .12s) var(--ease-out, ease),
+              box-shadow var(--duration-fast, .12s) var(--ease-out, ease) !important;
+}
+.cs-cta:hover:not(:disabled) { box-shadow: var(--cs-glow-accent), var(--cs-glow-pink); transform: translateY(-1px); }
+.cs-cta:active:not(:disabled) { transform: scale(0.98); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-hero { animation: none; }
+  .cs-card:hover, .cs-cta:hover:not(:disabled), .cs-cta:active:not(:disabled) { transform: none; }
 }
 
 /* ── Stepper ────────────────────────────────────────────────────────────── */
@@ -68,18 +150,27 @@
   .cs-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ── Card ───────────────────────────────────────────────────────────────── */
+/* ── Card (V2 Bold — elevated + hover-lift) ─────────────────────────────── */
 .cs-card {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   margin-bottom: var(--space-4);
+  box-shadow: var(--cs-card-shadow);
   transition: border-color var(--duration-fast, .12s) var(--ease-out, ease),
-              background var(--duration-fast, .12s) var(--ease-out, ease);
+              box-shadow var(--duration-fast, .12s) var(--ease-out, ease),
+              transform var(--duration-fast, .12s) var(--ease-out, ease);
 }
-.cs-card:hover { border-color: var(--border-hi); }
+.cs-card:hover {
+  border-color: var(--border-hi);
+  transform: translateY(-3px);
+  box-shadow: var(--cs-card-shadow), var(--cs-glow-accent);
+}
 .cs-card--flush { margin-bottom: 0; }
+/* Opt-out of the hover-lift for cards that are containers, not interactive
+   (e.g. the live feed / big panels) — add cs-card--static. */
+.cs-card--static:hover { transform: none; box-shadow: var(--cs-card-shadow); border-color: var(--border-subtle); }
 
 .cs-card-hd {
   display: flex; justify-content: space-between; align-items: center;
