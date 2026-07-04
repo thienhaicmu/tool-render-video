@@ -78,6 +78,10 @@ export interface UIStore {
    *  background/other job opens the monitor now that the broad
    *  auto-reattach hijack is gone — set by dock/drawer/notification/409. */
   monitorJobId: string | null
+  /** Content Studio's equivalent of monitorJobId — reattach an active
+   *  content-mode render to the Content Studio monitor (a content job must
+   *  NOT open in the Clip Studio). Set by the shared openRenderMonitor. */
+  contentMonitorJobId: string | null
   /** S3.2/S3.5 — monotonic counter incremented every time the user
    *  asks for a fresh render (⌘N, palette action, or future "+ New"
    *  button). RenderWorkflow watches this counter and force-resets to
@@ -95,6 +99,7 @@ export interface UIStore {
   setDuplicateSeedJobId: (jobId: string | null) => void
   setSendToRenderSourcePath: (path: string | null) => void
   setMonitorJobId: (jobId: string | null) => void
+  setContentMonitorJobId: (jobId: string | null) => void
   requestNewRender: () => void
   /** S4.7 — mark a single history entry as read. */
   markNotificationRead: (id: string) => void
@@ -139,6 +144,7 @@ export const useUIStore = create<UIStore>((set) => ({
   duplicateSeedJobId: null,
   sendToRenderSourcePath: null,
   monitorJobId: null,
+  contentMonitorJobId: null,
   newRenderRequest: 0,
 
   toggleSidebar: () => {
@@ -196,6 +202,7 @@ export const useUIStore = create<UIStore>((set) => ({
 
 
   setMonitorJobId: (jobId: string | null) => set({ monitorJobId: jobId }),
+  setContentMonitorJobId: (jobId: string | null) => set({ contentMonitorJobId: jobId }),
 
   requestNewRender: () => set((s) => ({ newRenderRequest: s.newRenderRequest + 1 })),
 

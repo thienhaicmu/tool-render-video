@@ -56,11 +56,40 @@ def _pixabay_search(query: str, key: str, w: int, h: int) -> str:
     return hits[0].get("largeImageURL") or hits[0].get("webformatURL") or ""
 
 
+# Style/camera words that hurt a stock keyword search — strip them so a rich
+# AI-style prompt still yields a usable Pexels/Pixabay query.
+_STOCK_STOPWORDS = frozenset({
+    "cinematic", "photoreal", "photorealistic", "realistic", "4k", "8k", "hd",
+    "shot", "wide", "close-up", "closeup", "close", "up", "over-the-shoulder",
+    "of", "a", "an", "the", "with", "and", "in", "on", "at", "dramatic",
+    "lighting", "volumetric", "fog", "mood", "style", "illustration", "3d",
+    "render", "detailed", "highly", "background", "scene", "view", "angle",
+})
+
+
+def _stock_query(raw: str) -> str:
+    """Turn a (possibly long, cinematic) visual prompt into a short stock-search
+    keyword phrase: take the first clause, drop style/camera stopwords, cap to a
+    few words. Pexels/Pixabay return far better results for 2-5 keywords than for
+    a full sentence. Never raises."""
+    try:
+        s = (raw or "").strip()
+        if not s:
+            return ""
+        s = s.split(",", 1)[0]                      # first clause (usually the subject)
+        words = [w for w in s.replace(".", " ").split() if w]
+        kept = [w for w in words if w.strip().lower() not in _STOCK_STOPWORDS]
+        out = " ".join((kept or words)[:5]).strip()
+        return out or s[:60].strip()
+    except Exception:
+        return (raw or "").strip()[:60]
+
+
 def resolve_stock(request: SceneVisualRequest) -> Optional[SceneVisualAsset]:
     """Search + download a stock image for the scene. None on no key / no
     network / no result (→ local fallback). Never raises."""
     try:
-        query = (getattr(request, "prompt", "") or "").strip()
+        query = _stock_query(getattr(request, "prompt", "") or "")
         if not query:
             return None
         pexels = (os.getenv("PEXELS_API_KEY") or "").strip()

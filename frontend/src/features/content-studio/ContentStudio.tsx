@@ -25,10 +25,13 @@ import type { RenderRequest, JobPart } from '@/types/api'
 import type { WsLogEvent } from '../../websocket/events'
 import { useI18n } from '../../i18n/useI18n'
 import { useRenderStore } from '../../stores/renderStore'
+import { useUIStore } from '../../stores/uiStore'
 import { useRenderSocket } from '../../hooks/useRenderSocket'
 import { Button } from '../../components/ui/Button'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { AIChip } from '../../components/ui/AIChip'
+import { ConicRing } from '../../components/ui/ConicRing'
+import { IconCheck } from '../../components/icons'
 import { RATIO_INFO } from '../clip-studio/render/constants'
 import type { Ratio } from '../clip-studio/render/types'
 import {
@@ -94,6 +97,16 @@ export function ContentStudio() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const setCfgKey = <K extends keyof Config>(k: K, v: Config[K]) => setCfg((p) => ({ ...p, [k]: v }))
+
+  // Reattach an active content render when opened from the topbar badge / dock /
+  // notification (openRenderMonitor routes content jobs here, not to Clip Studio).
+  const contentMonitorJobId = useUIStore((s) => s.contentMonitorJobId)
+  const setContentMonitorJobId = useUIStore((s) => s.setContentMonitorJobId)
+  useEffect(() => {
+    if (!contentMonitorJobId) return
+    setJobId(contentMonitorJobId)   // renders <ContentMonitor> for this job
+    setContentMonitorJobId(null)
+  }, [contentMonitorJobId, setContentMonitorJobId])
 
   // Load recent drafts once.
   useEffect(() => {
@@ -303,12 +316,10 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
   return (
     <div className="cs-screen">
       <Stepper vi={vi} step={1} />
-      <div className="cs-header">
-        <h1 className="cs-h1">Content Studio</h1>
-        <p className="cs-sub">{vi
-          ? 'Bước 1 — Viết kịch bản. AI Content Director sẽ lập kế hoạch cảnh + lời kể để bạn duyệt trước khi render.'
-          : 'Step 1 — Write the script. The AI Content Director drafts scenes + narration for you to review before rendering.'}</p>
-      </div>
+      <HeroHeader icon="✨" title="Content Studio"
+        subtitle={vi
+          ? 'Biến kịch bản thành video — AI lo cảnh, lời kể & hình ảnh để bạn duyệt trước khi render.'
+          : 'Turn a script into a video — the AI drafts scenes, narration & visuals for you to review before rendering.'} />
 
       {drafts.length > 0 && (
         <section className="cs-card">
@@ -343,135 +354,141 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
           </div>
         </section>
 
-        <section className="cs-card cs-card--flush">
-          <div className="cs-card-hd"><span className="cs-card-title">{vi ? 'Cấu hình' : 'Configuration'}</span></div>
+        <div className="cs-config-col">
+          <SectionCard icon="🎨" title={vi ? 'Định dạng' : 'Format'}>
+            <Field label={vi ? 'Tỉ lệ khung' : 'Aspect ratio'}>
+              <RatioPreview value={cfg.ratio} onChange={(r) => setCfgKey('ratio', r)} />
+            </Field>
+            <Field label={vi ? 'Thời lượng mục tiêu' : 'Target duration'}>
+              <DurationSlider value={cfg.targetDuration} onChange={(v) => setCfgKey('targetDuration', v)} />
+            </Field>
+          </SectionCard>
 
-          <Field label={vi ? 'Tỉ lệ khung' : 'Aspect ratio'}>
-            <div className="cs-seg-row">
-              {RATIOS.map((r) => <button key={r} className={seg(cfg.ratio === r)} onClick={() => setCfgKey('ratio', r)}>{RATIO_INFO[r].label}</button>)}
-            </div>
-          </Field>
-          <Field label={vi ? 'Thời lượng mục tiêu (giây)' : 'Target duration (sec)'}>
-            <input type="number" min={15} max={600} className="cs-input" value={cfg.targetDuration}
-              onChange={(e) => setCfgKey('targetDuration', Math.max(15, Math.min(600, Number(e.target.value) || 90)))} />
-          </Field>
-          <Field label={vi ? 'Nền' : 'Background'}>
-            <div className="cs-seg-row">
-              {(['color', 'image', 'video'] as BgKind[]).map((k) => (
-                <button key={k} className={seg(cfg.bgKind === k)} onClick={() => setCfgKey('bgKind', k)}>
-                  {k === 'color' ? (vi ? 'Màu' : 'Color') : k === 'image' ? (vi ? 'Ảnh' : 'Image') : 'Video'}
-                </button>
-              ))}
-            </div>
-            {cfg.bgKind === 'color' ? (
-              <div className="cs-row cs-row--top">
-                <input type="color" className="cs-color-swatch" value={cfg.bgColor} onChange={(e) => setCfgKey('bgColor', e.target.value)} />
-                <input className="cs-input" value={cfg.bgColor} onChange={(e) => setCfgKey('bgColor', e.target.value)} />
-              </div>
-            ) : (
-              <input className="cs-input cs-row--top" value={cfg.bgAssetPath} onChange={(e) => setCfgKey('bgAssetPath', e.target.value)}
-                placeholder={vi ? 'Đường dẫn file trên máy…' : 'Local file path…'} />
+          <SectionCard icon="🖼️" title={vi ? 'Hình ảnh' : 'Visuals'}>
+            <Field label={vi ? 'Nguồn hình ảnh' : 'Visual source'}>
+              <select className="cs-input" value={cfg.visualProvider} onChange={(e) => setCfgKey('visualProvider', e.target.value as Config['visualProvider'])}>
+                <option value="local">{vi ? 'Nền tự chọn (offline)' : 'Chosen background (offline)'}</option>
+                <option value="stock">{vi ? 'Ảnh Stock (Pexels/Pixabay — cần API key)' : 'Stock images (Pexels/Pixabay — needs API key)'}</option>
+                <option value="ai_image">{vi ? 'Ảnh AI (Imagen/DALL·E — cần API key)' : 'AI Image (Imagen/DALL·E — needs API key)'}</option>
+                <option value="ai_video">{vi ? 'Video AI (Veo — cần API key, chậm)' : 'AI Video (Veo — needs API key, slow)'}</option>
+              </select>
+              {cfg.visualProvider !== 'local' && (
+                <div className="cs-hint">
+                  {vi ? 'Mỗi cảnh lấy ảnh theo nội dung. Thiếu key/mạng → tự dùng nền đã chọn.' : 'Each scene fetches an image by its content. Missing key/network → falls back to your background.'}
+                </div>
+              )}
+            </Field>
+            {cfg.visualProvider === 'ai_image' && (
+              <Field label={vi ? 'Chất lượng ảnh AI' : 'AI image quality'}>
+                <div className="cs-seg-row">
+                  {(['fast', 'standard', 'ultra'] as ImagenTier[]).map((tier) => (
+                    <button key={tier} className={seg(cfg.imagenTier === tier)} onClick={() => setCfgKey('imagenTier', tier)}>
+                      {tier === 'fast' ? (vi ? 'Nhanh' : 'Fast') : tier === 'standard' ? (vi ? 'Tiêu chuẩn' : 'Standard') : 'Ultra'}
+                    </button>
+                  ))}
+                </div>
+                <div className="cs-hint">
+                  {cfg.imagenTier === 'fast'
+                    ? (vi ? 'Imagen 4 Fast — cần key có Imagen 4.' : 'Imagen 4 Fast — needs Imagen 4 access.')
+                    : cfg.imagenTier === 'ultra'
+                    ? (vi ? 'Imagen 4 Ultra — cao nhất, cần key có Imagen 4.' : 'Imagen 4 Ultra — top quality, needs Imagen 4 access.')
+                    : (vi ? 'Imagen 3 (mặc định, phổ biến). Cần key Gemini có bật billing.' : 'Imagen 3 (default, broadly available). Needs a billing-enabled Gemini key.')}
+                </div>
+              </Field>
             )}
-          </Field>
-          <Field label={vi ? 'Nguồn hình ảnh (AI/Stock — tuỳ chọn)' : 'Visual source (AI/Stock — optional)'}>
-            <select className="cs-input" value={cfg.visualProvider} onChange={(e) => setCfgKey('visualProvider', e.target.value as Config['visualProvider'])}>
-              <option value="local">{vi ? 'Nền tự chọn (offline)' : 'Chosen background (offline)'}</option>
-              <option value="stock">{vi ? 'Ảnh Stock (Pexels/Pixabay — cần API key)' : 'Stock images (Pexels/Pixabay — needs API key)'}</option>
-              <option value="ai_image">{vi ? 'Ảnh AI (Imagen/DALL·E — cần API key)' : 'AI Image (Imagen/DALL·E — needs API key)'}</option>
-              <option value="ai_video">{vi ? 'Video AI (Veo — cần API key, chậm)' : 'AI Video (Veo — needs API key, slow)'}</option>
-            </select>
-            {cfg.visualProvider !== 'local' && (
-              <div className="cs-hint">
-                {vi ? 'Mỗi cảnh sinh/tải ảnh từ "visual prompt". Thiếu key/mạng → tự dùng nền đã chọn.' : 'Each scene fetches/generates an image from its visual prompt. Missing key/network → falls back to your background.'}
-              </div>
-            )}
-          </Field>
-          {cfg.visualProvider === 'ai_image' && (
-            <Field label={vi ? 'Chất lượng ảnh Imagen 4' : 'Imagen 4 quality'}>
+            <Field label={vi ? 'Nền (khi không có ảnh)' : 'Background (fallback)'}>
               <div className="cs-seg-row">
-                {(['fast', 'standard', 'ultra'] as ImagenTier[]).map((tier) => (
-                  <button key={tier} className={seg(cfg.imagenTier === tier)} onClick={() => setCfgKey('imagenTier', tier)}>
-                    {tier === 'fast' ? (vi ? 'Nhanh' : 'Fast') : tier === 'standard' ? (vi ? 'Tiêu chuẩn' : 'Standard') : 'Ultra'}
+                {(['color', 'image', 'video'] as BgKind[]).map((k) => (
+                  <button key={k} className={seg(cfg.bgKind === k)} onClick={() => setCfgKey('bgKind', k)}>
+                    {k === 'color' ? (vi ? 'Màu' : 'Color') : k === 'image' ? (vi ? 'Ảnh' : 'Image') : 'Video'}
                   </button>
                 ))}
               </div>
-              <div className="cs-hint">
-                {cfg.imagenTier === 'fast'
-                  ? (vi ? 'Nhanh & rẻ nhất — hợp bản nháp / nhiều ảnh.' : 'Fastest & cheapest — good for drafts / many images.')
-                  : cfg.imagenTier === 'ultra'
-                  ? (vi ? 'Chất lượng cao nhất, chậm & tốn key hơn — chỉ 1 ảnh/cảnh.' : 'Highest quality, slower & costs more — 1 image/scene.')
-                  : (vi ? 'Cân bằng chất lượng / chi phí (khuyến nghị).' : 'Balanced quality / cost (recommended).')}
+              {cfg.bgKind === 'color' ? (
+                <div className="cs-row cs-row--top">
+                  <input type="color" className="cs-color-swatch" value={cfg.bgColor} onChange={(e) => setCfgKey('bgColor', e.target.value)} />
+                  <input className="cs-input" value={cfg.bgColor} onChange={(e) => setCfgKey('bgColor', e.target.value)} />
+                </div>
+              ) : (
+                <input className="cs-input cs-row--top" value={cfg.bgAssetPath} onChange={(e) => setCfgKey('bgAssetPath', e.target.value)}
+                  placeholder={vi ? 'Đường dẫn file trên máy…' : 'Local file path…'} />
+              )}
+            </Field>
+          </SectionCard>
+
+          <SectionCard icon="🎙️" title={vi ? 'Giọng & Phụ đề' : 'Voice & Subtitles'}>
+            <Field label={vi ? 'Giọng đọc' : 'Voice'}>
+              <div className="cs-row">
+                <select className="cs-input" value={cfg.voiceLang} onChange={(e) => setCfgKey('voiceLang', e.target.value as typeof VOICE_LANGS[number])}>
+                  {VOICE_LANGS.map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+                <select className="cs-input" value={cfg.voiceGender} onChange={(e) => setCfgKey('voiceGender', e.target.value as 'female' | 'male')}>
+                  <option value="female">{vi ? 'Nữ' : 'Female'}</option>
+                  <option value="male">{vi ? 'Nam' : 'Male'}</option>
+                </select>
+                <select className="cs-input" value={cfg.ttsEngine} onChange={(e) => setCfgKey('ttsEngine', e.target.value as typeof TTS_ENGINES[number])}>
+                  {TTS_ENGINES.map((e2) => <option key={e2} value={e2}>{e2}</option>)}
+                </select>
               </div>
             </Field>
-          )}
-          <Field label={vi ? 'Giọng đọc' : 'Voice'}>
-            <div className="cs-row">
-              <select className="cs-input" value={cfg.voiceLang} onChange={(e) => setCfgKey('voiceLang', e.target.value as typeof VOICE_LANGS[number])}>
-                {VOICE_LANGS.map((l) => <option key={l} value={l}>{l}</option>)}
-              </select>
-              <select className="cs-input" value={cfg.voiceGender} onChange={(e) => setCfgKey('voiceGender', e.target.value as 'female' | 'male')}>
-                <option value="female">{vi ? 'Nữ' : 'Female'}</option>
-                <option value="male">{vi ? 'Nam' : 'Male'}</option>
-              </select>
-              <select className="cs-input" value={cfg.ttsEngine} onChange={(e) => setCfgKey('ttsEngine', e.target.value as typeof TTS_ENGINES[number])}>
-                {TTS_ENGINES.map((e2) => <option key={e2} value={e2}>{e2}</option>)}
-              </select>
-            </div>
-          </Field>
-          <Field label={vi ? 'Phụ đề' : 'Subtitles'}>
-            <div className="cs-row">
-              <button className={seg(cfg.subEnabled)} onClick={() => setCfgKey('subEnabled', !cfg.subEnabled)}>{cfg.subEnabled ? (vi ? 'Bật' : 'On') : (vi ? 'Tắt' : 'Off')}</button>
-              {cfg.subEnabled && (
-                <select className="cs-input" value={cfg.subStyle} onChange={(e) => setCfgKey('subStyle', e.target.value)}>
-                  {SUB_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              )}
-              {cfg.subEnabled && (
-                <label className="cs-mini-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <input type="checkbox" checked={cfg.wordByWord} onChange={(e) => setCfgKey('wordByWord', e.target.checked)} />
-                  {vi ? 'Chữ động (Whisper)' : 'Word-by-word (Whisper)'}
-                </label>
-              )}
-            </div>
-            {cfg.subEnabled && cfg.wordByWord && (
-              <div className="cs-hint">
-                {vi ? '⚠ Chữ động chạy Whisper cho MỖI cảnh — render chậm hơn đáng kể. Tắt để phụ đề theo câu (nhanh hơn).' : '⚠ Word-by-word runs Whisper per scene — noticeably slower. Turn off for faster sentence-level subtitles.'}
+            <Field label={vi ? 'Phụ đề' : 'Subtitles'}>
+              <div className="cs-row">
+                <button className={seg(cfg.subEnabled)} onClick={() => setCfgKey('subEnabled', !cfg.subEnabled)}>{cfg.subEnabled ? (vi ? 'Bật' : 'On') : (vi ? 'Tắt' : 'Off')}</button>
+                {cfg.subEnabled && (
+                  <select className="cs-input" value={cfg.subStyle} onChange={(e) => setCfgKey('subStyle', e.target.value)}>
+                    {SUB_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                )}
+                {cfg.subEnabled && (
+                  <label className="cs-mini-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                    <input type="checkbox" checked={cfg.wordByWord} onChange={(e) => setCfgKey('wordByWord', e.target.checked)} />
+                    {vi ? 'Chữ động (Whisper)' : 'Word-by-word (Whisper)'}
+                  </label>
+                )}
               </div>
-            )}
-          </Field>
-          <Field label={vi ? 'Nhạc nền (tuỳ chọn)' : 'Background music (optional)'}>
-            <input className="cs-input" value={cfg.bgmPath} onChange={(e) => setCfgKey('bgmPath', e.target.value)}
-              placeholder={vi ? 'Đường dẫn file nhạc… (tự ducking dưới giọng đọc)' : 'Music file path… (auto-ducked under narration)'} />
-          </Field>
-          <Field label={vi ? 'Thư mục lưu *' : 'Save folder *'}>
-            <div className="cs-row">
-              <input className="cs-input" value={cfg.outputDir}
-                onChange={(e) => { setCfgKey('outputDir', e.target.value); setDefaultSaved(false) }}
-                placeholder={vi ? 'Chọn nơi lưu video…' : 'Choose where to save…'} />
-              {hasPicker && (
-                <Button variant="secondary" size="sm" onClick={pickOutputDir}>{vi ? '📁 Chọn…' : '📁 Browse…'}</Button>
+              {cfg.subEnabled && cfg.wordByWord && (
+                <div className="cs-hint">
+                  {vi ? '⚠ Chữ động chạy Whisper cho MỖI cảnh — render chậm hơn đáng kể. Tắt để phụ đề theo câu (nhanh hơn).' : '⚠ Word-by-word runs Whisper per scene — noticeably slower. Turn off for faster sentence-level subtitles.'}
+                </div>
               )}
-            </div>
-            {cfg.outputDir.trim() ? (
-              <div className="cs-row cs-row--top">
-                <Button variant="ghost" size="sm" disabled={defaultSaved} onClick={saveAsDefaultDir}>
-                  {defaultSaved ? (vi ? '✓ Đã đặt mặc định' : '✓ Set as default') : (vi ? 'Đặt làm mặc định' : 'Set as default')}
-                </Button>
+            </Field>
+          </SectionCard>
+
+          <SectionCard icon="⚙️" title={vi ? 'Khác' : 'More'}>
+            <Field label={vi ? 'Nhạc nền (tuỳ chọn)' : 'Background music (optional)'}>
+              <input className="cs-input" value={cfg.bgmPath} onChange={(e) => setCfgKey('bgmPath', e.target.value)}
+                placeholder={vi ? 'Đường dẫn file nhạc… (tự ducking dưới giọng đọc)' : 'Music file path… (auto-ducked under narration)'} />
+            </Field>
+            <Field label={vi ? 'Thư mục lưu *' : 'Save folder *'}>
+              <div className="cs-row">
+                <input className="cs-input" value={cfg.outputDir}
+                  onChange={(e) => { setCfgKey('outputDir', e.target.value); setDefaultSaved(false) }}
+                  placeholder={vi ? 'Chọn nơi lưu video…' : 'Choose where to save…'} />
+                {hasPicker && (
+                  <Button variant="secondary" size="sm" onClick={pickOutputDir}>{vi ? '📁 Chọn…' : '📁 Browse…'}</Button>
+                )}
               </div>
-            ) : (
-              <div className="cs-hint">{vi ? '⚠ Chưa chọn thư mục — bắt buộc trước khi render.' : '⚠ No folder chosen — required before rendering.'}</div>
-            )}
-            {!hasPicker && (
-              <div className="cs-hint">{vi ? 'Nút chọn thư mục chỉ có trong app desktop — nhập đường dẫn tay khi dùng trình duyệt.' : 'The folder picker is desktop-app only — type a path when using the browser.'}</div>
-            )}
-          </Field>
-        </section>
+              {cfg.outputDir.trim() ? (
+                <div className="cs-row cs-row--top">
+                  <Button variant="ghost" size="sm" disabled={defaultSaved} onClick={saveAsDefaultDir}>
+                    {defaultSaved ? (vi ? '✓ Đã đặt mặc định' : '✓ Set as default') : (vi ? 'Đặt làm mặc định' : 'Set as default')}
+                  </Button>
+                </div>
+              ) : (
+                <div className="cs-hint">{vi ? '⚠ Chưa chọn thư mục — bắt buộc trước khi render.' : '⚠ No folder chosen — required before rendering.'}</div>
+              )}
+              {!hasPicker && (
+                <div className="cs-hint">{vi ? 'Nút chọn thư mục chỉ có trong app desktop — nhập đường dẫn tay khi dùng trình duyệt.' : 'The folder picker is desktop-app only — type a path when using the browser.'}</div>
+              )}
+            </Field>
+          </SectionCard>
+        </div>
       </div>
 
       <div className="cs-footer">
         {error && <span className="cs-error">{error}</span>}
-        <Button variant="primary" disabled={!charCount || busy} onClick={onGenerate}>
-          {busy ? (vi ? 'AI đang phân tích…' : 'AI analyzing…') : (vi ? '✨ Tạo kế hoạch (AI)' : '✨ Generate Content Plan')}
+        <Button variant="primary" className="cs-cta" disabled={!charCount || busy} onClick={onGenerate}>
+          {busy ? (vi ? 'AI đang phân tích…' : 'AI analyzing…') : (vi ? '✨ Tạo kế hoạch (AI) →' : '✨ Generate Content Plan →')}
         </Button>
       </div>
 
@@ -512,15 +529,15 @@ function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvid
   return (
     <div className="cs-screen">
       <Stepper vi={vi} step={2} />
-      <div className="cs-header">
-        <h1 className="cs-h1">{vi ? 'Duyệt kế hoạch AI' : 'Review AI Plan'}</h1>
-        <p className="cs-sub">
-          {plan.topic ? <b>{plan.topic}</b> : null}
-          {plan.video_style ? ` · ${plan.video_style}` : ''}
-          {' · '}{plan.scenes.length} {vi ? 'cảnh' : 'scenes'}
-          {' · '}{vi ? 'Sửa lời kể / cảm xúc / thời lượng, thêm-xoá-đổi thứ tự cảnh trước khi render.' : 'Edit narration / emotion / duration, add-remove-reorder before rendering.'}
-        </p>
-      </div>
+      <HeroHeader icon="🎬" title={vi ? 'Duyệt kế hoạch AI' : 'Review AI Plan'}
+        subtitle={
+          <>
+            {plan.topic ? <b>{plan.topic}</b> : null}
+            {plan.video_style ? ` · ${plan.video_style}` : ''}
+            {' · '}{plan.scenes.length} {vi ? 'cảnh' : 'scenes'}
+            {' · '}{vi ? 'Sửa lời kể / cảm xúc / thời lượng, thêm-xoá-đổi thứ tự cảnh trước khi render.' : 'Edit narration / emotion / duration, add-remove-reorder before rendering.'}
+          </>
+        } />
 
       <AiInsights vi={vi} plan={plan} durationFit={durationFit} visualProvider={visualProvider} targetDuration={targetDuration} />
 
@@ -539,8 +556,8 @@ function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvid
       <div className="cs-footer">
         <Button variant="ghost" onClick={onBack} disabled={busy}>{vi ? '← Quay lại kịch bản' : '← Back to script'}</Button>
         {error && <span className="cs-error">{error}</span>}
-        <Button variant="primary" disabled={!canRender} onClick={onApprove}>
-          {busy ? (vi ? 'Đang gửi…' : 'Starting…') : (vi ? 'Duyệt & Render' : 'Approve & Render')}
+        <Button variant="primary" className="cs-cta" disabled={!canRender} onClick={onApprove}>
+          {busy ? (vi ? 'Đang gửi…' : 'Starting…') : (vi ? 'Duyệt & Render →' : 'Approve & Render →')}
         </Button>
       </div>
     </div>
@@ -699,10 +716,8 @@ function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
   return (
     <div className="cs-screen">
       <Stepper vi={vi} step={3} />
-      <div className="cs-header">
-        <h1 className="cs-h1">{vi ? 'Đang render…' : 'Rendering…'}</h1>
-        <p className="cs-sub">{jobMessage || stage || ''}</p>
-      </div>
+      <HeroHeader icon="🎞️" title={vi ? 'Đang render…' : 'Rendering…'}
+        subtitle={jobMessage || stage || ''} />
       <section className="cs-card">
         <div className="cs-card-hd"><span className="cs-card-title">{vi ? 'Tiến độ' : 'Progress'}</span></div>
         <ProgressBar value={pct} variant={isTerminal ? (ok ? 'success' : 'error') : 'default'} />
@@ -711,19 +726,9 @@ function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
         </div>
       </section>
 
-      <div className="cs-live-grid">
-        <AiActivityFeed vi={vi} events={liveEvents} done={isTerminal} />
-        <section className="cs-card cs-card--flush">
-          <div className="cs-card-hd"><span className="cs-card-title">{vi ? 'Cảnh' : 'Scenes'} {liveParts.length ? `(${liveParts.length})` : ''}</span></div>
-          {liveParts.length === 0 ? (
-            <div className="cs-hint">{vi ? 'Chờ AI lập kế hoạch cảnh…' : 'Waiting for the AI scene plan…'}</div>
-          ) : (
-            <div className="cs-scene-grid">
-              {liveParts.map((p) => <LiveSceneCard key={p.part_no} vi={vi} part={p} />)}
-            </div>
-          )}
-        </section>
-      </div>
+      <section className="cs-card cs-card--flush cs-live-wrap">
+        <ContentLiveView vi={vi} liveParts={liveParts} liveEvents={liveEvents} />
+      </section>
       {isTerminal && (
         <section className="cs-card" style={{ borderColor: ok ? 'var(--ok)' : 'var(--fail)' }}>
           <div className="cs-card-hd">
@@ -990,79 +995,101 @@ function AiDirectorConsole({ vi }: { vi: boolean }) {
 
 // Icon + tone for a live render event so the feed reads as "what the AI is
 // doing", not a raw log. Falls back to the backend's own message text.
-function eventMeta(ev: WsLogEvent): { icon: string; tone: 'ai' | 'ok' | 'warn' | 'info' } {
-  const e = ev.event || ''
-  const lvl = (ev.level || '').toUpperCase()
-  if (lvl === 'ERROR') return { icon: '✕', tone: 'warn' }
-  if (lvl === 'WARNING') return { icon: '⚠', tone: 'warn' }
-  if (e === 'render.complete') return { icon: '✓', tone: 'ok' }
-  if (e === 'content.plan.ready') return { icon: '📋', tone: 'ai' }
-  if (e === 'content.timing.fit') return { icon: '⏱', tone: 'ai' }
-  if (e === 'content.narration.audit') return { icon: '🔎', tone: 'ai' }
-  if (e === 'content.narration.refined') return { icon: '✍', tone: 'ai' }
-  if (e.startsWith('content.')) return { icon: '✨', tone: 'ai' }
-  return { icon: '⚙', tone: 'info' }
+// Scene status helpers (mirror RecapLiveView semantics).
+function _lvNorm(s: string | undefined): string { return (s || '').toLowerCase() }
+function _lvActive(s: string | undefined): boolean { return ['rendering', 'cutting', 'transcribing'].includes(_lvNorm(s)) }
+function _lvDone(s: string | undefined): boolean { return _lvNorm(s) === 'done' }
+function _lvFailed(s: string | undefined): boolean { return ['failed', 'cancelled', 'skipped'].includes(_lvNorm(s)) }
+function _lvGlyph(s: string | undefined): string {
+  if (_lvDone(s)) return '✓'
+  if (_lvActive(s)) return '◉'
+  if (_lvFailed(s)) return '✕'
+  return '○'
 }
 
-function AiActivityFeed({ vi, events, done }: { vi: boolean; events: WsLogEvent[]; done: boolean }) {
-  // Collapse consecutive duplicate messages, keep the last ~40, so the feed
-  // reads as distinct AI steps rather than a spammy log.
-  const items = useMemo(() => {
-    const out: WsLogEvent[] = []
-    for (const ev of events) {
-      const prev = out[out.length - 1]
-      if (prev && prev.event === ev.event && (prev.message || '') === (ev.message || '')) continue
-      out.push(ev)
-    }
-    return out.slice(-40)
-  }, [events])
-  const endRef = useRef<HTMLLIElement | null>(null)
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }) }, [items.length])
+interface SceneMeta { n: number; role?: string; narration?: string; scene_title?: string }
+
+// ContentLiveView — "Now Rendering" view modelled on RecapLiveView: a LEFT focus
+// column (the scene rendering now — ConicRing + title + narration) and a RIGHT
+// queue (compact scene rows). Content has no episodes, so the queue is a flat
+// scene list. Data comes from liveParts + the content.plan.ready event.
+function ContentLiveView({ vi, liveParts, liveEvents }: {
+  vi: boolean; liveParts: JobPart[]; liveEvents: WsLogEvent[]
+}) {
+  const planEv = [...liveEvents].reverse().find((e) => e.event === 'content.plan.ready')
+  const metaByN = new Map<number, SceneMeta>(
+    (((planEv?.context?.scenes) as SceneMeta[] | undefined) ?? [])
+      .filter(Boolean).map((s) => [Number(s.n), s]),
+  )
+  const parts = liveParts
+  if (parts.length === 0) {
+    return <div className="cs-hint" style={{ padding: '14px 16px' }}>{vi ? 'Chờ AI lập kế hoạch cảnh…' : 'Waiting for the AI scene plan…'}</div>
+  }
+  const actives = [...parts].filter((p) => _lvActive(p.status))
+    .sort((a, b) => (b.progress_percent ?? 0) - (a.progress_percent ?? 0))
+  const focus = actives[0] ?? parts.find((p) => !_lvDone(p.status)) ?? parts[parts.length - 1]
+  const doneCount = parts.filter((p) => _lvDone(p.status)).length
+
+  const roleOf = (p: JobPart) => (metaByN.get(p.part_no)?.role || metaByN.get(p.part_no)?.scene_title || `${vi ? 'Cảnh' : 'Scene'} ${p.part_no}`)
+  const statusLabel = (p: JobPart) => _lvDone(p.status) ? (vi ? 'Xong' : 'Done')
+    : _lvFailed(p.status) ? (vi ? 'Lỗi' : 'Failed')
+    : _lvActive(p.status) ? (vi ? 'Đang dựng' : 'Rendering') : (vi ? 'Chờ' : 'Waiting')
 
   return (
-    <section className="cs-card cs-card--flush cs-feed">
-      <div className="cs-card-hd"><span className="cs-card-title">{vi ? '✨ AI đang làm' : '✨ AI activity'}</span></div>
-      {items.length === 0 ? (
-        <div className="cs-hint">{vi ? 'Đang khởi động…' : 'Starting…'}</div>
-      ) : (
-        <ol className="cs-feed-list">
-          {items.map((ev, i) => {
-            const { icon, tone } = eventMeta(ev)
-            const active = !done && i === items.length - 1
+    <div className="cs-live">
+      {/* LEFT — the scene being rendered now */}
+      <div className="cs-live-focus">
+        <div className="cs-live-label">{vi ? 'ĐANG DỰNG CẢNH' : 'BUILDING SCENE'}</div>
+        {focus && <ContentFocusCard vi={vi} part={focus} meta={metaByN.get(focus.part_no)} roleLabel={roleOf(focus)} />}
+      </div>
+      {/* RIGHT — compact scene queue */}
+      <div className="cs-live-queue">
+        <div className="cs-live-queue-hd">{(vi ? 'Cảnh' : 'Scenes')} {doneCount}/{parts.length}</div>
+        <div className="cs-live-rows">
+          {parts.map((p) => {
+            const st = _lvNorm(p.status)
+            const isFocus = focus?.part_no === p.part_no
             return (
-              <li key={i} ref={i === items.length - 1 ? endRef : undefined}
-                className={`cs-feed-item tone-${tone}${active ? ' is-active' : ''}`}>
-                <span className="cs-feed-icon">{active ? <span className="cs-feed-spinner" /> : icon}</span>
-                <span className="cs-feed-msg">{ev.message || ev.event}</span>
-              </li>
+              <div key={p.part_no} className={`cs-live-row${isFocus ? ' is-focus' : ''}`}>
+                <span className={`cs-live-glyph st-${st}`}>{_lvGlyph(p.status)}</span>
+                <div className="cs-live-row-main">
+                  <div className="cs-live-row-title"><span className="cs-live-row-n">#{p.part_no}</span> {roleOf(p)}</div>
+                  {p.message && <div className="cs-live-row-sub">{p.message}</div>}
+                </div>
+                <span className={`cs-live-row-pct st-${st}`}>
+                  {_lvActive(p.status) && (p.progress_percent ?? 0) > 0 ? `${Math.round(p.progress_percent ?? 0)}%` : statusLabel(p)}
+                </span>
+              </div>
             )
           })}
-        </ol>
-      )}
-    </section>
+        </div>
+      </div>
+    </div>
   )
 }
 
-function LiveSceneCard({ vi, part }: { vi: boolean; part: JobPart }) {
-  const st = String(part.status)
-  const pct = part.progress_percent || 0
-  const running = st !== 'done' && st !== 'failed' && st !== 'skipped'
-  const label = st === 'done' ? (vi ? 'Xong' : 'Done')
-    : st === 'failed' ? (vi ? 'Lỗi' : 'Failed')
-    : st === 'rendering' ? (vi ? 'Đang dựng' : 'Rendering')
-    : st === 'queued' ? (vi ? 'Chờ' : 'Queued')
-    : st
+function ContentFocusCard({ vi, part, meta, roleLabel }: {
+  vi: boolean; part: JobPart; meta?: SceneMeta; roleLabel: string
+}) {
+  const done = _lvDone(part.status)
+  const active = _lvActive(part.status)
+  const pct = active ? Math.max(2, Math.round(part.progress_percent ?? 0)) : (done ? 100 : 0)
+  const statusLabel = done ? (vi ? 'Xong' : 'Done') : active ? (vi ? 'Đang dựng' : 'Rendering') : (vi ? 'Chờ' : 'Waiting')
+  const narr = (meta?.narration || '').trim()
   return (
-    <div className={`cs-scene-tile status-${st}${running ? ' is-running' : ''}`}>
-      <div className="cs-scene-tile-hd">
-        <b>#{part.part_no}</b>
-        <span className={statusClass(st)}>{label}</span>
+    <>
+      <div className="cs-focus-preview">
+        <ConicRing progress={pct} size={76}>{done ? <IconCheck size={24} /> : undefined}</ConicRing>
+        <span className="cs-focus-n">#{part.part_no}</span>
+        <span className={`cs-focus-status st-${_lvNorm(part.status)}`}>{statusLabel}</span>
       </div>
-      {part.message && <div className="cs-scene-tile-msg">{part.message}</div>}
-      {running && (
-        <div className="cs-mini-track"><div className="cs-mini-fill" style={{ width: `${pct}%` }} /></div>
-      )}
-    </div>
+      <div>
+        <div className="cs-focus-title">{roleLabel}</div>
+        <div className="cs-focus-sub">{part.message || (vi ? 'Đang xử lý…' : 'Processing…')}</div>
+      </div>
+      <div className="cs-focus-track"><div className="cs-focus-fill" style={{ width: `${pct}%` }} /></div>
+      {narr && <div className="cs-focus-narr">💬 {narr}</div>}
+    </>
   )
 }
 
@@ -1084,6 +1111,61 @@ function Stepper({ vi, step }: { vi: boolean; step: 1 | 2 | 3 }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// V2 Bold — gradient hero header (icon + bold title + subtitle). Shared across
+// the Compose / Review / Render screens. Strings are passed in (already i18n'd
+// by callers) and all colours come from tokens → dark + light both work.
+function HeroHeader({ icon, title, subtitle }: { icon: string; title: string; subtitle?: React.ReactNode }) {
+  return (
+    <div className="cs-hero">
+      <div className="cs-hero-row">
+        <span className="cs-hero-icon" aria-hidden>{icon}</span>
+        <div>
+          <h1 className="cs-hero-h1">{title}</h1>
+          {subtitle != null && <p className="cs-hero-sub">{subtitle}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// V2 Bold — a grouped config section with an icon chip + bold title.
+function SectionCard({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
+  return (
+    <section className="cs-section">
+      <div className="cs-section-hd">
+        <span className="cs-section-icon" aria-hidden>{icon}</span>
+        <span className="cs-section-title">{title}</span>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+// V2 Bold — visual aspect-ratio picker (real frames instead of 3 text buttons).
+function RatioPreview({ value, onChange }: { value: Ratio; onChange: (r: Ratio) => void }) {
+  return (
+    <div className="cs-ratio-row">
+      {RATIOS.map((r) => (
+        <button key={r} type="button" className={`cs-ratio${value === r ? ' is-on' : ''}`} onClick={() => onChange(r)}>
+          <span className={`cs-ratio-frame cs-ratio-frame--${r}`} />
+          <span className="cs-ratio-label">{RATIO_INFO[r].label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// V2 Bold — target-duration slider with a live value pill.
+function DurationSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="cs-dur">
+      <input className="cs-dur-range" type="range" min={15} max={600} step={5}
+        value={value} onChange={(e) => onChange(Math.max(15, Math.min(600, Number(e.target.value) || 90)))} />
+      <span className="cs-dur-val">{value}s</span>
     </div>
   )
 }
@@ -1119,13 +1201,6 @@ function PublishField({ vi, label, value, multiline }: {
         : <input className="cs-input" readOnly value={value} />}
     </div>
   )
-}
-
-function statusClass(status: string): string {
-  if (status === 'done') return 'cs-status-ok'
-  if (status === 'failed') return 'cs-status-fail'
-  if (status === 'rendering') return 'cs-status-run'
-  return 'cs-status-idle'
 }
 
 function seg(on: boolean): string {

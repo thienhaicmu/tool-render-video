@@ -210,9 +210,17 @@ def _normalize_history_item(row: dict, *, parts_lookup: "dict[str, list] | None"
             best_score = None
             best_part_no = None
 
+    # render_format lets the FE route an active render to the RIGHT studio
+    # (content → Content Studio; clips/recap → Clip Studio) instead of always
+    # opening the Clip Studio monitor. Defensive: default "clips".
+    _rf = str(payload.get("render_format") or "clips").strip().lower()
+    if _rf not in ("clips", "recap", "content"):
+        _rf = "clips"
+
     return {
         "job_id": row["job_id"],
         "kind": "download" if kind == "download" else "render",
+        "render_format": _rf,
         "status": status,
         "stage": str(row.get("stage") or "").strip().lower(),
         "title": title or ("Download job" if kind == "download" else "Render job"),

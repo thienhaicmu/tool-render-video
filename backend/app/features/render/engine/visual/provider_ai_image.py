@@ -29,14 +29,20 @@ def _apply_style(prompt: str, style: str) -> str:
     return f"{prompt}, {style} style" if style else prompt
 
 
-# Imagen 4 model tiers (Gemini API). Choose the axis via CONTENT_IMAGEN_TIER
+# Imagen model tiers (Gemini API). Choose via CONTENT_IMAGEN_TIER
 # (fast | standard | ultra); CONTENT_IMAGEN_MODEL overrides with a full model id.
-#   fast     — batch / storyboard drafts (cheapest, quickest)
-#   standard — the everyday default (best quality/cost balance)
-#   ultra    — highest fidelity, 1 image only (finals / posters)
+#
+#   standard — Imagen 3 (imagen-3.0-generate-002). The DEFAULT because it is
+#              broadly available on Gemini API keys. This is what the UI's
+#              default "Standard" maps to, so AI images work out of the box.
+#   fast / ultra — Imagen 4 variants. Higher quality but require Imagen 4 access
+#              on the key (billing-enabled); a key without access falls back to
+#              the plain background (surfaced via content.visual.fallback).
+# If you have Imagen 4 access and want it as the default, set
+# CONTENT_IMAGEN_MODEL=imagen-4.0-generate-001 (or the tier you prefer).
 _IMAGEN_TIERS = {
     "fast": "imagen-4.0-fast-generate-001",
-    "standard": "imagen-4.0-generate-001",
+    "standard": "imagen-3.0-generate-002",
     "ultra": "imagen-4.0-ultra-generate-001",
 }
 _IMAGEN_DEFAULT_TIER = "standard"
@@ -114,7 +120,13 @@ def _gemini_image(
         # yields, treats None as "try next key"); it cools a key on 429 and rotates.
         return key_pool.call_gemini_with_rotation(_once, label="imagen", seed_key=seed_key)
     except Exception as exc:
-        logger.info("visual.ai_image: Imagen generation failed: %s", exc)
+        logger.warning(
+            "visual.ai_image: Imagen generation FAILED (model=%s): %s — scene will "
+            "fall back to the plain background. A permission/quota error usually "
+            "means the Gemini key lacks Imagen access (needs a billing-enabled key), "
+            "or the model id is wrong (try CONTENT_IMAGEN_MODEL=imagen-3.0-generate-002).",
+            _imagen_model(imagen_tier), exc,
+        )
         return None
 
 

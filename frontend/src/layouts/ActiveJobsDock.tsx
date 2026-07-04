@@ -11,6 +11,7 @@
 import React, { useState, useEffect } from 'react'
 import { useActiveJobs, useJobsStore } from '../stores/jobsStore'
 import { useUIStore } from '../stores/uiStore'
+import { openRenderMonitor } from '../lib/openRenderMonitor'
 import { useRenderStore } from '../stores/renderStore'
 import { useI18n } from '../i18n/useI18n'
 import { cancelRender, retryRender, resumeRender } from '../api/render'
@@ -43,7 +44,6 @@ export function ActiveJobsDock() {
   const queueOrder = useJobsStore((s) => s.queueOrder)
   const { t } = useI18n()
   const setActivePanel = useUIStore((s) => s.setActivePanel)
-  const setMonitorJobId = useUIStore((s) => s.setMonitorJobId)
 
   // P1.4 — session-scoped dismissals for the attention section.
   const [dismissed, setDismissed] = useState<Set<string>>(loadDismissed)
@@ -112,10 +112,9 @@ export function ActiveJobsDock() {
               } as never,
             },
       }))
-      // Pha 4 — explicit "open this job's Monitor". RenderWorkflow consumes
-      // monitorJobId (Step 3); ClipStudio flips to the Render tab.
-      setMonitorJobId(job.job_id)
-      setActivePanel('clip-studio')
+      // Open this job's Monitor in the RIGHT studio (content → Content Studio;
+      // clips/recap → Clip Studio). openRenderMonitor reads job.render_format.
+      openRenderMonitor(job)
     } else {
       setActivePanel('download')
     }

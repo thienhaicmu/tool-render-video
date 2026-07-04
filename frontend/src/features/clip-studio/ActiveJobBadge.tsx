@@ -10,7 +10,7 @@
  * lands the user on the monitor view.
  */
 import { useActiveJobs } from '@/stores/jobsStore'
-import { useUIStore } from '@/stores/uiStore'
+import { openRenderMonitor } from '@/lib/openRenderMonitor'
 
 interface ActiveJobBadgeProps {
   onClick: () => void
@@ -21,14 +21,14 @@ export function ActiveJobBadge({ onClick }: ActiveJobBadgeProps) {
   // mounting this component bumps the refcount, unmounting decrements
   // it, and the interval is alive while any one subscriber is mounted.
   const { active, activeCount } = useActiveJobs()
-  const setMonitorJobId = useUIStore((s) => s.setMonitorJobId)
 
   if (activeCount === 0 || !active) return null
 
-  // Pha 4 — clicking the badge opens the active render's Monitor explicitly
-  // (the old auto-reattach that did this on tab switch is gone).
+  // Clicking the badge opens the active render's Monitor in the RIGHT studio
+  // (content → Content Studio; clips/recap → Clip Studio). For a non-render
+  // (download) active job, keep the caller's default navigation.
   const handleClick = () => {
-    if (active.kind === 'render') setMonitorJobId(active.job_id)
+    if (active.kind === 'render') { openRenderMonitor(active); return }
     onClick()
   }
 
