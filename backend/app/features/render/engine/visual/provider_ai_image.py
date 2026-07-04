@@ -114,7 +114,13 @@ def _gemini_image(
         # yields, treats None as "try next key"); it cools a key on 429 and rotates.
         return key_pool.call_gemini_with_rotation(_once, label="imagen", seed_key=seed_key)
     except Exception as exc:
-        logger.info("visual.ai_image: Imagen generation failed: %s", exc)
+        logger.warning(
+            "visual.ai_image: Imagen generation FAILED (model=%s): %s — scene will "
+            "fall back to the plain background. A permission/quota error usually "
+            "means the Gemini key lacks Imagen access (needs a billing-enabled key), "
+            "or the model id is wrong (try CONTENT_IMAGEN_MODEL=imagen-3.0-generate-002).",
+            _imagen_model(imagen_tier), exc,
+        )
         return None
 
 

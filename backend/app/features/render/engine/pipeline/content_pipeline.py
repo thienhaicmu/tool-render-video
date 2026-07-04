@@ -361,6 +361,7 @@ def run_content(
         # worker's own thread-local DB connection.
         failed_parts: list[dict] = []
         _results: dict[int, str] = {}
+        _visual_fallbacks: list[int] = []   # scenes where an online visual provider fell back to local
 
         # MED-2: cancel probe (Veo polls it; checked between sub-steps).
         def _cancel_cb() -> bool:
@@ -458,6 +459,19 @@ def run_content(
                 upsert_job_part(job_id, i, part_name, JobPartStage.FAILED,
                                 progress_percent=0, message="visual resolve failed")
                 return {"idx": i, "clip": None, "error": "visual_failed"}
+            # A requested online provider (stock / ai_image / ai_video) that yields
+            # a 'local' asset SILENTLY fell back to the plain background (no key /
+            # no access / API error / empty visual_prompt). Flag it so the user is
+            # told WHY "AI images" produced only backgrounds instead of guessing.
+            _fell_back = _prov != "local" and (asset.provider or "local") == "local"
+            if _fell_back:
+                upsert_job_part(job_id, i, part_name, JobPartStage.RENDERING,
+                                progress_percent=55,
+                                message=f"{_prov} unavailable — using background")
+                _job_log(effective_channel, job_id,
+                         f"Content scene {i}: visual provider '{_prov}' fell back to "
+                         f"local background (no key / no access / error / empty prompt)",
+                         kind="warning")
             if _cancel_cb():
                 raise cancel_registry.JobCancelledError()
 
@@ -480,7 +494,7 @@ def run_content(
                 upsert_job_part(job_id, i, part_name, JobPartStage.DONE,
                                 progress_percent=100, duration=ndur,
                                 output_file=scene_out, message=(scene.role or ""))
-                return {"idx": i, "clip": scene_out, "error": None}
+                return {"idx": i, "clip": scene_out, "error": None, "fallback": _fell_back}
             upsert_job_part(job_id, i, part_name, JobPartStage.FAILED,
                             progress_percent=0, message="scene render failed")
             return {"idx": i, "clip": None, "error": "render_failed"}
@@ -488,6 +502,8 @@ def run_content(
         def _collect(r: dict) -> None:
             if r.get("clip"):
                 _results[int(r["idx"])] = r["clip"]
+                if r.get("fallback"):
+                    _visual_fallbacks.append(int(r["idx"]))
             elif r.get("error"):
                 failed_parts.append({"part_no": int(r["idx"]), "error": r["error"]})
 
@@ -532,6 +548,27 @@ def run_content(
         scene_clips: list[str] = [_results[i] for i in sorted(_results)]
         if not scene_clips:
             raise RuntimeError("Content: no scene rendered successfully")
+
+        # Tell the user WHY "AI images" produced only backgrounds — a requested
+        # online visual provider that silently fell back to local on every scene
+        # is almost always a missing API key / no Imagen access on the key /
+        # a bad model id / empty visual prompts. Surfaced as a WS warning event
+        # + result flag so it shows in the Activity Feed (not just the log).
+        if _visual_fallbacks and visual_provider != "local":
+            _n_fb = len(_visual_fallbacks)
+            _emit_render_event(
+                channel_code=effective_channel, job_id=job_id,
+                event="content.visual.fallback", level="WARNING",
+                message=(
+                    f"{_n_fb}/{total_parts} scene(s): '{visual_provider}' visuals "
+                    f"unavailable — used the background instead. Check the API key / "
+                    f"model access (Imagen needs a billing-enabled Gemini key) or the "
+                    f"scene visual prompts."
+                ),
+                step="render.content",
+                context={"provider": visual_provider, "fallback_scenes": _visual_fallbacks,
+                         "total": total_parts},
+            )
 
         # 5. Assemble scenes → one video (reuse the recap assembler) -----------
         _set_stage(JobStage.WRITING_REPORT, 88, "Assembling final video")
@@ -611,6 +648,8 @@ def run_content(
             "successful_outputs_count": 1,
             "failed_outputs_count": len(failed_parts),
             "failed_parts": [int(f["part_no"]) for f in failed_parts],
+            "visual_provider": visual_provider,
+            "visual_fallback_scenes": _visual_fallbacks,
             "selected_segments_count": total_parts,
             "is_partial_success": bool(failed_parts),
             "ai_director": {"enabled": True, "mode": "content"},

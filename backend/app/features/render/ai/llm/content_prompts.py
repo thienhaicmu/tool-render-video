@@ -93,14 +93,24 @@ CREATOR TONE:       {tone_clause}
     default|capcut|word_by_word|karaoke|highlight|minimal|bold based on the tone.
 11. **SCENE TITLE** ("scene_title"): a short label for this scene (for the review
     timeline), in {lang_name}.
-12. **VISUAL PROMPT** ("visual_prompt"): a FULL, descriptive prompt an image/video
-    generator (or a stock search) could use for this scene — subject, setting,
-    style, lighting, mood. English is fine here (generators prefer it). Example:
-    "A cinematic battlefield at sunrise, Napoleon leading troops, dramatic
-    lighting, realistic, 4k". Also give a short "negative_prompt" (things to
-    avoid) when useful, else "". "visual_hint" stays a short human label.
-13. **ASSET SUGGESTION** ("asset_suggestion"): your best guess at the visual
-    source for this scene — one of ai_image|ai_video|stock|upload|local|"".
+12. **VISUAL PROMPT** ("visual_prompt") — REQUIRED for EVERY scene, NEVER leave it
+    empty. Write a FULL, standalone image-generator prompt (Imagen / DALL·E / stock
+    search) that fully describes what to SHOW on screen for this scene. Include, in
+    this order: SUBJECT (who/what) · SETTING/background · COMPOSITION/shot (wide,
+    close-up, over-the-shoulder…) · STYLE (photoreal, cinematic, 3D, illustration…)
+    · LIGHTING · MOOD. Write it in ENGLISH (generators perform better), even when
+    the narration is in {lang_name}. Keep it CONSISTENT across scenes: reuse the
+    plan's ``video_style`` and, for any Story Bible character present, their
+    canonical look, so the video feels like one piece. Ground it in THIS scene's
+    narration — do NOT reuse a generic prompt for every scene. Example:
+    "Cinematic wide shot of a snowy Waterloo battlefield at dawn, Napoleon in a
+    grey coat on horseback leading exhausted troops, cold blue light, volumetric
+    fog, photoreal, 4k". Also give a short "negative_prompt" (things to avoid:
+    text, watermark, distorted faces…), else "".
+13. **ASSET SUGGESTION** ("asset_suggestion"): the best visual source for this
+    scene — one of ai_image|ai_video|stock|upload|local. Prefer "ai_image" for a
+    scene that has a real visual to generate; only use "local" for a pure
+    title/quote card with nothing to depict.
 14. **CAMERA / TRANSITION / ANIMATION / BGM**: suggest what would suit each scene.
     DESCRIPTIVE SUGGESTIONS ONLY — the engine may or may not use them. Leave any
     field you have no opinion on as an empty string.
@@ -131,9 +141,9 @@ CREATOR TONE:       {tone_clause}
       "est_duration_sec": <float>,
       "subtitle_style": "<per-scene override, or '' to use the plan style>",
       "visual_hint": "<short label of what footage/image suits this scene, or ''>",
-      "visual_prompt": "<full image/video generator prompt for this scene, or ''>",
+      "visual_prompt": "<REQUIRED — full English image-generator prompt for this scene>",
       "negative_prompt": "<things to avoid in the visual, or ''>",
-      "asset_suggestion": "ai_image|ai_video|stock|upload|local|",
+      "asset_suggestion": "ai_image|ai_video|stock|upload|local",
       "camera_hint": "zoom_in|zoom_out|pan|still|",
       "transition_hint": "fade|cut|slide|flash|zoom|",
       "animation_hint": "highlight|popup|title|lower_third|progress_bar|"
