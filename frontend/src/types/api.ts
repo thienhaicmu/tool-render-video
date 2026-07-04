@@ -208,6 +208,8 @@ export interface RenderRequest {
   content_background_value?: string
   content_bgm_path?: string
   content_visual_provider?: string
+  // Imagen tier for the ai_image provider: ''|fast|standard|ultra ('' = env/standard).
+  content_imagen_tier?: string
   // CS-A: edited/approved ContentPlan JSON from the Review step. When set, the
   // backend renders from it and skips AI planning.
   content_plan_override?: string

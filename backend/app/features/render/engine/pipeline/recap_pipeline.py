@@ -75,7 +75,8 @@ logger = logging.getLogger("app.render.recap")
 # narration for every scene at once, so later scenes degrade. When ON, re-author
 # each episode's narration in a focused call. Default OFF → recap is
 # byte-identical; the wiring below is a no-op. Costs +1 LLM call per episode.
-_RECAP_PER_EPISODE_NARRATION: bool = os.getenv("RECAP_PER_EPISODE_NARRATION", "0") == "1"
+from app.features.render.ai.llm.recap_profile import recap_flag as _recap_flag
+_RECAP_PER_EPISODE_NARRATION: bool = _recap_flag("RECAP_PER_EPISODE_NARRATION")
 
 # Windows-illegal filename chars (+ control chars). Episode titles come from the
 # AI (e.g. "Tập 1: Mở màn án mạng") and may contain ':' '/' etc.
@@ -482,7 +483,7 @@ def run_recap(
         # window — matches scene_detector's _TV2_MERGE_GAP_SEC by design.
         try:
             import os as _os
-            if _os.getenv("RECAP_SNAP_TO_SHOTS_ENABLED", "1") == "1" and _scene_map is not None:
+            if _recap_flag("RECAP_SNAP_TO_SHOTS_ENABLED") and _scene_map is not None:
                 try:
                     _tol = float(_os.getenv("RECAP_SNAP_TOLERANCE_SEC", "0.5"))
                 except (TypeError, ValueError):
@@ -508,8 +509,7 @@ def run_recap(
         # final scene set, and before persist. ``RECAP_TRIM_TO_BAND=0`` is the
         # kill switch; default ON. Never fatal.
         try:
-            import os as _os_trim
-            if _os_trim.getenv("RECAP_TRIM_TO_BAND", "1") == "1" and video_duration > 0:
+            if _recap_flag("RECAP_TRIM_TO_BAND") and video_duration > 0:
                 _trim = recap_plan.trim_to_duration_band(video_duration)
                 if _trim.get("changed"):
                     _job_log(

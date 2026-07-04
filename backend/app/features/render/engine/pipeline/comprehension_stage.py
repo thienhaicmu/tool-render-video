@@ -61,8 +61,13 @@ def is_hoist_enabled() -> bool:
     """Public form of the kill switch — the recap_pipeline calls this once to
     decide whether to use the Comprehension stage (hoist ON) or the legacy
     Batch-A in-dispatcher pass-1 path (hoist OFF). Read on every call (not at
-    module load) so an operator can flip the env var without restarting."""
-    return os.getenv("STORY_INTELLIGENCE_HOIST_ENABLED", "1") == "1"
+    module load) so an operator can flip the env var without restarting.
+
+    Resolves via the recap intelligence profile (RECAP_INTELLIGENCE_PROFILE):
+    an explicit STORY_INTELLIGENCE_HOIST_ENABLED env var still overrides; with
+    neither set the hard default (ON) is byte-identical to before."""
+    from app.features.render.ai.llm.recap_profile import recap_flag
+    return recap_flag("STORY_INTELLIGENCE_HOIST_ENABLED")
 
 
 # Internal alias for back-compat with this module's tests.

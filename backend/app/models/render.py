@@ -375,6 +375,11 @@ class RenderRequest(BaseModel):
     content_background_value: str = "#000000"   # color hex / asset path
     content_bgm_path: str = ""                  # "" = no background music
     content_visual_provider: str = "local"      # engine.visual seam selector
+    # Imagen tier for the ai_image provider: ""|fast|standard|ultra. "" (default,
+    # Sacred #2 inert) = fall back to the CONTENT_IMAGEN_TIER env, then "standard"
+    # — so existing jobs behave exactly as before. Only consulted when
+    # content_visual_provider="ai_image".
+    content_imagen_tier: str = ""
     # CS-A: an APPROVED/edited ContentPlan JSON from the Review step. When set
     # (Content Studio's mandatory Review → Approve flow), run_content renders
     # FROM this plan and SKIPS the AI planning call. "" = generate the plan via

@@ -40,6 +40,12 @@ export interface ContentPlan {
   total_target_sec?: number
   subtitle_style?: string
   bgm_mood?: string
+  story_bible?: {
+    setting?: string
+    hook?: string
+    cta?: string
+    characters?: { id?: string; name?: string; description?: string }[]
+  }
   scenes: ContentScene[]
 }
 
@@ -52,9 +58,74 @@ export interface ContentPlanRequest {
   llm_model?: string | null
 }
 
-/** Generate a ContentPlan from a script WITHOUT rendering (Review step). */
-export async function generateContentPlan(req: ContentPlanRequest): Promise<{ plan: ContentPlan }> {
-  return apiFetch<{ plan: ContentPlan }>('/api/content/plan', {
+/** AI's deterministic duration-fit result (reading-speed scaling to hit target). */
+export interface DurationFit {
+  changed: boolean
+  before_sec: number
+  after_sec: number
+  target_sec: number
+  applied_scale?: number | null
+  in_tolerance?: boolean | null
+  scaled_scenes?: number
+}
+
+/** AI's per-scene narration/timing audit (overloaded/sparse flags). */
+export interface NarrationAuditScene {
+  n: number
+  chars: number
+  capacity_chars?: number
+  load?: number | null
+  flag: 'overloaded' | 'sparse' | 'ok' | 'no_estimate'
+}
+export interface NarrationAudit {
+  weak: boolean
+  rated: number
+  overloaded: number
+  sparse: number
+  scenes: NarrationAuditScene[]
+}
+
+export interface ContentPlanResponse {
+  plan: ContentPlan
+  duration_fit?: DurationFit | null
+  narration_audit?: NarrationAudit | null
+}
+
+/** Generate a ContentPlan from a script WITHOUT rendering (Review step). The
+ *  response also carries the AI's deterministic duration-fit + narration audit
+ *  so the Review screen can show what the AI did. */
+export async function generateContentPlan(req: ContentPlanRequest): Promise<ContentPlanResponse> {
+  return apiFetch<ContentPlanResponse>('/api/content/plan', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
+// ── Cost preflight (POST /api/content/estimate) ──────────────────────────────
+
+export interface ContentEstimate {
+  estimated_cost: number
+  budget_cap: number
+  scenes: number
+  by_provider: Record<string, number>
+  per_scene: { scene: number; provider: string; cost: number }[]
+  estimated_duration_sec: number
+}
+
+export interface ContentEstimateRequest {
+  plan?: ContentPlan
+  script?: string
+  target_duration?: number
+  voice_language?: string
+  visual_provider?: string
+  budget_cap?: number
+}
+
+/** Preflight the AI cost + per-scene visual provider BEFORE rendering. Runs the
+ *  same deterministic decision tree + budget guard the render uses (read-only —
+ *  no render, no paid API call). */
+export async function estimateContentCost(req: ContentEstimateRequest): Promise<ContentEstimate> {
+  return apiFetch<ContentEstimate>('/api/content/estimate', {
     method: 'POST',
     body: JSON.stringify(req),
   })
