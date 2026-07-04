@@ -101,6 +101,36 @@ export async function generateContentPlan(req: ContentPlanRequest): Promise<Cont
   })
 }
 
+// ── Cost preflight (POST /api/content/estimate) ──────────────────────────────
+
+export interface ContentEstimate {
+  estimated_cost: number
+  budget_cap: number
+  scenes: number
+  by_provider: Record<string, number>
+  per_scene: { scene: number; provider: string; cost: number }[]
+  estimated_duration_sec: number
+}
+
+export interface ContentEstimateRequest {
+  plan?: ContentPlan
+  script?: string
+  target_duration?: number
+  voice_language?: string
+  visual_provider?: string
+  budget_cap?: number
+}
+
+/** Preflight the AI cost + per-scene visual provider BEFORE rendering. Runs the
+ *  same deterministic decision tree + budget guard the render uses (read-only —
+ *  no render, no paid API call). */
+export async function estimateContentCost(req: ContentEstimateRequest): Promise<ContentEstimate> {
+  return apiFetch<ContentEstimate>('/api/content/estimate', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
 export interface NarrationPreviewRequest {
   text: string
   voice_language?: string

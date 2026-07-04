@@ -32,8 +32,8 @@ import { RATIO_INFO } from '../clip-studio/render/constants'
 import type { Ratio } from '../clip-studio/render/types'
 import {
   generateContentPlan, previewNarration, createProject, saveProject, getProject, listProjects,
-  publishMeta, type ContentPlan, type ContentScene, type ContentProjectSummary, type PublishMeta,
-  type DurationFit,
+  publishMeta, estimateContentCost, type ContentPlan, type ContentScene, type ContentProjectSummary,
+  type PublishMeta, type DurationFit, type ContentEstimate,
 } from '../../api/content'
 import { getDefaultOutputDir, putDefaultOutputDir } from '../../api/outputDir'
 import { BASE_URL } from '../../api/client'
@@ -521,6 +521,10 @@ function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvid
 
       <AiInsights vi={vi} plan={plan} durationFit={durationFit} visualProvider={visualProvider} targetDuration={targetDuration} />
 
+      {visualProvider !== 'local' && (
+        <CostEstimatePanel vi={vi} plan={plan} visualProvider={visualProvider} targetDuration={targetDuration} />
+      )}
+
       <div className="cs-scene-list">
         {plan.scenes.map((s, i) => (
           <SceneRow key={i} vi={vi} scene={s} index={i} total={plan.scenes.length} voice={voice}
@@ -837,6 +841,69 @@ function AiInsights({ vi, plan, durationFit, visualProvider, targetDuration }: {
           </div>
         )}
       </div>
+    </section>
+  )
+}
+
+// ── Cost preflight (Review, paid visual providers) ──────────────────────────
+
+const _PROVIDER_LABELS: Record<string, string> = {
+  local: 'Local', stock: 'Stock', ai_image: 'Imagen', ai_video: 'Veo',
+}
+
+function CostEstimatePanel({ vi, plan, visualProvider, targetDuration }: {
+  vi: boolean; plan: ContentPlan; visualProvider: Config['visualProvider']; targetDuration: number
+}) {
+  const [busy, setBusy] = useState(false)
+  const [est, setEst] = useState<ContentEstimate | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function run() {
+    if (busy) return
+    setBusy(true); setErr(null)
+    try {
+      const r = await estimateContentCost({
+        plan, visual_provider: visualProvider, target_duration: targetDuration, budget_cap: 0,
+      })
+      setEst(r)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="cs-card cs-cost">
+      <div className="cs-card-hd">
+        <span className="cs-card-title">{vi ? '💰 Chi phí AI ước tính' : '💰 Estimated AI cost'}</span>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={run}>
+          {busy ? (vi ? 'Đang tính…' : 'Estimating…') : est ? (vi ? 'Tính lại' : 'Recalculate') : (vi ? 'Ước tính' : 'Estimate')}
+        </Button>
+      </div>
+      {err && <div className="cs-hint" style={{ color: 'var(--fail)' }}>{err}</div>}
+      {!est && !err && (
+        <div className="cs-hint">
+          {vi ? 'Bấm "Ước tính" để xem chi phí ảnh AI trước khi render (không gọi API trả phí).'
+              : 'Click "Estimate" to preview the AI image cost before rendering (no paid API call).'}
+        </div>
+      )}
+      {est && (
+        <div className="cs-cost-body">
+          <div className="cs-cost-total">
+            <span className="cs-cost-num">${est.estimated_cost.toFixed(2)}</span>
+            <span className="cs-cost-sub">{est.scenes} {vi ? 'cảnh' : 'scenes'} · ~{est.estimated_duration_sec.toFixed(0)}s</span>
+          </div>
+          <div className="cs-row" style={{ gap: 6 }}>
+            {Object.entries(est.by_provider).map(([prov, n]) => (
+              <span key={prov} className="cs-char-chip">{_PROVIDER_LABELS[prov] || prov}: {n}</span>
+            ))}
+          </div>
+          {est.estimated_cost === 0 && (
+            <div className="cs-hint">{vi ? 'Miễn phí — mọi cảnh dùng nguồn không tính phí (local/stock).' : 'Free — every scene uses a no-cost source (local/stock).'}</div>
+          )}
+        </div>
+      )}
     </section>
   )
 }
