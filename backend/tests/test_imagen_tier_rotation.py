@@ -19,14 +19,15 @@ def _clean(monkeypatch):
     yield
 
 
-def test_tier_maps_to_imagen4_models(monkeypatch):
-    assert ai._imagen_model() == "imagen-4.0-generate-001"           # default standard
+def test_tier_maps_to_models(monkeypatch):
+    # Default "standard" = Imagen 3 (broadly available so AI images work OOTB).
+    assert ai._imagen_model() == "imagen-3.0-generate-002"
     monkeypatch.setenv("CONTENT_IMAGEN_TIER", "fast")
-    assert ai._imagen_model() == "imagen-4.0-fast-generate-001"
+    assert ai._imagen_model() == "imagen-4.0-fast-generate-001"      # Imagen 4 (opt-in)
     monkeypatch.setenv("CONTENT_IMAGEN_TIER", "ultra")
-    assert ai._imagen_model() == "imagen-4.0-ultra-generate-001"
+    assert ai._imagen_model() == "imagen-4.0-ultra-generate-001"     # Imagen 4 (opt-in)
     monkeypatch.setenv("CONTENT_IMAGEN_TIER", "nonsense")
-    assert ai._imagen_model() == "imagen-4.0-generate-001"           # unknown → standard
+    assert ai._imagen_model() == "imagen-3.0-generate-002"           # unknown → standard
 
 
 def test_explicit_model_overrides_tier(monkeypatch):
