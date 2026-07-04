@@ -71,7 +71,6 @@
   display: block; background: var(--bg-hover, var(--surface-input));
   border: 1.5px solid var(--text-3); transition: border-color 0.15s;
 }
-.cs-ratio.is-on .cs-ratio-frame { border-color: var(--accent-primary); background: var(--accent-subtle); }
 .cs-ratio-frame--r916 { width: 22px; height: 39px; }
 .cs-ratio-frame--r11  { width: 34px; height: 34px; }
 .cs-ratio-frame--r169 { width: 46px; height: 26px; }
