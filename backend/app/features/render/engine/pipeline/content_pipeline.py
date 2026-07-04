@@ -450,6 +450,7 @@ def run_content(
                     ),
                     width=width, height=height, fps=fps, duration_sec=ndur,
                     work_dir=str(scenes_dir), cancel_check=_cancel_cb,
+                    imagen_tier=(getattr(payload, "content_imagen_tier", "") or ""),
                 ),
                 provider=_prov,
             )

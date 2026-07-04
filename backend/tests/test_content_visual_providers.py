@@ -86,7 +86,7 @@ def test_ai_image_forwards_negative_and_style(monkeypatch, tmp_path):
     monkeypatch.setattr(ai, "visual_cache_dir", lambda: tmp_path)
     captured: dict = {}
 
-    def _fake_gemini(prompt, negative="", style="", seed=0, width=0, height=0):
+    def _fake_gemini(prompt, negative="", style="", seed=0, width=0, height=0, imagen_tier=""):
         captured.update(prompt=prompt, negative=negative, style=style, seed=seed,
                         width=width, height=height)
         return b"PNGDATA"
@@ -129,7 +129,7 @@ def test_ai_image_verify_regenerates_on_mismatch(monkeypatch, tmp_path):
 
     gen_calls = {"n": 0}
 
-    def _fake_gemini(prompt, negative="", style="", seed=0, width=0, height=0):
+    def _fake_gemini(prompt, negative="", style="", seed=0, width=0, height=0, imagen_tier=""):
         gen_calls["n"] += 1
         return b"PNGDATA"
     monkeypatch.setattr(ai, "_gemini_image", _fake_gemini)

@@ -42,13 +42,19 @@ _IMAGEN_TIERS = {
 _IMAGEN_DEFAULT_TIER = "standard"
 
 
-def _imagen_model() -> str:
-    """Resolve the Imagen model id: explicit CONTENT_IMAGEN_MODEL wins, else map
-    CONTENT_IMAGEN_TIER (fast|standard|ultra) → an Imagen 4 model. Never raises."""
+def _imagen_model(tier_override: str = "") -> str:
+    """Resolve the Imagen model id. Precedence:
+       1. CONTENT_IMAGEN_MODEL env (full model id) — always wins.
+       2. Per-request ``tier_override`` (from the payload's content_imagen_tier).
+       3. CONTENT_IMAGEN_TIER env.
+       4. "standard".
+    fast|standard|ultra → an Imagen 4 model. Never raises."""
     explicit = (os.getenv("CONTENT_IMAGEN_MODEL", "") or "").strip()
     if explicit:
         return explicit
-    tier = (os.getenv("CONTENT_IMAGEN_TIER", _IMAGEN_DEFAULT_TIER) or _IMAGEN_DEFAULT_TIER).strip().lower()
+    tier = (tier_override or "").strip().lower() or (
+        os.getenv("CONTENT_IMAGEN_TIER", _IMAGEN_DEFAULT_TIER) or _IMAGEN_DEFAULT_TIER
+    ).strip().lower()
     return _IMAGEN_TIERS.get(tier, _IMAGEN_TIERS[_IMAGEN_DEFAULT_TIER])
 
 
@@ -68,10 +74,11 @@ def _imagen_aspect_ratio(width: int, height: int) -> str:
 
 def _gemini_image(
     prompt: str, negative: str = "", style: str = "", seed: int = 0,
-    width: int = 0, height: int = 0,
+    width: int = 0, height: int = 0, imagen_tier: str = "",
 ) -> Optional[bytes]:
     """Generate a PNG via Gemini Imagen 4, fanning the request across the whole
     ``GEMINI_API_KEYS`` pool (rotates on 429/quota — N keys ≈ N× the daily cap).
+    ``imagen_tier`` (""|fast|standard|ultra) selects the model tier per request.
     Lazy SDK import; None on any failure (→ local fallback). Never raises."""
     try:
         from google import genai  # lazy — optional dep
@@ -82,7 +89,7 @@ def _gemini_image(
             logger.info("visual.ai_image: no Gemini key / pool — skipping Imagen")
             return None
 
-        model = _imagen_model()
+        model = _imagen_model(imagen_tier)
         _cfg: dict = {
             "number_of_images": 1,
             "aspect_ratio": _imagen_aspect_ratio(width, height),
@@ -181,10 +188,11 @@ def resolve_ai_image(request: SceneVisualRequest) -> Optional[SceneVisualAsset]:
             return None
         provider = (os.getenv("CONTENT_AI_IMAGE_PROVIDER", "").strip().lower() or "gemini")
         w, h = int(request.width), int(request.height)
+        tier = (getattr(request, "imagen_tier", "") or "").strip().lower()
         # Include the resolved model in the cache key so switching the Imagen tier
         # (fast/standard/ultra) or the DALL-E model regenerates instead of serving
         # a stale lower/higher-tier image for the same prompt+size.
-        _model_tag = _imagen_model() if provider != "openai" else (
+        _model_tag = _imagen_model(tier) if provider != "openai" else (
             os.getenv("CONTENT_DALLE_MODEL", "dall-e-3").strip() or "dall-e-3"
         )
         cached = visual_cache_dir() / f"{cache_key('ai_image', provider, _model_tag, prompt, w, h)}.png"
@@ -201,7 +209,7 @@ def resolve_ai_image(request: SceneVisualRequest) -> Optional[SceneVisualAsset]:
             seed = base_seed + attempt if base_seed else 0
             data = (
                 _openai_image(prompt, w, h, negative, style) if provider == "openai"
-                else _gemini_image(prompt, negative, style, seed, w, h)
+                else _gemini_image(prompt, negative, style, seed, w, h, imagen_tier=tier)
             )
             if not data:
                 return None

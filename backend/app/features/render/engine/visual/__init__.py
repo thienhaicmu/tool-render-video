@@ -68,6 +68,10 @@ class SceneVisualRequest:
     # (e.g. Veo, minutes long) polls this to abort promptly on cancel. None =
     # no cancellation wiring (local + tests).
     cancel_check: Optional[Callable[[], bool]] = field(default=None)
+    # Imagen tier override for the ai_image provider: ""|fast|standard|ultra.
+    # "" = provider falls back to the CONTENT_IMAGEN_TIER env, then "standard".
+    # Ignored by non-Imagen providers.
+    imagen_tier: str = ""
 
 
 @dataclass

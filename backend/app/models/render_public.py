@@ -156,7 +156,7 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # → Video. The user-facing knobs: the script + the chosen background + the
     # visual provider selector. All inert by default (Sacred Contract #2).
     "content_script", "content_background_kind", "content_background_value",
-    "content_bgm_path", "content_visual_provider",
+    "content_bgm_path", "content_visual_provider", "content_imagen_tier",
     # CS-A (2026-07-03) — an edited/approved ContentPlan JSON from the Content
     # Studio Review step. When set, run_content renders from it and skips AI planning.
     "content_plan_override",

@@ -178,7 +178,70 @@ def _validate_output_dir(payload: RenderRequest):
         logger.warning("disk space probe failed for %s: %s", probe, _disk_exc)
 
 
+def _validate_content_source(payload: RenderRequest):
+    """Case-aware validation for a Content-mode render (render_format="content").
+
+    Content has NO source video — its "source" is the script (or an approved
+    plan override). We validate what a content render actually needs, so a bad
+    request fails fast with a clear message instead of either a cryptic
+    source-video error (the pre-2026-07 bug) or a mid-render failure:
+
+      1. A non-empty script OR a non-empty approved plan override.
+      2. If the job-level background is an image/video, its path must be
+         provided AND exist on disk (a color background needs no file). Per-scene
+         backgrounds can still override this at render time, but a missing
+         job-level asset with no override would fail mid-render.
+      3. A usable, writable output_dir (shared _validate_output_dir: existence,
+         write permission, free-disk preflight).
+
+    The visual provider (stock / ai_image / ai_video) is NOT hard-validated for
+    an API key here: the engine.visual seam falls back to the local background
+    when a provider has no key / no network, so a missing key degrades
+    gracefully rather than failing the request.
+    """
+    script = (getattr(payload, "content_script", "") or "").strip()
+    plan_override = (getattr(payload, "content_plan_override", "") or "").strip()
+    if not script and not plan_override:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "content_script is required for a content render — paste a script "
+                "(or generate + approve a plan) before rendering."
+            ),
+        )
+
+    bg_kind = (getattr(payload, "content_background_kind", "") or "color").strip().lower()
+    bg_value = (getattr(payload, "content_background_value", "") or "").strip()
+    if bg_kind in ("image", "video"):
+        if not bg_value:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Background is set to '{bg_kind}' but no file was chosen. "
+                    f"Pick a background {bg_kind}, or switch the background to Color."
+                ),
+            )
+        if not Path(bg_value).expanduser().exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Background {bg_kind} not found on disk: {bg_value}",
+            )
+
+    _validate_output_dir(payload)
+
+
 def _validate_render_source(payload: RenderRequest):
+    # Validation is per render_format — each mode has a DIFFERENT "source":
+    #   content → the SCRIPT (or an approved plan override); NO video file.
+    #   clips / recap → a local source video file (or an editor session).
+    # Validating source_video_path unconditionally (the pre-2026-07 behaviour)
+    # rejected every Content-mode render with "source_video_path is required",
+    # because Content mode has no footage. Route the check by format.
+    render_format = str(getattr(payload, "render_format", "clips") or "clips").strip().lower()
+    if render_format == "content":
+        _validate_content_source(payload)
+        return
+
     # When an editor session is provided, the pipeline uses the session's video_path;
     # skip source-path validation entirely.
     if (getattr(payload, "edit_session_id", None) or "").strip():

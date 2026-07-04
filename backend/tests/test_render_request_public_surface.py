@@ -143,9 +143,11 @@ def test_public_field_count_pinned():
     # total stays 162.
     # CS-A (2026-07-03): +1 content_plan_override, FE-facing (Content Studio's
     # Review flow sends the edited plan on the wire). FE 82→83, BE-only 80, total 163.
-    assert len(FE_FACING_FIELDS) == 83, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    # P1 redesign (2026-07-04): +1 content_imagen_tier, FE-facing (Content Studio's
+    # Imagen quality selector). FE 83→84, BE-only 80, total 163→164.
+    assert len(FE_FACING_FIELDS) == 84, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
     assert len(BE_ONLY_FIELDS)   == 80, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
-    assert len(RenderRequest.model_fields) == 163, (
+    assert len(RenderRequest.model_fields) == 164, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
     )

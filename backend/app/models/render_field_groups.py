@@ -40,7 +40,8 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
         # Content Mode (render_format="content") — Script → AI narration → Video.
         # BE-only; the Visual Generator provider seam selector + user background.
         "content_script", "content_background_kind", "content_background_value",
-        "content_bgm_path", "content_visual_provider", "content_plan_override",
+        "content_bgm_path", "content_visual_provider", "content_imagen_tier",
+        "content_plan_override",
     }),
     "lifecycle": frozenset({
         "resume_job_id", "resume_from_last", "render_profile", "render_preset",

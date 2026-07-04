@@ -35,6 +35,34 @@ def test_explicit_model_overrides_tier(monkeypatch):
     assert ai._imagen_model() == "imagen-custom-x"
 
 
+def test_per_request_tier_overrides_env(monkeypatch):
+    # A payload/scene tier beats the env default (but not an explicit model id).
+    monkeypatch.setenv("CONTENT_IMAGEN_TIER", "fast")
+    assert ai._imagen_model("ultra") == "imagen-4.0-ultra-generate-001"
+    # Empty override → fall back to the env tier.
+    assert ai._imagen_model("") == "imagen-4.0-fast-generate-001"
+
+
+def test_render_request_imagen_tier_default_inert():
+    # Sacred Contract #2: new field defaults to "" (inert → env/standard).
+    from app.models.render import RenderRequest
+    assert RenderRequest().content_imagen_tier == ""
+    from app.models.render_public import FE_FACING_FIELDS
+    assert "content_imagen_tier" in FE_FACING_FIELDS  # user-selectable on the wire
+
+
+def test_scene_visual_request_carries_tier():
+    from app.features.render.engine.visual import SceneVisualRequest
+    r = SceneVisualRequest(scene_index=0, kind="color", value="#000", prompt="x",
+                           width=1080, height=1920, fps=30, duration_sec=3, work_dir=".",
+                           imagen_tier="ultra")
+    assert r.imagen_tier == "ultra"
+    # default is inert
+    r2 = SceneVisualRequest(scene_index=0, kind="color", value="#000", prompt="x",
+                            width=1080, height=1920, fps=30, duration_sec=3, work_dir=".")
+    assert r2.imagen_tier == ""
+
+
 def test_aspect_ratio_from_canvas():
     assert ai._imagen_aspect_ratio(1080, 1920) == "9:16"
     assert ai._imagen_aspect_ratio(1920, 1080) == "16:9"
