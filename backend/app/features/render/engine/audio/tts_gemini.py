@@ -210,7 +210,22 @@ def _rate_to_tempo_hint(rate: str, lang: str) -> str:
     return ""
 
 
-def _resolve_style(content_type: str, language: str = "", rate: str = "") -> str:
+# D1: AI emotion → a Gemini TTS style directive appended to the content-type
+# style. "" / "normal" / unknown = no directive (inert). Gated by CONTENT_EMOTION_TTS.
+_EMOTION_STYLE: dict[str, str] = {
+    "excited": "with an excited, energetic tone",
+    "happy": "in a cheerful, upbeat tone",
+    "surprise": "with a surprised, animated tone",
+    "motivating": "in a motivating, inspiring tone",
+    "curious": "in a curious, inquisitive tone",
+    "epic": "in an epic, dramatic tone",
+    "suspense": "in a tense, suspenseful tone",
+    "calm": "in a calm, soothing tone",
+    "sad": "in a soft, sombre tone",
+}
+
+
+def _resolve_style(content_type: str, language: str = "", rate: str = "", emotion: str = "") -> str:
     env = (os.environ.get("GEMINI_TTS_STYLE") or "").strip()
     if env:
         return env
@@ -218,7 +233,12 @@ def _resolve_style(content_type: str, language: str = "", rate: str = "") -> str
     table = _STYLE_TABLES.get(lang, _STYLE_BY_CONTENT_TYPE_EN)
     style = table.get(str(content_type or "").strip().lower(), table["vlog"])
     hint = _rate_to_tempo_hint(rate, lang)
-    return f"{style}. {hint}" if hint else style
+    style = f"{style}. {hint}" if hint else style
+    if os.getenv("CONTENT_EMOTION_TTS", "1") == "1":
+        em = _EMOTION_STYLE.get((emotion or "").strip().lower(), "")
+        if em:
+            style = f"{style}. Speak {em}"
+    return style
 
 
 def _wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
@@ -305,6 +325,7 @@ def synthesize_gemini(
     content_type: str = "vlog",
     output_path: str | None = None,
     rate: str = "",
+    emotion: str = "",
 ) -> str:
     """Synthesize speech with Gemini TTS (online, preview). Returns MP3 path.
 
@@ -325,7 +346,7 @@ def synthesize_gemini(
     voice = _resolve_voice(gender)
     # Style (incl. any tempo hint) is part of the cache key downstream, so a
     # rate change correctly re-synthesizes instead of serving cached audio.
-    style = _resolve_style(content_type, language=language, rate=rate)
+    style = _resolve_style(content_type, language=language, rate=rate, emotion=emotion)
 
     cache_key = _synthesis_cache_key(clean_text, language, voice, style)
     cache_dir = TEMP_DIR / "gemini_tts_cache"

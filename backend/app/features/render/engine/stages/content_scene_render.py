@@ -113,6 +113,7 @@ def synthesize_scene_narration(
             text=text, language=language, gender=gender, rate=rate,
             job_id=job_id, voice_id=voice_id, output_path=out_path,
             content_type=content_type, tts_engine=tts_engine,
+            emotion=str(getattr(scene, "emotion", "") or ""),   # D1
         )
         if not path or not Path(path).exists() or Path(path).stat().st_size <= 0:
             logger.warning("content_scene_render: TTS produced no audio (scene idx=%s)",
@@ -217,6 +218,7 @@ def _shift_srt(srt_path: str, offset_sec: float) -> None:
 def _build_word_ass(
     audio_path: str, out_ass: str, width: int, height: int,
     style: str, model_name: str, offset_sec: float,
+    emphasis=None,
 ) -> bool:
     """Transcribe the narration audio with Whisper word timestamps → word-level
     SRT → CapCut word-by-word ASS (shifted by offset_sec so it syncs with the
@@ -235,6 +237,7 @@ def _build_word_ass(
         srt_to_ass_capcut(
             tmp_srt, out_ass, style=(style or ""),
             play_res_x=int(width), play_res_y=int(height),
+            emphasis=emphasis,   # D2
         )
         return Path(out_ass).exists() and Path(out_ass).stat().st_size > 0
     except Exception as exc:
@@ -318,6 +321,7 @@ def render_content_scene(
                 want_ass = _build_word_ass(
                     narration_audio_path, ass_path, int(width), int(height),
                     subtitle_style, _CONTENT_WHISPER_MODEL, pause_before,
+                    emphasis=getattr(scene, "emphasis", None),   # D2
                 )
             if not want_ass:
                 want_srt = _build_scene_srt(

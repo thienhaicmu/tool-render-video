@@ -26,6 +26,23 @@ _CONTENT_TYPE_VOICE_PROFILES: dict[str, dict] = {
     "gaming":     {"rate_nudge": "+12%", "pause_style": "light"},
 }
 _DEFAULT_VOICE_RATE = "+0%"
+
+# D1: emotion → (rate delta %, pitch Hz), applied ON TOP of the reading-speed
+# rate for expressive Edge delivery. "" / "normal" / unknown = inert (0, 0) →
+# byte-identical to the pre-D1 output. Kill-switch CONTENT_EMOTION_TTS.
+_CONTENT_EMOTION_TTS = os.getenv("CONTENT_EMOTION_TTS", "1") == "1"
+_EMOTION_PROSODY: dict[str, tuple[int, int]] = {
+    "excited": (8, 15), "happy": (6, 12), "surprise": (6, 14),
+    "motivating": (5, 10), "curious": (3, 8),
+    "epic": (-3, -10), "suspense": (-5, -12), "calm": (-6, -8), "sad": (-8, -18),
+}
+
+
+def _emotion_prosody(emotion: str) -> "tuple[int, int]":
+    """(rate delta %, pitch Hz) for an AI emotion, or (0, 0) when inert/off."""
+    if not _CONTENT_EMOTION_TTS:
+        return (0, 0)
+    return _EMOTION_PROSODY.get((emotion or "").strip().lower(), (0, 0))
 # Sentence boundary regex — accepts both Latin (.!?) and CJK (。！？)
 # punctuation, with optional whitespace. CJK text rarely has spaces
 # between sentences so the trailing \s+ requirement (pre-2026-06-28)
@@ -391,6 +408,7 @@ def generate_narration_mp3(
     voice_id: str | None = None,
     output_path: str | None = None,
     content_type: str = "vlog",
+    emotion: str = "",
 ) -> str:
     clean_text = str(text or "").strip()
     if not clean_text:
@@ -419,9 +437,19 @@ def generate_narration_mp3(
         _humanized = _sanitize_plain_tts(_humanized)
     _ssml_active = _TTS_ALLOW_SSML_BREAKS and _SSML_HUMANIZER_ENABLED and "<break" in _humanized
     _rate = _effective_rate_for(rate, content_type)
+    # D1: fold the emotion prosody into the rate + a pitch shift. Inert (0, 0)
+    # keeps _rate unchanged and pitch at Edge's "+0Hz" default → byte-identical.
+    _er, _ep = _emotion_prosody(emotion)
+    if _er:
+        try:
+            _base_pct = int(str(_rate).rstrip("%") or "0")
+        except ValueError:
+            _base_pct = 0
+        _rate = f"{_base_pct + _er:+d}%"
+    _pitch = f"{_ep:+d}Hz"
     logger.info(
-        "tts_humanized job_id=%s content_type=%s rate=%s pause_style=%s ssml=%s",
-        job_id, content_type, _rate, _ct_profile["pause_style"], _ssml_active,
+        "tts_humanized job_id=%s content_type=%s rate=%s pitch=%s pause_style=%s ssml=%s",
+        job_id, content_type, _rate, _pitch, _ct_profile["pause_style"], _ssml_active,
     )
 
     profile = resolve_voice_profile(language, gender, voice_id=voice_id)
@@ -446,7 +474,10 @@ def generate_narration_mp3(
     )
     _cache_key = _tts_cache_key(
         text=clean_text, language=language, gender=gender,
-        rate=_rate, voice_id=profile.get("voice_id", ""),
+        # Disambiguate a pitch shift (same rate, different emotion) so two
+        # emotions can't collide in the cache. _ep==0 → unchanged key.
+        rate=(_rate if _ep == 0 else f"{_rate}@p{_ep}"),
+        voice_id=profile.get("voice_id", ""),
         content_type=content_type,
     )
     if _tts_cache_get(_cache_key, mp3_path):
@@ -457,7 +488,7 @@ def generate_narration_mp3(
         return str(mp3_path)
 
     async def _run():
-        communicate = edge_tts.Communicate(_humanized, profile["voice_id"], rate=_rate)
+        communicate = edge_tts.Communicate(_humanized, profile["voice_id"], rate=_rate, pitch=_pitch)
         try:
             await asyncio.wait_for(communicate.save(str(mp3_path)), timeout=TTS_TIMEOUT_SEC)
         except asyncio.TimeoutError:
@@ -504,6 +535,7 @@ def generate_narration_audio(
     output_path: str | None = None,
     content_type: str = "vlog",
     tts_engine: str = "edge",
+    emotion: str = "",
 ) -> str:
     """Route narration synthesis to the requested TTS engine.
 
@@ -529,7 +561,7 @@ def generate_narration_audio(
         return generate_narration_mp3(
             text=text, language=language, gender=gender, rate=rate,
             job_id=job_id, voice_id=voice_id, output_path=output_path,
-            content_type=content_type,
+            content_type=content_type, emotion=emotion,
         )
 
     def _piper() -> str:
@@ -608,7 +640,7 @@ def generate_narration_audio(
                 return synthesize_gemini(
                     text=_clean, language=language, gender=gender,
                     job_id=job_id, content_type=content_type, output_path=output_path,
-                    rate=rate,
+                    rate=rate, emotion=emotion,
                 )
             logger.warning(
                 "gemini_tts_unavailable_fallback job_id=%s — SDK or API key absent, using edge chain",

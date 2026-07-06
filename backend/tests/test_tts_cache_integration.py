@@ -33,10 +33,11 @@ class _FakeCommunicate:
     instances: list["_FakeCommunicate"] = []
     payload: bytes = b"FAKE-EDGE-TTS-MP3-BYTES"
 
-    def __init__(self, text, voice_id, rate=None):
+    def __init__(self, text, voice_id, rate=None, pitch=None):
         self.text = text
         self.voice_id = voice_id
         self.rate = rate
+        self.pitch = pitch   # D1: real edge_tts.Communicate accepts pitch
         type(self).instances.append(self)
 
     async def save(self, out_path: str) -> None:

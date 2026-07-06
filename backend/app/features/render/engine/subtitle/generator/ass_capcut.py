@@ -145,6 +145,31 @@ def _is_keyword(word: str) -> bool:
     return bool(_KEYWORD_RE.search(w) or _ALLCAPS_RE.match(w))
 
 
+# D2: AI-chosen emphasis words get the keyword accent too (colour + pop).
+_EMPH_STRIP = ".,!?;:\"'()[]…—-"
+
+
+def _norm_emph(word: str) -> str:
+    return (word or "").strip().strip(_EMPH_STRIP).lower()
+
+
+def _emphasis_set(emphasis) -> "set[str]":
+    """Normalise an emphasis word/phrase list into comparable tokens (lowercased,
+    punctuation-stripped, phrases split into words). Never raises."""
+    out: "set[str]" = set()
+    if not emphasis:
+        return out
+    try:
+        for item in emphasis:
+            for tok in str(item or "").split():
+                n = _norm_emph(tok)
+                if n:
+                    out.add(n)
+    except Exception:
+        return set()
+    return out
+
+
 def _word_override(state: str, style: CapCutStyle, is_keyword: bool) -> str:
     """Inline ASS override block for one word in a given state.
 
@@ -205,6 +230,7 @@ def srt_to_ass_capcut(
     play_res_y: int = 1440,
     margin_v: int | None = None,
     font_size: int = 0,
+    emphasis: "set[str] | list[str] | None" = None,
 ) -> str:
     """Generate a CapCut-style ASS file from a WORD-LEVEL SRT.
 
@@ -222,6 +248,7 @@ def srt_to_ass_capcut(
     scale_y = 100
 
     words = _parse_srt_blocks(srt_path)
+    _emph = _emphasis_set(emphasis)   # D2: AI-chosen emphasis words → accent
     style_body = _style_lines(st, font, eff_font, eff_outline, eff_shadow, scale_y, eff_margin)
     header = (
         "[Script Info]\n"
@@ -247,7 +274,8 @@ def srt_to_ass_capcut(
             parts = []
             for j, w in enumerate(group):
                 state = "active" if j == i else ("spoken" if j < i else "future")
-                tag = _word_override(state, st, _is_keyword(w["text"]))
+                _kw = _is_keyword(w["text"]) or (bool(_emph) and _norm_emph(w["text"]) in _emph)
+                tag = _word_override(state, st, _kw)
                 parts.append(tag + _ass_escape_text(w["text"]))
             line = " ".join(parts)
             out.append(
