@@ -43,6 +43,12 @@ PROVIDER_MANIFESTS: dict[str, ProviderManifest] = {
         name="ai_video", kind="video", online=True, needs_key=True, cost_tier=3,
         supports_reference=False, supports_seed=False,
     ),
+    # Pollinations.ai — free, no-key AI image generation (online). cost_tier=1 so
+    # the decision tree treats it as cheap (like stock); estimate_cost is 0.
+    "ai_image_free": ProviderManifest(
+        name="ai_image_free", kind="image", online=True, needs_key=False, cost_tier=1,
+        supports_seed=True,
+    ),
 }
 
 

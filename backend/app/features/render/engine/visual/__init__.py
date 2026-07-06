@@ -34,13 +34,14 @@ logger = logging.getLogger("app.render.visual")
 # Providers known to this seam. v1 = local only. Adding "ai_image" / "stock" /
 # "ai_video" here + a branch in resolve_scene_visual is the ONLY change needed
 # to introduce a new visual source — the pipeline + scene renderer are untouched.
-SUPPORTED_PROVIDERS = ("local", "stock", "ai_image", "ai_video")
+SUPPORTED_PROVIDERS = ("local", "stock", "ai_image", "ai_video", "ai_image_free")
 DEFAULT_PROVIDER = "local"
-# Online providers (need network + an API key). They are opt-in — only used when
-# content_visual_provider names them — and ALWAYS fall back to 'local' when they
-# produce nothing (no key / no network / no result / error), so a scene never
-# fails to get an asset.
-_ONLINE_PROVIDERS = ("stock", "ai_image", "ai_video")
+# Online providers (need network; some need an API key). They are opt-in — only
+# used when content_visual_provider names them — and ALWAYS fall back to 'local'
+# when they produce nothing (no key / no network / no result / error), so a scene
+# never fails to get an asset. ``ai_image_free`` (Pollinations) needs network but
+# NO key.
+_ONLINE_PROVIDERS = ("stock", "ai_image", "ai_video", "ai_image_free")
 
 
 @dataclass
@@ -114,6 +115,9 @@ def resolve_scene_visual(
         elif p == "ai_video":
             from app.features.render.engine.visual.provider_ai_video import resolve_ai_video
             asset = resolve_ai_video(request)
+        elif p == "ai_image_free":
+            from app.features.render.engine.visual.provider_pollinations import resolve_pollinations
+            asset = resolve_pollinations(request)
         if asset is not None:
             return asset
         logger.info("visual: provider %s produced no asset — falling back to local", p)

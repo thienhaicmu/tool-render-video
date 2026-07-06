@@ -374,7 +374,12 @@ def run_content(
         # (budget applied deterministically in scene order) so the parallel loop
         # just executes. Uses est_duration_sec (no TTS needed). Only downgrades a
         # paid choice — never costs more than the user's provider selection.
-        _budget = BudgetTracker(float(os.getenv("CONTENT_AI_BUDGET", "0") or 0))
+        # P4.1: per-render budget cap from the payload wins; fall back to the env
+        # CONTENT_AI_BUDGET. 0 (either source) = unlimited.
+        _budget = BudgetTracker(
+            float(getattr(payload, "content_ai_budget", 0.0) or 0.0)
+            or float(os.getenv("CONTENT_AI_BUDGET", "0") or 0)
+        )
         _scene_providers: dict[int, str] = {}
         for _si, _s in enumerate(scenes, start=1):
             _scene_providers[_si] = decide_provider(
@@ -483,11 +488,19 @@ def run_content(
             if _cancel_cb():
                 raise cancel_registry.JobCancelledError()
 
-            _sub_style = (
-                (getattr(scene, "subtitle_style", "") or "").strip()
-                or (getattr(plan, "subtitle_style", "") or "").strip()
-                or (getattr(payload, "subtitle_style", "") or "").strip()
-            )
+            # Subtitle style precedence (P1.1): the user's explicit UI pick is
+            # authoritative. Only when the user leaves it on "auto" (or empty)
+            # does the AI-chosen style apply — per-scene override first, else the
+            # plan-level suggestion. Fixes the prior order where the AI plan style
+            # silently overrode the user's dropdown choice.
+            _user_pick = (getattr(payload, "subtitle_style", "") or "").strip()
+            if _user_pick and _user_pick.lower() != "auto":
+                _sub_style = _user_pick
+            else:
+                _sub_style = (
+                    (getattr(scene, "subtitle_style", "") or "").strip()
+                    or (getattr(plan, "subtitle_style", "") or "").strip()
+                )
             ok = render_content_scene(
                 scene=scene, background_kind=asset.kind, background_value=asset.value,
                 narration_audio_path=audio_path, narration_dur=ndur,
@@ -495,7 +508,7 @@ def run_content(
                 out_path=scene_out, work_dir=str(scenes_dir), subtitle_enabled=add_subtitle,
                 subtitle_style=_sub_style, word_by_word=_word_by_word,
                 ken_burns=asset.kind == "image" and (
-                    _s_ken_burns or asset.provider in ("stock", "ai_image")
+                    _s_ken_burns or asset.provider in ("stock", "ai_image", "ai_image_free")
                 ),
             )
             if ok:

@@ -340,6 +340,17 @@ def startup():
             apply_performance_env(_perf["hwdecode"], _perf["qsv"])
     except Exception as _perf_exc:
         logging.getLogger("app.startup").warning("performance prefs apply failed: %s", _perf_exc)
+    # Apply persisted stock API keys (Settings UI: Pexels / Pixabay) to the
+    # process env provider_stock reads. Non-empty only → never clobbers a
+    # .env-provided key. Defensive — never blocks boot.
+    try:
+        from app.db.creator_repo import get_stock_keys
+        from app.routes.settings import apply_stock_keys_env
+        _sk = get_stock_keys()
+        if _sk is not None:
+            apply_stock_keys_env(_sk["pexels"], _sk["pixabay"])
+    except Exception as _sk_exc:
+        logging.getLogger("app.startup").warning("stock keys apply failed: %s", _sk_exc)
     # Phase E: seed built-in render presets (idempotent — safe on every restart).
     try:
         from app.services.preset_seeder import seed_builtin_presets

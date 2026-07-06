@@ -37,8 +37,9 @@ import { RATIO_INFO } from '../clip-studio/render/constants'
 import type { Ratio } from '../clip-studio/render/types'
 import {
   generateContentPlan, previewNarration, createProject, saveProject, getProject, listProjects,
-  publishMeta, estimateContentCost, type ContentPlan, type ContentScene, type ContentProjectSummary,
-  type PublishMeta, type DurationFit, type ContentEstimate,
+  publishMeta, estimateContentCost, getVisualProviders,
+  type ContentPlan, type ContentScene, type ContentProjectSummary,
+  type PublishMeta, type DurationFit, type ContentEstimate, type VisualProviderInfo,
 } from '../../api/content'
 import { getDefaultOutputDir, putDefaultOutputDir } from '../../api/outputDir'
 import { BASE_URL } from '../../api/client'
@@ -50,7 +51,9 @@ type Phase = 'script' | 'review'
 const RATIOS: Ratio[] = ['r916', 'r11', 'r169']
 const VOICE_LANGS = ['vi-VN', 'en-US', 'en-GB', 'ja-JP', 'ko-KR'] as const
 const TTS_ENGINES = ['edge', 'xtts', 'gemini'] as const
-const SUB_STYLES = ['tiktok_bounce_v1', 'capcut_box', 'opus_pop', 'minimal_clean'] as const
+// Real CapCut preset ids (ass_capcut.CAPCUT_PRESETS) + 'auto' = let the AI plan
+// pick the style. Every option resolves to a distinct, valid style now (P1.1).
+const SUB_STYLES = ['auto', 'opus_pop', 'capcut_box', 'punch_green', 'karaoke_clean', 'smooth_premiere'] as const
 const EMOTIONS = ['normal', 'excited', 'calm', 'suspense', 'epic', 'sad', 'happy', 'curious', 'motivating', 'surprise'] as const
 
 interface Config {
@@ -66,8 +69,9 @@ interface Config {
   subStyle: string
   wordByWord: boolean
   bgmPath: string
-  visualProvider: 'local' | 'stock' | 'ai_image' | 'ai_video'
+  visualProvider: 'local' | 'stock' | 'ai_image' | 'ai_video' | 'ai_image_free'
   imagenTier: ImagenTier
+  aiBudget: number
   outputDir: string
   tone: string
 }
@@ -75,8 +79,8 @@ interface Config {
 const DEFAULT_CFG: Config = {
   ratio: 'r916', targetDuration: 90, bgKind: 'color', bgColor: '#101820', bgAssetPath: '',
   voiceLang: 'vi-VN', voiceGender: 'female', ttsEngine: 'edge',
-  subEnabled: true, subStyle: 'tiktok_bounce_v1', wordByWord: true,
-  bgmPath: '', visualProvider: 'local', imagenTier: 'standard', outputDir: '', tone: '',
+  subEnabled: true, subStyle: 'auto', wordByWord: true,
+  bgmPath: '', visualProvider: 'local', imagenTier: 'standard', aiBudget: 0, outputDir: '', tone: '',
 }
 
 export function ContentStudio() {
@@ -96,6 +100,11 @@ export function ContentStudio() {
   const [projectId, setProjectId] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<ContentProjectSummary[]>([])
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // P3.1: which visual sources are usable (from server env keys) + guards so the
+  // free-stock auto-pick fires at most once and never clobbers an opened draft.
+  const [providerAvail, setProviderAvail] = useState<Record<string, VisualProviderInfo> | null>(null)
+  const autoPickedRef = useRef(false)
+  const loadedDraftRef = useRef(false)
 
   const setCfgKey = <K extends keyof Config>(k: K, v: Config[K]) => setCfg((p) => ({ ...p, [k]: v }))
 
@@ -125,6 +134,23 @@ export function ContentStudio() {
       .catch(() => {})
   }, [])
 
+  // P3.1: learn which visual sources are usable (server env keys).
+  useEffect(() => {
+    void getVisualProviders().then((r) => setProviderAvail(r.providers)).catch(() => {})
+  }, [])
+
+  // P3.1: when a free Pexels/Pixabay key is present, auto-select the stock
+  // provider so content videos get real footage instead of a solid colour — but
+  // only on a fresh session (not after opening a draft, and never overriding a
+  // choice the user already made). Fires at most once.
+  useEffect(() => {
+    if (autoPickedRef.current || loadedDraftRef.current || !providerAvail) return
+    if (providerAvail.stock?.available && cfg.visualProvider === 'local') {
+      autoPickedRef.current = true
+      setCfgKey('visualProvider', 'stock')
+    }
+  }, [providerAvail, cfg.visualProvider])
+
   // Autosave (debounced) whenever the script/config/plan changes and there is
   // something worth keeping. Creates the project lazily on first save.
   useEffect(() => {
@@ -150,6 +176,7 @@ export function ContentStudio() {
   }, [script, cfg, plan, jobId, projectId])
 
   async function openDraft(id: string) {
+    loadedDraftRef.current = true   // a draft carries its own visual source — no auto-pick
     try {
       const p = await getProject(id)
       setScript(p.script || '')
@@ -183,6 +210,8 @@ export function ContentStudio() {
       // Only send the Imagen tier when AI images are actually selected; '' lets
       // the backend fall back to its env/standard default.
       content_imagen_tier: cfg.visualProvider === 'ai_image' ? cfg.imagenTier : undefined,
+      // P4.1: paid-visual budget cap (0 = unlimited → omit so the backend uses its env default).
+      content_ai_budget: cfg.aiBudget > 0 ? cfg.aiBudget : undefined,
       // Send the chosen folder as-is. Empty → backend uses the saved default or
       // returns a clear 400 (no silent relative "output" dir anymore, BUG-3).
       output_dir: cfg.outputDir.trim(),
@@ -278,20 +307,28 @@ export function ContentStudio() {
     <ScriptPhase
       vi={vi} script={script} setScript={setScript} cfg={cfg} setCfgKey={setCfgKey}
       busy={busy} error={error} onGenerate={handleGeneratePlan}
-      drafts={drafts} onOpenDraft={openDraft}
+      drafts={drafts} onOpenDraft={openDraft} providerAvail={providerAvail}
     />
   )
 }
 
 // ── Phase 1: script + config ────────────────────────────────────────────────
 
-function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGenerate, drafts, onOpenDraft }: {
+function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGenerate, drafts, onOpenDraft, providerAvail }: {
   vi: boolean; script: string; setScript: (s: string) => void
   cfg: Config; setCfgKey: <K extends keyof Config>(k: K, v: Config[K]) => void
   busy: boolean; error: string | null; onGenerate: () => void
   drafts: ContentProjectSummary[]; onOpenDraft: (id: string) => void
+  providerAvail: Record<string, VisualProviderInfo> | null
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
+  // P3.1: per-source availability tag for the Visual-source dropdown.
+  const availTag = (p: string): string => {
+    const a = providerAvail?.[p]
+    if (!a) return ''
+    if (a.available) return a.free ? (vi ? ' — ✓ miễn phí' : ' — ✓ free') : (vi ? ' — ✓ sẵn sàng' : ' — ✓ ready')
+    return vi ? ' — cần key' : ' — needs key'
+  }
   const charCount = script.trim().length
   const hasPicker = typeof window !== 'undefined' && !!window.electronAPI?.pickDirectory
   const [defaultSaved, setDefaultSaved] = useState(false)
@@ -368,11 +405,24 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
           <SectionCard icon="🖼️" title={vi ? 'Hình ảnh' : 'Visuals'}>
             <Field label={vi ? 'Nguồn hình ảnh' : 'Visual source'}>
               <select className="cs-input" value={cfg.visualProvider} onChange={(e) => setCfgKey('visualProvider', e.target.value as Config['visualProvider'])}>
-                <option value="local">{vi ? 'Nền tự chọn (offline)' : 'Chosen background (offline)'}</option>
-                <option value="stock">{vi ? 'Ảnh Stock (Pexels/Pixabay — cần API key)' : 'Stock images (Pexels/Pixabay — needs API key)'}</option>
-                <option value="ai_image">{vi ? 'Ảnh AI (Imagen/DALL·E — cần API key)' : 'AI Image (Imagen/DALL·E — needs API key)'}</option>
-                <option value="ai_video">{vi ? 'Video AI (Veo — cần API key, chậm)' : 'AI Video (Veo — needs API key, slow)'}</option>
+                <option value="local">{(vi ? 'Nền tự chọn (offline)' : 'Chosen background (offline)') + availTag('local')}</option>
+                <option value="stock">{(vi ? 'Ảnh Stock (Pexels/Pixabay)' : 'Stock images (Pexels/Pixabay)') + availTag('stock')}</option>
+                <option value="ai_image_free">{(vi ? 'Ảnh AI (Pollinations — miễn phí)' : 'AI Image (Pollinations — free)') + availTag('ai_image_free')}</option>
+                <option value="ai_image">{(vi ? 'Ảnh AI (Imagen/DALL·E, trả phí)' : 'AI Image (Imagen/DALL·E, paid)') + availTag('ai_image')}</option>
+                <option value="ai_video">{(vi ? 'Video AI (Veo, trả phí, chậm)' : 'AI Video (Veo, paid, slow)') + availTag('ai_video')}</option>
               </select>
+              {providerAvail?.stock?.available && cfg.visualProvider === 'local' && (
+                <div className="cs-hint">
+                  {vi ? '💡 Bạn đã có key Pexels — chọn "Ảnh Stock" để có ảnh thật miễn phí thay nền màu.' : '💡 Pexels key detected — pick "Stock images" for free real footage instead of a solid background.'}
+                </div>
+              )}
+              {cfg.visualProvider === 'ai_image_free' && (
+                <div className="cs-hint">
+                  {vi
+                    ? '⚠️ Prompt từng cảnh (do AI viết, bám nội dung) được gửi tới dịch vụ bên thứ 3 (Pollinations) để tạo ảnh. Miễn phí, không cần key.'
+                    : '⚠️ Each scene\'s AI-written (story-grounded) prompt is sent to a third-party service (Pollinations) to generate the image. Free, no key.'}
+                </div>
+              )}
               {cfg.visualProvider !== 'local' && (
                 <div className="cs-hint">
                   {vi ? 'Mỗi cảnh lấy ảnh theo nội dung. Thiếu key/mạng → tự dùng nền đã chọn.' : 'Each scene fetches an image by its content. Missing key/network → falls back to your background.'}
@@ -394,6 +444,21 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
                     : cfg.imagenTier === 'ultra'
                     ? (vi ? 'Imagen 4 Ultra — cao nhất, cần key có Imagen 4.' : 'Imagen 4 Ultra — top quality, needs Imagen 4 access.')
                     : (vi ? 'Imagen 3 (mặc định, phổ biến). Cần key Gemini có bật billing.' : 'Imagen 3 (default, broadly available). Needs a billing-enabled Gemini key.')}
+                </div>
+              </Field>
+            )}
+            {(cfg.visualProvider === 'ai_image' || cfg.visualProvider === 'ai_video') && (
+              <Field label={vi ? 'Trần chi phí AI ($)' : 'AI budget cap ($)'}>
+                <input
+                  className="cs-input" type="number" min={0} step={0.05}
+                  value={cfg.aiBudget || ''}
+                  onChange={(e) => setCfgKey('aiBudget', Math.max(0, Number(e.target.value) || 0))}
+                  placeholder={vi ? '0 = không giới hạn' : '0 = unlimited'}
+                />
+                <div className="cs-hint">
+                  {vi
+                    ? 'Ước tính tương đối — khi vượt trần, các cảnh sau tự hạ về nguồn rẻ hơn/miễn phí. 0 = không giới hạn.'
+                    : 'Relative estimate — once exceeded, later scenes downgrade to a cheaper/free source. 0 = unlimited.'}
                 </div>
               </Field>
             )}
@@ -437,7 +502,7 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
                 <button className={seg(cfg.subEnabled)} onClick={() => setCfgKey('subEnabled', !cfg.subEnabled)}>{cfg.subEnabled ? (vi ? 'Bật' : 'On') : (vi ? 'Tắt' : 'Off')}</button>
                 {cfg.subEnabled && (
                   <select className="cs-input" value={cfg.subStyle} onChange={(e) => setCfgKey('subStyle', e.target.value)}>
-                    {SUB_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    {SUB_STYLES.map((s) => <option key={s} value={s}>{s === 'auto' ? (vi ? 'Tự động (AI chọn)' : 'Auto (AI picks)') : s}</option>)}
                   </select>
                 )}
                 {cfg.subEnabled && (
@@ -876,7 +941,7 @@ function AiInsights({ vi, plan, durationFit, visualProvider, targetDuration }: {
 // ── Cost preflight (Review, paid visual providers) ──────────────────────────
 
 const _PROVIDER_LABELS: Record<string, string> = {
-  local: 'Local', stock: 'Stock', ai_image: 'Imagen', ai_video: 'Veo',
+  local: 'Local', stock: 'Stock', ai_image_free: 'Pollinations', ai_image: 'Imagen', ai_video: 'Veo',
 }
 
 function CostEstimatePanel({ vi, plan, visualProvider, targetDuration }: {
@@ -919,7 +984,12 @@ function CostEstimatePanel({ vi, plan, visualProvider, targetDuration }: {
       {est && (
         <div className="cs-cost-body">
           <div className="cs-cost-total">
-            <span className="cs-cost-num">${est.estimated_cost.toFixed(2)}</span>
+            <span
+              className="cs-cost-num"
+              title={vi
+                ? 'Ước tính tương đối dựa trên chi phí trung bình mỗi ảnh/clip AI — không phải hoá đơn chính xác. Nguồn local/stock không tính phí.'
+                : 'Rough estimate from average per-asset AI cost — not a precise bill. local/stock sources are free.'}
+            >~${est.estimated_cost.toFixed(2)}</span>
             <span className="cs-cost-sub">{est.scenes} {vi ? 'cảnh' : 'scenes'} · ~{est.estimated_duration_sec.toFixed(0)}s</span>
           </div>
           <div className="cs-row" style={{ gap: 6 }}>
@@ -927,8 +997,10 @@ function CostEstimatePanel({ vi, plan, visualProvider, targetDuration }: {
               <span key={prov} className="cs-char-chip">{_PROVIDER_LABELS[prov] || prov}: {n}</span>
             ))}
           </div>
-          {est.estimated_cost === 0 && (
+          {est.estimated_cost === 0 ? (
             <div className="cs-hint">{vi ? 'Miễn phí — mọi cảnh dùng nguồn không tính phí (local/stock).' : 'Free — every scene uses a no-cost source (local/stock).'}</div>
+          ) : (
+            <div className="cs-hint">{vi ? '≈ ước tính tương đối (chi phí trung bình mỗi ảnh/clip AI) — không phải hoá đơn chính xác.' : '≈ rough estimate (average per-asset AI cost) — not a precise bill.'}</div>
           )}
         </div>
       )}

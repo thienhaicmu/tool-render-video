@@ -35,6 +35,7 @@ _VEO_MIN_SEC: float = max(0.0, float(os.getenv("CONTENT_VEO_MIN_SCENE_SEC", "6")
 _COST = {
     "local": 0.0,
     "stock": float(os.getenv("CONTENT_COST_STOCK", "0") or 0),
+    "ai_image_free": 0.0,   # Pollinations — free, no key
     "ai_image": float(os.getenv("CONTENT_COST_AI_IMAGE", "0.04") or 0.04),
     "ai_video": float(os.getenv("CONTENT_COST_AI_VIDEO", "0.5") or 0.5),
 }

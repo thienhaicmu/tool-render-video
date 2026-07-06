@@ -33,12 +33,14 @@ from app.db.creator_repo import (
     get_job_retention_days,
     get_performance_prefs,
     get_render_defaults,
+    get_stock_keys,
     upsert_creator_context,
     upsert_creator_context_for_channel,
     upsert_default_output_dir,
     upsert_job_retention_days,
     upsert_performance_prefs,
     upsert_render_defaults,
+    upsert_stock_keys,
 )
 from app.domain.creator_context import CreatorContext
 
@@ -324,6 +326,77 @@ def put_settings_performance(payload: PerformancePayload) -> PerformanceEnvelope
         raise HTTPException(status_code=500, detail=f"performance write failed: {exc}")
     apply_performance_env(saved["hwdecode"], saved["qsv"])
     return PerformanceEnvelope(is_configured=True, performance=PerformancePayload(**saved))
+
+
+# ── P3.1-C: stock visual-provider API keys (Pexels / Pixabay) ─────────────
+#
+# Lets the user configure the FREE stock-image providers from the Settings UI
+# instead of hand-editing .env. Keys are persisted in creator_prefs and pushed
+# into os.environ (which provider_stock reads) at startup + on save.
+#
+# SECURITY: the raw keys are NEVER returned by GET — only "set / not set"
+# booleans (reflecting the effective env, saved OR .env). PUT accepts the raw
+# keys. Nothing here logs a key value.
+
+
+def apply_stock_keys_env(pexels: str, pixabay: str) -> None:
+    """Push the stock API keys into the process env that provider_stock reads
+    (os.getenv PEXELS_API_KEY / PIXABAY_API_KEY). Only NON-EMPTY values are set —
+    a blank saved value must not clobber a key provided via .env. Never raises."""
+    try:
+        if (pexels or "").strip():
+            os.environ["PEXELS_API_KEY"] = pexels.strip()
+        if (pixabay or "").strip():
+            os.environ["PIXABAY_API_KEY"] = pixabay.strip()
+    except Exception:
+        pass
+
+
+class StockKeysPayload(BaseModel):
+    """PUT body — the raw stock API keys. Empty string = leave as-is (a blank
+    save never wipes a .env-provided key). extra='ignore' for fwd/back-compat."""
+    model_config = ConfigDict(extra="ignore")
+    pexels: str = ""
+    pixabay: str = ""
+
+
+class StockKeysStatus(BaseModel):
+    """GET/PUT response — masked. Booleans only; the raw keys are never sent."""
+    pexels_set: bool
+    pixabay_set: bool
+
+
+def _stock_keys_status() -> StockKeysStatus:
+    """Effective set/not-set from the live env (covers both a saved pref applied
+    at startup AND a .env-provided key)."""
+    return StockKeysStatus(
+        pexels_set=bool((os.getenv("PEXELS_API_KEY") or "").strip()),
+        pixabay_set=bool((os.getenv("PIXABAY_API_KEY") or "").strip()),
+    )
+
+
+@router.get("/stock-keys", response_model=StockKeysStatus)
+def get_settings_stock_keys() -> StockKeysStatus:
+    """Report whether each stock key is configured (never returns the raw key)."""
+    return _stock_keys_status()
+
+
+@router.put("/stock-keys", response_model=StockKeysStatus)
+def put_settings_stock_keys(payload: StockKeysPayload) -> StockKeysStatus:
+    """Persist + apply the stock keys, then return the masked status. A blank
+    field leaves the existing key untouched (see apply_stock_keys_env)."""
+    # Merge: a blank field keeps the previously-SAVED key rather than wiping it
+    # (matches "empty = leave as-is"). A key that lives only in .env is not copied
+    # into the saved blob — apply_stock_keys_env's non-empty guard preserves it.
+    existing = get_stock_keys() or {"pexels": "", "pixabay": ""}
+    pexels = payload.pexels.strip() or existing.get("pexels", "")
+    pixabay = payload.pixabay.strip() or existing.get("pixabay", "")
+    try:
+        saved = upsert_stock_keys(pexels, pixabay)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"stock-keys write failed: {exc}")
+    apply_stock_keys_env(saved["pexels"], saved["pixabay"])
+    return _stock_keys_status()
 
 
 def _data_retention_envelope_after_put(saved) -> "DataRetentionEnvelope":

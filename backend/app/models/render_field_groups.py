@@ -41,6 +41,7 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
         # BE-only; the Visual Generator provider seam selector + user background.
         "content_script", "content_background_kind", "content_background_value",
         "content_bgm_path", "content_visual_provider", "content_imagen_tier",
+        "content_ai_budget",
         "content_plan_override",
     }),
     "lifecycle": frozenset({

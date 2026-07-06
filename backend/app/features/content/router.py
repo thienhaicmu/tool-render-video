@@ -177,6 +177,31 @@ def estimate_content_cost(req: ContentEstimateRequest) -> dict:
     }
 
 
+# ── P3.1: visual-provider availability (which sources are usable right now) ──
+
+@router.get("/visual-providers")
+def visual_providers() -> dict:
+    """Report which Content visual providers are usable right now, from the API
+    keys present in the environment. Read-only — never triggers a paid call.
+
+    The FE uses this to label each source "free / ready / needs key" and to
+    auto-select the free stock provider when a key is configured. ``local`` is
+    always available; ``stock`` is free (Pexels/Pixabay); ``ai_image`` / ``ai_video``
+    are paid. Mirrors the key checks the providers themselves make. Never raises."""
+    def _has(*names: str) -> bool:
+        return any((os.getenv(n) or "").strip() for n in names)
+    return {
+        "providers": {
+            "local":         {"available": True, "free": True},
+            "stock":         {"available": _has("PEXELS_API_KEY", "PIXABAY_API_KEY"), "free": True},
+            # Pollinations — free AI image, no key needed → always available.
+            "ai_image_free": {"available": True, "free": True},
+            "ai_image":      {"available": _has("GEMINI_API_KEY", "GEMINI_API_KEYS", "OPENAI_API_KEY"), "free": False},
+            "ai_video":      {"available": _has("GEMINI_API_KEY", "GOOGLE_API_KEY"), "free": False},
+        }
+    }
+
+
 # ── CS-D: per-scene narration preview / regenerate ───────────────────────────
 
 class NarrationPreviewRequest(BaseModel):

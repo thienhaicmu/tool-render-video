@@ -90,7 +90,7 @@ CREATOR TONE:       {tone_clause}
 9. **DURATION** ("est_duration_sec"): estimate each scene's spoken length. The
    engine refines this from the real TTS — your estimate only guides pacing.
 10. **SUBTITLE STYLE** ("subtitle_style", plan-level): suggest one of
-    default|capcut|word_by_word|karaoke|highlight|minimal|bold based on the tone.
+    opus_pop|capcut_box|punch_green|karaoke_clean|smooth_premiere based on the tone.
 11. **SCENE TITLE** ("scene_title"): a short label for this scene (for the review
     timeline), in {lang_name}.
 12. **VISUAL PROMPT** ("visual_prompt") — REQUIRED for EVERY scene, NEVER leave it
@@ -123,7 +123,7 @@ CREATOR TONE:       {tone_clause}
   "language": "{target_language}",
   "video_style": "documentary|storytelling|educational|news|explainer|",
   "total_target_sec": <float — your estimated total spoken length>,
-  "subtitle_style": "default|capcut|word_by_word|karaoke|highlight|minimal|bold",
+  "subtitle_style": "opus_pop|capcut_box|punch_green|karaoke_clean|smooth_premiere",
   "bgm_mood": "epic|calm|technology|news|sad|funny|dark|happy|corporate|",
   "scenes": [
     {{
@@ -139,7 +139,7 @@ CREATOR TONE:       {tone_clause}
       "characters": ["<Story Bible character id/name appearing in this scene>"],
       "continuity": "<what carries over from the previous scene, or ''>",
       "est_duration_sec": <float>,
-      "subtitle_style": "<per-scene override, or '' to use the plan style>",
+      "subtitle_style": "<one of the styles above as a per-scene override, or '' to use the plan style>",
       "visual_hint": "<short label of what footage/image suits this scene, or ''>",
       "visual_prompt": "<REQUIRED — full English image-generator prompt for this scene>",
       "negative_prompt": "<things to avoid in the visual, or ''>",

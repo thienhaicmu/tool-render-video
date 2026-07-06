@@ -380,6 +380,11 @@ class RenderRequest(BaseModel):
     # — so existing jobs behave exactly as before. Only consulted when
     # content_visual_provider="ai_image".
     content_imagen_tier: str = ""
+    # P4.1: per-render paid-visual budget cap (relative cost units — see
+    # engine.visual.decision). 0.0 (default, Sacred #2 inert) = unlimited → the
+    # env CONTENT_AI_BUDGET is used instead. Only meaningful for PAID providers
+    # (ai_image/ai_video); free sources (local/stock/ai_image_free) cost 0.
+    content_ai_budget: float = 0.0
     # CS-A: an APPROVED/edited ContentPlan JSON from the Review step. When set
     # (Content Studio's mandatory Review → Approve flow), run_content renders
     # FROM this plan and SKIPS the AI planning call. "" = generate the plan via
@@ -516,13 +521,23 @@ class RenderRequest(BaseModel):
     @classmethod
     def _validate_content_visual_provider(cls, v) -> str:
         # engine.visual providers: "local" (offline default) | "stock" |
-        # "ai_image" | "ai_video" (CS-G, online + opt-in). Unknown/future values
-        # coerce to "local" so a payload for a not-yet-shipped provider still
-        # renders offline instead of failing (Sacred Contract #2). Online
-        # providers always fall back to local at render time when their API key /
-        # network is unavailable.
+        # "ai_image" | "ai_video" | "ai_image_free" (Pollinations — free, no key)
+        # (CS-G, online + opt-in). Unknown/future values coerce to "local" so a
+        # payload for a not-yet-shipped provider still renders offline instead of
+        # failing (Sacred Contract #2). Online providers always fall back to local
+        # at render time when their API key / network is unavailable.
         v = str(v or "local").strip().lower()
-        return v if v in {"local", "stock", "ai_image", "ai_video"} else "local"
+        return v if v in {"local", "stock", "ai_image", "ai_video", "ai_image_free"} else "local"
+
+    @field_validator("content_ai_budget", mode="before")
+    @classmethod
+    def _validate_content_ai_budget(cls, v) -> float:
+        # Clamp to >= 0 (never raise) — a stale/negative stored value replays as
+        # "unlimited" (0.0), matching the pre-P4.1 default (Sacred Contract #2).
+        try:
+            return max(0.0, float(v or 0.0))
+        except (TypeError, ValueError):
+            return 0.0
 
     @field_validator("ai_clip_min_duration_sec")
     @classmethod

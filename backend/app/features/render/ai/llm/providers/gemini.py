@@ -575,6 +575,13 @@ _CONTENT_THINKING_BUDGET = int(os.getenv("GEMINI_CONTENT_THINKING_BUDGET", "1024
 # through-line); Pass B writes the plan GROUNDED in it → consistent narration +
 # visuals. Default on. CONTENT_MULTIPASS=0 → legacy single call.
 _CONTENT_MULTIPASS = os.getenv("CONTENT_MULTIPASS", "1") == "1"
+# P2.1 — gate the extra Story Bible call by script length. The bible earns its
+# cost on LONG multi-scene narrative scripts (character canon + through-line); a
+# short script rarely has recurring characters and Pass B alone handles it — so
+# skipping Pass A there saves ~1 LLM call + its latency at no quality loss.
+# Below this many script chars, Pass A is skipped even when CONTENT_MULTIPASS=1.
+# Set CONTENT_MULTIPASS_MIN_CHARS=0 to restore the always-on two-pass behaviour.
+_CONTENT_MULTIPASS_MIN_CHARS = int(os.getenv("CONTENT_MULTIPASS_MIN_CHARS", "1200"))
 
 
 def _call_gemini_content_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
@@ -629,12 +636,16 @@ def select_content_plan(
         if not script or not script.strip():
             logger.warning("gemini_client: empty script (content path)")
             return None
-        resolved_model = model or _DEFAULT_MODEL
+        # P2.2: content planning can use a cheaper/faster model than the global
+        # default (e.g. gemini-3.1-flash-lite) via CONTENT_LLM_MODEL, WITHOUT
+        # affecting the clip/recap paths. Explicit payload model still wins;
+        # unset env → the global _DEFAULT_MODEL (no behaviour change).
+        resolved_model = model or os.getenv("CONTENT_LLM_MODEL", "").strip() or _DEFAULT_MODEL
 
         # ── CU-4 Pass A — Story Bible (best-effort; failure → single-pass) ────
         bible = None
         meta: dict = {}
-        if _CONTENT_MULTIPASS:
+        if _CONTENT_MULTIPASS and len((script or "").strip()) >= _CONTENT_MULTIPASS_MIN_CHARS:
             try:
                 _bsys, _buser = build_story_bible_prompt(script, target_language, tone)
                 _braw = _call_gemini_content(api_key, resolved_model, _bsys, _buser)

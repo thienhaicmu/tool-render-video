@@ -221,3 +221,20 @@ export async function publishMeta(req: {
     method: 'POST', body: JSON.stringify(req),
   })
 }
+
+// ── P3.1: visual-provider availability (which sources are usable right now) ──
+
+export interface VisualProviderInfo {
+  available: boolean
+  free: boolean
+}
+export interface VisualProvidersResult {
+  providers: Record<string, VisualProviderInfo>
+}
+
+/** Which Content visual sources are usable right now (from the API keys in the
+ *  server env). Read-only. The UI labels each "free / ready / needs key" and
+ *  auto-selects the free stock provider when a key is configured. */
+export async function getVisualProviders(): Promise<VisualProvidersResult> {
+  return apiFetch<VisualProvidersResult>('/api/content/visual-providers')
+}

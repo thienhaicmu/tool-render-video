@@ -154,6 +154,59 @@ def _openai_image(prompt: str, w: int, h: int, negative: str = "", style: str = 
         return None
 
 
+def _gemini_flash_model() -> str:
+    """Gemini Flash Image model id (generate_content image-out). Override via
+    CONTENT_GEMINI_IMAGE_MODEL. Never raises."""
+    return (os.getenv("CONTENT_GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image").strip()
+            or "gemini-2.5-flash-image")
+
+
+def _gemini_flash_image(
+    prompt: str, negative: str = "", style: str = "", seed: int = 0,
+    width: int = 0, height: int = 0,
+) -> Optional[bytes]:
+    """Generate an image via a Gemini Flash Image model (``generate_content`` with
+    responseModalities=[IMAGE]), fanning across the GEMINI_API_KEYS pool. Returns
+    the raw image bytes, or None on any failure (→ local fallback). Never raises.
+
+    NOTE: Gemini image generation typically needs a BILLING-ENABLED key — free-tier
+    keys return 429, which surfaces here as None (fall back to the background).
+    Selected via CONTENT_AI_IMAGE_PROVIDER=gemini_flash."""
+    try:
+        from google import genai  # lazy — optional dep
+        from google.genai import types
+        from app.features.render.ai.llm import key_pool
+
+        seed_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+        if not seed_key and not key_pool.pool():
+            logger.info("visual.ai_image: no Gemini key / pool — skipping Flash Image")
+            return None
+        model = _gemini_flash_model()
+        full_prompt = _apply_style(prompt, style)
+        if (negative or "").strip():
+            full_prompt = f"{full_prompt}. Avoid: {negative.strip()}"
+
+        def _once(key: str) -> Optional[bytes]:
+            client = genai.Client(api_key=key)
+            resp = client.models.generate_content(
+                model=model, contents=full_prompt,
+                config=types.GenerateContentConfig(response_modalities=["IMAGE"]),
+            )
+            for cand in (getattr(resp, "candidates", None) or []):
+                content = getattr(cand, "content", None)
+                for part in (getattr(content, "parts", None) or []):
+                    inline = getattr(part, "inline_data", None)
+                    data = getattr(inline, "data", None) if inline is not None else None
+                    if data:
+                        return data
+            return None
+
+        return key_pool.call_gemini_with_rotation(_once, label="gemini-flash-image", seed_key=seed_key)
+    except Exception as exc:
+        logger.info("visual.ai_image: Gemini Flash Image failed: %s", exc)
+        return None
+
+
 # CU-10: media intelligence. When on, a vision model checks the generated image
 # actually matches the prompt; a mismatch triggers a regenerate (up to a cap).
 # Default OFF (a vision call per asset is extra cost/latency). Fail-open: if the
@@ -204,9 +257,12 @@ def resolve_ai_image(request: SceneVisualRequest) -> Optional[SceneVisualAsset]:
         # Include the resolved model in the cache key so switching the Imagen tier
         # (fast/standard/ultra) or the DALL-E model regenerates instead of serving
         # a stale lower/higher-tier image for the same prompt+size.
-        _model_tag = _imagen_model(tier) if provider != "openai" else (
-            os.getenv("CONTENT_DALLE_MODEL", "dall-e-3").strip() or "dall-e-3"
-        )
+        if provider == "openai":
+            _model_tag = os.getenv("CONTENT_DALLE_MODEL", "dall-e-3").strip() or "dall-e-3"
+        elif provider == "gemini_flash":
+            _model_tag = _gemini_flash_model()
+        else:
+            _model_tag = _imagen_model(tier)
         cached = visual_cache_dir() / f"{cache_key('ai_image', provider, _model_tag, prompt, w, h)}.png"
         if cached.exists() and cached.stat().st_size > 0:
             return SceneVisualAsset(kind="image", value=str(cached), provider="ai_image")
@@ -219,10 +275,12 @@ def resolve_ai_image(request: SceneVisualRequest) -> Optional[SceneVisualAsset]:
         for attempt in range(attempts):
             # Vary the seed on retries so a rejected image is not regenerated identically.
             seed = base_seed + attempt if base_seed else 0
-            data = (
-                _openai_image(prompt, w, h, negative, style) if provider == "openai"
-                else _gemini_image(prompt, negative, style, seed, w, h, imagen_tier=tier)
-            )
+            if provider == "openai":
+                data = _openai_image(prompt, w, h, negative, style)
+            elif provider == "gemini_flash":
+                data = _gemini_flash_image(prompt, negative, style, seed, w, h)
+            else:
+                data = _gemini_image(prompt, negative, style, seed, w, h, imagen_tier=tier)
             if not data:
                 return None
             cached.write_bytes(data)

@@ -75,6 +75,42 @@ def upsert_performance_prefs(hwdecode: bool, qsv: bool) -> dict:
     return out
 
 
+# Stock visual-provider API keys (P3.1-C) under
+# prefs_json["stock_keys"] = {pexels, pixabay}. Persisted so the free stock
+# provider works without hand-editing .env; applied to os.environ at startup +
+# on save (see routes/settings.apply_stock_keys_env).
+_STOCK_KEYS_KEY = "stock_keys"
+
+
+def get_stock_keys() -> Optional[dict]:
+    """Return {'pexels': str, 'pixabay': str} or None when never configured (so
+    the route falls back to the env/.env effective state). Never raises."""
+    try:
+        prefs = get_creator_prefs()
+    except Exception as exc:
+        logger.warning("get_stock_keys failed: %s", exc)
+        return None
+    nested = prefs.get(_STOCK_KEYS_KEY)
+    if not isinstance(nested, dict):
+        return None
+    return {"pexels": str(nested.get("pexels") or ""), "pixabay": str(nested.get("pixabay") or "")}
+
+
+def upsert_stock_keys(pexels: str, pixabay: str) -> dict:
+    """Persist the stock API keys, preserving other prefs keys. Never raises."""
+    out = {"pexels": (pexels or "").strip(), "pixabay": (pixabay or "").strip()}
+    try:
+        current = get_creator_prefs()
+    except Exception:
+        current = {}
+    current[_STOCK_KEYS_KEY] = out
+    try:
+        upsert_creator_prefs(current)
+    except Exception as exc:
+        logger.warning("upsert_stock_keys failed: %s", exc)
+    return out
+
+
 def get_creator_prefs() -> dict:
     with db_conn() as conn:
         row = conn.execute(

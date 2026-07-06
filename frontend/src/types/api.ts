@@ -210,6 +210,8 @@ export interface RenderRequest {
   content_visual_provider?: string
   // Imagen tier for the ai_image provider: ''|fast|standard|ultra ('' = env/standard).
   content_imagen_tier?: string
+  // P4.1: per-render paid-visual budget cap (0/omitted = unlimited → backend env default).
+  content_ai_budget?: number
   // CS-A: edited/approved ContentPlan JSON from the Review step. When set, the
   // backend renders from it and skips AI planning.
   content_plan_override?: string

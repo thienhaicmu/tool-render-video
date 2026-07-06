@@ -17,6 +17,11 @@ import {
   putPerformance,
 } from '@/api/performance'
 import {
+  getStockKeys,
+  putStockKeys,
+  type StockKeysStatus,
+} from '@/api/stockKeys'
+import {
   getDefaultOutputDir,
   putDefaultOutputDir,
 } from '@/api/outputDir'
@@ -898,6 +903,10 @@ export function SettingsScreen() {
           <PerformanceSection />
         </section>
 
+        <section id="settings-stock">
+          <StockKeysSection />
+        </section>
+
       {loading ? (
         <div style={{ color: 'var(--text-3)', fontSize: 12 }}>{t('st_loading')}</div>
       ) : info ? (
@@ -973,11 +982,87 @@ export function SettingsScreen() {
 // v1 (would require an IntersectionObserver) — kept minimal so the rail
 // is purely a faster jump table.
 
+// P3.1-C: configure the FREE stock-image API keys (Pexels / Pixabay) so Content
+// Studio can use real images instead of a solid background — without editing
+// .env. Keys are stored server-side; the API only ever reports set/not-set.
+function StockKeysSection() {
+  const { lang } = useI18n()
+  const vi = lang === 'vi'
+  const [status, setStatus] = useState<StockKeysStatus>({ pexels_set: false, pixabay_set: false })
+  const [pexels, setPexels] = useState('')
+  const [pixabay, setPixabay] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    try { setStatus(await getStockKeys()) } catch { /* non-critical */ } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { fetch() }, [fetch])
+
+  async function save() {
+    setSaving(true); setMsg(null)
+    try {
+      const s = await putStockKeys({ pexels: pexels.trim() || undefined, pixabay: pixabay.trim() || undefined })
+      setStatus(s); setPexels(''); setPixabay('')
+      setMsg(vi ? 'Đã lưu.' : 'Saved.')
+    } catch {
+      setMsg(vi ? 'Lưu thất bại.' : 'Save failed.')
+    } finally { setSaving(false) }
+  }
+
+  const dot = (on: boolean) => (
+    <span style={{ fontSize: 10, fontWeight: 500, color: on ? 'var(--ok, #29a745)' : 'var(--text-3)', marginLeft: 6 }}>
+      {on ? (vi ? '✓ đã đặt' : '✓ set') : (vi ? 'chưa đặt' : 'not set')}
+    </span>
+  )
+  const inputStyle = { flex: 1, minWidth: 0, background: 'var(--bg-input, var(--bg-card))', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 10px', fontSize: 12, color: 'var(--text-1)' } as const
+  const canSave = !!(pexels.trim() || pixabay.trim())
+
+  return (
+    <div data-testid="stock-keys-section" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
+      <SectionTitle>{vi ? 'Ảnh Stock (miễn phí)' : 'Stock images (free)'}</SectionTitle>
+      {loading ? (
+        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>…</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5, marginBottom: 6 }}>
+            {vi
+              ? 'Dán API key Pexels/Pixabay (miễn phí) để Content Studio dùng ảnh thật thay nền màu. Key lưu phía máy chủ và không hiển thị lại; để trống = giữ key đã lưu.'
+              : 'Paste your free Pexels/Pixabay API key so Content Studio uses real images instead of a solid background. Keys are stored server-side and never shown again; leave blank to keep the saved key.'}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+            <div style={{ width: 96, fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>Pexels{dot(status.pexels_set)}</div>
+            <input type="password" autoComplete="off" spellCheck={false} value={pexels}
+              onChange={(e) => setPexels(e.target.value)}
+              placeholder={status.pexels_set ? '••••••••' : (vi ? 'Dán key…' : 'Paste key…')} style={inputStyle} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+            <div style={{ width: 96, fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>Pixabay{dot(status.pixabay_set)}</div>
+            <input type="password" autoComplete="off" spellCheck={false} value={pixabay}
+              onChange={(e) => setPixabay(e.target.value)}
+              placeholder={status.pixabay_set ? '••••••••' : (vi ? 'Dán key…' : 'Paste key…')} style={inputStyle} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+            <button onClick={save} disabled={saving || !canSave}
+              style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 16px', fontSize: 12, fontWeight: 600, cursor: (saving || !canSave) ? 'not-allowed' : 'pointer', opacity: (saving || !canSave) ? 0.6 : 1 }}>
+              {saving ? (vi ? 'Đang lưu…' : 'Saving…') : (vi ? 'Lưu' : 'Save')}
+            </button>
+            {msg ? <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{msg}</span> : null}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 const _NAV_ITEMS: Array<{ id: string; label: string }> = [
   { id: 'settings-creator',   label: 'Creator' },
   { id: 'settings-defaults',  label: 'Render Defaults' },
   { id: 'settings-output',    label: 'Output' },
   { id: 'settings-retention', label: 'Data Retention' },
+  { id: 'settings-stock',     label: 'Stock Keys' },
   { id: 'settings-storage',   label: 'Cache' },
   { id: 'settings-database',  label: 'Database' },
   { id: 'settings-stats',     label: 'st_nav_stats' },

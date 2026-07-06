@@ -121,8 +121,10 @@ def test_render_request_field_count_unchanged():
     # 2026-07-04 P1: +1 (content_imagen_tier, default "") → 164. Sacred #2
     # verified: "" = env/standard Imagen tier; only consulted when
     # content_visual_provider="ai_image".
-    assert field_count == 164, (
-        f"RenderRequest now has {field_count} fields (expected 164). "
+    # 2026-07-06 P4.1: +1 (content_ai_budget, default 0.0) → 165. Sacred #2
+    # verified: 0.0 = unlimited = the env CONTENT_AI_BUDGET (pre-P4.1 behaviour).
+    assert field_count == 165, (
+        f"RenderRequest now has {field_count} fields (expected 165). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )
