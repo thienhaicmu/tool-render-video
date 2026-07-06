@@ -32,6 +32,7 @@ import { ProgressBar } from '../../components/ui/ProgressBar'
 import { AIChip } from '../../components/ui/AIChip'
 import { ConicRing } from '../../components/ui/ConicRing'
 import { IconCheck } from '../../components/icons'
+import { revealInFolder } from '../../lib/revealInFolder'
 import { RATIO_INFO } from '../clip-studio/render/constants'
 import type { Ratio } from '../clip-studio/render/types'
 import {
@@ -749,7 +750,7 @@ function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
                 <Button variant="secondary" size="sm" onClick={() => window.electronAPI?.openPath?.(outputFile)}>
                   {vi ? '▶ Phát' : '▶ Play'}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => window.electronAPI?.openPath?.(outputFile.replace(/[\\/][^\\/]+$/, ''))}>
+                <Button variant="ghost" size="sm" onClick={() => revealInFolder(outputFile)}>
                   {vi ? '📁 Mở thư mục' : '📁 Open folder'}
                 </Button>
               </>

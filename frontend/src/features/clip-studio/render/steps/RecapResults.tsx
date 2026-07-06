@@ -18,6 +18,7 @@ import type { RecapPlanResponse } from '@/api/jobs'
 import type { RecapSceneBlock } from '@/websocket/events'
 import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
+import { revealInFolder } from '@/lib/revealInFolder'
 import { IconFilm, IconPlay, IconCheck } from '@/components/icons'
 
 function fmt(sec: number): string {
@@ -82,10 +83,7 @@ export function RecapResults({ jobId, parts, recapPlan, jobStatus, aspectRatio, 
 
   const openFolder = () => {
     const f = doneEpisodes[0]?.repPart?.output_file
-    if (!f) return
-    const sep = f.includes('\\') ? '\\' : '/'
-    const dir = f.substring(0, f.lastIndexOf(sep))
-    if (dir) window.electronAPI?.openPath?.(dir)
+    if (f) revealInFolder(f)
   }
 
   const failed = jobStatus === 'failed'

@@ -22,6 +22,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { ClipActionsMenu } from './ClipActionsMenu'
 import { ClipPlayerModal } from './ClipPlayerModal'
 import { IconInbox, IconFilm } from '@/components/icons'
+import { revealInFolder } from '@/lib/revealInFolder'
 import type { ClipMenuItem } from './ClipActionsMenu'
 
 // P2.3 - tier label comes from the Strings table (creator-voiced, both locales).
@@ -387,8 +388,10 @@ function StepResultsBase({
     return f.substring(0, f.lastIndexOf(sep)) || null
   })()
 
-  const openOutputFolder = async () => {
-    if (outputDir) await window.electronAPI?.openPath?.(outputDir)
+  const openOutputFolder = () => {
+    const f = doneParts[0]?.output_file
+    if (f) revealInFolder(f)
+    else if (outputDir) void window.electronAPI?.openPath?.(outputDir)
   }
 
   const selScore  = selectedPart ? partScores[selectedPart.part_no] : undefined
@@ -839,12 +842,7 @@ function StepResultsBase({
                             items.push({
                               id: 'folder',
                               label: t.resMenuOpenFolder,
-                              onClick: () => {
-                                const f = part.output_file
-                                const sep = f.includes('\\') ? '\\' : '/'
-                                const dir = f.substring(0, f.lastIndexOf(sep)) || f
-                                window.electronAPI?.openPath?.(dir)
-                              },
+                              onClick: () => { revealInFolder(part.output_file) },
                             })
                             items.push({
                               id: 'delete',

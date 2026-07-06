@@ -64,6 +64,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return e?.message || String(e || 'Unable to open path');
     }
   },
+  showItemInFolder: async (targetPath) => {
+    try {
+      return await ipcRenderer.invoke('shell:showItemInFolder', String(targetPath || ''));
+    } catch (e) {
+      return e?.message || String(e || 'Unable to reveal item');
+    }
+  },
   pickCookiesFile: async () => {
     try {
       const picked = await ipcRenderer.invoke('pick-cookies-file');

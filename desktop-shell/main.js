@@ -611,6 +611,22 @@ ipcMain.handle('shell:openPath', async (_event, targetPath) => {
   return shell.openPath(p);
 });
 
+// shell:showItemInFolder — open the file's containing folder AND select the
+// file itself. Unlike shell.openPath(dir) this highlights the exact file, so a
+// freshly rendered clip is never lost among other files in a busy folder. Also
+// avoids the client-side "strip the filename" path math, which breaks on a
+// drive root (e.g. "D:\clip.mp4" -> "D:" opens the wrong dir).
+ipcMain.handle('shell:showItemInFolder', async (_event, targetPath) => {
+  const p = String(targetPath || '').trim();
+  if (!p) return 'Missing path';
+  try {
+    shell.showItemInFolder(p);
+    return '';
+  } catch (e) {
+    return (e && e.message) || String(e || 'Unable to reveal item');
+  }
+});
+
 // ---------------------------------------------------------------------------
 // notify:show — OS-level notification when a long render job finishes.
 // Click brings the window forward and emits 'notify-clicked' to the renderer

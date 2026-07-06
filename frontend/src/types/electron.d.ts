@@ -12,6 +12,10 @@ interface ElectronAPI {
   pickVideoFile?: () => Promise<string | null>
   /** Open the given path in the OS file manager / default application. */
   openPath?: (path: string) => Promise<void> | void
+  /** Reveal a file in the OS file manager, selecting/highlighting it. Prefer
+   *  this over openPath(dir) for "open folder" so the exact file is picked out
+   *  even in a busy folder, and it handles drive-root paths correctly. */
+  showItemInFolder?: (path: string) => Promise<string | void> | string | void
   /** Open a native file picker for cookies.txt, returns the chosen path or null. */
   pickCookiesFile?: () => Promise<string | null>
   /** Check whether a path exists on disk. Returns null on IPC failure

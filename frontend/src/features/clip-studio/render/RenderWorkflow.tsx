@@ -18,6 +18,7 @@ import { validateSources, validateConfig } from './validate'
 import { useRenderConfig } from './useRenderConfig'
 import { loadTerminalResults } from './loadResults'
 import { parseSubmitError } from './submitError'
+import { revealInFolder } from '@/lib/revealInFolder'
 import { submitSources } from './submitSources'
 import { CreateHero } from './steps/CreateHero'
 import { StepConfigure } from './steps/StepConfigure'
@@ -812,7 +813,11 @@ export function RenderWorkflow({ lang }: { lang: Lang }) {
                     has an output_dir written. */}
                 {cfg.outputDir && (
                   <button
-                    onClick={() => { window.electronAPI?.openPath?.(cfg.outputDir) }}
+                    onClick={() => {
+                      const f = doneParts[0]?.output_file
+                      if (f) revealInFolder(f)
+                      else window.electronAPI?.openPath?.(cfg.outputDir)
+                    }}
                     title={cfg.outputDir}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
