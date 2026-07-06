@@ -11,6 +11,7 @@ import type { Strings } from '../i18n'
 import { IconPlay } from '@/components/icons'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 import { clipStateKey } from './clipState'
+import { ClipSteps } from './ClipSteps'
 
 function fmtDur(sec?: number): string | null {
   if (sec == null || sec <= 0) return null
@@ -60,7 +61,7 @@ export function ClipTile({ slot, jobId, isFocus, onFocus, t, getStatusLabel }: {
         <span className="ct-name-spec">{slot.name ? `Clip ${no}${durFmt ? ` · ${durFmt}` : ''}` : (durFmt ?? '')}</span>
       </div>
 
-      <span className={`ct-status ct-status-${st}`}>{getStatusLabel(slot.status)}</span>
+      <ClipSteps status={slot.status} variant="row" />
 
       <div className="ct-prog">
         <div className="ct-prog-track">

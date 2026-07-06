@@ -2158,7 +2158,7 @@
 /* ── Queue list ─────────────────────────────────────────────────────────── */
 .ct-list { display: flex; flex-direction: column; padding: 6px; background: var(--mon-card); border: 1px solid var(--mon-line); border-radius: 14px; }
 .ct-row {
-  display: grid; grid-template-columns: 28px 56px minmax(120px, 1fr) 104px 220px 64px 36px;
+  display: grid; grid-template-columns: 28px 56px minmax(120px, 1fr) 172px 176px 64px 36px;
   align-items: center; gap: 14px; padding: 9px 12px; border-radius: 9px; cursor: pointer;
   transition: background .15s ease;
 }
@@ -2188,7 +2188,45 @@
 .ct-act-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; color: var(--mon-txt-2); background: rgba(var(--text-rgb), .05); text-decoration: none; transition: background .15s, color .15s; }
 .ct-act-btn:hover { background: rgba(var(--mon-acc-rgb), .18); color: var(--mon-acc); }
 
+/* ── Per-clip step indicator (Cut → Sub → Render) ───────────────────────── */
+.clip-steps { display: flex; align-items: center; min-width: 0; }
+.rs-steps-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.rs-activity { font: 500 11.5px var(--font-ui); color: var(--mon-txt-2); }
+
+.cs-node { display: flex; align-items: center; gap: 5px; }
+.cs-dot {
+  width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  border: 1.5px solid var(--mon-txt-3); background: transparent;
+  transition: background .25s, border-color .25s, box-shadow .25s;
+}
+.cs-lbl { font: 600 10px var(--font-ui); letter-spacing: .01em; color: var(--mon-txt-3); white-space: nowrap; }
+.cs-line { height: 1.5px; background: var(--mon-line); flex-shrink: 0; transition: background .25s; }
+.cs-line-done { background: var(--mon-ok); }
+
+.cs-node-done .cs-dot { background: var(--mon-ok); border-color: var(--mon-ok); }
+.cs-node-done .cs-lbl { color: var(--mon-txt-2); }
+.cs-node-active .cs-dot { background: var(--mon-acc); border-color: var(--mon-acc); animation: cs-pulse 1.4s ease-in-out infinite; }
+.cs-node-active .cs-lbl { color: var(--mon-acc); }
+.cs-node-failed .cs-dot { background: var(--mon-fail); border-color: var(--mon-fail); }
+.cs-node-failed .cs-lbl { color: var(--mon-fail); }
+@keyframes cs-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(var(--mon-acc-rgb), .28); }
+  50%      { box-shadow: 0 0 0 5px rgba(var(--mon-acc-rgb), .06); }
+}
+
+/* Compact row variant (queue) */
+.clip-steps-row .cs-dot { width: 13px; height: 13px; }
+.clip-steps-row .cs-lbl { font-size: 9.5px; }
+.clip-steps-row .cs-line { width: 10px; margin: 0 4px; }
+
+/* Larger focus variant (Current-Rendering card) */
+.clip-steps-focus .cs-dot { width: 18px; height: 18px; }
+.clip-steps-focus .cs-lbl { font-size: 11.5px; }
+.clip-steps-focus .cs-line { width: 22px; margin: 0 8px; }
+
 @media (prefers-reduced-motion: reduce) {
   .rs-thumb-active .rs-thumb-ph, .rs-bar-live::after { animation: none; }
   .rs-bar-live::after { display: none; }
+  .cs-node-active .cs-dot { animation: none; box-shadow: 0 0 0 3px rgba(var(--mon-acc-rgb), .18); }
 }

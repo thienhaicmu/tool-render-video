@@ -15,8 +15,9 @@ import type { Strings } from '../i18n'
 import { getPartThumbnailUrl, getPartMediaUrl } from '../utils'
 import { IconPlay } from '@/components/icons'
 import { ClipTile } from './ClipTile'
+import { ClipSteps } from './ClipSteps'
 import { useCountUp } from './useCountUp'
-import { clipStateKey } from './clipState'
+import { clipStateKey, activityLabel } from './clipState'
 
 // Re-export so existing consumers (StepRendering) keep importing from here.
 export { clipStateKey }
@@ -114,6 +115,13 @@ export function RenderStage({ slots, jobId, thumbRatio, t, getStatusLabel }: {
           <div className="rs-info-top">
             <span className="rs-title" title={focus.name || `Clip ${focus.part_no}`}>{focus.name || `Clip ${focus.part_no}`}</span>
             <span className={`rs-badge rs-badge-${focusState}`}>{getStatusLabel(focus.status)}</span>
+          </div>
+
+          <div className="rs-steps-row">
+            <ClipSteps status={focus.status} variant="focus" />
+            {activityLabel(focus.status, t) && (
+              <span className="rs-activity">{activityLabel(focus.status, t)}</span>
+            )}
           </div>
 
           <div className="rs-prog-row">
