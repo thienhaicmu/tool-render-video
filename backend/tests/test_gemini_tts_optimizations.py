@@ -29,13 +29,14 @@ def test_synthesize_routes_through_rotation(monkeypatch, tmp_path):
     and its PCM must flow into the WAV→MP3 pipeline."""
     calls = {}
 
-    def fake_rotation(once_factory, *, label, seed_key):
+    def fake_rotation(once_km, *, label, seed_key, models):
         calls["label"] = label
         calls["seed"] = seed_key
+        calls["models"] = models
         return b"\x00\x01" * 2400  # fake PCM
 
     monkeypatch.setattr(
-        "app.features.render.ai.llm.key_pool.call_gemini_with_rotation", fake_rotation)
+        "app.features.render.ai.llm.key_pool.call_gemini_with_model_rotation", fake_rotation)
     monkeypatch.setattr(
         "app.features.render.ai.llm.key_pool.active_key", lambda seed="": "poolkey")
     monkeypatch.setattr(tts_gemini, "_resolve_api_key", lambda: "poolkey")
@@ -49,6 +50,9 @@ def test_synthesize_routes_through_rotation(monkeypatch, tmp_path):
         content_type="story", output_path=str(tmp_path / "out.mp3"))
     assert calls["label"] == "gemini-tts"
     assert calls["seed"] == "poolkey"
+    # TTS-family model chain: primary first, then the TTS fallback (never a text model).
+    assert calls["models"][0] == tts_gemini._tts_model()
+    assert "gemini-2.5-flash-preview-tts" in calls["models"]
     assert Path(out).exists() and Path(out).stat().st_size > 0
 
 
@@ -56,8 +60,8 @@ def test_all_keys_exhausted_raises_for_fallback(monkeypatch, tmp_path):
     """Rotation returning None (pool exhausted) must RAISE — the dispatcher's
     fallback-to-Edge contract depends on the exception."""
     monkeypatch.setattr(
-        "app.features.render.ai.llm.key_pool.call_gemini_with_rotation",
-        lambda f, *, label, seed_key: None)
+        "app.features.render.ai.llm.key_pool.call_gemini_with_model_rotation",
+        lambda f, *, label, seed_key, models: None)
     monkeypatch.setattr(
         "app.features.render.ai.llm.key_pool.active_key", lambda seed="": "k")
     monkeypatch.setattr(tts_gemini, "_resolve_api_key", lambda: "k")

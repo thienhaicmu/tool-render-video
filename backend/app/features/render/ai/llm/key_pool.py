@@ -117,30 +117,51 @@ def rotation_sequence(seed: str) -> "list[str]":
     return [k for k in seq if k and (k not in seen and not seen.add(k))]
 
 
-def call_gemini_with_rotation(
-    once_factory: Callable[[str], Optional[str]],
+def model_chain(
+    primary: str,
+    *,
+    env_var: str,
+    default_fallbacks: "list[str]",
+) -> "list[str]":
+    """Ordered model list to try for one logical call: ``primary`` first, then
+    the configured fallbacks. Fallbacks come from ``env_var`` (comma-separated)
+    when set, else ``default_fallbacks``. Deduped, order-preserving; blank
+    entries dropped. Never raises.
+
+    Model rotation is per-FAMILY: a text call passes a text env/defaults, a TTS
+    call passes TTS ones, etc. — so an overloaded ``gemini-3.5-flash`` falls to
+    ``gemini-2.5-flash`` and an overloaded TTS model falls to a TTS model, never
+    across families.
+    """
+    raw = os.getenv(env_var, "") or ""
+    if raw.strip():
+        fallbacks = [m.strip() for m in raw.split(",") if m.strip()]
+    else:
+        fallbacks = [m for m in (default_fallbacks or []) if m]
+    seq = [primary, *fallbacks]
+    seen: set[str] = set()
+    return [m for m in seq if m and (m not in seen and not seen.add(m))]
+
+
+def _run_key_rotation(
+    once_km: Callable[[str, str], Optional[object]],
+    model: str,
     *,
     label: str,
-    seed_key: str,
-) -> Optional[str]:
-    """Run ``once_factory(key)`` across the pool, rotating on rate-limit.
+    seq: "list[str]",
+) -> "tuple[Optional[object], bool]":
+    """Run ``once_km(key, model)`` across ``seq`` keys for a SINGLE model.
 
-    ``once_factory`` builds+runs one SDK call for a given key and may raise.
-    Each key is tried once (no per-key backoff sleep — rotation IS the retry).
-    Failure handling by class:
-      - RATE-LIMIT (429/quota): cool the key, try the next one.
-      - TRANSIENT (503 overload / 504 timeout / 5xx): the key is NOT at fault —
-        do not cool it; sleep briefly and try the next key (time passes +
-        different routing). Restores the resilience the pre-rotation
-        max_attempts=2 backoff used to provide.
-      - anything else (bad prompt / parse / auth): fail fast — a different key
-        won't fix it.
-    Returns the first non-None result, or None. Never raises."""
+    Returns ``(result, exhausted_by_overload)``:
+      - ``result``: first non-None output, or None.
+      - ``exhausted_by_overload``: True only when EVERY key failed due to
+        rate-limit (429/quota) or transient overload (503/504) — the signal the
+        caller uses to advance to the next model. False when a hard, non-
+        retryable failure (auth / bad prompt / empty response) stopped the loop,
+        or when a result was found.
+    Never raises."""
     from app.features.render.ai.llm.retry import _is_transient, call_with_retry
 
-    seq = rotation_sequence(seed_key)
-    if not seq:
-        return None
     for idx, key in enumerate(seq):
         _rl = {"hit": False}
         _last: dict = {"exc": None}
@@ -150,23 +171,82 @@ def call_gemini_with_rotation(
             note_rate_limited(_k)
 
         result = call_with_retry(
-            lambda _k=key: once_factory(_k),
+            lambda _k=key, _m=model: once_km(_k, _m),
             label=label, max_attempts=1, on_rate_limit=_on_rl,
             on_error=lambda _e: _last.__setitem__("exc", _e),
         )
         if result is not None:
-            return result
+            return result, False
         if _rl["hit"]:
             if len(seq) > 1:
-                logger.info("key_pool: %s rate-limited on key …%s — rotating", label, key[-6:])
+                logger.info("key_pool: %s rate-limited on key …%s (model=%s) — rotating",
+                            label, key[-6:], model or "-")
             continue
         if _last["exc"] is not None and _is_transient(_last["exc"]):
-            logger.info("key_pool: %s transient error on key …%s (%s) — retrying on next key",
-                        label, key[-6:], type(_last["exc"]).__name__)
+            logger.info("key_pool: %s transient error on key …%s (model=%s, %s) — retrying on next key",
+                        label, key[-6:], model or "-", type(_last["exc"]).__name__)
             if idx < len(seq) - 1:
                 time.sleep(_TRANSIENT_BACKOFF_SEC)
             continue
-        # Non-retryable failure (empty response / bad request / auth) —
-        # another key won't help; fail fast like the pre-rotation behaviour.
-        return None
+        # Non-retryable failure (empty response / bad request / auth) — neither a
+        # different key NOR a different model will help; fail fast.
+        return None, False
+    # Loop completed via rate-limit/transient continues only → every key was
+    # exhausted by overload/quota, so a different model is worth trying.
+    return None, True
+
+
+def call_gemini_with_model_rotation(
+    once_km: Callable[[str, str], Optional[object]],
+    *,
+    label: str,
+    seed_key: str,
+    models: "list[str]",
+) -> Optional[object]:
+    """Run ``once_km(key, model)`` across the key pool for each model in
+    ``models``, advancing to the next model ONLY when the current one is
+    exhausted across every key by overload (503/504) or quota (429). A hard
+    failure (auth / bad prompt / empty response) fails fast — a different model
+    won't help. Returns the first non-None result, or None. Never raises
+    (Sacred Contract #3)."""
+    model_seq = [m for m in (models or []) if m] or [""]
+    for m_idx, model in enumerate(model_seq):
+        seq = rotation_sequence(seed_key)
+        if not seq:
+            return None
+        result, exhausted_overload = _run_key_rotation(once_km, model, label=label, seq=seq)
+        if result is not None:
+            return result
+        if not exhausted_overload:
+            return None
+        if m_idx < len(model_seq) - 1:
+            logger.warning(
+                "key_pool: %s exhausted all %d key(s) on model=%s (overload/quota) — "
+                "falling back to model=%s",
+                label, len(seq), model or "-", model_seq[m_idx + 1],
+            )
     return None
+
+
+def call_gemini_with_rotation(
+    once_factory: Callable[[str], Optional[object]],
+    *,
+    label: str,
+    seed_key: str,
+) -> Optional[object]:
+    """Single-model key rotation (frozen public API — used by TTS + image
+    providers). Rotates ``once_factory(key)`` across the pool:
+      - RATE-LIMIT (429/quota): cool the key, try the next one.
+      - TRANSIENT (503 overload / 504 timeout): key is NOT at fault — do not
+        cool it; sleep briefly and try the next key.
+      - anything else (bad prompt / parse / auth): fail fast.
+    Returns the first non-None result, or None. Never raises.
+
+    Backed by :func:`call_gemini_with_model_rotation` with a single
+    (caller-baked) model so behaviour is byte-identical to the pre-model-
+    rotation implementation. Callers that ALSO want model fallback use
+    ``call_gemini_with_model_rotation`` directly with a ``model_chain``."""
+    return call_gemini_with_model_rotation(
+        lambda _k, _m: once_factory(_k),
+        label=label, seed_key=seed_key, models=[""],
+    )

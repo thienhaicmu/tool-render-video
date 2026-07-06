@@ -45,6 +45,15 @@ def _tts_model() -> str:
     return os.environ.get("GEMINI_TTS_MODEL", "gemini-3.1-flash-tts-preview")
 
 
+# TTS-family model-fallback chain: when the primary TTS model is exhausted
+# across every key by overload (503) / quota (429), the key-pool rotates DOWN
+# this chain to the next TTS model (e.g. ``gemini-3.1-flash-tts-preview`` →
+# ``gemini-2.5-flash-preview-tts``). Override via ``GEMINI_TTS_MODEL_FALLBACKS``
+# (comma-separated). TTS family ONLY — never a text/image model.
+_GEMINI_TTS_MODEL_FALLBACKS_ENV = "GEMINI_TTS_MODEL_FALLBACKS"
+_DEFAULT_TTS_MODEL_FALLBACKS = ["gemini-2.5-flash-preview-tts"]
+
+
 _GEMINI_TTS_TIMEOUT_SEC = int(os.environ.get("GEMINI_TTS_TIMEOUT_SEC", "120"))
 # API contract for TTS models: raw PCM signed 16-bit LE, 24 kHz, mono.
 _GEMINI_TTS_SAMPLE_RATE = 24000
@@ -280,19 +289,21 @@ def _generate_pcm(style: str, text: str, voice: str) -> bytes:
     Returns raw PCM bytes; raises RuntimeError when every key is exhausted or
     the response is empty (caller falls back to the Edge chain).
     """
-    from app.features.render.ai.llm.key_pool import active_key, call_gemini_with_rotation
+    from app.features.render.ai.llm.key_pool import (
+        active_key, call_gemini_with_model_rotation, model_chain,
+    )
     from google import genai  # lazy — optional dependency
     from google.genai import types as genai_types
 
     model = _tts_model()
 
-    def _once(key: str) -> "bytes | None":
+    def _once(key: str, tts_model: str) -> "bytes | None":
         client = genai.Client(
             api_key=key,
             http_options={"timeout": _GEMINI_TTS_TIMEOUT_SEC * 1000},
         )
         resp = client.models.generate_content(
-            model=model,
+            model=tts_model,
             contents=f"{style}: {text}",
             config=genai_types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
@@ -310,7 +321,14 @@ def _generate_pcm(style: str, text: str, voice: str) -> bytes:
         return pcm or None
 
     with _GEMINI_TTS_SEMAPHORE:
-        pcm = call_gemini_with_rotation(_once, label="gemini-tts", seed_key=active_key())
+        pcm = call_gemini_with_model_rotation(
+            _once, label="gemini-tts", seed_key=active_key(),
+            models=model_chain(
+                model,
+                env_var=_GEMINI_TTS_MODEL_FALLBACKS_ENV,
+                default_fallbacks=_DEFAULT_TTS_MODEL_FALLBACKS,
+            ),
+        )
     if not pcm:
         raise RuntimeError("gemini_tts_failed_all_keys_or_empty")
     return pcm

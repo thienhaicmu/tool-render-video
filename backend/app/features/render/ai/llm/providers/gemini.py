@@ -16,7 +16,7 @@ from app.features.render.ai.llm.cache import llm_cache_get, llm_cache_put
 from app.features.render.ai.llm.parser import parse_render_plan_response
 from app.features.render.ai.llm.prompts import build_render_plan_prompt
 from app.features.render.ai.llm.retry import call_with_retry
-from app.features.render.ai.llm.key_pool import call_gemini_with_rotation
+from app.features.render.ai.llm.key_pool import call_gemini_with_model_rotation, model_chain
 from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
 from app.features.render.ai.llm.recap_prompts import (
@@ -51,6 +51,20 @@ logger.info("gemini_provider: module loaded (build=2026-06-01.i1-multi-provider)
 # unlocks Pro. The prior comment here claimed ``gemini-2.5-pro`` works
 # where ``gemini-2.5-pro`` doesn't — almost certainly a typo for Flash.
 _DEFAULT_MODEL = os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+
+# Model-fallback chain for the TEXT LLM calls below. When the primary model is
+# exhausted across EVERY key by overload (503) / quota (429), the key-pool
+# rotates DOWN this chain to the next model (e.g. an overloaded
+# ``gemini-3.5-flash`` → ``gemini-2.5-flash``). Override the fallbacks with
+# ``GEMINI_MODEL_FALLBACKS`` (comma-separated). This is the TEXT family only —
+# TTS / image models rotate within their own families (their own env vars).
+_MODEL_FALLBACKS_ENV = "GEMINI_MODEL_FALLBACKS"
+_DEFAULT_MODEL_FALLBACKS = ["gemini-2.5-flash"]
+
+
+def _text_model_chain(model: str) -> "list[str]":
+    """Primary model + configured text fallbacks (deduped, primary first)."""
+    return model_chain(model, env_var=_MODEL_FALLBACKS_ENV, default_fallbacks=_DEFAULT_MODEL_FALLBACKS)
 
 # 60K chars ≈ 15K tokens — captures ~30 min of dense Vietnamese speech.
 # Architecture-review Batch D-3a (2026-06-30): resolves via the shared helper
@@ -299,9 +313,9 @@ def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str)
     if cached is not None:
         logger.info("gemini_client: cache HIT model=%s", model)
         return cached
-    result = call_gemini_with_rotation(
-        lambda _k: _call_gemini_once(_k, model, system_prompt, user_prompt),
-        label="gemini", seed_key=api_key,
+    result = call_gemini_with_model_rotation(
+        lambda _k, _m: _call_gemini_once(_k, _m, system_prompt, user_prompt),
+        label="gemini", seed_key=api_key, models=_text_model_chain(model),
     )
     if result is not None:
         llm_cache_put("gemini", model, system_prompt, user_prompt, result)
@@ -447,9 +461,9 @@ def _call_gemini_rewrite(api_key: str, model: str, system_prompt: str, user_prom
     if cached is not None:
         logger.info("gemini_client: rewrite cache HIT model=%s", model)
         return cached
-    result = call_gemini_with_rotation(
-        lambda _k: _call_gemini_rewrite_once(_k, model, system_prompt, user_prompt),
-        label="gemini-rewrite", seed_key=api_key,
+    result = call_gemini_with_model_rotation(
+        lambda _k, _m: _call_gemini_rewrite_once(_k, _m, system_prompt, user_prompt),
+        label="gemini-rewrite", seed_key=api_key, models=_text_model_chain(model),
     )
     if result is not None:
         llm_cache_put("gemini-rewrite", model, system_prompt, user_prompt, result)
@@ -606,9 +620,9 @@ def _call_gemini_content(api_key: str, model: str, system_prompt: str, user_prom
     if cached is not None:
         logger.info("gemini_client: content cache HIT model=%s", model)
         return cached
-    result = call_gemini_with_rotation(
-        lambda _k: _call_gemini_content_once(_k, model, system_prompt, user_prompt),
-        label="gemini-content", seed_key=api_key,
+    result = call_gemini_with_model_rotation(
+        lambda _k, _m: _call_gemini_content_once(_k, _m, system_prompt, user_prompt),
+        label="gemini-content", seed_key=api_key, models=_text_model_chain(model),
     )
     if result is not None:
         llm_cache_put("gemini-content", model, system_prompt, user_prompt, result)
@@ -749,9 +763,9 @@ def _call_gemini_episode_narration(api_key: str, model: str, system_prompt: str,
     cached = llm_cache_get("gemini-episode-narration", model, system_prompt, user_prompt)
     if cached is not None:
         return cached
-    result = call_gemini_with_rotation(
-        lambda _k: _call_gemini_episode_narration_once(_k, model, system_prompt, user_prompt),
-        label="gemini-episode-narration", seed_key=api_key,
+    result = call_gemini_with_model_rotation(
+        lambda _k, _m: _call_gemini_episode_narration_once(_k, _m, system_prompt, user_prompt),
+        label="gemini-episode-narration", seed_key=api_key, models=_text_model_chain(model),
     )
     if result is not None:
         llm_cache_put("gemini-episode-narration", model, system_prompt, user_prompt, result)
@@ -809,9 +823,9 @@ def _call_gemini_content_narration(api_key: str, model: str, system_prompt: str,
     cached = llm_cache_get("gemini-content-narration", model, system_prompt, user_prompt)
     if cached is not None:
         return cached
-    result = call_gemini_with_rotation(
-        lambda _k: _call_gemini_content_narration_once(_k, model, system_prompt, user_prompt),
-        label="gemini-content-narration", seed_key=api_key,
+    result = call_gemini_with_model_rotation(
+        lambda _k, _m: _call_gemini_content_narration_once(_k, _m, system_prompt, user_prompt),
+        label="gemini-content-narration", seed_key=api_key, models=_text_model_chain(model),
     )
     if result is not None:
         llm_cache_put("gemini-content-narration", model, system_prompt, user_prompt, result)
@@ -876,9 +890,9 @@ def _call_gemini_editorial(api_key: str, model: str, system_prompt: str, user_pr
     if cached is not None:
         logger.info("gemini_client: editorial cache HIT model=%s", model)
         return cached
-    result = call_gemini_with_rotation(
-        lambda _k: _call_gemini_editorial_once(_k, model, system_prompt, user_prompt),
-        label="gemini-editorial", seed_key=api_key,
+    result = call_gemini_with_model_rotation(
+        lambda _k, _m: _call_gemini_editorial_once(_k, _m, system_prompt, user_prompt),
+        label="gemini-editorial", seed_key=api_key, models=_text_model_chain(model),
     )
     if result is not None:
         llm_cache_put("gemini-editorial", model, system_prompt, user_prompt, result)
@@ -939,9 +953,9 @@ def _call_gemini_recap(api_key: str, model: str, system_prompt: str, user_prompt
     if cached is not None:
         logger.info("gemini_client: recap cache HIT model=%s", model)
         return cached
-    result = call_gemini_with_rotation(
-        lambda _k: _call_gemini_recap_once(_k, model, system_prompt, user_prompt),
-        label="gemini-recap", seed_key=api_key,
+    result = call_gemini_with_model_rotation(
+        lambda _k, _m: _call_gemini_recap_once(_k, _m, system_prompt, user_prompt),
+        label="gemini-recap", seed_key=api_key, models=_text_model_chain(model),
     )
     if result is not None:
         llm_cache_put("gemini-recap", model, system_prompt, user_prompt, result)
@@ -983,9 +997,9 @@ def _call_gemini_story(api_key: str, model: str, system_prompt: str, user_prompt
     if cached is not None:
         logger.info("gemini_client: story cache HIT model=%s", model)
         return cached
-    result = call_gemini_with_rotation(
-        lambda _k: _call_gemini_story_once(_k, model, system_prompt, user_prompt),
-        label="gemini-story", seed_key=api_key,
+    result = call_gemini_with_model_rotation(
+        lambda _k, _m: _call_gemini_story_once(_k, _m, system_prompt, user_prompt),
+        label="gemini-story", seed_key=api_key, models=_text_model_chain(model),
     )
     if result is not None:
         llm_cache_put("gemini-story", model, system_prompt, user_prompt, result)

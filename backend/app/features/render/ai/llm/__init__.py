@@ -28,6 +28,28 @@ DEFAULT_PROVIDER = "gemini"
 # cross-provider fallback; lower cost/latency on a failing render).
 _LLM_FALLBACK_ENABLED: bool = os.getenv("LLM_FALLBACK_ENABLED", "1") == "1"
 
+
+def _disabled_providers() -> "set[str]":
+    """Providers explicitly turned OFF via ``LLM_DISABLED_PROVIDERS`` (comma-
+    separated, e.g. ``openai,claude``). Read at CALL time so the lock can be
+    toggled by editing ``.env`` + restarting, with no code change. Empty by
+    default → every SUPPORTED_PROVIDER stays eligible (pre-existing behaviour)."""
+    raw = os.getenv("LLM_DISABLED_PROVIDERS", "") or ""
+    return {p.strip().lower() for p in raw.split(",") if p.strip()}
+
+
+def _provider_chain(primary: str) -> "list[str]":
+    """Ordered providers to try: ``primary`` first, then the cross-provider
+    fallbacks (when ``LLM_FALLBACK_ENABLED``), with any ``LLM_DISABLED_PROVIDERS``
+    filtered out. Never returns empty — falls back to ``gemini`` so the render
+    pipeline always has a usable provider even if the primary was disabled."""
+    chain = [primary]
+    if _LLM_FALLBACK_ENABLED:
+        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    disabled = _disabled_providers()
+    filtered = [p for p in chain if p not in disabled]
+    return filtered or ["gemini"]
+
 # Story Intelligence pipeline (architecture-review naming, 2026-06-30):
 # the recap path runs up to THREE LLM passes — story understanding, editorial
 # planning, then scene binding. The flags below independently gate the first
@@ -187,9 +209,7 @@ def select_content_plan(
     primary = (provider or DEFAULT_PROVIDER).strip().lower()
     if primary not in SUPPORTED_PROVIDERS:
         primary = "gemini"
-    chain = [primary]
-    if _LLM_FALLBACK_ENABLED:
-        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    chain = _provider_chain(primary)
     base_kwargs = dict(
         script=script, target_duration_sec=target_duration_sec,
         target_language=target_language, tone=tone, model=model,
@@ -234,9 +254,7 @@ def generate_publish_meta(
     primary = (provider or DEFAULT_PROVIDER).strip().lower()
     if primary not in SUPPORTED_PROVIDERS:
         primary = "gemini"
-    chain = [primary]
-    if _LLM_FALLBACK_ENABLED:
-        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    chain = _provider_chain(primary)
     base = dict(topic=topic, tone=tone, audience=audience,
                 target_language=target_language, narration_sample=narration_sample, model=model)
     for _p in chain:
@@ -284,9 +302,7 @@ def select_story_model(
     primary = (provider or DEFAULT_PROVIDER).strip().lower()
     if primary not in SUPPORTED_PROVIDERS:
         primary = "gemini"
-    chain = [primary]
-    if _LLM_FALLBACK_ENABLED:
-        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    chain = _provider_chain(primary)
     kwargs = dict(
         srt_content=srt_content, video_duration=video_duration,
         target_language=target_language, tone=tone, api_key=api_key, model=model,
@@ -327,9 +343,7 @@ def select_editorial_blueprint(
     primary = (provider or DEFAULT_PROVIDER).strip().lower()
     if primary not in SUPPORTED_PROVIDERS:
         primary = "gemini"
-    chain = [primary]
-    if _LLM_FALLBACK_ENABLED:
-        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    chain = _provider_chain(primary)
     kwargs = dict(
         story_model=story_model, video_duration=video_duration,
         target_language=target_language, tone=tone, api_key=api_key, model=model,
@@ -486,9 +500,7 @@ def select_recap_plan(
     primary = (provider or DEFAULT_PROVIDER).strip().lower()
     if primary not in SUPPORTED_PROVIDERS:
         primary = "gemini"
-    chain = [primary]
-    if _LLM_FALLBACK_ENABLED:
-        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    chain = _provider_chain(primary)
     # Pass 1 — Story Understanding. Two code paths:
     #   (a) External story_model provided (Batch C, recap_pipeline → Comprehension
     #       stage already produced one) → skip internal pass-1; do NOT fire
@@ -617,9 +629,7 @@ def select_render_plan(
         )
         primary = "gemini"
 
-    chain = [primary]
-    if _LLM_FALLBACK_ENABLED:
-        chain += [p for p in SUPPORTED_PROVIDERS if p != primary]
+    chain = _provider_chain(primary)
 
     kwargs = dict(
         srt_content=srt_content,

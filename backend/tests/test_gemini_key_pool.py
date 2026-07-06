@@ -143,6 +143,75 @@ def test_all_keys_exhausted_returns_none(monkeypatch):
     assert key_pool._cooldown_until.get("k2", 0) > time.time()
 
 
+# ── model rotation (per-family fallback) ─────────────────────────────────────
+
+def test_model_chain_primary_first_then_fallbacks(monkeypatch):
+    monkeypatch.delenv("GEMINI_MODEL_FALLBACKS", raising=False)
+    assert key_pool.model_chain(
+        "m-a", env_var="GEMINI_MODEL_FALLBACKS", default_fallbacks=["m-b", "m-c"]
+    ) == ["m-a", "m-b", "m-c"]
+    # env override replaces the defaults; primary still leads.
+    monkeypatch.setenv("GEMINI_MODEL_FALLBACKS", "m-x, m-y")
+    assert key_pool.model_chain(
+        "m-a", env_var="GEMINI_MODEL_FALLBACKS", default_fallbacks=["m-b"]
+    ) == ["m-a", "m-x", "m-y"]
+    # dedup + drop blanks.
+    monkeypatch.delenv("GEMINI_MODEL_FALLBACKS", raising=False)
+    assert key_pool.model_chain(
+        "m-a", env_var="GEMINI_MODEL_FALLBACKS", default_fallbacks=["m-a", "m-b", ""]
+    ) == ["m-a", "m-b"]
+
+
+def test_model_rotates_on_overload_exhaustion(monkeypatch):
+    # Primary model 503s on EVERY key → fall back to the next model, which works.
+    _set_pool(monkeypatch, ["k1", "k2"])
+    monkeypatch.setattr(key_pool, "_TRANSIENT_BACKOFF_SEC", 0.0)
+    seen = []
+
+    def once(key, model):
+        seen.append((key, model))
+        if model == "primary":
+            raise RuntimeError("503 UNAVAILABLE: high demand")
+        return f"ok:{model}"
+
+    out = key_pool.call_gemini_with_model_rotation(
+        once, label="t", seed_key="k1", models=["primary", "fallback"])
+    assert out == "ok:fallback"
+    assert ("k1", "primary") in seen and ("k2", "primary") in seen   # primary exhausted
+    assert seen[-1][1] == "fallback"                                  # then advanced
+
+
+def test_hard_failure_does_not_rotate_model(monkeypatch):
+    # A non-retryable error (bad prompt) must NOT waste keys OR advance models.
+    _set_pool(monkeypatch, ["k1", "k2"])
+    seen = []
+
+    def once(key, model):
+        seen.append(model)
+        raise ValueError("malformed prompt")
+
+    out = key_pool.call_gemini_with_model_rotation(
+        once, label="t", seed_key="k1", models=["primary", "fallback"])
+    assert out is None
+    assert seen == ["primary"]   # fail-fast on the first key, first model
+
+
+def test_quota_exhaustion_rotates_model(monkeypatch):
+    # 429 on every key of the primary model → try the next model too.
+    _set_pool(monkeypatch, ["k1", "k2"])
+    seen = []
+
+    def once(key, model):
+        seen.append(model)
+        if model == "primary":
+            raise RuntimeError("429 RESOURCE_EXHAUSTED: quota")
+        return "ok"
+
+    assert key_pool.call_gemini_with_model_rotation(
+        once, label="t", seed_key="k1", models=["primary", "fallback"]) == "ok"
+    assert seen.count("primary") == 2 and "fallback" in seen
+
+
 # ── retry hook ───────────────────────────────────────────────────────────────
 
 def test_is_rate_limit_detection():
