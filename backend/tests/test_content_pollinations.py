@@ -94,7 +94,11 @@ def test_seam_dispatches_ai_image_free(monkeypatch, tmp_path):
 
 
 def test_seam_falls_back_to_local_on_pollinations_failure(monkeypatch):
-    # Pollinations returns None (e.g. network down) → seam yields the local asset.
+    # Pollinations returns None (e.g. network down). B2's stepped fallback is
+    # disabled here so we exercise the terminal local path (the free-pool fallback
+    # itself is covered in test_content_visual_fallback.py).
+    import app.features.render.engine.visual as _v
+    monkeypatch.setattr(_v, "_CONTENT_VISUAL_FALLBACK", False)
     monkeypatch.setattr(poll, "resolve_pollinations", lambda req: None)
     asset = resolve_scene_visual(_req(kind="color", value="#101820"), provider="ai_image_free")
     assert asset is not None and asset.provider == "local"

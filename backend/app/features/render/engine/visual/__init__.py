@@ -26,6 +26,7 @@ provider always yields an asset (falling back to opaque black on bad input).
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -42,6 +43,14 @@ DEFAULT_PROVIDER = "local"
 # never fails to get an asset. ``ai_image_free`` (Pollinations) needs network but
 # NO key.
 _ONLINE_PROVIDERS = ("stock", "ai_image", "ai_video", "ai_image_free")
+# B2 — real-image providers eligible for stepped fallback (Veo excluded: a video
+# provider failing should not spin up an unrelated image generation).
+_IMAGE_PROVIDERS = ("stock", "ai_image", "ai_image_free")
+# Free real-image sources tried (in order) before giving up to the plain local
+# background, so a momentary 429 / missing key / error on the chosen source keeps
+# a real image instead of a solid colour card.
+_IMAGE_FALLBACK_POOL = ("ai_image_free", "stock")
+_CONTENT_VISUAL_FALLBACK = os.getenv("CONTENT_VISUAL_FALLBACK", "1") == "1"
 
 
 @dataclass
@@ -85,6 +94,27 @@ class SceneVisualAsset:
     provider: str = "local"   # which provider produced it (observability)
 
 
+def _resolve_one(provider: str, request: "SceneVisualRequest") -> Optional["SceneVisualAsset"]:
+    """Call ONE online provider by name → its asset or None. Lazy imports so an
+    unused provider's optional deps never load. Never raises (Sacred #3 spirit)."""
+    try:
+        if provider == "stock":
+            from app.features.render.engine.visual.provider_stock import resolve_stock
+            return resolve_stock(request)
+        if provider == "ai_image":
+            from app.features.render.engine.visual.provider_ai_image import resolve_ai_image
+            return resolve_ai_image(request)
+        if provider == "ai_video":
+            from app.features.render.engine.visual.provider_ai_video import resolve_ai_video
+            return resolve_ai_video(request)
+        if provider == "ai_image_free":
+            from app.features.render.engine.visual.provider_pollinations import resolve_pollinations
+            return resolve_pollinations(request)
+    except Exception as exc:
+        logger.info("visual: provider %s raised %s", provider, exc)
+    return None
+
+
 def resolve_scene_visual(
     request: SceneVisualRequest,
     *,
@@ -103,23 +133,23 @@ def resolve_scene_visual(
     try:
         if p == "local":
             return resolve_local(request)
-        # Online providers: try, then fall back to local on None/failure so the
-        # scene always gets an asset (Sacred Contract #3 spirit).
-        asset = None
-        if p == "stock":
-            from app.features.render.engine.visual.provider_stock import resolve_stock
-            asset = resolve_stock(request)
-        elif p == "ai_image":
-            from app.features.render.engine.visual.provider_ai_image import resolve_ai_image
-            asset = resolve_ai_image(request)
-        elif p == "ai_video":
-            from app.features.render.engine.visual.provider_ai_video import resolve_ai_video
-            asset = resolve_ai_video(request)
-        elif p == "ai_image_free":
-            from app.features.render.engine.visual.provider_pollinations import resolve_pollinations
-            asset = resolve_pollinations(request)
+        # Chosen online provider first.
+        asset = _resolve_one(p, request)
         if asset is not None:
             return asset
+        # B2 — stepped fallback: before the plain local background, try the other
+        # FREE real-image providers (Pollinations / stock) so a momentary failure
+        # (429 / no key / error) on the chosen source still yields a REAL image.
+        # Only for image providers; ai_video (Veo) goes straight to local. stock
+        # without a key returns None instantly, so trying it is cheap.
+        if _CONTENT_VISUAL_FALLBACK and p in _IMAGE_PROVIDERS:
+            for fb in _IMAGE_FALLBACK_POOL:
+                if fb == p:
+                    continue
+                asset = _resolve_one(fb, request)
+                if asset is not None:
+                    logger.info("visual: provider %s produced nothing — fell back to %s", p, fb)
+                    return asset
         logger.info("visual: provider %s produced no asset — falling back to local", p)
         return resolve_local(request)
     except Exception as exc:

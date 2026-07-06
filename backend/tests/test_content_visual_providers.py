@@ -152,6 +152,11 @@ def test_verify_image_fail_open_without_key(monkeypatch):
 
 
 def test_seam_stock_falls_back_to_local(monkeypatch, tmp_path):
+    # B2 adds a stepped free-image fallback; disable it here to exercise the
+    # terminal local path (the fallback itself is covered in
+    # test_content_visual_fallback.py).
+    import app.features.render.engine.visual as _v
+    monkeypatch.setattr(_v, "_CONTENT_VISUAL_FALLBACK", False)
     monkeypatch.delenv("PEXELS_API_KEY", raising=False)
     monkeypatch.delenv("PIXABAY_API_KEY", raising=False)
     a = resolve_scene_visual(_req(kind="color", value="#123456", tmp=str(tmp_path)), provider="stock")
@@ -160,6 +165,8 @@ def test_seam_stock_falls_back_to_local(monkeypatch, tmp_path):
 
 
 def test_seam_ai_image_falls_back_to_local(monkeypatch, tmp_path):
+    import app.features.render.engine.visual as _v
+    monkeypatch.setattr(_v, "_CONTENT_VISUAL_FALLBACK", False)   # B2: terminal-local path
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     a = resolve_scene_visual(_req(kind="color", value="#abcdef", tmp=str(tmp_path)), provider="ai_image")

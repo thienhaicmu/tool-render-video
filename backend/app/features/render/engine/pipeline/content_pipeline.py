@@ -458,9 +458,13 @@ def run_content(
                     style=(getattr(plan, "video_style", "") or ""),
                     # CU-11: seed by the scene's primary character (else the video
                     # style) so the same subject stays visually consistent.
+                    # CU-11 + B1: stable seed by the scene's character, else the
+                    # plan's video_style, else its topic — so even a character-less
+                    # scene keeps a coherent look across the whole video (never 0).
                     seed=_stable_seed(
                         (getattr(scene, "characters", None) or [""])[0]
                         or (getattr(plan, "video_style", "") or "")
+                        or (getattr(plan, "topic", "") or "")
                     ),
                     width=width, height=height, fps=fps, duration_sec=ndur,
                     work_dir=str(scenes_dir), cancel_check=_cancel_cb,
