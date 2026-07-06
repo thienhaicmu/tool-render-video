@@ -390,3 +390,32 @@ def test_run_content_auto_bgm_by_mood(_content_sandbox, monkeypatch):
     from app.db.jobs_repo import get_job
     row = get_job(job_id)
     assert row is not None and row["status"] == "completed"
+
+
+@_NEEDS_FFMPEG
+def test_run_content_writes_thumbnail(_content_sandbox, monkeypatch):
+    """E2: a poster .thumb.jpg is written next to the output and its path lands
+    in result_json.thumbnail_path."""
+    from app.models.schemas import RenderRequest
+    import app.features.render.engine.pipeline.content_pipeline as cp
+
+    job_id = str(uuid.uuid4())
+    output_dir = _content_sandbox["output_dir"]
+    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())
+    monkeypatch.setattr(cp, "synthesize_scene_narration", _fake_synth_factory())
+
+    payload = RenderRequest(
+        channel_code="content-e2e", render_format="content", content_script="x",
+        content_background_kind="color", content_background_value="#101820",
+        output_dir=str(output_dir / "content-thumb"), aspect_ratio="9:16",
+        output_fps=30, add_subtitle=False, voice_enabled=False,
+    )
+    cp.run_content(job_id=job_id, payload=payload, resume_mode=False,
+                   load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None)
+
+    from app.db.jobs_repo import get_job
+    row = get_job(job_id)
+    result = json.loads(row.get("result_json") or "{}")
+    tp = result.get("thumbnail_path")
+    assert tp and Path(tp).exists() and Path(tp).stat().st_size > 0
+    assert list(output_dir.rglob("*.thumb.jpg"))

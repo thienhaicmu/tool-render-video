@@ -684,6 +684,26 @@ def run_content(
             raise RuntimeError(f"Content: output failed QA: {_qa.get('error')}")
         _final_dur = float(_qa["metadata"].get("duration") or 0.0)
 
+        # E2: best-effort poster thumbnail from the finished video (~1/3 in).
+        # Never fails the render (Sacred Contract #3 spirit).
+        _thumb_path = ""
+        if os.getenv("CONTENT_THUMBNAIL", "1") == "1":
+            try:
+                import subprocess
+                from app.services.bin_paths import get_ffmpeg_bin
+                _thumb = output_dir / f"{final_out.stem}.thumb.jpg"
+                _tss = max(0.5, _final_dur / 3.0)
+                subprocess.run(
+                    [get_ffmpeg_bin(), "-y", "-ss", f"{_tss:.2f}", "-i", str(final_out),
+                     "-frames:v", "1", "-q:v", "3", str(_thumb)],
+                    capture_output=True, timeout=60,
+                )
+                if _thumb.exists() and _thumb.stat().st_size > 0:
+                    _thumb_path = str(_thumb)
+                    _job_log(effective_channel, job_id, f"Content: thumbnail → {_thumb.name}")
+            except Exception as _th_exc:
+                logger.warning("content: thumbnail failed (non-fatal): %s", _th_exc)
+
         # Repoint scene part rows at the final video BEFORE deleting the scene
         # intermediates, so every per-part surface keeps a live output link.
         try:
@@ -720,6 +740,7 @@ def run_content(
             "failed_outputs_count": len(failed_parts),
             "failed_parts": [int(f["part_no"]) for f in failed_parts],
             "visual_provider": visual_provider,
+            "thumbnail_path": _thumb_path,   # E2
             "visual_fallback_scenes": _visual_fallbacks,
             "selected_segments_count": total_parts,
             "is_partial_success": bool(failed_parts),

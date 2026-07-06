@@ -54,6 +54,9 @@ _MIN_CUE_SEC: float = 0.6
 # pays the model-load cost. CONTENT_WHISPER_MODEL picks the model (base = a good
 # speed/accuracy trade-off for short TTS clips).
 _CONTENT_WORD_BY_WORD: bool = os.getenv("CONTENT_WORD_BY_WORD", "1") == "1"
+# E1: animated text overlay (title card / lower-third) from the AI's
+# animation_hint + scene_title. Default ON; a build failure just skips it.
+_CONTENT_TEXT_OVERLAY: bool = os.getenv("CONTENT_TEXT_OVERLAY", "1") == "1"
 _CONTENT_WHISPER_MODEL: str = (os.getenv("CONTENT_WHISPER_MODEL", "base").strip() or "base")
 
 _SRT_TIME_LINE_RE = re.compile(r"(\d\d:\d\d:\d\d,\d\d\d)\s*-->\s*(\d\d:\d\d:\d\d,\d\d\d)")
@@ -283,6 +286,7 @@ def render_content_scene(
     bg_path = ""
     srt_path = ""
     ass_path = ""
+    overlay_path = ""
     try:
         pause_before = max(0.0, float(getattr(scene, "pause_before", 0.0) or 0.0))
         pause_after = max(0.0, float(getattr(scene, "pause_after", 0.0) or 0.0))
@@ -328,7 +332,20 @@ def render_content_scene(
                     str(getattr(scene, "narration", "") or ""), pause_before, ndur, srt_path,
                 )
 
-        # 3. Compose: burn subtitle (-vf) + delay/pad narration (-af) + mux.
+        # E1: optional animated text overlay (title card / lower-third) from the
+        # AI's animation_hint + scene_title. Best-effort — a failure skips it.
+        overlay_path = ""
+        if _CONTENT_TEXT_OVERLAY:
+            _anim = (getattr(scene, "animation_hint", "") or "").strip().lower()
+            _title = (getattr(scene, "scene_title", "") or "").strip()
+            if _anim in ("title", "lower_third") and _title:
+                from app.features.render.engine.stages.content_overlay import build_overlay_ass
+                _ov = str(work / f"content_ov_{idx:03d}.ass")
+                if build_overlay_ass(_title, _anim, int(width), int(height), scene_dur, _ov):
+                    overlay_path = _ov
+
+        # 3. Compose: burn subtitle + optional overlay (-vf) + delay/pad narration
+        #    (-af) + mux.
         pb_ms = int(round(pause_before * 1000))
         af = f"adelay={pb_ms}:all=1,apad,atrim=0:{scene_dur:.3f},aresample={sr}"
         cmd = [
@@ -337,11 +354,15 @@ def render_content_scene(
             "-i", str(narration_audio_path),
             "-map", "0:v:0", "-map", "1:a:0",
         ]
+        _vf: list[str] = []
         if want_ass:
-            cmd += ["-vf", f"ass='{safe_filter_path(ass_path)}'"]
-            cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-bf", "0"]
+            _vf.append(f"ass='{safe_filter_path(ass_path)}'")
         elif want_srt:
-            cmd += ["-vf", f"subtitles='{safe_filter_path(srt_path)}'"]
+            _vf.append(f"subtitles='{safe_filter_path(srt_path)}'")
+        if overlay_path:
+            _vf.append(f"ass='{safe_filter_path(overlay_path)}'")
+        if _vf:
+            cmd += ["-vf", ",".join(_vf)]
             cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-bf", "0"]
         else:
             # No burn needed — the background is already at spec; copy the video.
@@ -374,6 +395,7 @@ def render_content_scene(
         _cleanup(bg_path)
         _cleanup(srt_path)
         _cleanup(ass_path)
+        _cleanup(overlay_path)
 
 
 def _cleanup(path: str) -> None:
