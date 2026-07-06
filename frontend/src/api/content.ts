@@ -153,6 +153,36 @@ export async function previewNarration(req: NarrationPreviewRequest): Promise<Na
   })
 }
 
+// ── C1: per-scene visual preview ─────────────────────────────────────────────
+
+export interface VisualPreviewRequest {
+  prompt: string
+  provider?: string
+  aspect_ratio?: string
+  seed?: number
+  style?: string
+  negative_prompt?: string
+  imagen_tier?: string
+}
+
+export interface VisualPreviewResult {
+  kind: 'image' | 'color' | 'video'
+  provider: string
+  token?: string
+  url?: string   // present when kind === 'image'
+  value?: string // background spec when it fell back (kind color/video)
+}
+
+/** Resolve ONE scene's visual via the render seam and return a previewable image
+ *  (Review "Xem ảnh" / "Tạo lại"). Free for stock/Pollinations; a paid provider
+ *  (Imagen) costs one image per call. */
+export async function previewVisual(req: VisualPreviewRequest): Promise<VisualPreviewResult> {
+  return apiFetch<VisualPreviewResult>('/api/content/visual/preview', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
 // ── CU-1: draft/project persistence ─────────────────────────────────────────
 
 export interface ContentProjectPayload {

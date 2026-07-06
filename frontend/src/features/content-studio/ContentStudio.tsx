@@ -36,7 +36,7 @@ import { revealInFolder } from '../../lib/revealInFolder'
 import { RATIO_INFO } from '../clip-studio/render/constants'
 import type { Ratio } from '../clip-studio/render/types'
 import {
-  generateContentPlan, previewNarration, createProject, saveProject, getProject, listProjects,
+  generateContentPlan, previewNarration, previewVisual, createProject, saveProject, getProject, listProjects,
   publishMeta, estimateContentCost, getVisualProviders,
   type ContentPlan, type ContentScene, type ContentProjectSummary,
   type PublishMeta, type DurationFit, type ContentEstimate, type VisualProviderInfo,
@@ -298,6 +298,7 @@ export function ContentStudio() {
       <ReviewPhase
         vi={vi} plan={plan} setPlan={setPlan} busy={busy} error={error}
         durationFit={durationFit} visualProvider={cfg.visualProvider} targetDuration={cfg.targetDuration}
+        aspectApi={RATIO_INFO[cfg.ratio].api} imagenTier={cfg.imagenTier}
         voice={{ lang: cfg.voiceLang, gender: cfg.voiceGender, engine: cfg.ttsEngine }}
         onBack={() => setPhase('script')} onApprove={handleApproveRender}
       />
@@ -566,13 +567,16 @@ function ScriptPhase({ vi, script, setScript, cfg, setCfgKey, busy, error, onGen
 // ── Phase 2: review + edit plan ─────────────────────────────────────────────
 
 interface VoiceCfg { lang: string; gender: 'female' | 'male'; engine: string }
+interface VisualCfg { provider: string; aspectApi: string; style: string; imagenTier: string }
 
-function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvider, targetDuration, voice, onBack, onApprove }: {
+function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvider, targetDuration, aspectApi, imagenTier, voice, onBack, onApprove }: {
   vi: boolean; plan: ContentPlan; setPlan: (p: ContentPlan) => void
   busy: boolean; error: string | null
   durationFit: DurationFit | null; visualProvider: Config['visualProvider']; targetDuration: number
+  aspectApi: string; imagenTier: string
   voice: VoiceCfg; onBack: () => void; onApprove: () => void
 }) {
+  const visualCfg: VisualCfg = { provider: visualProvider, aspectApi, style: plan.video_style || '', imagenTier }
   function updateScene(i: number, patch: Partial<ContentScene>) {
     setPlan({ ...plan, scenes: plan.scenes.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) })
   }
@@ -613,7 +617,7 @@ function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvid
 
       <div className="cs-scene-list">
         {plan.scenes.map((s, i) => (
-          <SceneRow key={i} vi={vi} scene={s} index={i} total={plan.scenes.length} voice={voice}
+          <SceneRow key={i} vi={vi} scene={s} index={i} total={plan.scenes.length} voice={voice} visualCfg={visualCfg}
             onChange={(patch) => updateScene(i, patch)} onRemove={() => removeScene(i)} onMove={(d) => moveScene(i, d)} />
         ))}
         <div><Button variant="ghost" size="sm" onClick={addScene}>+ {vi ? 'Thêm cảnh' : 'Add scene'}</Button></div>
@@ -630,8 +634,8 @@ function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvid
   )
 }
 
-function SceneRow({ vi, scene, index, total, voice, onChange, onRemove, onMove }: {
-  vi: boolean; scene: ContentScene; index: number; total: number; voice: VoiceCfg
+function SceneRow({ vi, scene, index, total, voice, visualCfg, onChange, onRemove, onMove }: {
+  vi: boolean; scene: ContentScene; index: number; total: number; voice: VoiceCfg; visualCfg: VisualCfg
   onChange: (patch: Partial<ContentScene>) => void; onRemove: () => void; onMove: (dir: -1 | 1) => void
 }) {
   const [previewing, setPreviewing] = useState(false)
@@ -640,6 +644,42 @@ function SceneRow({ vi, scene, index, total, voice, onChange, onRemove, onMove }
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const hasText = !!(scene.narration || '').trim()
   const audit = sceneAudit(scene)
+
+  // C1: per-scene visual preview.
+  const [vImg, setVImg] = useState<string | null>(null)      // shown image URL
+  const [vNote, setVNote] = useState<string | null>(null)    // "fell back to background" / error
+  const [vBusy, setVBusy] = useState(false)
+  const vSeed = useRef(0)
+  const hasPrompt = !!(scene.visual_prompt || '').trim()
+  const canVisual = visualCfg.provider !== 'local' && hasPrompt
+
+  async function doVisual(regen: boolean) {
+    if (!canVisual || vBusy) return
+    if (regen) vSeed.current += 1
+    setVBusy(true); setVNote(null)
+    try {
+      const r = await previewVisual({
+        prompt: (scene.visual_prompt || '').trim(),
+        provider: visualCfg.provider, aspect_ratio: visualCfg.aspectApi,
+        seed: vSeed.current, style: visualCfg.style,
+        negative_prompt: scene.negative_prompt || '',
+        imagen_tier: visualCfg.provider === 'ai_image' ? visualCfg.imagenTier : undefined,
+      })
+      if (r.kind === 'image' && r.url) {
+        setVImg(BASE_URL + r.url + `?t=${Date.now()}`)   // bust cache on regen
+        if (r.provider !== visualCfg.provider) {
+          setVNote(vi ? `Đã dùng nguồn "${r.provider}" (nguồn chọn không tạo được).` : `Used "${r.provider}" (chosen source unavailable).`)
+        }
+      } else {
+        setVImg(null)
+        setVNote(vi ? 'Nguồn không tạo được ảnh — khi render sẽ dùng nền màu.' : 'No image produced — the render will use a background colour.')
+      }
+    } catch (err) {
+      setVNote(err instanceof Error ? err.message : String(err))
+    } finally {
+      setVBusy(false)
+    }
+  }
 
   async function doPreview() {
     if (!hasText || previewing) return
@@ -680,6 +720,13 @@ function SceneRow({ vi, scene, index, total, voice, onChange, onRemove, onMove }
         <div className="cs-row" style={{ gap: 4 }}>
           <button className={`cs-icon-btn${hasText ? ' is-accent' : ''}`} title={vi ? 'Nghe thử giọng' : 'Preview voice'}
             disabled={!hasText || previewing} onClick={doPreview}>{previewing ? '…' : '🔊'}</button>
+          {canVisual && (
+            <button className="cs-icon-btn is-accent"
+              title={(visualCfg.provider === 'ai_image' || visualCfg.provider === 'ai_video')
+                ? (vi ? 'Xem thử ảnh — TỐN PHÍ mỗi lần (Imagen/Veo)' : 'Preview image — PAID per call (Imagen/Veo)')
+                : (vi ? 'Xem thử ảnh (miễn phí)' : 'Preview image (free)')}
+              disabled={vBusy} onClick={() => doVisual(false)}>{vBusy ? '…' : '🖼️'}</button>
+          )}
           <button className="cs-icon-btn" title="Up" disabled={index === 0} onClick={() => onMove(-1)}>↑</button>
           <button className="cs-icon-btn" title="Down" disabled={index === total - 1} onClick={() => onMove(1)}>↓</button>
           <button className="cs-icon-btn is-danger" title="Delete" onClick={onRemove}>✕</button>
@@ -706,6 +753,19 @@ function SceneRow({ vi, scene, index, total, voice, onChange, onRemove, onMove }
             placeholder={vi ? 'Mô tả hình ảnh cho scene này…' : 'Image/video prompt for this scene…'} />
         </label>
       </div>
+      {/* C1: per-scene visual preview (image + regenerate). */}
+      {(vImg || vNote) && (
+        <div style={{ marginTop: 8 }}>
+          {vImg && <img src={vImg} alt="" style={{ maxWidth: 160, maxHeight: 280, borderRadius: 8, display: 'block' }} />}
+          <div className="cs-row" style={{ gap: 8, alignItems: 'center', marginTop: 6 }}>
+            {vImg && (
+              <button className="cs-icon-btn" title={vi ? 'Tạo lại ảnh' : 'Regenerate image'}
+                disabled={vBusy} onClick={() => doVisual(true)}>{vBusy ? '…' : '🔄'}</button>
+            )}
+            {vNote && <span className="cs-hint" style={{ margin: 0, color: vImg ? undefined : 'var(--warn, #d6a200)' }}>{vNote}</span>}
+          </div>
+        </div>
+      )}
       {/* CS-E: per-scene background (Asset Manager). "" = dùng nền chung của project. */}
       <div className="cs-row cs-row--top" style={{ alignItems: 'flex-end' }}>
         <label className="cs-mini-label">{vi ? 'Nền riêng' : 'Scene background'}

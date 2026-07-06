@@ -202,6 +202,80 @@ def visual_providers() -> dict:
     }
 
 
+# ── C1: per-scene visual preview (Review) ────────────────────────────────────
+
+_VISUAL_PREVIEW_DIR = CACHE_DIR / "content_visual_preview"
+_IMG_EXT_MEDIA = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+
+
+class VisualPreviewRequest(BaseModel):
+    prompt: str = Field(default="", description="The scene's visual_prompt")
+    provider: str = "ai_image_free"      # stock | ai_image | ai_video | ai_image_free | local
+    aspect_ratio: str = "9:16"
+    seed: int = 0
+    style: str = ""
+    negative_prompt: str = ""
+    imagen_tier: str = ""
+
+
+@router.post("/visual/preview")
+def visual_preview(req: VisualPreviewRequest) -> dict:
+    """Resolve ONE scene's visual via the SAME seam the render uses (incl. the B2
+    stepped fallback) and return a previewable image. Runs the user's chosen
+    provider — free for stock/Pollinations; a paid provider (Imagen) costs one
+    image per call. Returns ``{kind:"image", provider, token, url}`` for an image,
+    or ``{kind, provider, value}`` when it fell back to a colour/video background
+    (no still to show). 422 empty prompt."""
+    prompt = (req.prompt or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=422, detail="prompt is required")
+    from app.features.render.engine.visual import SceneVisualRequest, resolve_scene_visual
+    from app.features.render.engine.encoder.ffmpeg_helpers import resolve_target_dimensions
+
+    w, h = resolve_target_dimensions(req.aspect_ratio or "9:16")
+    _VISUAL_PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
+    asset = resolve_scene_visual(
+        SceneVisualRequest(
+            scene_index=0, kind="color", value="#101820", prompt=prompt,
+            negative_prompt=(req.negative_prompt or ""), style=(req.style or ""),
+            seed=int(req.seed or 0), width=w, height=h, fps=30.0, duration_sec=3.0,
+            work_dir=str(_VISUAL_PREVIEW_DIR), imagen_tier=(req.imagen_tier or ""),
+        ),
+        provider=(req.provider or "ai_image_free"),
+    )
+    if asset is None:
+        raise HTTPException(status_code=502, detail="visual generation failed")
+    if asset.kind == "image" and asset.value and Path(asset.value).exists():
+        token = uuid.uuid4().hex
+        ext = Path(asset.value).suffix.lower()
+        if ext not in _IMG_EXT_MEDIA:
+            ext = ".jpg"
+        dst = _VISUAL_PREVIEW_DIR / f"{token}{ext}"
+        try:
+            import shutil as _sh
+            _sh.copyfile(asset.value, dst)
+        except Exception as exc:
+            logger.warning("content visual preview: copy failed %s", exc)
+            raise HTTPException(status_code=502, detail="preview copy failed")
+        return {"kind": "image", "provider": asset.provider, "token": token,
+                "url": f"/api/content/visual/image/{token}"}
+    # Fell back to a colour/video background — no still image to preview.
+    return {"kind": asset.kind, "provider": asset.provider, "value": asset.value}
+
+
+@router.get("/visual/image/{token}")
+def visual_image(token: str):
+    """Serve a visual-preview image by token. 404 on a malformed token or a
+    missing/expired file (the cache prune may have reclaimed it)."""
+    if not _TOKEN_RE.match(token or ""):
+        raise HTTPException(status_code=404, detail="not found")
+    for ext, media in _IMG_EXT_MEDIA.items():
+        p = _VISUAL_PREVIEW_DIR / f"{token}{ext}"
+        if p.exists() and p.stat().st_size > 0:
+            return FileResponse(str(p), media_type=media)
+    raise HTTPException(status_code=404, detail="not found")
+
+
 # ── CS-D: per-scene narration preview / regenerate ───────────────────────────
 
 class NarrationPreviewRequest(BaseModel):
