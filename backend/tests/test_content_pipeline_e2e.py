@@ -344,3 +344,49 @@ def test_run_content_no_plan_fails_cleanly(_content_sandbox, monkeypatch):
         )
     # No .mp4 delivered.
     assert not list(output_dir.rglob("*.mp4"))
+
+
+@_NEEDS_FFMPEG
+def test_run_content_auto_bgm_by_mood(_content_sandbox, monkeypatch):
+    """A2: with no user BGM, run_content auto-picks a track for the plan's
+    bgm_mood from BGM_DIR/{mood}/ and mixes it (ducked)."""
+    from app.models.schemas import RenderRequest
+    import app.features.render.engine.pipeline.content_pipeline as cp
+    import app.features.render.engine.audio.mixer as mixer
+    from app.services.bin_paths import get_ffmpeg_bin
+
+    job_id = str(uuid.uuid4())
+    output_dir = _content_sandbox["output_dir"]
+    bgm = _content_sandbox["tmp_path"] / "mood_epic.mp3"
+    subprocess.run(
+        [get_ffmpeg_bin(), "-y", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+         "-t", "3", "-c:a", "libmp3lame", str(bgm)],
+        capture_output=True, check=True, timeout=60,
+    )
+
+    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())  # plan.bgm_mood="epic"
+    monkeypatch.setattr(cp, "synthesize_scene_narration", _fake_synth_factory())
+    # The auto-pick reuses config._pick_bgm_file (imported lazily inside run_content).
+    monkeypatch.setattr("app.core.config._pick_bgm_file", lambda mood: str(bgm))
+
+    seen = {}
+    _real_mix = mixer.mix_with_bgm
+
+    def _spy_mix(*, video_path, bgm_path, output_path, **kw):
+        seen["bgm_path"] = bgm_path
+        return _real_mix(video_path=video_path, bgm_path=bgm_path, output_path=output_path, **kw)
+    monkeypatch.setattr(mixer, "mix_with_bgm", _spy_mix)
+
+    payload = RenderRequest(
+        channel_code="content-e2e", render_format="content", content_script="x",
+        content_background_kind="color", content_background_value="#101820",
+        output_dir=str(output_dir / "content-bgm"), aspect_ratio="9:16",
+        output_fps=30, add_subtitle=False, voice_enabled=False,
+    )
+    cp.run_content(job_id=job_id, payload=payload, resume_mode=False,
+                   load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None)
+
+    assert seen.get("bgm_path") == str(bgm), "auto BGM was not mixed for the mood"
+    from app.db.jobs_repo import get_job
+    row = get_job(job_id)
+    assert row is not None and row["status"] == "completed"

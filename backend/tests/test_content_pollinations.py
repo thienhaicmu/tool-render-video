@@ -57,13 +57,13 @@ def test_decision_cost_zero_and_routes():
 def test_pollinations_sends_story_prompt_and_returns_asset(monkeypatch, tmp_path):
     captured = {}
 
-    def _fake_dl(url, out, timeout=90):
+    def _fake_dl(url, out, timeout=90, cancel_check=None):
         captured["url"] = url
         Path(out).write_bytes(b"\xff\xd8\xff\xe0fakejpeg")
         return True
 
     monkeypatch.setattr(poll, "visual_cache_dir", lambda: tmp_path)
-    monkeypatch.setattr(poll, "download_to", _fake_dl)
+    monkeypatch.setattr(poll, "_download_with_retry", _fake_dl)
     asset = poll.resolve_pollinations(_req(prompt="Napoleon on horseback at Waterloo"))
     assert asset is not None
     assert asset.kind == "image" and asset.provider == "ai_image_free"
@@ -79,7 +79,7 @@ def test_pollinations_empty_prompt_returns_none(monkeypatch, tmp_path):
 
 def test_pollinations_download_failure_returns_none(monkeypatch, tmp_path):
     monkeypatch.setattr(poll, "visual_cache_dir", lambda: tmp_path)
-    monkeypatch.setattr(poll, "download_to", lambda *a, **k: False)
+    monkeypatch.setattr(poll, "_download_with_retry", lambda *a, **k: False)
     assert poll.resolve_pollinations(_req()) is None
 
 
@@ -87,8 +87,8 @@ def test_pollinations_download_failure_returns_none(monkeypatch, tmp_path):
 
 def test_seam_dispatches_ai_image_free(monkeypatch, tmp_path):
     monkeypatch.setattr(poll, "visual_cache_dir", lambda: tmp_path)
-    monkeypatch.setattr(poll, "download_to",
-                        lambda url, out, timeout=90: (Path(out).write_bytes(b"\xff\xd8ok") or True))
+    monkeypatch.setattr(poll, "_download_with_retry",
+                        lambda url, out, timeout=90, cancel_check=None: (Path(out).write_bytes(b"\xff\xd8ok") or True))
     asset = resolve_scene_visual(_req(), provider="ai_image_free")
     assert asset is not None and asset.provider == "ai_image_free"
 
@@ -98,3 +98,80 @@ def test_seam_falls_back_to_local_on_pollinations_failure(monkeypatch):
     monkeypatch.setattr(poll, "resolve_pollinations", lambda req: None)
     asset = resolve_scene_visual(_req(kind="color", value="#101820"), provider="ai_image_free")
     assert asset is not None and asset.provider == "local"
+
+
+# ── retry / backoff (429) ────────────────────────────────────────────────────
+
+import urllib.error  # noqa: E402
+
+
+class _FakeResp:
+    def __init__(self, data, headers=None):
+        self._data = data
+        self.headers = headers or {}
+
+    def read(self, n=-1):
+        return self._data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _urlopen_seq(*outcomes):
+    """Fake urlopen yielding each outcome in turn (Exception → raised, bytes →
+    a fake 200 response). Records the call count on ``.calls``."""
+    state = {"n": 0}
+
+    def _fn(req, timeout=None):
+        i = state["n"]
+        state["n"] += 1
+        o = outcomes[min(i, len(outcomes) - 1)]
+        if isinstance(o, Exception):
+            raise o
+        return _FakeResp(o)
+
+    _fn.calls = state
+    return _fn
+
+
+def _http_error(code):
+    return urllib.error.HTTPError("http://x", code, "err", {}, None)
+
+
+def test_download_retries_on_429_then_succeeds(monkeypatch, tmp_path):
+    monkeypatch.setattr(poll.time, "sleep", lambda s: None)
+    fake = _urlopen_seq(_http_error(429), b"\xff\xd8imagebytes")
+    monkeypatch.setattr(poll.urllib.request, "urlopen", fake)
+    out = tmp_path / "o.jpg"
+    assert poll._download_with_retry("http://x", str(out), timeout=5) is True
+    assert out.read_bytes() == b"\xff\xd8imagebytes"
+    assert fake.calls["n"] == 2   # one 429 + one success
+
+
+def test_download_gives_up_on_persistent_429(monkeypatch, tmp_path):
+    monkeypatch.setattr(poll.time, "sleep", lambda s: None)
+    monkeypatch.setattr(poll, "_RETRIES", 2)
+    fake = _urlopen_seq(_http_error(429), _http_error(429), _http_error(429), _http_error(429))
+    monkeypatch.setattr(poll.urllib.request, "urlopen", fake)
+    assert poll._download_with_retry("http://x", str(tmp_path / "o.jpg"), timeout=5) is False
+    assert fake.calls["n"] == 3   # initial + 2 retries
+
+
+def test_download_no_retry_on_404(monkeypatch, tmp_path):
+    slept = {"n": 0}
+    monkeypatch.setattr(poll.time, "sleep", lambda s: slept.__setitem__("n", slept["n"] + 1))
+    fake = _urlopen_seq(_http_error(404), _http_error(404))
+    monkeypatch.setattr(poll.urllib.request, "urlopen", fake)
+    assert poll._download_with_retry("http://x", str(tmp_path / "o.jpg"), timeout=5) is False
+    assert fake.calls["n"] == 1 and slept["n"] == 0   # non-retryable → one attempt, no sleep
+
+
+def test_download_stops_on_cancel(monkeypatch, tmp_path):
+    fake = _urlopen_seq(b"should-not-be-read")
+    monkeypatch.setattr(poll.urllib.request, "urlopen", fake)
+    assert poll._download_with_retry("http://x", str(tmp_path / "o.jpg"), timeout=5,
+                                     cancel_check=lambda: True) is False
+    assert fake.calls["n"] == 0   # cancelled before any request

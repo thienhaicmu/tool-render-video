@@ -501,12 +501,22 @@ def run_content(
                     (getattr(scene, "subtitle_style", "") or "").strip()
                     or (getattr(plan, "subtitle_style", "") or "").strip()
                 )
+            # A3: AI-directed camera move (image backgrounds only). "pan" alternates
+            # left/right by scene index for variety. Empty hint → build_background_clip
+            # falls back to the default Ken Burns zoom. Gated by CONTENT_CAMERA_MOTION.
+            _camera = ""
+            if asset.kind == "image" and os.getenv("CONTENT_CAMERA_MOTION", "1") == "1":
+                _ch = (getattr(scene, "camera_hint", "") or "").strip().lower()
+                if _ch == "pan":
+                    _ch = "pan_right" if (i % 2 == 0) else "pan_left"
+                _camera = _ch
             ok = render_content_scene(
                 scene=scene, background_kind=asset.kind, background_value=asset.value,
                 narration_audio_path=audio_path, narration_dur=ndur,
                 width=width, height=height, fps=fps, sample_rate=_SAMPLE_RATE,
                 out_path=scene_out, work_dir=str(scenes_dir), subtitle_enabled=add_subtitle,
                 subtitle_style=_sub_style, word_by_word=_word_by_word,
+                camera=_camera,
                 ken_burns=asset.kind == "image" and (
                     _s_ken_burns or asset.provider in ("stock", "ai_image", "ai_image_free")
                 ),
@@ -599,7 +609,30 @@ def run_content(
         while final_out.exists():
             final_out = output_dir / f"{_base} ({_n}).mp4"
             _n += 1
-        _res = concat_clips(scene_clips, str(final_out), width=width, height=height, fps=fps)
+        # A1: join scenes with crossfade transitions per the AI's transition_hint.
+        # Content-only assembler (never touches the shared concat_clips). Any
+        # failure / disabled → fall back to the plain concat (hard cut).
+        _res = None
+        if os.getenv("CONTENT_TRANSITIONS", "1") == "1" and len(scene_clips) >= 2:
+            try:
+                from app.features.render.engine.stages.content_assembler import concat_with_transitions
+                _ordered = sorted(_results)
+                # transition BEFORE each clip after the first = that scene's hint.
+                _trans = [(getattr(scenes[idx - 1], "transition_hint", "") or "") for idx in _ordered[1:]]
+                _res = concat_with_transitions(
+                    scene_clips, str(final_out), transitions=_trans,
+                    width=width, height=height, fps=fps,
+                )
+                if _res.get("ok"):
+                    _job_log(effective_channel, job_id,
+                             f"Content: assembled with transitions ({_res.get('method')})")
+                else:
+                    _res = None
+            except Exception as _tx_exc:
+                logger.warning("content: transition assembly failed (%s) — plain concat", _tx_exc)
+                _res = None
+        if not _res:
+            _res = concat_clips(scene_clips, str(final_out), width=width, height=height, fps=fps)
         if not _res.get("ok"):
             raise RuntimeError("Content: assembly (concat) failed")
 
@@ -608,6 +641,19 @@ def run_content(
         #     (never fails the render). Runs BEFORE QA so the delivered file is
         #     validated with its final audio.
         _bgm = (getattr(payload, "content_bgm_path", "") or "").strip()
+        # A2: no user BGM → auto-pick a track for the AI-planned mood from
+        # BGM_DIR/{mood}/ (reuses the clips-path music library). Returns None when
+        # the user hasn't added any music files → no BGM (unchanged behaviour).
+        if not (_bgm and Path(_bgm).exists()) and os.getenv("CONTENT_AUTO_BGM", "1") == "1":
+            try:
+                from app.core.config import _pick_bgm_file
+                _auto_bgm = _pick_bgm_file(getattr(plan, "bgm_mood", "") or "")
+                if _auto_bgm:
+                    _bgm = _auto_bgm
+                    _job_log(effective_channel, job_id,
+                             f"Content: auto BGM for mood '{plan.bgm_mood or 'default'}'")
+            except Exception as _bgm_pick_exc:
+                logger.warning("content: auto BGM pick failed (%s)", _bgm_pick_exc)
         if _bgm and Path(_bgm).exists():
             _bgm_tmp = str(final_out) + ".bgm.mp4"
             try:

@@ -76,6 +76,30 @@ def _ken_burns_vf(width: int, height: int, fps: float, frames: int) -> str:
     )
 
 
+def _camera_vf(width: int, height: int, fps: float, frames: int, mode: str) -> str:
+    """Phase A (A3) — a per-scene camera move on a still image, driven by the AI's
+    ``camera_hint``. Mirrors _ken_burns_vf's upscale+crop so zoompan samples a
+    clean frame. Modes: zoom_in (default) | zoom_out | pan_left | pan_right.
+    ``still`` never reaches here (the caller uses the static hold). Never raises."""
+    w2, h2 = int(width) * 2, int(height) * 2
+    d = max(1, int(frames))
+    cx = "x='iw/2-(iw/zoom/2)'"
+    cy = "y='ih/2-(ih/zoom/2)'"
+    m = (mode or "").strip().lower()
+    if m == "zoom_out":
+        expr = (f"zoompan=z='max(1.30-0.0006*on,1.0)':d={d}:s={width}x{height}:"
+                f"fps={fps:.3f}:{cx}:{cy}")
+    elif m in ("pan_left", "pan_right"):
+        frac = f"(on/{d})" if m == "pan_right" else f"(1-on/{d})"
+        expr = (f"zoompan=z='1.15':d={d}:s={width}x{height}:fps={fps:.3f}:"
+                f"x='(iw-iw/zoom)*{frac}':{cy}")
+    else:  # zoom_in
+        expr = (f"zoompan=z='min(1.0+0.0006*on,1.30)':d={d}:s={width}x{height}:"
+                f"fps={fps:.3f}:{cx}:{cy}")
+    return (f"scale={w2}:{h2}:force_original_aspect_ratio=increase,crop={w2}:{h2},"
+            f"{expr},setsar=1")
+
+
 def build_background_clip(
     *,
     kind: str,
@@ -86,6 +110,7 @@ def build_background_clip(
     duration_sec: float,
     out_path: str,
     ken_burns: bool = False,
+    camera: str = "",
 ) -> bool:
     """Render a video-only background clip → ``out_path``. Returns True on success.
 
@@ -134,7 +159,18 @@ def build_background_clip(
             if not src.exists() or src.stat().st_size <= 0:
                 logger.warning("content_background: image not found: %r", value)
                 return False
-            if ken_burns:
+            _cam = (camera or "").strip().lower()
+            if _cam and _cam != "still":
+                # A3: an AI-directed camera move (zoom_in/out, pan). zoompan
+                # generates frames from ONE input frame — no -loop.
+                frames = int(dur * r) + 1
+                cmd = [
+                    get_ffmpeg_bin(), "-y",
+                    "-i", str(src),
+                    "-vf", _camera_vf(w, h, r, frames, _cam),
+                    *common_tail,
+                ]
+            elif ken_burns:
                 # zoompan generates the frames from ONE input frame — no -loop.
                 frames = int(dur * r) + 1
                 cmd = [

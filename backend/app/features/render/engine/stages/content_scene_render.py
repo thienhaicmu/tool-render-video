@@ -266,6 +266,7 @@ def render_content_scene(
     subtitle_enabled: bool = True,
     subtitle_style: str = "",
     ken_burns: bool = False,
+    camera: str = "",
     word_by_word: bool = True,
 ) -> bool:
     """Compose one Content-Mode scene → ``out_path``. Returns True on success.
@@ -303,7 +304,7 @@ def render_content_scene(
             kind=background_kind, value=background_value,
             width=int(width), height=int(height), fps=r,
             duration_sec=scene_dur, out_path=bg_path,
-            ken_burns=bool(ken_burns),
+            ken_burns=bool(ken_burns), camera=(camera or ""),
         ):
             logger.warning("content_scene_render: background build failed (scene idx=%s)", idx)
             return False
