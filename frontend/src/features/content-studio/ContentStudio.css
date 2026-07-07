@@ -458,9 +458,10 @@
 }
 .cs-live-rows { flex: 1; overflow-y: auto; max-height: 440px; }
 .cs-live-row {
-  display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 14px;
-  border-left: 2px solid transparent;
+  display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px 8px 14px;
+  border-left: 2px solid transparent; border-bottom: 1px solid var(--border);
 }
+.cs-live-glyph { margin-top: 1px; }
 .cs-live-row.is-focus { border-left-color: var(--accent); background: var(--bg-hover, var(--surface-card-hover)); }
 .cs-live-glyph { font-size: 11px; width: 12px; text-align: center; color: var(--text-3); flex-shrink: 0; }
 .cs-live-glyph.st-done { color: var(--ok); }
@@ -474,6 +475,160 @@
 .cs-live-row-pct.st-done { color: var(--ok); }
 .cs-live-row-pct.st-rendering, .cs-live-row-pct.st-cutting, .cs-live-row-pct.st-transcribing { color: var(--accent); }
 .cs-live-row-pct.st-failed, .cs-live-row-pct.st-cancelled, .cs-live-row-pct.st-skipped { color: var(--fail); }
+
+/* Redesign 2026-07-07 — rich row content (narration + scene chips) + focus
+   sub-steps + Content Director header. */
+.cs-live-row-title { display: flex; align-items: center; gap: 6px; white-space: normal; }
+.cs-live-row-narr {
+  font-size: 11px; line-height: 1.4; color: var(--text-2); margin-top: 3px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.cs-live-row-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.cs-live-row-pct { margin-top: 1px; }
+
+.cs-role-badge {
+  font-size: 8.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  border: 1px solid; border-radius: 4px; padding: 1px 5px; flex-shrink: 0;
+  font-family: var(--fb, inherit);
+}
+.cs-mini-chip {
+  font-size: 9px; font-weight: 600; color: var(--text-3); font-family: var(--fb, inherit);
+  background: var(--bg-card, var(--surface-input)); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 5px; white-space: nowrap;
+}
+
+/* Focus card additions */
+.cs-focus-title { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.cs-substeps { display: flex; align-items: center; gap: 4px; }
+.cs-substep { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.cs-substep-dot {
+  width: 8px; height: 8px; border-radius: 99px; flex-shrink: 0;
+  background: var(--border); border: 1px solid var(--border);
+}
+.cs-substep.is-done .cs-substep-dot { background: var(--ok); border-color: var(--ok); }
+.cs-substep.is-active .cs-substep-dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .18); }
+.cs-substep-lbl {
+  font-size: 8.5px; font-weight: 600; color: var(--text-3); font-family: var(--fb, inherit);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cs-substep.is-active .cs-substep-lbl { color: var(--text-1); }
+.cs-substep.is-done .cs-substep-lbl { color: var(--text-2); }
+
+/* ── Content Director header ─────────────────────────────────────────────── */
+.cs-director { display: flex; flex-direction: column; gap: 10px; }
+.cs-director-hd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cs-director-topic {
+  font-size: var(--text-md); font-weight: 700; color: var(--text-1); flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cs-director-badges { display: flex; gap: 5px; flex-wrap: wrap; }
+.cs-badge {
+  font-size: 9px; font-weight: 700; letter-spacing: .03em; color: var(--accent);
+  background: rgba(var(--accent-rgb), .12); border: 1px solid rgba(var(--accent-rgb), .3);
+  border-radius: 5px; padding: 2px 7px; font-family: var(--fb, inherit);
+}
+.cs-badge--muted { color: var(--text-3); background: transparent; border-color: var(--border); }
+.cs-director-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cs-chip {
+  font-size: 10px; font-weight: 600; color: var(--text-2); font-family: var(--fb, inherit);
+  background: var(--bg-card, var(--surface-input)); border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 8px;
+}
+.cs-chip--muted { color: var(--text-3); }
+.cs-director-think { color: var(--text-2); font-style: italic; }
+
+.cs-phases { display: flex; align-items: center; gap: 4px; }
+.cs-ph { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
+.cs-ph:not(:last-child)::after {
+  content: ''; flex: 1; height: 1px; background: var(--border); margin: 0 2px;
+}
+.cs-ph-dot {
+  width: 14px; height: 14px; border-radius: 99px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  background: var(--border); border: 1px solid var(--border);
+}
+.cs-ph.is-done .cs-ph-dot { background: var(--ok); border-color: var(--ok); }
+.cs-ph.is-active .cs-ph-dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .18); }
+.cs-ph-lbl { font-size: 10px; font-weight: 600; color: var(--text-3); white-space: nowrap; }
+.cs-ph.is-active .cs-ph-lbl { color: var(--text-1); font-weight: 700; }
+.cs-ph.is-done .cs-ph-lbl { color: var(--text-2); }
+
+.cs-fallback {
+  font-size: 11px; line-height: 1.45; color: var(--warn, #eab308);
+  background: rgba(234, 179, 8, .1); border: 1px solid rgba(234, 179, 8, .28);
+  border-radius: 8px; padding: 8px 10px;
+}
+
+/* AI Director activity feed (collapsible) */
+.cs-feed { border-top: 1px solid var(--border); margin-top: 2px; padding-top: 8px; }
+.cs-feed-toggle {
+  display: flex; align-items: center; gap: 7px; width: 100%; background: transparent;
+  border: none; cursor: pointer; padding: 2px 0; text-align: left;
+  font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--text-2); font-family: var(--fb, inherit);
+}
+.cs-feed-caret { display: inline-block; font-size: 9px; color: var(--text-3); transition: transform .15s; }
+.cs-feed-count {
+  font-size: 9px; font-weight: 700; color: var(--text-3); background: var(--bg-card, var(--surface-input));
+  border: 1px solid var(--border); border-radius: 99px; padding: 0 6px; letter-spacing: 0;
+}
+.cs-feed-list { margin-top: 6px; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.cs-feed-row {
+  display: grid; grid-template-columns: 54px 1fr; gap: 8px; align-items: baseline;
+  font-size: 11px; line-height: 1.4; padding: 2px 2px;
+}
+.cs-feed-time { font-size: 9px; color: var(--text-3); font-family: var(--fb, inherit); }
+.cs-feed-msg { color: var(--text-2); }
+.cs-feed-row.lv-warning .cs-feed-msg, .cs-feed-row.lv-warn .cs-feed-msg { color: var(--warn, #eab308); }
+.cs-feed-row.lv-error .cs-feed-msg { color: var(--fail); }
+
+/* Transition connector between two scene rows */
+.cs-live-connector {
+  display: flex; align-items: center; gap: 8px; padding: 3px 12px 3px 26px;
+}
+.cs-conn-line { flex: 1; height: 1px; background: var(--border); }
+.cs-conn-lbl {
+  font-size: 9px; font-weight: 600; color: var(--text-3); font-family: var(--fb, inherit);
+  white-space: nowrap; letter-spacing: .02em;
+}
+
+/* Story Bible card (setting / hook / cta + characters, from the plan) */
+.cs-bible { display: flex; flex-direction: column; gap: 8px; }
+.cs-bible-hd { font-size: 11px; font-weight: 700; letter-spacing: .3px; color: var(--text-1); }
+.cs-bible-lines { display: flex; flex-direction: column; gap: 5px; }
+.cs-bible-line { display: grid; grid-template-columns: 68px 1fr; gap: 10px; font-size: 11px; line-height: 1.45; align-items: baseline; }
+.cs-bible-k {
+  font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-3); font-family: var(--fb, inherit);
+}
+.cs-bible-v { color: var(--text-2); }
+.cs-bible-chars { display: flex; flex-wrap: wrap; gap: 5px; }
+.cs-bible-char {
+  font-size: 10px; font-weight: 600; color: var(--text-2); font-family: var(--fb, inherit);
+  background: var(--bg-card, var(--surface-input)); border: 1px solid var(--border);
+  border-radius: 99px; padding: 2px 9px; cursor: default;
+}
+
+/* Emphasis words highlighted inside narration text */
+.cs-emph {
+  background: rgba(var(--accent-rgb), .18); color: var(--text-1);
+  border-radius: 3px; padding: 0 2px; font-weight: 600;
+}
+
+/* Assemble phase banner (stage = writing_report — concat + BGM mix) */
+.cs-assemble-banner {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  background: rgba(var(--accent-rgb), .08); color: var(--text-1);
+  font-size: 12px; font-weight: 600;
+}
+.cs-assemble-sub { font-size: 11px; font-weight: 400; color: var(--text-3); font-family: var(--fb, inherit); }
+.cs-assemble-spin {
+  width: 13px; height: 13px; border-radius: 99px; flex-shrink: 0;
+  border: 2px solid rgba(var(--accent-rgb), .3); border-top-color: var(--accent);
+  animation: cs-spin .8s linear infinite;
+}
+@keyframes cs-spin { to { transform: rotate(360deg); } }
 
 /* ── Progress / parts (monitor) ─────────────────────────────────────────── */
 .cs-part-row {

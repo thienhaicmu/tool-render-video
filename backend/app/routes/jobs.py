@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from app.db.jobs_repo import clear_part_output, delete_job, get_job, get_recap_plan, get_story_model, list_job_parts, list_job_parts_bulk, list_jobs_page, save_error_kind
+from app.db.jobs_repo import clear_part_output, delete_job, get_content_plan, get_job, get_recap_plan, get_story_model, list_job_parts, list_job_parts_bulk, list_jobs_page, save_error_kind
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
 from app.models.schemas import JobStatusResponse
@@ -488,10 +488,12 @@ def api_get_job_recap_plan(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     _empty = {"job_id": job_id, "available": False, "episodes": [], "scenes": []}
     try:
-        # Lazy import — recap_pipeline pulls the render engine; keep it off the
-        # route-import path so mounting jobs.py never drags engine deps in.
+        # Lazy import of the PURE projection (recap_scoring, no engine deps) —
+        # NOT recap_pipeline, which pulls the whole render engine (cv2/whisper/…)
+        # at import time and would make this endpoint fail on any install
+        # missing an engine dep. Kept lazy so mounting jobs.py stays light.
         from app.domain.recap_plan import RecapPlan
-        from app.features.render.engine.pipeline.recap_pipeline import (
+        from app.features.render.engine.pipeline.recap_scoring import (
             _scored_from_recap_plan,
         )
 
@@ -528,6 +530,47 @@ def api_get_job_recap_plan(job_id: str):
         }
     except Exception:
         # Defensive — a corrupt recap_plan_json must not 500 the polling path.
+        return _empty
+
+
+@router.get("/{job_id}/content-plan")
+def api_get_job_content_plan(job_id: str):
+    """Polling / reattach fallback for the ``content.plan.ready`` WS event.
+
+    ContentMonitor normally builds its Director header + scene rows from the
+    ``plan`` prop (only set in the script→review→render flow) or the
+    ``content.plan.ready`` WebSocket event. Both are missing when a running
+    Content job is REATTACHED from the topbar badge / dock (plan prop null, and
+    the one-shot plan event fired before the socket connected and is never
+    replayed), and on a WS→HTTP-polling downgrade. This endpoint returns the
+    PERSISTED ContentPlan so the FE can re-render the rich monitor in those
+    cases.
+
+    The stored ``content_plan_json`` is ``asdict(ContentPlan)`` — the same
+    schema the FE ``ContentPlan`` type mirrors — so ``plan`` is a near
+    pass-through (richer than the WS event: also carries story_bible +
+    per-scene transition/animation/camera/emphasis).
+
+    Never raises — returns ``{available: False}`` for a missing / legacy /
+    malformed / non-content job so the FE keeps its existing sources instead of
+    erroring. Mirrors ``api_get_job_recap_plan``.
+    """
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _empty = {"job_id": job_id, "available": False, "plan": None}
+    try:
+        # Pure-dataclass parse (no engine deps) — defensive, returns None on any
+        # bad input so a corrupt blob can't 500 the polling path.
+        from app.domain.content_plan import ContentPlan
+
+        plan = ContentPlan.from_json(get_content_plan(job_id))
+        if plan is None or not plan.scenes:
+            return _empty
+        # to_json() is asdict(self) dumped; round-trip to a plain dict for the
+        # JSON response (avoids a dataclasses.asdict import here).
+        return {"job_id": job_id, "available": True, "plan": json.loads(plan.to_json())}
+    except Exception:
         return _empty
 
 
