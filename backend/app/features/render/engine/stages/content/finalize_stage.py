@@ -84,7 +84,11 @@ def finalize_content(ctx, plan, payload, *, output_dir, output_stem, final_out, 
     _result = {
         "outputs": [_entry],
         "render_format": "content",
-        "content_plan": plan.to_json(),
+        # W5-4: the full ContentPlan is NOT duplicated here — the canonical copy
+        # is the jobs.content_plan_json column (same row), read via
+        # get_content_plan(job_id). Only the light topic/tone/audience metadata
+        # is denormalised for history display. (Audit: no consumer read the old
+        # result_json.content_plan.)
         "content_topic": plan.topic,
         "content_tone": plan.tone,
         "content_audience": plan.audience,
