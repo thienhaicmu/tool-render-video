@@ -275,7 +275,7 @@ CM-1, CM-9, CM-10, CM-11 là LOW tier → giao Developer trực tiếp.
 | CM-6 | ⬜ TODO | — | — |
 | CM-7 | ⬜ TODO | — | — |
 | CM-8 | ⬜ TODO | — | — |
-| CM-9 | ⬜ TODO | — | — |
+| CM-9 | ✅ DONE | 2026-07-07 | Tách `ContentStudio.tsx` (1342 → 268) thành cấu trúc phẳng: `types.ts`, `shared.tsx`, `ScriptPhase.tsx` (315), `SceneRow.tsx` (180), `ReviewPhase.tsx` (220), `ContentMonitor.tsx` (216). Mỗi file <400 dòng, không đổi logic. `tsc -b` sạch; `npm run build` OK. Chưa commit build artifacts static-v2 (sinh ra — commit riêng). |
 | CM-10 | ⬜ TODO | — | — |
 | CM-11 | ⬜ TODO | — | — |
 | CM-12 | ⬜ TODO | — | — |
