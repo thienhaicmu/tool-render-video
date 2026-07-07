@@ -33,6 +33,18 @@ Cache dir cũng nhận: `XDG_CACHE_HOME`, `TORCH_HOME`, `HF_HOME`,
 | `ENABLE_DEVTOOLS` | `0` (off) | Mount `POST /api/dev/command` (chạy shell, không auth). Chỉ mount khi `1` **và** bind loopback (fail-closed). Không bao giờ bật ở production |
 | `ENABLE_V2` | `1` | Thử mount router `v2.*` (module v2 hiện không có trong source → import fail êm, log warning) |
 
+### Content Studio preview guard (CM-1, 2026-07-07)
+
+Các endpoint `/api/content/visual/preview` + `/api/content/narration/preview` **không có auth** (loopback) và một visual preview có thể gọi provider **trả phí** (Imagen/Veo) — 1 asset mỗi lần bấm. Ba guard per-process, in-memory:
+
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `CONTENT_PREVIEW_RATE_PER_MIN` | `20` | Rate limit dùng chung cho cả hai endpoint (call/phút). `0` = tắt. Vượt → `429` |
+| `CONTENT_PREVIEW_DAILY_CAP` | `0` (unlimited) | Trần số visual preview **trả phí** mỗi ngày (chỉ đếm khi asset thực sự do provider paid tạo, KHÔNG tính khi fallback về local). Vượt → `429` |
+| `CONTENT_PREVIEW_PAID_DISABLED` | `0` | `1` = chặn hẳn provider paid (`ai_image`/`ai_video`) ở preview → `403`; nguồn free (`stock`/`ai_image_free`) không bị ảnh hưởng |
+
+Quan sát: counter Prometheus `content_preview_total{endpoint,provider,outcome}` (`outcome ∈ ok|rate_limited|budget_capped|paid_disabled|failed`) trên `/metrics`.
+
 ## 3. Hàng đợi job & tài nguyên
 
 | Biến | Mặc định | Ý nghĩa |

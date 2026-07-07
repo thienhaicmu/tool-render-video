@@ -51,6 +51,95 @@ _PREVIEW_DIR = CACHE_DIR / "content_preview"
 _TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
 
 
+# ── CM-1: preview cost / abuse guard ─────────────────────────────────────────
+# The /visual/preview + /narration/preview endpoints are unauthenticated
+# (loopback) and a visual preview can trigger a PAID provider call (Imagen/Veo)
+# — one paid asset per click, previously with no rate limit or spend cap. Two
+# guards, both per-process + in-memory (this is a single-user desktop backend):
+#   1. a token-bucket rate limit SHARED by both endpoints (abuse / runaway loops)
+#   2. a per-CALENDAR-DAY cap on PAID visual previews (accidental large spend)
+# Plus a hard off-switch (CONTENT_PREVIEW_PAID_DISABLED) for locked-down installs.
+# Defaults are deliberately generous so the normal Review flow (explicit,
+# warned per-click in the FE) is never impeded; the guards only catch abuse.
+import threading as _threading  # noqa: E402
+import time as _time  # noqa: E402
+from datetime import date as _date  # noqa: E402
+
+# A resolved asset whose provider is one of these actually cost money.
+_PAID_VISUAL_PROVIDERS = {"ai_image", "ai_video"}
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)) or default)
+    except (TypeError, ValueError):
+        return default
+
+
+# 0 disables the corresponding guard. Read once at import (env is process-static).
+_PREVIEW_RATE_PER_MIN = _env_int("CONTENT_PREVIEW_RATE_PER_MIN", 20)
+_PREVIEW_DAILY_CAP = _env_int("CONTENT_PREVIEW_DAILY_CAP", 0)  # 0 = unlimited
+_PREVIEW_PAID_DISABLED = (os.getenv("CONTENT_PREVIEW_PAID_DISABLED", "0") or "0").strip() == "1"
+
+
+class _PreviewGuard:
+    """Per-process rate limit (shared, per-minute) + paid-preview daily cap.
+    Thread-safe (endpoints run in FastAPI's sync threadpool). Never raises."""
+
+    def __init__(self) -> None:
+        self._lock = _threading.Lock()
+        self._window_start = 0.0
+        self._count = 0
+        self._paid_day: Optional[str] = None
+        self._paid_count = 0
+
+    def allow_call(self) -> bool:
+        """True if under the per-minute limit; records the call. 0 = unlimited."""
+        if _PREVIEW_RATE_PER_MIN <= 0:
+            return True
+        now = _time.monotonic()
+        with self._lock:
+            if now - self._window_start >= 60.0:
+                self._window_start = now
+                self._count = 0
+            if self._count >= _PREVIEW_RATE_PER_MIN:
+                return False
+            self._count += 1
+            return True
+
+    def paid_would_exceed(self) -> bool:
+        """True if today's paid-preview count is already at the daily cap."""
+        if _PREVIEW_DAILY_CAP <= 0:
+            return False
+        today = _date.today().isoformat()
+        with self._lock:
+            if self._paid_day != today:
+                self._paid_day, self._paid_count = today, 0
+            return self._paid_count >= _PREVIEW_DAILY_CAP
+
+    def record_paid(self) -> None:
+        """Count one paid preview that actually produced a paid asset."""
+        today = _date.today().isoformat()
+        with self._lock:
+            if self._paid_day != today:
+                self._paid_day, self._paid_count = today, 0
+            self._paid_count += 1
+
+
+_preview_guard = _PreviewGuard()
+
+
+def _metric_preview(endpoint: str, provider: str, outcome: str) -> None:
+    """Emit content_preview_total. Best-effort — never breaks a request."""
+    try:
+        from app.services.metrics import CONTENT_PREVIEW_TOTAL
+        CONTENT_PREVIEW_TOTAL.labels(
+            endpoint=endpoint, provider=(provider or "?"), outcome=outcome,
+        ).inc()
+    except Exception:
+        pass
+
+
 class ContentPlanRequest(BaseModel):
     script: str = Field(default="", description="Raw script / article / news text")
     target_duration: int = 90
@@ -229,6 +318,26 @@ def visual_preview(req: VisualPreviewRequest) -> dict:
     prompt = (req.prompt or "").strip()
     if not prompt:
         raise HTTPException(status_code=422, detail="prompt is required")
+
+    # CM-1: cost / abuse guard (rate limit + paid-preview daily cap + off-switch).
+    _prov = (req.provider or "ai_image_free").strip().lower()
+    _is_paid = _prov in _PAID_VISUAL_PROVIDERS
+    if not _preview_guard.allow_call():
+        _metric_preview("visual", _prov, "rate_limited")
+        raise HTTPException(status_code=429, detail="preview rate limit exceeded — slow down")
+    if _is_paid and _PREVIEW_PAID_DISABLED:
+        _metric_preview("visual", _prov, "paid_disabled")
+        raise HTTPException(
+            status_code=403,
+            detail="paid visual preview is disabled — use a free source (stock / ai_image_free)",
+        )
+    if _is_paid and _preview_guard.paid_would_exceed():
+        _metric_preview("visual", _prov, "budget_capped")
+        raise HTTPException(
+            status_code=429,
+            detail="daily paid-preview cap reached — try a free source or raise CONTENT_PREVIEW_DAILY_CAP",
+        )
+
     from app.features.render.engine.visual import SceneVisualRequest, resolve_scene_visual
     from app.features.render.engine.encoder.ffmpeg_helpers import resolve_target_dimensions
 
@@ -244,7 +353,13 @@ def visual_preview(req: VisualPreviewRequest) -> dict:
         provider=(req.provider or "ai_image_free"),
     )
     if asset is None:
+        _metric_preview("visual", _prov, "failed")
         raise HTTPException(status_code=502, detail="visual generation failed")
+    # Count spend only when a PAID provider actually produced the asset — a silent
+    # fallback to local (no key / error) yields provider="local" and costs nothing.
+    if (asset.provider or "").strip().lower() in _PAID_VISUAL_PROVIDERS:
+        _preview_guard.record_paid()
+    _metric_preview("visual", (asset.provider or _prov), "ok")
     if asset.kind == "image" and asset.value and Path(asset.value).exists():
         token = uuid.uuid4().hex
         ext = Path(asset.value).suffix.lower()
@@ -297,6 +412,13 @@ def narration_preview(req: NarrationPreviewRequest) -> dict:
     if not text:
         raise HTTPException(status_code=422, detail="text is required")
 
+    # CM-1: shared rate limit (abuse / runaway loops). TTS is normally free/edge,
+    # so no paid cap here — the rate limit alone bounds any online-TTS spend.
+    _engine = (req.tts_engine or "edge").strip().lower()
+    if not _preview_guard.allow_call():
+        _metric_preview("narration", _engine, "rate_limited")
+        raise HTTPException(status_code=429, detail="preview rate limit exceeded — slow down")
+
     from app.features.render.engine.audio.tts import generate_narration_audio
     from app.features.render.engine.stages.content_scene_render import (
         _reading_speed_to_rate, probe_audio_duration,
@@ -314,6 +436,7 @@ def narration_preview(req: NarrationPreviewRequest) -> dict:
         )
     except Exception as exc:
         logger.warning("content narration preview: TTS raised %s", exc)
+        _metric_preview("narration", _engine, "failed")
         raise HTTPException(status_code=502, detail="TTS failed")
 
     # generate_narration_audio returns the written path; normalise to `out` so the
@@ -326,8 +449,10 @@ def narration_preview(req: NarrationPreviewRequest) -> dict:
         except Exception:
             out = final  # serve wherever it landed (still under the preview dir)
     if not out.exists() or out.stat().st_size <= 0:
+        _metric_preview("narration", _engine, "failed")
         raise HTTPException(status_code=502, detail="TTS produced no audio")
 
+    _metric_preview("narration", _engine, "ok")
     return {
         "token": token,
         "url": f"/api/content/narration/audio/{token}",
