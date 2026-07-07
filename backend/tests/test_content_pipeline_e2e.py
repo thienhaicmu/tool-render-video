@@ -347,6 +347,57 @@ def test_run_content_no_plan_fails_cleanly(_content_sandbox, monkeypatch):
 
 
 @_NEEDS_FFMPEG
+def test_run_content_resume_prefers_persisted_plan(_content_sandbox, monkeypatch):
+    """CM-3: on resume, the persisted ContentPlan checkpoint (content_plan_json)
+    wins over BOTH the payload's content_plan_override AND the AI Director — so
+    resume renders the exact plan whose scenes are keyed on disk, never a
+    re-planned/reordered one."""
+    from app.models.schemas import RenderRequest
+    from app.domain.content_plan import ContentPlan, ContentScene
+    import app.features.render.engine.pipeline.content_pipeline as cp
+    from app.db.jobs_repo import upsert_job, update_content_plan, get_job
+
+    job_id = str(uuid.uuid4())
+    output_dir = _content_sandbox["output_dir"]
+
+    # The persisted checkpoint: 2 scenes, a distinctive topic. Seed the job row
+    # first (update_content_plan is an UPDATE), then persist the plan.
+    persisted = _make_plan()  # topic "Sao Hoa", 2 scenes
+    upsert_job(job_id, "render", "content-e2e", "interrupted", {}, {})
+    update_content_plan(job_id, persisted.to_json())
+
+    # A DIFFERENT override in the payload (1 scene, other topic) — must LOSE to the
+    # persisted plan on resume.
+    override = ContentPlan(
+        topic="OverrideShouldNotWin", language="vi-VN",
+        scenes=[ContentScene(index=0, role="hook", narration="khong dung cai nay")],
+    ).to_json()
+
+    def _boom(**_k):
+        raise AssertionError("resume must use the persisted plan, not the AI Director")
+    monkeypatch.setattr(cp, "select_content_plan", _boom)
+    monkeypatch.setattr(cp, "synthesize_scene_narration", _fake_synth_factory())
+
+    payload = RenderRequest(
+        channel_code="content-e2e", render_format="content",
+        content_script="ignored on resume",
+        content_plan_override=override,
+        content_background_kind="color", content_background_value="#101820",
+        output_dir=str(output_dir / "content-resume-plan"),
+        aspect_ratio="9:16", output_fps=30, add_subtitle=True, voice_enabled=False,
+    )
+    cp.run_content(job_id=job_id, payload=payload, resume_mode=True,
+                   load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None)
+
+    row = get_job(job_id)
+    assert row is not None and row["status"] == "completed", row and row["status"]
+    result = json.loads(row.get("result_json") or "{}")
+    # The persisted plan (2 scenes, "Sao Hoa") was used — NOT the 1-scene override.
+    assert result.get("content_topic") == "Sao Hoa"
+    assert result.get("selected_segments_count") == 2
+
+
+@_NEEDS_FFMPEG
 def test_run_content_auto_bgm_by_mood(_content_sandbox, monkeypatch):
     """A2: with no user BGM, run_content auto-picks a track for the plan's
     bgm_mood from BGM_DIR/{mood}/ and mixes it (ducked)."""

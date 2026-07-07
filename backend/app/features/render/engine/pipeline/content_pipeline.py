@@ -182,8 +182,27 @@ def run_content(
         _set_stage(JobStage.ANALYZING, 15, "Preparing content plan")
         from app.domain.content_plan import ContentPlan
         plan = None
+        # CM-3: on resume, the persisted ContentPlan is the CHECKPOINT — the scenes
+        # already rendered on disk are keyed by ITS index order. Prefer it over the
+        # override/AI path so resume reuses those scenes instead of re-planning
+        # (which could reorder/reindex and orphan the disk-truth scenes, esp. when
+        # the original run planned via AI and the stored payload has no override).
+        # Defensive: a missing/unusable persisted plan falls through unchanged.
+        if resume_mode:
+            try:
+                from app.db.jobs_repo import get_content_plan
+                _persisted = get_content_plan(job_id)
+                if _persisted:
+                    _rp = ContentPlan.from_json(_persisted)
+                    if _rp is not None and _rp.scene_count() > 0:
+                        plan = _rp
+                        _job_log(effective_channel, job_id,
+                                 f"Content: resuming from persisted plan "
+                                 f"({plan.scene_count()} scene(s)) — planning skipped")
+            except Exception as _rexc:
+                logger.warning("content: resume plan load failed (%s) — normal planning", _rexc)
         _override_raw = (getattr(payload, "content_plan_override", "") or "").strip()
-        if _override_raw:
+        if plan is None and _override_raw:
             # CS-A: render FROM the user-approved/edited plan — skip the AI call.
             plan = ContentPlan.from_json(_override_raw)
             if plan is not None and plan.scene_count() > 0:
