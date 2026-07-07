@@ -38,10 +38,7 @@ output passes qa_pipeline before DONE).
 from __future__ import annotations
 
 import logging
-import os
-import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 from typing import Callable
 
 from app.core.config import TEMP_DIR
@@ -60,7 +57,6 @@ from app.features.render.engine.pipeline.pipeline_setup import (
     prepare_output_dir,
     setup_render_pipeline,
 )
-from app.features.render.engine.pipeline.qa_pipeline import _validate_render_output
 from app.features.render.engine.pipeline.render_events import (
     _emit_render_event,
     _job_log,
@@ -68,10 +64,11 @@ from app.features.render.engine.pipeline.render_events import (
     register_job_log_dir,
     unregister_job_log_dir,
 )
-from app.features.render.engine.stages.recap_assembler import concat_clips
 from app.features.render.engine.stages.content.context import ContentRenderContext, safe_filename
 from app.features.render.engine.stages.content.scene_stage import render_one_scene
 from app.features.render.engine.stages.content.provider_stage import plan_scene_providers
+from app.features.render.engine.stages.content.assembly_stage import assemble_scenes
+from app.features.render.engine.stages.content.finalize_stage import finalize_content
 
 logger = logging.getLogger("app.render.content")
 
@@ -304,179 +301,19 @@ def run_content(
                          "total": total_parts},
             )
 
-        # 5. Assemble scenes → one video (reuse the recap assembler) -----------
-        _set_stage(JobStage.WRITING_REPORT, 88, "Assembling final video")
-        final_out = output_dir / f"{_output_stem}.mp4"
-        _base = _output_stem
-        _n = 2
-        while final_out.exists():
-            final_out = output_dir / f"{_base} ({_n}).mp4"
-            _n += 1
-        # A1: join scenes with crossfade transitions per the AI's transition_hint.
-        # Content-only assembler (never touches the shared concat_clips). Any
-        # failure / disabled → fall back to the plain concat (hard cut).
-        _res = None
-        if os.getenv("CONTENT_TRANSITIONS", "1") == "1" and len(scene_clips) >= 2:
-            try:
-                from app.features.render.engine.stages.content_assembler import concat_with_transitions
-                _ordered = sorted(_results)
-                # transition BEFORE each clip after the first = that scene's hint.
-                _trans = [(getattr(scenes[idx - 1], "transition_hint", "") or "") for idx in _ordered[1:]]
-                _res = concat_with_transitions(
-                    scene_clips, str(final_out), transitions=_trans,
-                    width=width, height=height, fps=fps,
-                )
-                if _res.get("ok"):
-                    _job_log(effective_channel, job_id,
-                             f"Content: assembled with transitions ({_res.get('method')})")
-                else:
-                    _res = None
-            except Exception as _tx_exc:
-                logger.warning("content: transition assembly failed (%s) — plain concat", _tx_exc)
-                _res = None
-        if not _res:
-            _res = concat_clips(scene_clips, str(final_out), width=width, height=height, fps=fps)
-        if not _res.get("ok"):
-            raise RuntimeError("Content: assembly (concat) failed")
-
-        # 5b. CS-F — mix background music (ducked under the narration) into the
-        #     assembled video. Best-effort: a BGM failure keeps the non-BGM output
-        #     (never fails the render). Runs BEFORE QA so the delivered file is
-        #     validated with its final audio.
-        _bgm = (getattr(payload, "content_bgm_path", "") or "").strip()
-        # A2: no user BGM → auto-pick a track for the AI-planned mood from
-        # BGM_DIR/{mood}/ (reuses the clips-path music library). Returns None when
-        # the user hasn't added any music files → no BGM (unchanged behaviour).
-        if not (_bgm and Path(_bgm).exists()) and os.getenv("CONTENT_AUTO_BGM", "1") == "1":
-            try:
-                from app.core.config import _pick_bgm_file
-                _auto_bgm = _pick_bgm_file(getattr(plan, "bgm_mood", "") or "")
-                if _auto_bgm:
-                    _bgm = _auto_bgm
-                    _job_log(effective_channel, job_id,
-                             f"Content: auto BGM for mood '{plan.bgm_mood or 'default'}'")
-            except Exception as _bgm_pick_exc:
-                logger.warning("content: auto BGM pick failed (%s)", _bgm_pick_exc)
-        if _bgm and Path(_bgm).exists():
-            _bgm_tmp = str(final_out) + ".bgm.mp4"
-            try:
-                from app.features.render.engine.audio.mixer import mix_with_bgm
-                mix_with_bgm(
-                    video_path=str(final_out), bgm_path=_bgm,
-                    output_path=_bgm_tmp, duck=True,
-                )
-                Path(_bgm_tmp).replace(final_out)
-                _job_log(effective_channel, job_id, "Content: background music mixed (ducked)")
-            except Exception as exc:
-                logger.warning("content: BGM mix failed (non-fatal): %s", exc)
-                try:
-                    Path(_bgm_tmp).unlink(missing_ok=True)
-                except Exception:
-                    pass
-
-        # 6. QA gate (Sacred Contract #8 — never bypassed) ---------------------
-        _exp = float(_res.get("expected_duration") or 0.0)
-        _qa = _validate_render_output(
-            final_out, expected_duration=(_exp if _exp > 0 else None), expect_audio=True,
+        # 5. Assemble scenes → one video, then mix BGM (returns final_out + the
+        #    concat result for the QA expected-duration).
+        final_out, _res = assemble_scenes(
+            ctx, plan, payload, output_dir=output_dir, output_stem=_output_stem,
+            scene_clips=scene_clips, results=_results, scenes=scenes, set_stage=_set_stage,
         )
-        if not _qa["ok"]:
-            raise RuntimeError(f"Content: output failed QA: {_qa.get('error')}")
-        _final_dur = float(_qa["metadata"].get("duration") or 0.0)
 
-        # E2: best-effort poster thumbnail from the finished video (~1/3 in).
-        # Never fails the render (Sacred Contract #3 spirit).
-        _thumb_path = ""
-        if os.getenv("CONTENT_THUMBNAIL", "1") == "1":
-            try:
-                import subprocess
-                from app.services.bin_paths import get_ffmpeg_bin
-                _thumb = output_dir / f"{final_out.stem}.thumb.jpg"
-                _tss = max(0.5, _final_dur / 3.0)
-                subprocess.run(
-                    [get_ffmpeg_bin(), "-y", "-ss", f"{_tss:.2f}", "-i", str(final_out),
-                     "-frames:v", "1", "-q:v", "3", str(_thumb)],
-                    capture_output=True, timeout=60,
-                )
-                if _thumb.exists() and _thumb.stat().st_size > 0:
-                    _thumb_path = str(_thumb)
-                    _job_log(effective_channel, job_id, f"Content: thumbnail → {_thumb.name}")
-            except Exception as _th_exc:
-                logger.warning("content: thumbnail failed (non-fatal): %s", _th_exc)
-
-        # Repoint scene part rows at the final video BEFORE deleting the scene
-        # intermediates, so every per-part surface keeps a live output link.
-        try:
-            from app.db.jobs_repo import update_part_output_path
-            for i in range(1, total_parts + 1):
-                update_part_output_path(job_id, i, str(final_out))
-        except Exception as exc:
-            logger.warning("content: part repoint failed (non-fatal): %s", exc)
-        try:
-            shutil.rmtree(scenes_dir, ignore_errors=True)
-        except Exception:
-            pass
-
-        # 7. Terminal result_json + DONE (Sacred Contract #1 keys on output) ---
-        _entry = {
-            "part_no": 1, "path": str(final_out), "output_file": str(final_out),
-            "output_path": str(final_out), "title": (plan.topic or _output_stem),
-            "clip_name": _output_stem, "ai_title": (plan.topic or ""),
-            "start_sec": 0.0, "end_sec": _final_dur, "duration": _final_dur,
-            "viral_score": 100.0,
-            # Sacred Contract #1 keys — present on EVERY output.
-            "output_rank_score": 100.0, "is_best_output": True, "is_best_clip": True,
-        }
-        _result = {
-            "outputs": [_entry],
-            "render_format": "content",
-            "content_plan": plan.to_json(),
-            "content_topic": plan.topic,
-            "content_tone": plan.tone,
-            "content_audience": plan.audience,
-            "output_ranking": [dict(_entry, output_rank=1)],
-            "best_clip": _entry,
-            "successful_outputs_count": 1,
-            "failed_outputs_count": len(failed_parts),
-            "failed_parts": [int(f["part_no"]) for f in failed_parts],
-            "visual_provider": visual_provider,
-            "thumbnail_path": _thumb_path,   # E2
-            "visual_fallback_scenes": _visual_fallbacks,
-            "selected_segments_count": total_parts,
-            "is_partial_success": bool(failed_parts),
-            "ai_director": {"enabled": True, "mode": "content"},
-            # CU-8/9: which visual provider each scene used + estimated paid cost.
-            "ai_cost": {
-                "estimated": round(_budget.spent, 3),
-                "budget_cap": _budget.cap,
-                "by_provider": {
-                    _p: sum(1 for _v in _scene_providers.values() if _v == _p)
-                    for _p in sorted(set(_scene_providers.values()))
-                },
-            },
-        }
-        # MED-1: a partial success (some scenes failed but ≥1 delivered) reports
-        # "completed_with_errors" so the UI/history flag it — matching the clips /
-        # recap convention. Job STAGE stays DONE (Sacred Contract #4).
-        _terminal_status = "completed_with_errors" if failed_parts else "completed"
-        upsert_job(
-            job_id, "render", effective_channel, _terminal_status, payload.model_dump(), _result,
-            stage=JobStage.DONE, progress_percent=100,
-            message=(
-                f"Content complete: {len(scene_clips)}/{total_parts} scenes, {_final_dur:.0f}s"
-                + (f" ({len(failed_parts)} failed)" if failed_parts else "")
-            ),
-        )
-        _emit_render_event(
-            channel_code=effective_channel, job_id=job_id, event="render.complete",
-            level="INFO", message="Content render complete", step="render.complete",
-            context={
-                "duration_sec": _final_dur, "scenes": total_parts,
-                "rendered": len(scene_clips), "failed": len(failed_parts),
-            },
-        )
-        _job_log(
-            effective_channel, job_id,
-            f"Content DONE: {len(scene_clips)}/{total_parts} scenes ({_final_dur:.0f}s)",
+        finalize_content(
+            ctx, plan, payload, output_dir=output_dir, output_stem=_output_stem,
+            final_out=final_out, assembly=_res, scene_clips=scene_clips,
+            scenes_dir=scenes_dir, total_parts=total_parts, failed_parts=failed_parts,
+            visual_fallbacks=_visual_fallbacks, visual_provider=visual_provider,
+            budget=_budget, scene_providers=_scene_providers,
         )
     finally:
         try:
