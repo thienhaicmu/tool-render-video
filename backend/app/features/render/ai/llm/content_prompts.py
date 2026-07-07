@@ -28,7 +28,8 @@ MAX_CONTENT_SCRIPT_CHARS = int(_os.getenv("CONTENT_MAX_SCRIPT_CHARS", "40000"))
 # CM-8: prompt version tag, logged with every plan so a quality regression can be
 # traced to a prompt revision (pairs with the ai_eval harness). Bump on any
 # material change to the Content Director templates below.
-CONTENT_PLAN_PROMPT_VERSION = "v3"
+CONTENT_PLAN_PROMPT_VERSION = "v4"  # v4 (W5-3): drop dead `continuity`; narrow
+                                    # animation_hint to consumed title|lower_third.
 
 _LANG_NAMES: dict[str, str] = {
     "vi-VN": "Vietnamese (Tiếng Việt)",
@@ -142,7 +143,6 @@ CREATOR TONE:       {tone_clause}
       "pause_after": <float seconds>,
       "emphasis": ["<word or phrase to stress>"],
       "characters": ["<Story Bible character id/name appearing in this scene>"],
-      "continuity": "<what carries over from the previous scene, or ''>",
       "est_duration_sec": <float>,
       "subtitle_style": "<one of the styles above as a per-scene override, or '' to use the plan style>",
       "visual_hint": "<short label of what footage/image suits this scene, or ''>",
@@ -151,7 +151,7 @@ CREATOR TONE:       {tone_clause}
       "asset_suggestion": "ai_image|ai_video|stock|upload|local",
       "camera_hint": "zoom_in|zoom_out|pan|still|",
       "transition_hint": "fade|cut|slide|flash|zoom|",
-      "animation_hint": "highlight|popup|title|lower_third|progress_bar|"
+      "animation_hint": "title|lower_third|"
     }}
   ]
 }}

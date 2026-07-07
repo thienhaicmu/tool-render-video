@@ -288,7 +288,7 @@ Bản review tổng thể xác nhận CM-1…12 đạt, nhưng còn gap correctn
 |----|-----------|------|---------|
 | W5-2 | ✅ DONE | 2026-07-07 | Verify runtime (skill /verify): boot backend (:8010, code hiện tại) + drive content API thật — CM-1 providers, CM-2 plan (Gemini thật, 5 scene), CM-12 preview→pin→durable asset, **CM-6 render thật** (stage rendering_parallel→writing_report→done, completed, Sacred#1 keys, mp4 h264+aac). PASS. **Findings:** backend dev `:8000` của user chạy code CŨ (pre-CM-12) → cần restart; GUI tương tác (undo/drag) chưa pixel-verify (giới hạn môi trường). |
 | W5-1 | ✅ DONE | 2026-07-07 | **Duration-fit engine-aware.** Vấn đề (verify): chỉ edge honor `rate`; xtts/piper bỏ qua, gemini soft-hint → plan fit reading_speed không hiệu lực. Fix: engine≠edge → truyền rate trung tính + `atempo` post (`_apply_tempo`) ép reading_speed thật; edge byte-identical. MEDIUM (`content_scene_render.py`). Test `test_content_tempo_fit.py` (3, ffmpeg). Known edge case: edge fallback offline→piper/xtts không sửa được (không quan sát được fallback). |
-| W5-3 | ⬜ TODO | — | Dọn dead code (`continuity` + enum hint chưa map) |
+| W5-3 | ✅ DONE | 2026-07-07 | Dọn dead code. **Verify sửa review:** `camera_hint` (zoom_in/zoom_out/pan) THỰC SỰ dùng qua `_camera_vf` → giữ. Chỉ bỏ: `continuity` (0 consumer render) khỏi prompt (giữ field domain parse-tolerant, ghi DEPRECATED); narrow `animation_hint` → `title\|lower_third` (bỏ highlight/popup/progress_bar chưa map). Prompt version bump v3→v4. HIGH tier (content_prompts.py) — không đổi format-safety. Content regression 235 passed. |
 | W5-4 | ⬜ TODO | — | Hợp nhất nguồn plan (canonical `content_plan_json`) |
 | W5-5 | ⬜ TODO | — | Subtitle align tốt hơn |
 | W5-6 | ⬜ TODO | — | Whisper 1 lần/video |
