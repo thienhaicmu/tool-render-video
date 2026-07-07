@@ -592,6 +592,29 @@
   white-space: nowrap; letter-spacing: .02em;
 }
 
+/* Story Bible card (setting / hook / cta + characters, from the plan) */
+.cs-bible { display: flex; flex-direction: column; gap: 8px; }
+.cs-bible-hd { font-size: 11px; font-weight: 700; letter-spacing: .3px; color: var(--text-1); }
+.cs-bible-lines { display: flex; flex-direction: column; gap: 5px; }
+.cs-bible-line { display: grid; grid-template-columns: 68px 1fr; gap: 10px; font-size: 11px; line-height: 1.45; align-items: baseline; }
+.cs-bible-k {
+  font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-3); font-family: var(--fb, inherit);
+}
+.cs-bible-v { color: var(--text-2); }
+.cs-bible-chars { display: flex; flex-wrap: wrap; gap: 5px; }
+.cs-bible-char {
+  font-size: 10px; font-weight: 600; color: var(--text-2); font-family: var(--fb, inherit);
+  background: var(--bg-card, var(--surface-input)); border: 1px solid var(--border);
+  border-radius: 99px; padding: 2px 9px; cursor: default;
+}
+
+/* Emphasis words highlighted inside narration text */
+.cs-emph {
+  background: rgba(var(--accent-rgb), .18); color: var(--text-1);
+  border-radius: 3px; padding: 0 2px; font-weight: 600;
+}
+
 /* Assemble phase banner (stage = writing_report — concat + BGM mix) */
 .cs-assemble-banner {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;

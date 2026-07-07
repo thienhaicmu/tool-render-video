@@ -169,6 +169,8 @@ export function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
         <DirectorFeed vi={vi} liveEvents={liveEvents} />
       </section>
 
+      <StoryBibleCard vi={vi} plan={plan} />
+
       <section className="cs-card cs-card--flush cs-live-wrap">
         <ContentLiveView
           vi={vi} plan={plan} evScenes={evScenes} liveParts={liveParts}
@@ -224,6 +226,55 @@ export function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
       {!isTerminal && <div style={{ marginTop: 'var(--space-3)' }}><Button variant="ghost" onClick={onNew}>{vi ? 'Tạo cái khác' : 'Start another'}</Button></div>}
     </div>
   )
+}
+
+// Story Bible card — the AI's setting / hook / cta + characters, from the plan
+// prop (the content.plan.ready WS event does NOT carry story_bible, so this is
+// absent on a reattached job with plan=null — renders nothing then).
+function StoryBibleCard({ vi, plan }: { vi: boolean; plan: ContentPlan | null }) {
+  const sb = plan?.story_bible
+  const chars = (sb?.characters || []).filter((c) => c && (c.name || c.description))
+  if (!sb || !(sb.setting || sb.hook || sb.cta || chars.length > 0)) return null
+  return (
+    <section className="cs-card cs-bible">
+      <div className="cs-bible-hd">📖 {vi ? 'Story bible' : 'Story bible'}</div>
+      <div className="cs-bible-lines">
+        {sb.setting && <div className="cs-bible-line"><span className="cs-bible-k">{vi ? 'Bối cảnh' : 'Setting'}</span><span className="cs-bible-v">{sb.setting}</span></div>}
+        {sb.hook && <div className="cs-bible-line"><span className="cs-bible-k">Hook</span><span className="cs-bible-v">{sb.hook}</span></div>}
+        {sb.cta && <div className="cs-bible-line"><span className="cs-bible-k">CTA</span><span className="cs-bible-v">{sb.cta}</span></div>}
+      </div>
+      {chars.length > 0 && (
+        <div className="cs-bible-chars">
+          {chars.map((c, i) => (
+            <span key={c.id || i} className="cs-bible-char" title={c.description || ''}>
+              👤 {c.name || c.id || `#${i + 1}`}
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+// Highlight the scene's emphasis words inside its narration text. Emphasis is a
+// list of words/short phrases the AI marked for stress (also burned into the
+// CapCut subtitle). Case-insensitive, defensive: any regex failure returns the
+// plain text unchanged.
+function highlightEmphasis(text: string, emphasis?: string[]) {
+  const words = (emphasis || []).map((w) => (w || '').trim()).filter((w) => w.length >= 2)
+  if (words.length === 0) return text
+  const set = new Set(words.map((w) => w.toLowerCase()))
+  try {
+    const esc = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    const re = new RegExp(`(${esc.join('|')})`, 'gi')
+    return text.split(re).map((p, i) =>
+      set.has(p.toLowerCase())
+        ? <mark key={i} className="cs-emph">{p}</mark>
+        : <Fragment key={i}>{p}</Fragment>,
+    )
+  } catch {
+    return text
+  }
 }
 
 // ── Live render: Content Director scene view ────────────────────────────────
@@ -447,7 +498,7 @@ function ContentLiveView({ vi, plan, evScenes, liveParts, assembling, assembleMs
                         {info.role && <span className="cs-role-badge" style={{ color: accent, borderColor: accent }}>{info.role}</span>}
                         {!info.role && <span>{titleOf(info, p)}</span>}
                       </div>
-                      {info.narration && <div className="cs-live-row-narr">{info.narration}</div>}
+                      {info.narration && <div className="cs-live-row-narr">{highlightEmphasis(info.narration, info.emphasis)}</div>}
                       <SceneChips info={info} vi={vi} />
                       {p.message && <div className="cs-live-row-sub">{p.message}</div>}
                     </div>
@@ -529,7 +580,7 @@ function ContentFocusCard({ vi, part, info, title }: {
       </div>
 
       <div className="cs-focus-track"><div className="cs-focus-fill" style={{ width: `${pct}%`, background: accent }} /></div>
-      {narr && <div className="cs-focus-narr">💬 {narr}</div>}
+      {narr && <div className="cs-focus-narr">💬 {highlightEmphasis(narr, info.emphasis)}</div>}
       {part.message && <div className="cs-focus-sub">{part.message}</div>}
     </>
   )
