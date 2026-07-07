@@ -55,8 +55,11 @@ def render_one_scene(ctx: ContentRenderContext, plan, i: int, scene, scene_provi
 
     if ctx.cancel_cb():
         raise cancel_registry.JobCancelledError()
+    # Sub-step 1/3 — narration (TTS). Progress + message drive the UI's
+    # per-scene sub-step strip (Narration → Visual → Compose) so it reflects the
+    # real stage instead of guessing from the overall percent.
     upsert_job_part(job_id, i, part_name, JobPartStage.RENDERING,
-                    progress_percent=20, message="synthesizing narration")
+                    progress_percent=15, message="synthesizing narration")
 
     # W5-6: reuse the pre-pass narration when available, else synth per-scene.
     narr = pre_audio if pre_audio is not None else synthesize_scene_narration(
@@ -73,6 +76,10 @@ def render_one_scene(ctx: ContentRenderContext, plan, i: int, scene, scene_provi
     audio_path, ndur = narr
     if ctx.cancel_cb():
         raise cancel_registry.JobCancelledError()
+
+    # Sub-step 2/3 — visual (resolve/generate the scene background/footage).
+    upsert_job_part(job_id, i, part_name, JobPartStage.RENDERING,
+                    progress_percent=45, message="resolving visual")
 
     # Provider chosen by the CU-8 pre-pass (decision tree + budget). A
     # per-scene override still resolves via local with the user's asset.
@@ -156,6 +163,9 @@ def render_one_scene(ctx: ContentRenderContext, plan, i: int, scene, scene_provi
         if _ch == "pan":
             _ch = "pan_right" if (i % 2 == 0) else "pan_left"
         _camera = _ch
+    # Sub-step 3/3 — compose (burn subtitle + mux narration in one ffmpeg pass).
+    upsert_job_part(job_id, i, part_name, JobPartStage.RENDERING,
+                    progress_percent=75, message="composing scene")
     ok = render_content_scene(
         scene=scene, background_kind=asset.kind, background_value=asset.value,
         narration_audio_path=audio_path, narration_dur=ndur,

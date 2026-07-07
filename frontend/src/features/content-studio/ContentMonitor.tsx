@@ -545,20 +545,23 @@ function ContentLiveView({ vi, plan, evScenes, liveParts, assembling, assembleMs
   )
 }
 
-// Sub-step strip: the composition stages inside ONE scene. Derived from the
-// part's progress_percent + message (content_pipeline reports 20 at
-// "synthesizing narration", ~55 at the visual step, 100 on done).
-const SUBSTEPS_VI = ['Lời thoại', 'Hình ảnh', 'Phụ đề', 'Ghép']
-const SUBSTEPS_EN = ['Narration', 'Visual', 'Subtitle', 'Mux']
+// Sub-step strip: the 3 real composition stages inside ONE scene, driven by the
+// per-scene RENDERING progress+message scene_stage.py emits (15 "synthesizing
+// narration" -> 45 "resolving visual" -> 75 "composing scene" -> 100 done). The
+// message is authoritative; the progress bands are a fallback. Subtitle + mux
+// are a single ffmpeg pass, so "compose" is the honest 3rd step (not 4).
+const SUBSTEPS_VI = ['Lời thoại', 'Hình ảnh', 'Dựng']
+const SUBSTEPS_EN = ['Narration', 'Visual', 'Compose']
 function subStepIdx(part: JobPart): number {
-  if (_lvDone(part.status)) return 4
+  if (_lvDone(part.status)) return 3   // all sub-steps complete
   if (!_lvActive(part.status)) return -1
   const msg = (part.message || '').toLowerCase()
   if (msg.includes('narration') || msg.includes('synth')) return 0
-  if (msg.includes('visual') || msg.includes('background') || msg.includes('unavailable')) return 1
+  if (msg.includes('visual') || msg.includes('resolv') || msg.includes('background') || msg.includes('unavailable')) return 1
+  if (msg.includes('compos')) return 2
   const p = part.progress_percent ?? 0
-  if (p < 25) return 0
-  if (p < 60) return 1
+  if (p < 40) return 0
+  if (p < 70) return 1
   return 2
 }
 
@@ -588,10 +591,10 @@ function ContentFocusCard({ vi, part, info, title }: {
         <SceneChips info={info} vi={vi} />
       </div>
 
-      {/* Sub-step strip — narration → visual → subtitle → mux */}
+      {/* Sub-step strip — narration → visual → compose */}
       <div className="cs-substeps">
         {steps.map((label, i) => {
-          const state = cur >= 4 ? 'done' : i < cur ? 'done' : i === cur ? 'active' : 'pending'
+          const state = cur >= steps.length ? 'done' : i < cur ? 'done' : i === cur ? 'active' : 'pending'
           return (
             <span key={label} className={`cs-substep is-${state}`}>
               <span className="cs-substep-dot" />
