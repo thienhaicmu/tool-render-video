@@ -105,8 +105,10 @@ def _run_capturing_style(_sandbox, monkeypatch, *, user_style: str, plan_style: 
     subtitle_style it receives. Returns the list of captured styles."""
     from app.models.schemas import RenderRequest
     import app.features.render.engine.pipeline.content_pipeline as cp
-    # CM-6: TTS + scene render moved into scene_stage (render_one_scene).
+    # CM-6: TTS + scene render moved into scene_stage (render_one_scene);
+    # plan resolution moved into plan_stage.
     import app.features.render.engine.stages.content.scene_stage as scene_stage
+    import app.features.render.engine.stages.content.plan_stage as plan_stage
 
     captured: list[str] = []
 
@@ -128,7 +130,7 @@ def _run_capturing_style(_sandbox, monkeypatch, *, user_style: str, plan_style: 
             capture_output=True, check=True, timeout=60,
         )
 
-    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _plan_with_style(plan_style))
+    monkeypatch.setattr(plan_stage, "select_content_plan", lambda **k: _plan_with_style(plan_style))
     monkeypatch.setattr(scene_stage, "synthesize_scene_narration", _fake_synth)
     monkeypatch.setattr(scene_stage, "render_content_scene", _fake_render_scene)
 
