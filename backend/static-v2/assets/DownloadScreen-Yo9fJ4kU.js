@@ -1,0 +1,1 @@
+import{a1 as t,L as o}from"./index-C8amNuI8.js";import{D as e}from"./DownloadTab-Btfi4Juw.js";import"./vendor-CQnyV784.js";import"./outputDir-DbomMc54.js";function c(){const i=t(n=>n.lang)==="vi"?"VI":"EN";return o.jsx("div",{style:{display:"flex",flexDirection:"column",height:"100%",minHeight:0},children:o.jsx(e,{lang:i})})}export{c as DownloadScreen};
