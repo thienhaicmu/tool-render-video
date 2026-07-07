@@ -279,3 +279,17 @@ CM-1, CM-9, CM-10, CM-11 là LOW tier → giao Developer trực tiếp.
 | CM-10 | ✅ DONE | 2026-07-07 | Hook `usePlanHistory` (past/present/future, cap 50) — `setPlan` = edit undoable, `resetPlan` = plan mới xoá history. Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y (skip khi focus ở text field → native text-undo vẫn chạy) + nút Undo/Redo. LOW-tier FE. `tsc -b` sạch, build OK. static-v2 gộp cuối Wave 4. |
 | CM-11 | ✅ DONE | 2026-07-07 | `Timeline.tsx` — dải scene rộng ∝ `est_duration_sec`, màu theo role, badge audit, **drag reorder HTML5** (drop rời rạc → `key={i}` đủ, không cần sid), click→scroll tới SceneRow, ruler tổng vs target. Reorder qua `setPlan` → tích hợp undo CM-10. LOW-tier FE. `tsc -b` sạch, build OK. |
 | CM-12 | ✅ DONE (minimal) | 2026-07-07 | **Minimal (không cần bảng DB):** `POST /api/content/visual/pin {token}` copy ảnh preview (cache, pruneable) → `APP_DATA_DIR/content_assets` (ngoài cache/temp → không prune), trả local path. FE: nút 📌 trong SceneRow ghim ảnh → `visual_source=image`/`visual_path` + ken_burns → render dùng đúng ảnh. LOW-tier (`content/router.py` + FE). Test `test_content_pin_asset.py` (3). Content regression 232 passed; tsc/build OK. |
+
+## Wave 5 — khắc phục gap còn lại (sau review 2026-07-07)
+
+Bản review tổng thể xác nhận CM-1…12 đạt, nhưng còn gap correctness/hygiene ngoài scope. Wave 5:
+
+| ID | Trạng thái | Ngày | Ghi chú |
+|----|-----------|------|---------|
+| W5-2 | ✅ DONE | 2026-07-07 | Verify runtime (skill /verify): boot backend (:8010, code hiện tại) + drive content API thật — CM-1 providers, CM-2 plan (Gemini thật, 5 scene), CM-12 preview→pin→durable asset, **CM-6 render thật** (stage rendering_parallel→writing_report→done, completed, Sacred#1 keys, mp4 h264+aac). PASS. **Findings:** backend dev `:8000` của user chạy code CŨ (pre-CM-12) → cần restart; GUI tương tác (undo/drag) chưa pixel-verify (giới hạn môi trường). |
+| W5-1 | ✅ DONE | 2026-07-07 | **Duration-fit engine-aware.** Vấn đề (verify): chỉ edge honor `rate`; xtts/piper bỏ qua, gemini soft-hint → plan fit reading_speed không hiệu lực. Fix: engine≠edge → truyền rate trung tính + `atempo` post (`_apply_tempo`) ép reading_speed thật; edge byte-identical. MEDIUM (`content_scene_render.py`). Test `test_content_tempo_fit.py` (3, ffmpeg). Known edge case: edge fallback offline→piper/xtts không sửa được (không quan sát được fallback). |
+| W5-3 | ⬜ TODO | — | Dọn dead code (`continuity` + enum hint chưa map) |
+| W5-4 | ⬜ TODO | — | Hợp nhất nguồn plan (canonical `content_plan_json`) |
+| W5-5 | ⬜ TODO | — | Subtitle align tốt hơn |
+| W5-6 | ⬜ TODO | — | Whisper 1 lần/video |
+| W5-7 | ⬜ DEFER | — | (khảo sát) NVENC content — cần máy GPU |

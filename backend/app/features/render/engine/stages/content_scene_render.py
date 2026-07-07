@@ -90,6 +90,40 @@ def _reading_speed_to_rate(reading_speed: float) -> str:
     return f"+{pct}%" if pct >= 0 else f"{pct}%"
 
 
+def _apply_tempo(audio_path: str, speed: float) -> Optional[str]:
+    """W5-1 — change an audio file's TEMPO by ``speed`` (pitch-preserving ffmpeg
+    ``atempo``) to enforce a scene's reading_speed on TTS engines that DON'T apply
+    the ``rate`` knob (xtts / piper ignore it; gemini only soft-hints it). Edge
+    applies rate natively, so it never reaches here. ``speed`` > 1 → faster/shorter.
+
+    Overwrites ``audio_path`` in place; returns it on success, or None on failure
+    (the caller then keeps the natural-pace audio). reading_speed is clamped
+    0.5–2.0 so a single atempo (its supported range) always covers it. Never
+    raises (Sacred Contract #3 spirit)."""
+    try:
+        spd = max(0.5, min(2.0, float(speed or 1.0)))
+        if abs(spd - 1.0) <= 1e-3:
+            return audio_path
+        tmp = str(Path(audio_path).with_suffix(".tempo.mp3"))
+        subprocess.run(
+            [get_ffmpeg_bin(), "-y", "-i", str(audio_path),
+             "-filter:a", f"atempo={spd:.4f}", "-c:a", "libmp3lame", tmp],
+            capture_output=True, text=True, encoding="utf-8",
+            check=True, timeout=_FFMPEG_TIMEOUT_SEC,
+        )
+        if Path(tmp).exists() and Path(tmp).stat().st_size > 0:
+            os.replace(tmp, audio_path)
+            return audio_path
+        return None
+    except Exception as exc:
+        logger.info("content_scene_render: atempo failed (%s) — keeping natural pace", exc)
+        try:
+            Path(str(Path(audio_path).with_suffix(".tempo.mp3"))).unlink(missing_ok=True)
+        except Exception:
+            pass
+        return None
+
+
 def synthesize_scene_narration(
     *,
     scene,
@@ -111,7 +145,13 @@ def synthesize_scene_narration(
         if not text:
             return None
         from app.features.render.engine.audio.tts import generate_narration_audio
-        rate = _reading_speed_to_rate(getattr(scene, "reading_speed", 1.0))
+        # W5-1: only Edge applies `rate` precisely. For other engines pass a
+        # NEUTRAL rate and enforce reading_speed with a post-TTS atempo below, so
+        # the plan's fitted duration actually holds regardless of engine (edge
+        # stays byte-identical).
+        _is_edge = (tts_engine or "edge").strip().lower() == "edge"
+        _spd = float(getattr(scene, "reading_speed", 1.0) or 1.0)
+        rate = _reading_speed_to_rate(_spd) if _is_edge else "+0%"
         path = generate_narration_audio(
             text=text, language=language, gender=gender, rate=rate,
             job_id=job_id, voice_id=voice_id, output_path=out_path,
@@ -122,6 +162,13 @@ def synthesize_scene_narration(
             logger.warning("content_scene_render: TTS produced no audio (scene idx=%s)",
                            getattr(scene, "index", "?"))
             return None
+        # W5-1: enforce reading_speed on engines that ignore/only-hint `rate`.
+        # Note: an Edge request that silently fell back to piper/xtts offline is
+        # not corrected here (we can't observe the fallback) — a known edge case.
+        if not _is_edge and abs(_spd - 1.0) > 0.02:
+            _tempo = _apply_tempo(path, _spd)
+            if _tempo:
+                path = _tempo
         dur = probe_audio_duration(path)
         if dur <= 0:
             logger.warning("content_scene_render: TTS audio has zero duration")
