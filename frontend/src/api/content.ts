@@ -183,6 +183,15 @@ export async function previewVisual(req: VisualPreviewRequest): Promise<VisualPr
   })
 }
 
+// CM-12: pin a previewed image (by token) as a durable per-scene asset. Returns
+// the local file path to store in scene.visual_path (visual_source='image').
+export async function pinVisual(token: string): Promise<{ path: string }> {
+  return apiFetch<{ path: string }>('/api/content/visual/pin', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
+}
+
 // ── CU-1: draft/project persistence ─────────────────────────────────────────
 
 export interface ContentProjectPayload {

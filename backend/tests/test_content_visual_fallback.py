@@ -104,7 +104,7 @@ def test_resolve_one_routes_to_provider(monkeypatch):
 # ── B1 seed coherence ────────────────────────────────────────────────────────
 
 def test_seed_stable_and_nonzero_from_topic():
-    from app.features.render.engine.pipeline.content_pipeline import _stable_seed
+    from app.features.render.engine.stages.content.context import stable_seed as _stable_seed
     s = _stable_seed("Ancient Rome")
     assert s > 0
     assert _stable_seed("Ancient Rome") == s   # deterministic

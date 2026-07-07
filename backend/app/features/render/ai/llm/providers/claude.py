@@ -576,3 +576,66 @@ def _call_claude_story(api_key: str, model: str, system_prompt: str, user_prompt
     if result is not None:
         llm_cache_put("claude-story", model, system_prompt, user_prompt, result)
     return result
+
+
+# ── CM-2: Content Mode plan call (larger token budget than story — a multi-scene
+# content plan is a big JSON) + a thin select_content_plan that delegates the
+# CU-4/5/6 orchestration to the shared content_director. ─────────────────────
+_CONTENT_MAX_TOKENS = int(os.getenv("CLAUDE_CONTENT_MAX_TOKENS", "8192"))
+_CONTENT_TEMPERATURE = float(os.getenv("CLAUDE_CONTENT_TEMPERATURE", "0.5"))
+
+
+def _call_claude_content_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _AnthClient(api_key=api_key, timeout=90)
+    resp = client.messages.create(
+        model=model,
+        max_tokens=_CONTENT_MAX_TOKENS,
+        temperature=_CONTENT_TEMPERATURE,
+        system=system_prompt,
+        messages=[{"role": "user", "content": _cached_user_content(user_prompt, "CLAUDE_CONTENT_CACHE")}],
+    )
+    if not resp.content:
+        return None
+    parts = [block.text for block in resp.content if getattr(block, "type", "") == "text"]
+    return "\n".join(parts) if parts else None
+
+
+def _call_claude_content(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    cached = llm_cache_get("claude-content", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("claude_client: content cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
+        lambda: _call_claude_content_once(api_key, model, system_prompt, user_prompt),
+        label="claude-content",
+    )
+    if result is not None:
+        llm_cache_put("claude-content", model, system_prompt, user_prompt, result)
+    return result
+
+
+def select_content_plan(
+    script: str,
+    target_duration_sec: float = 90.0,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["object"]:
+    """Content Mode director (Claude) — turn a raw script into a ContentPlan via
+    the shared two-pass content_director. Returns a ContentPlan or None (Sacred
+    Contract #3 — never raises). Enables the cross-provider fallback for Content
+    Mode (previously Gemini-only)."""
+    try:
+        if not _ANTHROPIC_SDK or not api_key or not script or not script.strip():
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        from app.features.render.ai.llm.content_director import run_content_director
+        return run_content_director(
+            call_fn=lambda _sys, _usr: _call_claude_content(api_key, resolved_model, _sys, _usr),
+            script=script, target_duration_sec=target_duration_sec,
+            target_language=target_language, tone=tone, provider_label="claude",
+        )
+    except Exception as exc:
+        logger.warning("claude_client: select_content_plan unexpected error %s", exc, exc_info=True)
+        return None

@@ -62,6 +62,12 @@ _CONTENT_WHISPER_MODEL: str = (os.getenv("CONTENT_WHISPER_MODEL", "base").strip(
 _SRT_TIME_LINE_RE = re.compile(r"(\d\d:\d\d:\d\d,\d\d\d)\s*-->\s*(\d\d:\d\d:\d\d,\d\d\d)")
 
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…。！？])\s+")
+# W5-5: split an over-long sentence caption at a clause boundary (comma etc.) so
+# a long single sentence doesn't sit on screen as one wall of text for the whole
+# scene. Readability target ≈ one caption line. Timing stays char-proportional
+# (consistent with the plan's ~15 chars/sec model).
+_CLAUSE_SPLIT_RE = re.compile(r"(?<=[,;:—–])\s+")
+_CAPTION_CHAR_TARGET: int = max(16, int(os.getenv("CONTENT_CAPTION_CHARS", "42")))
 
 
 def probe_audio_duration(path: str) -> float:
@@ -90,6 +96,40 @@ def _reading_speed_to_rate(reading_speed: float) -> str:
     return f"+{pct}%" if pct >= 0 else f"{pct}%"
 
 
+def _apply_tempo(audio_path: str, speed: float) -> Optional[str]:
+    """W5-1 — change an audio file's TEMPO by ``speed`` (pitch-preserving ffmpeg
+    ``atempo``) to enforce a scene's reading_speed on TTS engines that DON'T apply
+    the ``rate`` knob (xtts / piper ignore it; gemini only soft-hints it). Edge
+    applies rate natively, so it never reaches here. ``speed`` > 1 → faster/shorter.
+
+    Overwrites ``audio_path`` in place; returns it on success, or None on failure
+    (the caller then keeps the natural-pace audio). reading_speed is clamped
+    0.5–2.0 so a single atempo (its supported range) always covers it. Never
+    raises (Sacred Contract #3 spirit)."""
+    try:
+        spd = max(0.5, min(2.0, float(speed or 1.0)))
+        if abs(spd - 1.0) <= 1e-3:
+            return audio_path
+        tmp = str(Path(audio_path).with_suffix(".tempo.mp3"))
+        subprocess.run(
+            [get_ffmpeg_bin(), "-y", "-i", str(audio_path),
+             "-filter:a", f"atempo={spd:.4f}", "-c:a", "libmp3lame", tmp],
+            capture_output=True, text=True, encoding="utf-8",
+            check=True, timeout=_FFMPEG_TIMEOUT_SEC,
+        )
+        if Path(tmp).exists() and Path(tmp).stat().st_size > 0:
+            os.replace(tmp, audio_path)
+            return audio_path
+        return None
+    except Exception as exc:
+        logger.info("content_scene_render: atempo failed (%s) — keeping natural pace", exc)
+        try:
+            Path(str(Path(audio_path).with_suffix(".tempo.mp3"))).unlink(missing_ok=True)
+        except Exception:
+            pass
+        return None
+
+
 def synthesize_scene_narration(
     *,
     scene,
@@ -111,7 +151,13 @@ def synthesize_scene_narration(
         if not text:
             return None
         from app.features.render.engine.audio.tts import generate_narration_audio
-        rate = _reading_speed_to_rate(getattr(scene, "reading_speed", 1.0))
+        # W5-1: only Edge applies `rate` precisely. For other engines pass a
+        # NEUTRAL rate and enforce reading_speed with a post-TTS atempo below, so
+        # the plan's fitted duration actually holds regardless of engine (edge
+        # stays byte-identical).
+        _is_edge = (tts_engine or "edge").strip().lower() == "edge"
+        _spd = float(getattr(scene, "reading_speed", 1.0) or 1.0)
+        rate = _reading_speed_to_rate(_spd) if _is_edge else "+0%"
         path = generate_narration_audio(
             text=text, language=language, gender=gender, rate=rate,
             job_id=job_id, voice_id=voice_id, output_path=out_path,
@@ -122,6 +168,13 @@ def synthesize_scene_narration(
             logger.warning("content_scene_render: TTS produced no audio (scene idx=%s)",
                            getattr(scene, "index", "?"))
             return None
+        # W5-1: enforce reading_speed on engines that ignore/only-hint `rate`.
+        # Note: an Edge request that silently fell back to piper/xtts offline is
+        # not corrected here (we can't observe the fallback) — a known edge case.
+        if not _is_edge and abs(_spd - 1.0) > 0.02:
+            _tempo = _apply_tempo(path, _spd)
+            if _tempo:
+                path = _tempo
         dur = probe_audio_duration(path)
         if dur <= 0:
             logger.warning("content_scene_render: TTS audio has zero duration")
@@ -143,15 +196,47 @@ def _srt_time(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{sec:02d},{ms:03d}"
 
 
+def _refine_long_cues(parts: list[str], max_cues: int) -> list[str]:
+    """W5-5 — while under ``max_cues``, sub-split the longest over-target caption
+    at its clause boundary nearest the middle (comma/semicolon/…), so a long
+    sentence becomes a few readable lines instead of one wall of text. A cue with
+    no clause boundary is left whole (can't split cleanly without word timings).
+    Preserves chronological order. Never raises."""
+    out = list(parts)
+    try:
+        while len(out) < max_cues:
+            idx, longest = -1, _CAPTION_CHAR_TARGET
+            for k, c in enumerate(out):
+                if len(c) > longest and _CLAUSE_SPLIT_RE.search(c):
+                    idx, longest = k, len(c)
+            if idx < 0:
+                break
+            c = out[idx]
+            cuts = [m.end() for m in _CLAUSE_SPLIT_RE.finditer(c)]
+            mid = len(c) / 2.0
+            cut = min(cuts, key=lambda p: abs(p - mid))
+            a, b = c[:cut].strip(), c[cut:].strip()
+            if not a or not b:
+                break
+            out[idx:idx + 1] = [a, b]
+        return out
+    except Exception:
+        return parts
+
+
 def _split_cues(text: str, max_cues: int) -> list[str]:
-    """Split narration into up to ``max_cues`` caption chunks by sentence, then by
-    length if there are too few. Never raises."""
+    """Split narration into up to ``max_cues`` caption chunks by sentence, then
+    sub-split over-long sentences at clause boundaries (W5-5) if there is headroom,
+    and finally merge if there are too many. Never raises."""
     t = " ".join((text or "").split())
     if not t:
         return []
     parts = [p.strip() for p in _SENTENCE_SPLIT_RE.split(t) if p.strip()]
     if not parts:
         parts = [t]
+    # W5-5: improve readability of long sentences before the merge step.
+    if len(parts) < max_cues:
+        parts = _refine_long_cues(parts, max_cues)
     if len(parts) > max_cues:
         # Merge neighbours until we're within the cap (keeps chronological order).
         while len(parts) > max_cues:
@@ -218,31 +303,55 @@ def _shift_srt(srt_path: str, offset_sec: float) -> None:
     Path(srt_path).write_text("\n".join(out), encoding="utf-8")
 
 
+def _word_srt_to_ass(
+    word_srt: str, out_ass: str, width: int, height: int,
+    style: str, offset_sec: float, emphasis=None,
+) -> bool:
+    """Render a 0-based word-level SRT to a CapCut word-by-word ASS, shifted by
+    ``offset_sec`` (the scene's pause_before) so it syncs with the adelay'd
+    narration. Copies the input to a scratch file so the caller's SRT is not
+    mutated. Returns False on any failure. Never raises (Sacred Contract #3)."""
+    scratch = str(Path(out_ass).with_suffix(".word.srt"))
+    try:
+        import shutil as _sh
+        from app.features.render.engine.subtitle.generator.ass_capcut import srt_to_ass_capcut
+        _sh.copyfile(word_srt, scratch)
+        if not Path(scratch).exists() or Path(scratch).stat().st_size <= 0:
+            return False
+        if offset_sec and offset_sec > 0:
+            _shift_srt(scratch, float(offset_sec))
+        srt_to_ass_capcut(
+            scratch, out_ass, style=(style or ""),
+            play_res_x=int(width), play_res_y=int(height),
+            emphasis=emphasis,   # D2
+        )
+        return Path(out_ass).exists() and Path(out_ass).stat().st_size > 0
+    except Exception as exc:
+        logger.info("content_scene_render: word-srt→ass failed (%s) — sentence SRT fallback", exc)
+        return False
+    finally:
+        try:
+            Path(scratch).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 def _build_word_ass(
     audio_path: str, out_ass: str, width: int, height: int,
     style: str, model_name: str, offset_sec: float,
     emphasis=None,
 ) -> bool:
-    """Transcribe the narration audio with Whisper word timestamps → word-level
-    SRT → CapCut word-by-word ASS (shifted by offset_sec so it syncs with the
-    delayed narration). Returns False on any failure (Whisper missing /
-    transcription error / empty result) so the caller falls back to the sentence
-    SRT. Never raises (Sacred Contract #3 spirit)."""
-    tmp_srt = str(Path(out_ass).with_suffix(".word.srt"))
+    """Transcribe ONE narration clip with Whisper word timestamps → CapCut ASS.
+    The per-scene fallback when W5-6's shared one-shot transcription isn't
+    available (word timings not pre-computed for this scene). Returns False on any
+    failure so the caller falls back to the sentence SRT. Never raises."""
+    tmp_srt = str(Path(out_ass).with_suffix(".tx.srt"))
     try:
         from app.features.render.engine.subtitle.transcription.whisper import transcribe_to_srt
-        from app.features.render.engine.subtitle.generator.ass_capcut import srt_to_ass_capcut
         transcribe_to_srt(str(audio_path), tmp_srt, model_name=model_name, highlight_per_word=True)
         if not Path(tmp_srt).exists() or Path(tmp_srt).stat().st_size <= 0:
             return False
-        if offset_sec and offset_sec > 0:
-            _shift_srt(tmp_srt, float(offset_sec))
-        srt_to_ass_capcut(
-            tmp_srt, out_ass, style=(style or ""),
-            play_res_x=int(width), play_res_y=int(height),
-            emphasis=emphasis,   # D2
-        )
-        return Path(out_ass).exists() and Path(out_ass).stat().st_size > 0
+        return _word_srt_to_ass(tmp_srt, out_ass, width, height, style, offset_sec, emphasis)
     except Exception as exc:
         logger.info(
             "content_scene_render: word-by-word subtitle unavailable (%s) — sentence SRT fallback",
@@ -274,6 +383,7 @@ def render_content_scene(
     ken_burns: bool = False,
     camera: str = "",
     word_by_word: bool = True,
+    word_srt: Optional[str] = None,
 ) -> bool:
     """Compose one Content-Mode scene → ``out_path``. Returns True on success.
 
@@ -322,11 +432,20 @@ def render_content_scene(
         want_srt = False
         if subtitle_enabled:
             if word_by_word and _CONTENT_WORD_BY_WORD:
-                want_ass = _build_word_ass(
-                    narration_audio_path, ass_path, int(width), int(height),
-                    subtitle_style, _CONTENT_WHISPER_MODEL, pause_before,
-                    emphasis=getattr(scene, "emphasis", None),   # D2
-                )
+                # W5-6: prefer the pre-computed word SRT (one shared transcription
+                # for the whole video) over a per-scene Whisper pass.
+                if word_srt and Path(word_srt).exists() and Path(word_srt).stat().st_size > 0:
+                    want_ass = _word_srt_to_ass(
+                        word_srt, ass_path, int(width), int(height),
+                        subtitle_style, pause_before,
+                        emphasis=getattr(scene, "emphasis", None),   # D2
+                    )
+                if not want_ass:
+                    want_ass = _build_word_ass(
+                        narration_audio_path, ass_path, int(width), int(height),
+                        subtitle_style, _CONTENT_WHISPER_MODEL, pause_before,
+                        emphasis=getattr(scene, "emphasis", None),   # D2
+                    )
             if not want_ass:
                 want_srt = _build_scene_srt(
                     str(getattr(scene, "narration", "") or ""), pause_before, ndur, srt_path,

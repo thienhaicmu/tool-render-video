@@ -25,6 +25,12 @@ import os as _os
 # CONTENT_MAX_SCRIPT_CHARS.
 MAX_CONTENT_SCRIPT_CHARS = int(_os.getenv("CONTENT_MAX_SCRIPT_CHARS", "40000"))
 
+# CM-8: prompt version tag, logged with every plan so a quality regression can be
+# traced to a prompt revision (pairs with the ai_eval harness). Bump on any
+# material change to the Content Director templates below.
+CONTENT_PLAN_PROMPT_VERSION = "v4"  # v4 (W5-3): drop dead `continuity`; narrow
+                                    # animation_hint to consumed title|lower_third.
+
 _LANG_NAMES: dict[str, str] = {
     "vi-VN": "Vietnamese (Tiếng Việt)",
     "en-US": "English (American)",
@@ -137,7 +143,6 @@ CREATOR TONE:       {tone_clause}
       "pause_after": <float seconds>,
       "emphasis": ["<word or phrase to stress>"],
       "characters": ["<Story Bible character id/name appearing in this scene>"],
-      "continuity": "<what carries over from the previous scene, or ''>",
       "est_duration_sec": <float>,
       "subtitle_style": "<one of the styles above as a per-scene override, or '' to use the plan style>",
       "visual_hint": "<short label of what footage/image suits this scene, or ''>",
@@ -146,7 +151,7 @@ CREATOR TONE:       {tone_clause}
       "asset_suggestion": "ai_image|ai_video|stock|upload|local",
       "camera_hint": "zoom_in|zoom_out|pan|still|",
       "transition_hint": "fade|cut|slide|flash|zoom|",
-      "animation_hint": "highlight|popup|title|lower_third|progress_bar|"
+      "animation_hint": "title|lower_third|"
     }}
   ]
 }}
@@ -389,3 +394,30 @@ def build_content_narration_refine_prompt(
         body.append(f"[{idx}] role={role} target={secs:.0f}s\ncurrent: {narration}")
     user = "\n".join(header_lines) + "\n\n" + "\n\n".join(body)
     return _SYSTEM_CONTENT_NARRATION, user
+
+
+# ── CM-8: one-shot JSON repair for a malformed / truncated plan response ───────
+# When the parser (strict → substring → balance-close salvage) still can't recover
+# a ContentPlan, a single repair pass asks the model to fix its own output into
+# valid JSON — recovering a plan that would otherwise fail the whole render.
+_SYSTEM_CONTENT_REPAIR = (
+    "You are a strict JSON repair tool. You are given text that was meant to be a "
+    "single ContentPlan JSON object but is malformed, truncated, or wrapped in "
+    "prose/markdown. Return ONLY a corrected, valid JSON object — no prose, no "
+    "markdown, no code fences. Preserve as much of the original content as "
+    "possible. The object MUST have a non-empty \"scenes\" array; every scene MUST "
+    "have a non-empty \"narration\" string and an integer \"index\" starting at 0 "
+    "and increasing by 1. Drop any incomplete trailing scene rather than inventing "
+    "content."
+)
+
+
+def build_content_plan_repair_prompt(broken: str) -> "tuple[str, str]":
+    """CM-8 — return (system, user) to repair a malformed ContentPlan JSON.
+
+    ``broken`` (the model's unparseable raw output) is inserted as a LITERAL value
+    via concatenation — NOT ``str.format`` — so arbitrary braces inside it are
+    format-safe. Never raises."""
+    cleaned = _fit_script(broken or "", MAX_CONTENT_SCRIPT_CHARS)
+    user = "Fix this into ONE valid ContentPlan JSON object:\n\n" + cleaned
+    return _SYSTEM_CONTENT_REPAIR, user

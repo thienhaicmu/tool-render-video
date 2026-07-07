@@ -181,6 +181,30 @@ RUBRICS: dict[str, Rubric] = {
         ],
         gates=[Gate("faithfulness", 4.5, "rewrite must preserve source facts")],
     ),
+    # ── CONTENT (Content Mode plan; CM-7 quality-mode A/B) ─────────────────
+    "content": Rubric(
+        feature="content",
+        criteria=[
+            Criterion("narration_fluency",
+                      "5 = the per-scene narration reads as ONE cohesive script "
+                      "that flows scene→scene (smooth transitions, strong hook "
+                      "first, clear close, no repetition). 1 = disconnected, "
+                      "repetitive, or abrupt scene jumps.",
+                      weight=1.5),
+            Criterion("time_fit",
+                      "5 = each scene's narration length fits its planned seconds "
+                      "at a natural pace (~15 characters/second); no scene is "
+                      "clearly overloaded (rushes) or sparse (silence). "
+                      "1 = lengths badly mismatch the planned durations.",
+                      weight=1.5),
+            Criterion("engagement",
+                      "5 = hook-first, vivid, varied sentences a real channel "
+                      "would use. 1 = monotone, filler-laden, generic.",
+                      weight=1.0),
+            _FAITHFULNESS,
+        ],
+        gates=[Gate("faithfulness", 4.5, "content narration must not invent facts")],
+    ),
 }
 
 

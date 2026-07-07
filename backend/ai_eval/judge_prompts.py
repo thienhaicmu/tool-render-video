@@ -78,6 +78,14 @@ _FEATURE_FRAMING: dict[str, str] = {
         "narration for TTS. Judge naturalness, engagement, time-fit, and whether "
         "the rewritten meaning matches the source utterance."
     ),
+    "content": (
+        "You are judging a CONTENT-MODE video plan generated from a source "
+        "script/article: ordered SCENES, each with a role, an AI-authored "
+        "voice-over narration, and a planned duration (seconds). Judge it as a "
+        "faceless short-form channel producer would — whether the narration "
+        "flows as one cohesive script scene→scene, each scene's length fits its "
+        "planned seconds, and it stays faithful to the source script."
+    ),
 }
 
 

@@ -512,5 +512,36 @@
    explicit for any transition declared here. */
 @media (prefers-reduced-motion: reduce) {
   .cs-step, .cs-step-dot, .cs-card, .cs-seg, .cs-icon-btn, .cs-draft-chip,
-  .cs-input, .cs-input-sm, .cs-textarea { transition: none; }
+  .cs-input, .cs-input-sm, .cs-textarea, .cs-tl-block { transition: none; }
 }
+
+/* ── CM-11 Timeline ─────────────────────────────────────────────────────── */
+.cs-tl-track {
+  display: flex; gap: 3px; align-items: stretch; width: 100%;
+  min-height: 46px; padding: 4px 0;
+}
+.cs-tl-block {
+  min-width: 22px; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; padding: 4px 2px; cursor: grab; user-select: none;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);
+  background: var(--bg-hover); color: inherit;
+  font-size: 11px; overflow: hidden; text-align: center;
+  transition: transform var(--duration-fast, .12s) var(--ease-out, ease),
+              border-color var(--duration-fast, .12s) var(--ease-out, ease),
+              background var(--duration-fast, .12s) var(--ease-out, ease);
+}
+.cs-tl-block:hover { border-color: var(--accent-primary); }
+.cs-tl-block.is-drag { opacity: .5; cursor: grabbing; }
+.cs-tl-block.is-over { border-color: var(--accent-primary); transform: translateY(-2px); }
+.cs-tl-block.is-over-audit { border-color: var(--fail); }
+.cs-tl-block.is-sparse { border-style: dashed; }
+.cs-tl-n { font-weight: 700; }
+.cs-tl-role {
+  font-size: 10px; opacity: .7; white-space: nowrap;
+  text-overflow: ellipsis; overflow: hidden; max-width: 100%;
+}
+.cs-tl-block.role-hook       { background: rgba(var(--accent-rgb, 99, 102, 241), .22); }
+.cs-tl-block.role-cta        { background: rgba(var(--ok-rgb, 34, 197, 94), .20); }
+.cs-tl-block.role-conclusion { background: rgba(var(--ok-rgb, 34, 197, 94), .14); }
+.cs-tl-block.role-example    { background: rgba(var(--accent-rgb, 99, 102, 241), .12); }

@@ -114,8 +114,10 @@ class ContentScene:
     emphasis: list[str] = field(default_factory=list)
     est_duration_sec: float = 0.0
     # CU-4: which StoryBible character ids appear in this scene (drives CU-6
-    # consistency injection) + a short continuity note (what carries over).
+    # consistency injection).
     characters: list[str] = field(default_factory=list)
+    # DEPRECATED (W5-3): no render consumer ever used this; the prompt stopped
+    # emitting it in v4. Kept (default "") so legacy blobs still load unchanged.
     continuity: str = ""
     # Per-scene subtitle style override ("" = use the plan/global style).
     subtitle_style: str = ""

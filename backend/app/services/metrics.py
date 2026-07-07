@@ -165,6 +165,18 @@ if _AVAILABLE:
         registry=REGISTRY,
     )
 
+    # CM-1 (2026-07-07): Content Studio preview cost/abuse guard. The
+    # /visual/preview + /narration/preview endpoints are unauthenticated
+    # (loopback) and can trigger PAID provider calls (Imagen/Veo). Every call is
+    # observable so runaway spend or abuse is visible on /metrics.
+    # outcome ∈ {ok, rate_limited, budget_capped, paid_disabled, failed}.
+    CONTENT_PREVIEW_TOTAL = Counter(
+        "content_preview_total",
+        "Content Studio preview calls by endpoint, provider and outcome",
+        ["endpoint", "provider", "outcome"],
+        registry=REGISTRY,
+    )
+
     # R7 recap two-pass observability (2026-06-30 architecture review, Phase 1).
     # LLM_RECAP_PASS_CALLS — outcome of each recap pass (pass-1 story model
     # health + pass-2 scene selection). Label `phase` is story|recap (NOT `pass`
@@ -342,6 +354,7 @@ else:
     CACHE_LOOKUPS_TOTAL = _NoOpMetric()        # type: ignore[assignment]
     WHISPER_TRANSCRIBE_DURATION = _NoOpMetric()  # type: ignore[assignment]
     DB_WRITES_TOTAL = _NoOpMetric()            # type: ignore[assignment]
+    CONTENT_PREVIEW_TOTAL = _NoOpMetric()      # type: ignore[assignment]
 
 
 # ── Shared cache-instrumentation decorator ───────────────────────────────────

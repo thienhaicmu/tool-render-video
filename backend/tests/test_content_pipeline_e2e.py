@@ -21,6 +21,13 @@ from pathlib import Path
 
 import pytest
 
+# CM-6: synthesize_scene_narration moved from content_pipeline into the extracted
+# scene_stage, so the tests patch it there (render_one_scene looks it up in
+# scene_stage's namespace).
+import app.features.render.engine.stages.content.scene_stage as scene_stage
+# CM-6: plan resolution (select_content_plan call) moved into plan_stage.
+import app.features.render.engine.stages.content.plan_stage as plan_stage
+
 
 def _ffmpeg_ok() -> bool:
     try:
@@ -119,8 +126,8 @@ def test_run_content_end_to_end(_content_sandbox, monkeypatch):
     output_dir = _content_sandbox["output_dir"]
 
     # Mock the AI director + TTS (no network); FFmpeg stays real.
-    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())
-    monkeypatch.setattr(cp, "synthesize_scene_narration", _fake_synth_factory())
+    monkeypatch.setattr(plan_stage, "select_content_plan", lambda **k: _make_plan())
+    monkeypatch.setattr(scene_stage, "synthesize_scene_narration", _fake_synth_factory())
 
     payload = RenderRequest(
         channel_code="content-e2e",
@@ -184,8 +191,8 @@ def test_run_content_uses_approved_plan_override(_content_sandbox, monkeypatch):
 
     def _boom(**_k):
         raise AssertionError("select_content_plan must be skipped when a plan override is present")
-    monkeypatch.setattr(cp, "select_content_plan", _boom)
-    monkeypatch.setattr(cp, "synthesize_scene_narration", _fake_synth_factory())
+    monkeypatch.setattr(plan_stage, "select_content_plan", _boom)
+    monkeypatch.setattr(scene_stage, "synthesize_scene_narration", _fake_synth_factory())
 
     approved = _make_plan().to_json()
     payload = RenderRequest(
@@ -218,7 +225,7 @@ def test_run_content_partial_success_status(_content_sandbox, monkeypatch):
 
     job_id = str(uuid.uuid4())
     output_dir = _content_sandbox["output_dir"]
-    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())
+    monkeypatch.setattr(plan_stage, "select_content_plan", lambda **k: _make_plan())
 
     def _synth_fail_first(*, scene, job_id, out_path, **kwargs):
         if getattr(scene, "index", 0) == 0:
@@ -232,7 +239,7 @@ def test_run_content_partial_success_status(_content_sandbox, monkeypatch):
             capture_output=True, check=True, timeout=60,
         )
         return (out_path, 6.0)
-    monkeypatch.setattr(cp, "synthesize_scene_narration", _synth_fail_first)
+    monkeypatch.setattr(scene_stage, "synthesize_scene_narration", _synth_fail_first)
 
     payload = RenderRequest(
         channel_code="content-e2e", render_format="content",
@@ -259,8 +266,8 @@ def test_run_content_honors_cancel(_content_sandbox, monkeypatch):
 
     job_id = str(uuid.uuid4())
     output_dir = _content_sandbox["output_dir"]
-    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())
-    monkeypatch.setattr(cp, "synthesize_scene_narration", _fake_synth_factory())
+    monkeypatch.setattr(plan_stage, "select_content_plan", lambda **k: _make_plan())
+    monkeypatch.setattr(scene_stage, "synthesize_scene_narration", _fake_synth_factory())
     monkeypatch.setattr(cp.cancel_registry, "is_cancelled", lambda jid: True)
 
     payload = RenderRequest(
@@ -299,11 +306,11 @@ def test_run_content_resumes_existing_scenes(_content_sandbox, monkeypatch):
     _make_av(str(scenes_dir / "scene_001.mp4"))
     _make_av(str(scenes_dir / "scene_002.mp4"))
 
-    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())
+    monkeypatch.setattr(plan_stage, "select_content_plan", lambda **k: _make_plan())
 
     def _boom_synth(**k):
         raise AssertionError("resume must skip TTS for already-rendered scenes")
-    monkeypatch.setattr(cp, "synthesize_scene_narration", _boom_synth)
+    monkeypatch.setattr(scene_stage, "synthesize_scene_narration", _boom_synth)
 
     payload = RenderRequest(
         channel_code="content-e2e", render_format="content", content_script="x",
@@ -328,7 +335,7 @@ def test_run_content_no_plan_fails_cleanly(_content_sandbox, monkeypatch):
 
     job_id = str(uuid.uuid4())
     output_dir = _content_sandbox["output_dir"]
-    monkeypatch.setattr(cp, "select_content_plan", lambda **k: None)
+    monkeypatch.setattr(plan_stage, "select_content_plan", lambda **k: None)
 
     payload = RenderRequest(
         channel_code="content-e2e",
@@ -344,6 +351,57 @@ def test_run_content_no_plan_fails_cleanly(_content_sandbox, monkeypatch):
         )
     # No .mp4 delivered.
     assert not list(output_dir.rglob("*.mp4"))
+
+
+@_NEEDS_FFMPEG
+def test_run_content_resume_prefers_persisted_plan(_content_sandbox, monkeypatch):
+    """CM-3: on resume, the persisted ContentPlan checkpoint (content_plan_json)
+    wins over BOTH the payload's content_plan_override AND the AI Director — so
+    resume renders the exact plan whose scenes are keyed on disk, never a
+    re-planned/reordered one."""
+    from app.models.schemas import RenderRequest
+    from app.domain.content_plan import ContentPlan, ContentScene
+    import app.features.render.engine.pipeline.content_pipeline as cp
+    from app.db.jobs_repo import upsert_job, update_content_plan, get_job
+
+    job_id = str(uuid.uuid4())
+    output_dir = _content_sandbox["output_dir"]
+
+    # The persisted checkpoint: 2 scenes, a distinctive topic. Seed the job row
+    # first (update_content_plan is an UPDATE), then persist the plan.
+    persisted = _make_plan()  # topic "Sao Hoa", 2 scenes
+    upsert_job(job_id, "render", "content-e2e", "interrupted", {}, {})
+    update_content_plan(job_id, persisted.to_json())
+
+    # A DIFFERENT override in the payload (1 scene, other topic) — must LOSE to the
+    # persisted plan on resume.
+    override = ContentPlan(
+        topic="OverrideShouldNotWin", language="vi-VN",
+        scenes=[ContentScene(index=0, role="hook", narration="khong dung cai nay")],
+    ).to_json()
+
+    def _boom(**_k):
+        raise AssertionError("resume must use the persisted plan, not the AI Director")
+    monkeypatch.setattr(plan_stage, "select_content_plan", _boom)
+    monkeypatch.setattr(scene_stage, "synthesize_scene_narration", _fake_synth_factory())
+
+    payload = RenderRequest(
+        channel_code="content-e2e", render_format="content",
+        content_script="ignored on resume",
+        content_plan_override=override,
+        content_background_kind="color", content_background_value="#101820",
+        output_dir=str(output_dir / "content-resume-plan"),
+        aspect_ratio="9:16", output_fps=30, add_subtitle=True, voice_enabled=False,
+    )
+    cp.run_content(job_id=job_id, payload=payload, resume_mode=True,
+                   load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None)
+
+    row = get_job(job_id)
+    assert row is not None and row["status"] == "completed", row and row["status"]
+    result = json.loads(row.get("result_json") or "{}")
+    # The persisted plan (2 scenes, "Sao Hoa") was used — NOT the 1-scene override.
+    assert result.get("content_topic") == "Sao Hoa"
+    assert result.get("selected_segments_count") == 2
 
 
 @_NEEDS_FFMPEG
@@ -364,8 +422,8 @@ def test_run_content_auto_bgm_by_mood(_content_sandbox, monkeypatch):
         capture_output=True, check=True, timeout=60,
     )
 
-    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())  # plan.bgm_mood="epic"
-    monkeypatch.setattr(cp, "synthesize_scene_narration", _fake_synth_factory())
+    monkeypatch.setattr(plan_stage, "select_content_plan", lambda **k: _make_plan())  # plan.bgm_mood="epic"
+    monkeypatch.setattr(scene_stage, "synthesize_scene_narration", _fake_synth_factory())
     # The auto-pick reuses config._pick_bgm_file (imported lazily inside run_content).
     monkeypatch.setattr("app.core.config._pick_bgm_file", lambda mood: str(bgm))
 
@@ -401,8 +459,8 @@ def test_run_content_writes_thumbnail(_content_sandbox, monkeypatch):
 
     job_id = str(uuid.uuid4())
     output_dir = _content_sandbox["output_dir"]
-    monkeypatch.setattr(cp, "select_content_plan", lambda **k: _make_plan())
-    monkeypatch.setattr(cp, "synthesize_scene_narration", _fake_synth_factory())
+    monkeypatch.setattr(plan_stage, "select_content_plan", lambda **k: _make_plan())
+    monkeypatch.setattr(scene_stage, "synthesize_scene_narration", _fake_synth_factory())
 
     payload = RenderRequest(
         channel_code="content-e2e", render_format="content", content_script="x",

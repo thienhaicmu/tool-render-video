@@ -33,6 +33,18 @@ Cache dir cũng nhận: `XDG_CACHE_HOME`, `TORCH_HOME`, `HF_HOME`,
 | `ENABLE_DEVTOOLS` | `0` (off) | Mount `POST /api/dev/command` (chạy shell, không auth). Chỉ mount khi `1` **và** bind loopback (fail-closed). Không bao giờ bật ở production |
 | `ENABLE_V2` | `1` | Thử mount router `v2.*` (module v2 hiện không có trong source → import fail êm, log warning) |
 
+### Content Studio preview guard (CM-1, 2026-07-07)
+
+Các endpoint `/api/content/visual/preview` + `/api/content/narration/preview` **không có auth** (loopback) và một visual preview có thể gọi provider **trả phí** (Imagen/Veo) — 1 asset mỗi lần bấm. Ba guard per-process, in-memory:
+
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `CONTENT_PREVIEW_RATE_PER_MIN` | `20` | Rate limit dùng chung cho cả hai endpoint (call/phút). `0` = tắt. Vượt → `429` |
+| `CONTENT_PREVIEW_DAILY_CAP` | `0` (unlimited) | Trần số visual preview **trả phí** mỗi ngày (chỉ đếm khi asset thực sự do provider paid tạo, KHÔNG tính khi fallback về local). Vượt → `429` |
+| `CONTENT_PREVIEW_PAID_DISABLED` | `0` | `1` = chặn hẳn provider paid (`ai_image`/`ai_video`) ở preview → `403`; nguồn free (`stock`/`ai_image_free`) không bị ảnh hưởng |
+
+Quan sát: counter Prometheus `content_preview_total{endpoint,provider,outcome}` (`outcome ∈ ok|rate_limited|budget_capped|paid_disabled|failed`) trên `/metrics`.
+
 ## 3. Hàng đợi job & tài nguyên
 
 | Biến | Mặc định | Ý nghĩa |
@@ -120,6 +132,20 @@ burst a free-tier RPM limit and fail → narration falls back / loses reaction):
 | `LLM_REWRITE_MIN_INTERVAL_SEC` | `0` | Khoảng cách tối thiểu giữa 2 lời gọi rewrite (giây). Vd `4.0` cho ~15 RPM free tier |
 | `*_REWRITE_TEMPERATURE` | `0.85` | Nhiệt độ rewrite (gemini/openai/claude) |
 
+### Content Mode planning provider (CM-2, 2026-07-07)
+
+Content Director (`render_format="content"`) giờ chạy trên orchestrator dùng chung `content_director.py` → cả **gemini / openai / claude** đều lập được ContentPlan, nên `LLM_FALLBACK_ENABLED=1` fallback qua provider khác **hoạt động thật** (trước chỉ gemini). Gate two-pass CU-4 (`CONTENT_MULTIPASS`, `CONTENT_MULTIPASS_MIN_CHARS`) nay đọc ở `content_director` cho mọi provider.
+
+| Env | Mặc định | Ý nghĩa |
+|-----|----------|---------|
+| `CONTENT_PLAN_MODE` | `fast` | CM-7: `fast` = 1 pass plan (mặc định, không đổi). `quality` = thêm 1 pass narration-refine (tái dùng prompt refine sẵn có qua content_director — không thêm prompt) để lời kể mượt scene→scene + khớp thời lượng. **Experimental** — nên đo bằng ai_eval trước khi bật default |
+| `CONTENT_PLAN_REPAIR` | `1` | CM-8: khi parse plan hỏng cả sau salvage, chạy 1 vòng LLM-repair (model tự sửa JSON) rồi parse lại. `0` = tắt. Prompt version log qua `content_director` (`CONTENT_PLAN_PROMPT_VERSION`) |
+| `OPENAI_CONTENT_MAX_TOKENS` | `8192` | Token tối đa cho plan Content (lớn hơn story vì plan nhiều scene) |
+| `OPENAI_CONTENT_TEMPERATURE` | `0.5` | Nhiệt độ plan Content (OpenAI) |
+| `CLAUDE_CONTENT_MAX_TOKENS` | `8192` | Token tối đa cho plan Content (Claude) |
+| `CLAUDE_CONTENT_TEMPERATURE` | `0.5` | Nhiệt độ plan Content (Claude) |
+| `CLAUDE_CONTENT_CACHE` | `1` | Prompt caching (ephemeral) cho lời gọi plan Content của Claude |
+
 ## 7. Download (yt-dlp)
 
 | Biến | Ý nghĩa |
@@ -138,6 +164,7 @@ burst a free-tier RPM limit and fail → narration falls back / loses reaction):
 | `DB_TIMEOUT` | `30` | Timeout kết nối SQLite (giây) |
 | `JOB_RETENTION_DAYS` | `0` | Xoá job non-active quá tuổi. `0` = tắt. UI Settings ghi đè qua DB |
 | `CLEANUP_INTERVAL_SEC` | `1800` | Chu kỳ vòng cleanup nền |
+| `CONTENT_RESUME_KEEP_HOURS` | `72` | CM-4: giữ thư mục temp của job `interrupted`/`paused` (theo mtime) để `/resume` tái dùng scene đã render, thay vì render lại. Quá hạn vẫn prune (plan còn trong DB). `0` = tắt (hành vi trước CM-4) |
 | `LOG_KEEP_LAST` | `30` | Giữ N log job gần nhất |
 | `LOG_KEEP_DAYS` | `10` | Xoá log job cũ hơn |
 | `LOG_LEVEL` | — | Mức log |
