@@ -274,7 +274,7 @@ CM-1, CM-9, CM-10, CM-11 là LOW tier → giao Developer trực tiếp.
 | CM-5 | ⏸️ DEFERRED → Wave 4 | 2026-07-07 | Điều tra CM-3/4 cho thấy `sid` KHÔNG cần cho resume (index đã dày + ổn định khi resume cùng plan). Giá trị chính là React/drag key → gộp với CM-11 (timeline). Đảo phụ thuộc: CM-5 giờ đi cùng CM-11. |
 | CM-6 | ⬜ TODO | — | — |
 | CM-7 | ⬜ TODO | — | — |
-| CM-8 | ⬜ TODO | — | — |
+| CM-8 | ✅ DONE | 2026-07-07 | **Scope tinh gọn** (loader đã defensive → bỏ schema-validate thừa): (1) prompt version `CONTENT_PLAN_PROMPT_VERSION="v3"` log qua content_director; (2) LLM-repair 1 vòng khi parse hỏng cả sau salvage (`CONTENT_PLAN_REPAIR=1`) — recover plan thay vì fail job. HIGH tier, chỉ chạm `content_director.py` + `content_prompts.py` (tránh CRITICAL). Test `test_content_plan_repair.py` (5). AI-path regression 492 passed. Chưa commit. |
 | CM-9 | ✅ DONE | 2026-07-07 | Tách `ContentStudio.tsx` (1342 → 268) thành cấu trúc phẳng: `types.ts`, `shared.tsx`, `ScriptPhase.tsx` (315), `SceneRow.tsx` (180), `ReviewPhase.tsx` (220), `ContentMonitor.tsx` (216). Mỗi file <400 dòng, không đổi logic. `tsc -b` sạch; `npm run build` OK. Chưa commit build artifacts static-v2 (sinh ra — commit riêng). |
 | CM-10 | ⬜ TODO | — | — |
 | CM-11 | ⬜ TODO | — | — |

@@ -138,6 +138,7 @@ Content Director (`render_format="content"`) giờ chạy trên orchestrator dù
 
 | Env | Mặc định | Ý nghĩa |
 |-----|----------|---------|
+| `CONTENT_PLAN_REPAIR` | `1` | CM-8: khi parse plan hỏng cả sau salvage, chạy 1 vòng LLM-repair (model tự sửa JSON) rồi parse lại. `0` = tắt. Prompt version log qua `content_director` (`CONTENT_PLAN_PROMPT_VERSION`) |
 | `OPENAI_CONTENT_MAX_TOKENS` | `8192` | Token tối đa cho plan Content (lớn hơn story vì plan nhiều scene) |
 | `OPENAI_CONTENT_TEMPERATURE` | `0.5` | Nhiệt độ plan Content (OpenAI) |
 | `CLAUDE_CONTENT_MAX_TOKENS` | `8192` | Token tối đa cho plan Content (Claude) |

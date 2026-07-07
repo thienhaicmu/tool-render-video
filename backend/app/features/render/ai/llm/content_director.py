@@ -25,7 +25,9 @@ from typing import Callable, Optional
 
 from app.features.render.ai.llm.content_prompts import (
     build_content_plan_prompt,
+    build_content_plan_repair_prompt,
     build_story_bible_prompt,
+    CONTENT_PLAN_PROMPT_VERSION,
 )
 from app.features.render.ai.llm.content_parser import (
     parse_content_plan_response,
@@ -96,8 +98,9 @@ def run_content_director(
             script, target_duration_sec, target_language, tone, bible=bible,
         )
         logger.info(
-            "content_director[%s]: calling content target_dur=%.0fs lang=%s in_chars=%d grounded=%s",
-            _p, float(target_duration_sec or 0.0), target_language, len(script), bible is not None,
+            "content_director[%s]: calling content prompt=%s target_dur=%.0fs lang=%s in_chars=%d grounded=%s",
+            _p, CONTENT_PLAN_PROMPT_VERSION, float(target_duration_sec or 0.0),
+            target_language, len(script), bible is not None,
         )
         raw = call_fn(system_prompt, user_prompt)
         if not raw:
@@ -105,7 +108,22 @@ def run_content_director(
             return None
         plan = parse_content_plan_response(raw, target_duration_sec)
         if plan is None:
-            return None
+            # CM-8: one bounded repair pass — ask the model to fix its own
+            # malformed/truncated JSON, then parse again. Recovers a plan the
+            # deterministic salvage couldn't, instead of failing the render.
+            # Kill-switch CONTENT_PLAN_REPAIR=0. Best-effort — never raises.
+            if raw and os.getenv("CONTENT_PLAN_REPAIR", "1") == "1":
+                try:
+                    _rsys, _ruser = build_content_plan_repair_prompt(raw)
+                    _fixed = call_fn(_rsys, _ruser)
+                    if _fixed:
+                        plan = parse_content_plan_response(_fixed, target_duration_sec)
+                        if plan is not None:
+                            logger.info("content_director[%s]: plan recovered via repair pass", _p)
+                except Exception as _repexc:
+                    logger.info("content_director[%s]: repair pass failed (%s)", _p, _repexc)
+            if plan is None:
+                return None
 
         # Assemble: stamp the Bible + pass-A metadata, then deterministic CU-5/CU-6.
         if bible is not None and plan.story_bible.is_empty():
