@@ -62,6 +62,12 @@ _CONTENT_WHISPER_MODEL: str = (os.getenv("CONTENT_WHISPER_MODEL", "base").strip(
 _SRT_TIME_LINE_RE = re.compile(r"(\d\d:\d\d:\d\d,\d\d\d)\s*-->\s*(\d\d:\d\d:\d\d,\d\d\d)")
 
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…。！？])\s+")
+# W5-5: split an over-long sentence caption at a clause boundary (comma etc.) so
+# a long single sentence doesn't sit on screen as one wall of text for the whole
+# scene. Readability target ≈ one caption line. Timing stays char-proportional
+# (consistent with the plan's ~15 chars/sec model).
+_CLAUSE_SPLIT_RE = re.compile(r"(?<=[,;:—–])\s+")
+_CAPTION_CHAR_TARGET: int = max(16, int(os.getenv("CONTENT_CAPTION_CHARS", "42")))
 
 
 def probe_audio_duration(path: str) -> float:
@@ -190,15 +196,47 @@ def _srt_time(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{sec:02d},{ms:03d}"
 
 
+def _refine_long_cues(parts: list[str], max_cues: int) -> list[str]:
+    """W5-5 — while under ``max_cues``, sub-split the longest over-target caption
+    at its clause boundary nearest the middle (comma/semicolon/…), so a long
+    sentence becomes a few readable lines instead of one wall of text. A cue with
+    no clause boundary is left whole (can't split cleanly without word timings).
+    Preserves chronological order. Never raises."""
+    out = list(parts)
+    try:
+        while len(out) < max_cues:
+            idx, longest = -1, _CAPTION_CHAR_TARGET
+            for k, c in enumerate(out):
+                if len(c) > longest and _CLAUSE_SPLIT_RE.search(c):
+                    idx, longest = k, len(c)
+            if idx < 0:
+                break
+            c = out[idx]
+            cuts = [m.end() for m in _CLAUSE_SPLIT_RE.finditer(c)]
+            mid = len(c) / 2.0
+            cut = min(cuts, key=lambda p: abs(p - mid))
+            a, b = c[:cut].strip(), c[cut:].strip()
+            if not a or not b:
+                break
+            out[idx:idx + 1] = [a, b]
+        return out
+    except Exception:
+        return parts
+
+
 def _split_cues(text: str, max_cues: int) -> list[str]:
-    """Split narration into up to ``max_cues`` caption chunks by sentence, then by
-    length if there are too few. Never raises."""
+    """Split narration into up to ``max_cues`` caption chunks by sentence, then
+    sub-split over-long sentences at clause boundaries (W5-5) if there is headroom,
+    and finally merge if there are too many. Never raises."""
     t = " ".join((text or "").split())
     if not t:
         return []
     parts = [p.strip() for p in _SENTENCE_SPLIT_RE.split(t) if p.strip()]
     if not parts:
         parts = [t]
+    # W5-5: improve readability of long sentences before the merge step.
+    if len(parts) < max_cues:
+        parts = _refine_long_cues(parts, max_cues)
     if len(parts) > max_cues:
         # Merge neighbours until we're within the cap (keeps chronological order).
         while len(parts) > max_cues:
