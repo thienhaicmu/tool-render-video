@@ -12,6 +12,7 @@ import {
 } from '../../api/content'
 import { Stepper, HeroHeader, sceneAudit } from './shared'
 import { SceneRow } from './SceneRow'
+import { Timeline } from './Timeline'
 import { _PROVIDER_LABELS, type Config, type VoiceCfg, type VisualCfg } from './types'
 
 export function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvider, targetDuration, aspectApi, imagenTier, voice, onBack, onApprove, undo, redo, canUndo, canRedo }: {
@@ -56,6 +57,17 @@ export function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visua
   function addScene() {
     setPlan({ ...plan, scenes: [...plan.scenes, { index: plan.scenes.length, role: 'explain', narration: '', emotion: 'normal', reading_speed: 1.0 }] })
   }
+  // CM-11: general drag reorder (Timeline) — move scene `from` to position `to`.
+  function reorderScene(from: number, to: number) {
+    if (from === to || from < 0 || to < 0 || from >= plan.scenes.length || to >= plan.scenes.length) return
+    const next = [...plan.scenes]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    setPlan({ ...plan, scenes: next })
+  }
+  function scrollToScene(i: number) {
+    document.getElementById(`cs-scene-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   const canRender = plan.scenes.some((s) => (s.narration || '').trim()) && !busy
 
@@ -78,6 +90,11 @@ export function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visua
         <CostEstimatePanel vi={vi} plan={plan} visualProvider={visualProvider} targetDuration={targetDuration} />
       )}
 
+      {plan.scenes.length > 1 && (
+        <Timeline vi={vi} plan={plan} targetDuration={targetDuration}
+          onReorder={reorderScene} onSelect={scrollToScene} />
+      )}
+
       <div className="cs-row" style={{ gap: 6, justifyContent: 'flex-end' }}>
         <Button variant="ghost" size="sm" disabled={!canUndo} onClick={undo} title="Ctrl+Z">
           ↶ {vi ? 'Hoàn tác' : 'Undo'}
@@ -89,8 +106,10 @@ export function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visua
 
       <div className="cs-scene-list">
         {plan.scenes.map((s, i) => (
-          <SceneRow key={i} vi={vi} scene={s} index={i} total={plan.scenes.length} voice={voice} visualCfg={visualCfg}
-            onChange={(patch) => updateScene(i, patch)} onRemove={() => removeScene(i)} onMove={(d) => moveScene(i, d)} />
+          <div key={i} id={`cs-scene-${i}`}>
+            <SceneRow vi={vi} scene={s} index={i} total={plan.scenes.length} voice={voice} visualCfg={visualCfg}
+              onChange={(patch) => updateScene(i, patch)} onRemove={() => removeScene(i)} onMove={(d) => moveScene(i, d)} />
+          </div>
         ))}
         <div><Button variant="ghost" size="sm" onClick={addScene}>+ {vi ? 'Thêm cảnh' : 'Add scene'}</Button></div>
       </div>
