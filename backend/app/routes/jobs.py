@@ -488,10 +488,12 @@ def api_get_job_recap_plan(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     _empty = {"job_id": job_id, "available": False, "episodes": [], "scenes": []}
     try:
-        # Lazy import — recap_pipeline pulls the render engine; keep it off the
-        # route-import path so mounting jobs.py never drags engine deps in.
+        # Lazy import of the PURE projection (recap_scoring, no engine deps) —
+        # NOT recap_pipeline, which pulls the whole render engine (cv2/whisper/…)
+        # at import time and would make this endpoint fail on any install
+        # missing an engine dep. Kept lazy so mounting jobs.py stays light.
         from app.domain.recap_plan import RecapPlan
-        from app.features.render.engine.pipeline.recap_pipeline import (
+        from app.features.render.engine.pipeline.recap_scoring import (
             _scored_from_recap_plan,
         )
 
