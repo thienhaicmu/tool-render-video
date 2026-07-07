@@ -230,6 +230,22 @@ def run_content(
             payload, scenes, visual_provider,
         )
 
+        # W5-6: for the word-by-word subtitle path, synthesize all narrations and
+        # transcribe the concatenation ONCE (word timings split back per scene) —
+        # ~2.2× cheaper than a Whisper pass per scene. Best-effort: any scene not
+        # covered falls back to the per-scene synth+transcribe in the render loop.
+        _pre_audio: dict = {}
+        _pre_word_srt: dict = {}
+        if _word_by_word and add_subtitle:
+            try:
+                from app.features.render.engine.stages.content.narration_stage import (
+                    prepare_narration_word_timings,
+                )
+                _pre_audio, _pre_word_srt = prepare_narration_word_timings(ctx, scenes)
+            except Exception as _npexc:
+                logger.warning("content: narration pre-pass errored (%s) — per-scene path", _npexc)
+                _pre_audio, _pre_word_srt = {}, {}
+
         def _collect(r: dict) -> None:
             if r.get("clip"):
                 _results[int(r["idx"])] = r["clip"]
@@ -244,7 +260,8 @@ def run_content(
             for i, scene in enumerate(scenes, start=1):
                 if _cancel_cb():
                     raise cancel_registry.JobCancelledError()
-                _collect(render_one_scene(ctx, plan, i, scene, _scene_providers.get(i, visual_provider)))
+                _collect(render_one_scene(ctx, plan, i, scene, _scene_providers.get(i, visual_provider),
+                                          pre_audio=_pre_audio.get(i), pre_word_srt=_pre_word_srt.get(i)))
                 _done += 1
                 _set_stage(JobStage.RENDERING, 40 + int(45 * _done / max(1, total_parts)),
                            f"Rendered scene {_done}/{total_parts}")
@@ -256,7 +273,9 @@ def run_content(
                 for i, scene in enumerate(scenes, start=1):
                     if _cancel_cb():
                         break  # stop submitting; running futures self-check cancel
-                    _fut[_ex.submit(render_one_scene, ctx, plan, i, scene, _scene_providers.get(i, visual_provider))] = i
+                    _fut[_ex.submit(render_one_scene, ctx, plan, i, scene,
+                                    _scene_providers.get(i, visual_provider),
+                                    _pre_audio.get(i), _pre_word_srt.get(i))] = i
                 for _f in as_completed(_fut):
                     _i = _fut[_f]
                     try:

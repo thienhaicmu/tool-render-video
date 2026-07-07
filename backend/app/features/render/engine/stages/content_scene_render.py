@@ -265,31 +265,55 @@ def _shift_srt(srt_path: str, offset_sec: float) -> None:
     Path(srt_path).write_text("\n".join(out), encoding="utf-8")
 
 
+def _word_srt_to_ass(
+    word_srt: str, out_ass: str, width: int, height: int,
+    style: str, offset_sec: float, emphasis=None,
+) -> bool:
+    """Render a 0-based word-level SRT to a CapCut word-by-word ASS, shifted by
+    ``offset_sec`` (the scene's pause_before) so it syncs with the adelay'd
+    narration. Copies the input to a scratch file so the caller's SRT is not
+    mutated. Returns False on any failure. Never raises (Sacred Contract #3)."""
+    scratch = str(Path(out_ass).with_suffix(".word.srt"))
+    try:
+        import shutil as _sh
+        from app.features.render.engine.subtitle.generator.ass_capcut import srt_to_ass_capcut
+        _sh.copyfile(word_srt, scratch)
+        if not Path(scratch).exists() or Path(scratch).stat().st_size <= 0:
+            return False
+        if offset_sec and offset_sec > 0:
+            _shift_srt(scratch, float(offset_sec))
+        srt_to_ass_capcut(
+            scratch, out_ass, style=(style or ""),
+            play_res_x=int(width), play_res_y=int(height),
+            emphasis=emphasis,   # D2
+        )
+        return Path(out_ass).exists() and Path(out_ass).stat().st_size > 0
+    except Exception as exc:
+        logger.info("content_scene_render: word-srt→ass failed (%s) — sentence SRT fallback", exc)
+        return False
+    finally:
+        try:
+            Path(scratch).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 def _build_word_ass(
     audio_path: str, out_ass: str, width: int, height: int,
     style: str, model_name: str, offset_sec: float,
     emphasis=None,
 ) -> bool:
-    """Transcribe the narration audio with Whisper word timestamps → word-level
-    SRT → CapCut word-by-word ASS (shifted by offset_sec so it syncs with the
-    delayed narration). Returns False on any failure (Whisper missing /
-    transcription error / empty result) so the caller falls back to the sentence
-    SRT. Never raises (Sacred Contract #3 spirit)."""
-    tmp_srt = str(Path(out_ass).with_suffix(".word.srt"))
+    """Transcribe ONE narration clip with Whisper word timestamps → CapCut ASS.
+    The per-scene fallback when W5-6's shared one-shot transcription isn't
+    available (word timings not pre-computed for this scene). Returns False on any
+    failure so the caller falls back to the sentence SRT. Never raises."""
+    tmp_srt = str(Path(out_ass).with_suffix(".tx.srt"))
     try:
         from app.features.render.engine.subtitle.transcription.whisper import transcribe_to_srt
-        from app.features.render.engine.subtitle.generator.ass_capcut import srt_to_ass_capcut
         transcribe_to_srt(str(audio_path), tmp_srt, model_name=model_name, highlight_per_word=True)
         if not Path(tmp_srt).exists() or Path(tmp_srt).stat().st_size <= 0:
             return False
-        if offset_sec and offset_sec > 0:
-            _shift_srt(tmp_srt, float(offset_sec))
-        srt_to_ass_capcut(
-            tmp_srt, out_ass, style=(style or ""),
-            play_res_x=int(width), play_res_y=int(height),
-            emphasis=emphasis,   # D2
-        )
-        return Path(out_ass).exists() and Path(out_ass).stat().st_size > 0
+        return _word_srt_to_ass(tmp_srt, out_ass, width, height, style, offset_sec, emphasis)
     except Exception as exc:
         logger.info(
             "content_scene_render: word-by-word subtitle unavailable (%s) — sentence SRT fallback",
@@ -321,6 +345,7 @@ def render_content_scene(
     ken_burns: bool = False,
     camera: str = "",
     word_by_word: bool = True,
+    word_srt: Optional[str] = None,
 ) -> bool:
     """Compose one Content-Mode scene → ``out_path``. Returns True on success.
 
@@ -369,11 +394,20 @@ def render_content_scene(
         want_srt = False
         if subtitle_enabled:
             if word_by_word and _CONTENT_WORD_BY_WORD:
-                want_ass = _build_word_ass(
-                    narration_audio_path, ass_path, int(width), int(height),
-                    subtitle_style, _CONTENT_WHISPER_MODEL, pause_before,
-                    emphasis=getattr(scene, "emphasis", None),   # D2
-                )
+                # W5-6: prefer the pre-computed word SRT (one shared transcription
+                # for the whole video) over a per-scene Whisper pass.
+                if word_srt and Path(word_srt).exists() and Path(word_srt).stat().st_size > 0:
+                    want_ass = _word_srt_to_ass(
+                        word_srt, ass_path, int(width), int(height),
+                        subtitle_style, pause_before,
+                        emphasis=getattr(scene, "emphasis", None),   # D2
+                    )
+                if not want_ass:
+                    want_ass = _build_word_ass(
+                        narration_audio_path, ass_path, int(width), int(height),
+                        subtitle_style, _CONTENT_WHISPER_MODEL, pause_before,
+                        emphasis=getattr(scene, "emphasis", None),   # D2
+                    )
             if not want_ass:
                 want_srt = _build_scene_srt(
                     str(getattr(scene, "narration", "") or ""), pause_before, ndur, srt_path,

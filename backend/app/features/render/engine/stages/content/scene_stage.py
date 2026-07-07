@@ -27,9 +27,15 @@ from app.features.render.engine.visual import SceneVisualRequest, resolve_scene_
 logger = logging.getLogger("app.render.content")
 
 
-def render_one_scene(ctx: ContentRenderContext, plan, i: int, scene, scene_provider: str) -> dict:
+def render_one_scene(ctx: ContentRenderContext, plan, i: int, scene, scene_provider: str,
+                     pre_audio=None, pre_word_srt=None) -> dict:
     """Compose one scene → {idx, clip|None, error|None}. Resumes from a valid
-    existing scene clip. Raises JobCancelledError on cancel."""
+    existing scene clip. Raises JobCancelledError on cancel.
+
+    W5-6: ``pre_audio`` (audio_path, dur) and ``pre_word_srt`` (0-based word SRT)
+    come from the shared narration pre-pass — when present, this skips the
+    per-scene TTS and per-scene Whisper transcription. Both default None → the
+    original per-scene path (the fallback when the pre-pass didn't cover a scene)."""
     job_id = ctx.job_id
     effective_channel = ctx.effective_channel
     scenes_dir = ctx.scenes_dir
@@ -52,7 +58,8 @@ def render_one_scene(ctx: ContentRenderContext, plan, i: int, scene, scene_provi
     upsert_job_part(job_id, i, part_name, JobPartStage.RENDERING,
                     progress_percent=20, message="synthesizing narration")
 
-    narr = synthesize_scene_narration(
+    # W5-6: reuse the pre-pass narration when available, else synth per-scene.
+    narr = pre_audio if pre_audio is not None else synthesize_scene_narration(
         scene=scene, job_id=job_id, language=ctx.language, gender=ctx.gender,
         voice_id=ctx.voice_id, tts_engine=ctx.tts_engine,
         out_path=str(scenes_dir / f"narr_{i:03d}.mp3"),
@@ -154,7 +161,7 @@ def render_one_scene(ctx: ContentRenderContext, plan, i: int, scene, scene_provi
         narration_audio_path=audio_path, narration_dur=ndur,
         width=ctx.width, height=ctx.height, fps=ctx.fps, sample_rate=ctx.sample_rate,
         out_path=scene_out, work_dir=str(scenes_dir), subtitle_enabled=ctx.add_subtitle,
-        subtitle_style=_sub_style, word_by_word=ctx.word_by_word,
+        subtitle_style=_sub_style, word_by_word=ctx.word_by_word, word_srt=pre_word_srt,
         camera=_camera,
         ken_burns=asset.kind == "image" and (
             _s_ken_burns or asset.provider in ("stock", "ai_image", "ai_image_free")
