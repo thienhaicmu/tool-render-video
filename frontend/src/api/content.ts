@@ -277,3 +277,17 @@ export interface VisualProvidersResult {
 export async function getVisualProviders(): Promise<VisualProvidersResult> {
   return apiFetch<VisualProvidersResult>('/api/content/visual-providers')
 }
+
+// ── Item 7: content-plan polling / reattach fallback ────────────────────────
+// GET /api/jobs/{jobId}/content-plan — the persisted ContentPlan, so the live
+// monitor keeps its rich Director header + scene rows when the `plan` prop is
+// null (job reattached from the topbar badge/dock) or the content.plan.ready WS
+// event never arrives (WS→HTTP-polling downgrade). Mirrors getRecapPlan.
+export interface ContentPlanFetchResult {
+  job_id: string
+  available: boolean
+  plan?: ContentPlan | null
+}
+export async function getContentPlan(jobId: string): Promise<ContentPlanFetchResult> {
+  return apiFetch<ContentPlanFetchResult>(`/api/jobs/${encodeURIComponent(jobId)}/content-plan`)
+}

@@ -11,7 +11,7 @@
  * duration, transition) instead of just role+narration. Data merges the `plan`
  * prop (richest) with the latched content.plan.ready WS event (survives reattach).
  */
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { JobPart } from '@/types/api'
 import type { WsLogEvent } from '../../websocket/events'
 import { useRenderSocket } from '../../hooks/useRenderSocket'
@@ -21,7 +21,7 @@ import { ConicRing } from '../../components/ui/ConicRing'
 import { IconCheck } from '../../components/icons'
 import { revealInFolder } from '../../lib/revealInFolder'
 import { BASE_URL } from '../../api/client'
-import { publishMeta, type ContentPlan, type ContentScene, type PublishMeta } from '../../api/content'
+import { getContentPlan, publishMeta, type ContentPlan, type ContentScene, type PublishMeta } from '../../api/content'
 import { Stepper, HeroHeader, PublishField } from './shared'
 import type { SceneMeta } from './types'
 
@@ -55,13 +55,35 @@ export function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
   const [pubMeta, setPubMeta] = useState<PublishMeta | null>(null)
   const [pubErr, setPubErr] = useState<string | null>(null)
 
+  // Item 7 — when the `plan` prop is null (job reattached from the badge/dock,
+  // or a WS→polling downgrade where content.plan.ready never arrives), fetch the
+  // persisted ContentPlan so the rich monitor still renders. Polls until the
+  // plan is produced (a just-started job persists it a few seconds in); one shot
+  // once terminal. Prop plan present → no fetch.
+  const [fetchedPlan, setFetchedPlan] = useState<ContentPlan | null>(null)
+  useEffect(() => {
+    if (plan || fetchedPlan) return
+    let cancelled = false
+    const tryFetch = async () => {
+      try {
+        const res = await getContentPlan(jobId)
+        if (!cancelled && res.available && res.plan) setFetchedPlan(res.plan)
+      } catch { /* retry next tick / ignore */ }
+    }
+    void tryFetch()
+    if (isTerminal) return () => { cancelled = true }
+    const timer = setInterval(tryFetch, 4000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [jobId, plan, fetchedPlan, isTerminal])
+  const effectivePlan = plan ?? fetchedPlan
+
   async function genPublish() {
-    if (pubBusy || !plan) return
+    if (pubBusy || !effectivePlan) return
     setPubBusy(true); setPubErr(null)
     try {
-      const sample = (plan.scenes || []).slice(0, 6).map((s) => s.narration).join(' ')
+      const sample = (effectivePlan.scenes || []).slice(0, 6).map((s) => s.narration).join(' ')
       const { meta } = await publishMeta({
-        topic: plan.topic, tone: plan.tone, audience: plan.audience,
+        topic: effectivePlan.topic, tone: effectivePlan.tone, audience: effectivePlan.audience,
         voice_language: voiceLang, narration_sample: sample,
       })
       setPubMeta(meta)
@@ -80,17 +102,17 @@ export function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
   )
   const pctx = (planEv?.context ?? {}) as Record<string, unknown>
   const evScenes = (pctx.scenes as SceneMeta[] | undefined) ?? []
-  const planReady = !!planEv || !!plan
+  const planReady = !!planEv || !!effectivePlan
 
   const info = {
-    topic:    plan?.topic || (pctx.topic as string) || '',
-    tone:     plan?.tone || (pctx.tone as string) || '',
-    audience: plan?.audience || (pctx.audience as string) || '',
-    language: plan?.language || (pctx.language as string) || voiceLang,
-    bgm:      plan?.bgm_mood || (pctx.bgm_mood as string) || '',
-    subStyle: plan?.subtitle_style || (pctx.subtitle_style as string) || '',
-    targetSec: plan?.total_target_sec || (pctx.total_target_sec as number) || 0,
-    sceneCount: plan?.scenes.length || evScenes.length || liveParts.length,
+    topic:    effectivePlan?.topic || (pctx.topic as string) || '',
+    tone:     effectivePlan?.tone || (pctx.tone as string) || '',
+    audience: effectivePlan?.audience || (pctx.audience as string) || '',
+    language: effectivePlan?.language || (pctx.language as string) || voiceLang,
+    bgm:      effectivePlan?.bgm_mood || (pctx.bgm_mood as string) || '',
+    subStyle: effectivePlan?.subtitle_style || (pctx.subtitle_style as string) || '',
+    targetSec: effectivePlan?.total_target_sec || (pctx.total_target_sec as number) || 0,
+    sceneCount: effectivePlan?.scenes.length || evScenes.length || liveParts.length,
   }
 
   // The Content Director's plan-phase "thinking" — the newest narration/timing
@@ -169,11 +191,11 @@ export function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
         <DirectorFeed vi={vi} liveEvents={liveEvents} />
       </section>
 
-      <StoryBibleCard vi={vi} plan={plan} />
+      <StoryBibleCard vi={vi} plan={effectivePlan} />
 
       <section className="cs-card cs-card--flush cs-live-wrap">
         <ContentLiveView
-          vi={vi} plan={plan} evScenes={evScenes} liveParts={liveParts}
+          vi={vi} plan={effectivePlan} evScenes={evScenes} liveParts={liveParts}
           assembling={!isTerminal && phaseIdx === 3} assembleMsg={jobMessage || ''}
         />
       </section>
@@ -202,7 +224,7 @@ export function ContentMonitor({ jobId, onNew, vi, plan, voiceLang }: {
                 </Button>
               </>
             )}
-            {ok && plan && (
+            {ok && effectivePlan && (
               <Button variant="ghost" size="sm" disabled={pubBusy} onClick={genPublish}>
                 {pubBusy ? (vi ? 'Đang tạo…' : 'Generating…') : (vi ? '✨ Tạo tiêu đề/mô tả (AI)' : '✨ Generate title/description (AI)')}
               </Button>
