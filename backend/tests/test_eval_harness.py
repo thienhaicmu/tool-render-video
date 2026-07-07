@@ -20,7 +20,7 @@ from ai_eval.dataset import compare_to_baseline, load_cases
 # ── rubrics ──────────────────────────────────────────────────────────────────
 
 def test_every_feature_has_a_rubric_with_faithfulness_gate():
-    assert set(SUPPORTED_FEATURES) == {"clip", "recap", "reaction", "rewrite"}
+    assert set(SUPPORTED_FEATURES) == {"clip", "recap", "reaction", "rewrite", "content"}
     for feature, rubric in RUBRICS.items():
         assert rubric.criteria, f"{feature} has no criteria"
         assert any(c.key == "faithfulness" for c in rubric.criteria)

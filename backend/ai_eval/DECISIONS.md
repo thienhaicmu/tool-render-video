@@ -133,6 +133,30 @@ fewer hold scenes).
 
 ---
 
+## CM-7 — Content Mode quality planning (`CONTENT_PLAN_MODE=quality`), 2026-07-07
+
+**What:** an opt-in second narration-refine pass over the Content Mode plan,
+reusing the existing refine prompt via `content_director` (no new prompt).
+Measured with `ab_content_quality` (new harness): Arm A = fast (base plan),
+Arm B = the SAME base plan with the refine applied, so the delta isolates the
+refine pass alone.
+
+**Result (n=3, 1 script, gemini judge == generator):** NO measured gain.
+- Δ weighted = **−0.111 ± 0.091 → inconclusive**; QUAL wins **0/3**.
+- narration_fluency / time_fit / engagement Δ = **+0.000**; faithfulness **−0.333**.
+- The refine consistently SHORTENS narration (e.g. 1241→967 chars); one run
+  dropped a fact → a faithfulness dip, with no fluency/time-fit uplift to offset.
+
+**Decision:** keep `CONTENT_PLAN_MODE=fast` (default). Per the general rule
+below, a gated flag flips ON only on a measured gain — this shows none (and a
+slight faithfulness-regression risk). Ships OFF = byte-identical, zero risk.
+
+**Caveats:** n=3, single script/topic, single-provider judge (self-preference
+bias). Directional only — re-run with a cross-provider judge + ≥3 scripts before
+any reconsideration.
+
+---
+
 ## Status of the other AI-quality flags
 
 | Flag | Default | Status | Verify with |
@@ -145,6 +169,7 @@ fewer hold scenes).
 | `RANKING_DETERMINISTIC_SPEECH_DENSITY` | OFF | **Gated, unmeasured** — P1-1' | needs clip-quality judge |
 | `RECAP_PER_EPISODE_NARRATION` | OFF | **Gated, unmeasured** — P1-2 | ab_recap (narration_fluency delta) |
 | `CLIP_PROMPT_FOCUSED` | OFF | **Gated, unmeasured** — P1-4 | ab_clip (clip-quality judge) |
+| `CONTENT_PLAN_MODE` | fast (OFF) | **Gated, measured NO-gain** — CM-7 (Δ−0.11, 0/3, faithfulness dip) | ab_content_quality |
 
 **General rule:** flip a gated flag ON only after a measured gain (cross-provider
 judge + ≥3 sources). Until then they ship OFF = byte-identical, zero risk.
