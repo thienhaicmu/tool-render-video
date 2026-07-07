@@ -28,15 +28,9 @@ from app.features.render.ai.llm.recap_parser import (
     parse_episode_narration_response,
 )
 from app.features.render.ai.llm.content_prompts import (
-    build_content_plan_prompt, build_story_bible_prompt, build_publish_meta_prompt,
-    build_content_narration_refine_prompt,
+    build_publish_meta_prompt, build_content_narration_refine_prompt,
 )
-from app.features.render.ai.llm.content_parser import (
-    parse_content_plan_response, parse_story_bible_response, parse_publish_meta_response,
-)
-from app.features.render.ai.llm.content_quality import (
-    validate_and_repair, inject_character_fragments,
-)
+from app.features.render.ai.llm.content_parser import parse_publish_meta_response
 from app.domain.render_plan import RenderPlan
 
 logger = logging.getLogger("app.render.gemini_client")
@@ -585,17 +579,8 @@ def select_recap_plan(
 _CONTENT_MAX_TOKENS = int(os.getenv("GEMINI_CONTENT_MAX_TOKENS", "16384"))
 _CONTENT_TEMPERATURE = float(os.getenv("GEMINI_CONTENT_TEMPERATURE", "0.5"))
 _CONTENT_THINKING_BUDGET = int(os.getenv("GEMINI_CONTENT_THINKING_BUDGET", "1024"))
-# CU-4: two-pass Content Director. Pass A commits a Story Bible (characters +
-# through-line); Pass B writes the plan GROUNDED in it → consistent narration +
-# visuals. Default on. CONTENT_MULTIPASS=0 → legacy single call.
-_CONTENT_MULTIPASS = os.getenv("CONTENT_MULTIPASS", "1") == "1"
-# P2.1 — gate the extra Story Bible call by script length. The bible earns its
-# cost on LONG multi-scene narrative scripts (character canon + through-line); a
-# short script rarely has recurring characters and Pass B alone handles it — so
-# skipping Pass A there saves ~1 LLM call + its latency at no quality loss.
-# Below this many script chars, Pass A is skipped even when CONTENT_MULTIPASS=1.
-# Set CONTENT_MULTIPASS_MIN_CHARS=0 to restore the always-on two-pass behaviour.
-_CONTENT_MULTIPASS_MIN_CHARS = int(os.getenv("CONTENT_MULTIPASS_MIN_CHARS", "1200"))
+# CU-4 two-pass gate (CONTENT_MULTIPASS / CONTENT_MULTIPASS_MIN_CHARS) now lives
+# in the shared content_director — this provider only supplies the content call.
 
 
 def _call_gemini_content_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
@@ -656,55 +641,16 @@ def select_content_plan(
         # unset env → the global _DEFAULT_MODEL (no behaviour change).
         resolved_model = model or os.getenv("CONTENT_LLM_MODEL", "").strip() or _DEFAULT_MODEL
 
-        # ── CU-4 Pass A — Story Bible (best-effort; failure → single-pass) ────
-        bible = None
-        meta: dict = {}
-        if _CONTENT_MULTIPASS and len((script or "").strip()) >= _CONTENT_MULTIPASS_MIN_CHARS:
-            try:
-                _bsys, _buser = build_story_bible_prompt(script, target_language, tone)
-                _braw = _call_gemini_content(api_key, resolved_model, _bsys, _buser)
-                _parsed = parse_story_bible_response(_braw) if _braw else None
-                if _parsed is not None:
-                    bible, meta = _parsed
-                    logger.info(
-                        "gemini_client: content pass-A bible OK characters=%d",
-                        len(bible.characters),
-                    )
-            except Exception as _be:
-                logger.info("gemini_client: content pass-A bible failed (%s) — single-pass", _be)
-                bible = None
-
-        # ── Pass B — the plan, GROUNDED in the Bible when available ──────────
-        system_prompt, user_prompt = build_content_plan_prompt(
-            script, target_duration_sec, target_language, tone, bible=bible,
+        # CM-2: the two-pass CU-4/5/6 orchestration is now the shared, provider-
+        # agnostic content_director — this provider only binds its content call
+        # (key rotation + cache stay inside _call_gemini_content). Behaviour is
+        # unchanged (same prompts, same multipass gate env vars).
+        from app.features.render.ai.llm.content_director import run_content_director
+        return run_content_director(
+            call_fn=lambda _sys, _usr: _call_gemini_content(api_key, resolved_model, _sys, _usr),
+            script=script, target_duration_sec=target_duration_sec,
+            target_language=target_language, tone=tone, provider_label="gemini",
         )
-        logger.info(
-            "gemini_client: calling content model=%s target_dur=%.0fs lang=%s in_chars=%d grounded=%s",
-            resolved_model, float(target_duration_sec or 0.0), target_language, len(script),
-            bible is not None,
-        )
-        raw = _call_gemini_content(api_key, resolved_model, system_prompt, user_prompt)
-        if not raw:
-            logger.warning("gemini_client: empty content response (model=%s)", resolved_model)
-            return None
-        plan = parse_content_plan_response(raw, target_duration_sec)
-        if plan is None:
-            return None
-
-        # Assemble: stamp the Bible + pass-A metadata, then deterministic CU-5/CU-6.
-        if bible is not None and plan.story_bible.is_empty():
-            plan.story_bible = bible
-        for _k in ("topic", "tone", "audience", "video_style"):
-            if meta.get(_k) and not (getattr(plan, _k, "") or "").strip():
-                setattr(plan, _k, meta[_k])
-        plan = validate_and_repair(plan, plan.story_bible)       # CU-5
-        plan = inject_character_fragments(plan, plan.story_bible)  # CU-6
-        logger.info(
-            "gemini_client: content OK model=%s scenes=%d total=%.0fs topic=%r chars=%d",
-            resolved_model, plan.scene_count(), plan.total_target_sec, plan.topic,
-            len(plan.story_bible.characters),
-        )
-        return plan
     except Exception as exc:
         logger.warning("gemini_client: select_content_plan unexpected error %s", exc, exc_info=True)
         return None

@@ -118,11 +118,13 @@ def _mock_call(monkeypatch, bible_out=_BIBLE, plan_out=_PLAN):
 
 
 def test_director_two_pass_grounds_and_injects(monkeypatch):
+    import app.features.render.ai.llm.content_director as director
     gem = _mock_call(monkeypatch)
-    monkeypatch.setattr(gem, "_CONTENT_MULTIPASS", True)
+    # CM-2: the two-pass gate moved from gemini into the shared content_director.
+    monkeypatch.setattr(director, "_CONTENT_MULTIPASS", True)
     # P2.1 gates Pass A by script length; this test exercises the two-pass
     # grounding MECHANISM, so disable the length gate (threshold 0 = always on).
-    monkeypatch.setattr(gem, "_CONTENT_MULTIPASS_MIN_CHARS", 0)
+    monkeypatch.setattr(director, "_CONTENT_MULTIPASS_MIN_CHARS", 0)
     plan = gem.select_content_plan(script="Napoleon lost at Waterloo", api_key="k")
     assert plan is not None
     assert len(plan.story_bible.characters) == 1                  # bible stamped
@@ -133,8 +135,9 @@ def test_director_two_pass_grounds_and_injects(monkeypatch):
 
 
 def test_director_falls_back_when_bible_pass_fails(monkeypatch):
+    import app.features.render.ai.llm.content_director as director
     gem = _mock_call(monkeypatch, bible_out=None)  # bible pass returns nothing
-    monkeypatch.setattr(gem, "_CONTENT_MULTIPASS", True)
+    monkeypatch.setattr(director, "_CONTENT_MULTIPASS", True)
     plan = gem.select_content_plan(script="x", api_key="k")
     assert plan is not None and plan.scene_count() == 2
     assert plan.story_bible.is_empty()  # no bible → ungrounded single-pass result
@@ -142,8 +145,9 @@ def test_director_falls_back_when_bible_pass_fails(monkeypatch):
 
 def test_director_single_pass_when_flag_off(monkeypatch):
     import app.features.render.ai.llm.providers.gemini as gem
+    import app.features.render.ai.llm.content_director as director
     monkeypatch.setattr(gem, "_GENAI_SDK", True)
-    monkeypatch.setattr(gem, "_CONTENT_MULTIPASS", False)
+    monkeypatch.setattr(director, "_CONTENT_MULTIPASS", False)
     calls = {"bible": 0}
 
     def _fake(api_key, model, system, user):

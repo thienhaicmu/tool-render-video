@@ -268,7 +268,7 @@ CM-1, CM-9, CM-10, CM-11 là LOW tier → giao Developer trực tiếp.
 | ID | Trạng thái | Ngày | Commit / Ghi chú |
 |----|-----------|------|------------------|
 | CM-1 | ✅ DONE | 2026-07-07 | Rate limit + paid daily cap + off-switch + Prometheus `content_preview_total`; `content/router.py`, `services/metrics.py`; test `test_content_preview_guard.py` (7 test). Env: `CONTENT_PREVIEW_RATE_PER_MIN`/`_DAILY_CAP`/`_PAID_DISABLED` (docs/CONFIGURATION.md). Chưa commit. |
-| CM-2 | ⬜ TODO | — | — |
+| CM-2 | ✅ DONE | 2026-07-07 | Phương án B — orchestrator dùng chung `ai/llm/content_director.py`; gemini delegate (bit-identical), openai/claude thêm `_call_*_content` + `select_content_plan` → fallback thật. Dọn dead imports/const gemini; gate CU-4 dời sang content_director (cập nhật test multipass_gate + wave2). Test mới `test_content_provider_fallback.py` (7). Env: `OPENAI/CLAUDE_CONTENT_MAX_TOKENS`/`_TEMPERATURE`, `CLAUDE_CONTENT_CACHE`. Full pytest 2568 passed. Chưa commit. |
 | CM-3 | ⬜ TODO | — | — |
 | CM-4 | ⬜ TODO | — | — |
 | CM-5 | ⬜ TODO | — | — |

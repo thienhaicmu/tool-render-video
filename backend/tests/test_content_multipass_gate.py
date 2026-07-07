@@ -15,12 +15,17 @@ from __future__ import annotations
 import json
 
 import app.features.render.ai.llm.providers.gemini as gem
+import app.features.render.ai.llm.content_director as director
 
 
 def _install_spy(monkeypatch, threshold: int):
     """Force the two-pass path on, pin the char threshold, and replace the real
     Gemini call with a JSON-returning spy. Returns the list of system prompts
-    seen (one per LLM call)."""
+    seen (one per LLM call).
+
+    CM-2: the two-pass gate moved from gemini into the shared content_director,
+    so the multipass constants are patched there; the raw content call is still
+    the gemini helper the provider binds into content_director."""
     seen: list[str] = []
 
     def _fake_call(api_key, model, system_prompt, user_prompt):
@@ -35,8 +40,8 @@ def _install_spy(monkeypatch, threshold: int):
         })
 
     monkeypatch.setattr(gem, "_GENAI_SDK", True, raising=False)
-    monkeypatch.setattr(gem, "_CONTENT_MULTIPASS", True, raising=False)
-    monkeypatch.setattr(gem, "_CONTENT_MULTIPASS_MIN_CHARS", threshold, raising=False)
+    monkeypatch.setattr(director, "_CONTENT_MULTIPASS", True, raising=False)
+    monkeypatch.setattr(director, "_CONTENT_MULTIPASS_MIN_CHARS", threshold, raising=False)
     monkeypatch.setattr(gem, "_call_gemini_content", _fake_call)
     return seen
 

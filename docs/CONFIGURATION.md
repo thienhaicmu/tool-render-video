@@ -132,6 +132,18 @@ burst a free-tier RPM limit and fail → narration falls back / loses reaction):
 | `LLM_REWRITE_MIN_INTERVAL_SEC` | `0` | Khoảng cách tối thiểu giữa 2 lời gọi rewrite (giây). Vd `4.0` cho ~15 RPM free tier |
 | `*_REWRITE_TEMPERATURE` | `0.85` | Nhiệt độ rewrite (gemini/openai/claude) |
 
+### Content Mode planning provider (CM-2, 2026-07-07)
+
+Content Director (`render_format="content"`) giờ chạy trên orchestrator dùng chung `content_director.py` → cả **gemini / openai / claude** đều lập được ContentPlan, nên `LLM_FALLBACK_ENABLED=1` fallback qua provider khác **hoạt động thật** (trước chỉ gemini). Gate two-pass CU-4 (`CONTENT_MULTIPASS`, `CONTENT_MULTIPASS_MIN_CHARS`) nay đọc ở `content_director` cho mọi provider.
+
+| Env | Mặc định | Ý nghĩa |
+|-----|----------|---------|
+| `OPENAI_CONTENT_MAX_TOKENS` | `8192` | Token tối đa cho plan Content (lớn hơn story vì plan nhiều scene) |
+| `OPENAI_CONTENT_TEMPERATURE` | `0.5` | Nhiệt độ plan Content (OpenAI) |
+| `CLAUDE_CONTENT_MAX_TOKENS` | `8192` | Token tối đa cho plan Content (Claude) |
+| `CLAUDE_CONTENT_TEMPERATURE` | `0.5` | Nhiệt độ plan Content (Claude) |
+| `CLAUDE_CONTENT_CACHE` | `1` | Prompt caching (ephemeral) cho lời gọi plan Content của Claude |
+
 ## 7. Download (yt-dlp)
 
 | Biến | Ý nghĩa |

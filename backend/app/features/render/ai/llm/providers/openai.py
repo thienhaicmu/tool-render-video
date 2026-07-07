@@ -537,3 +537,72 @@ def _call_openai_story(api_key: str, model: str, system_prompt: str, user_prompt
     if result is not None:
         llm_cache_put("openai-story", model, system_prompt, user_prompt, result)
     return result
+
+
+# ── CM-2: Content Mode plan call (larger token budget than story — a multi-scene
+# content plan is a big JSON) + a thin select_content_plan that delegates the
+# CU-4/5/6 orchestration to the shared content_director. ─────────────────────
+_CONTENT_MAX_TOKENS = int(os.getenv("OPENAI_CONTENT_MAX_TOKENS", "8192"))
+_CONTENT_TEMPERATURE = float(os.getenv("OPENAI_CONTENT_TEMPERATURE", "0.5"))
+
+
+def _call_openai_content_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _openai.OpenAI(api_key=api_key, timeout=90)
+    kwargs = dict(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        response_format={"type": "json_object"},
+    )
+    if _is_reasoning_model(model):
+        kwargs["max_completion_tokens"] = _CONTENT_MAX_TOKENS
+        if _STORY_REASONING_EFFORT in ("minimal", "low", "medium", "high"):
+            kwargs["reasoning_effort"] = _STORY_REASONING_EFFORT
+    else:
+        kwargs["max_tokens"] = _CONTENT_MAX_TOKENS
+        kwargs["temperature"] = _CONTENT_TEMPERATURE
+    resp = client.chat.completions.create(**kwargs)
+    return resp.choices[0].message.content
+
+
+def _call_openai_content(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    cached = llm_cache_get("openai-content", model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("openai_client: content cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
+        lambda: _call_openai_content_once(api_key, model, system_prompt, user_prompt),
+        label="openai-content",
+    )
+    if result is not None:
+        llm_cache_put("openai-content", model, system_prompt, user_prompt, result)
+    return result
+
+
+def select_content_plan(
+    script: str,
+    target_duration_sec: float = 90.0,
+    target_language: str = "vi-VN",
+    tone: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+) -> Optional["object"]:
+    """Content Mode director (OpenAI) — turn a raw script into a ContentPlan via
+    the shared two-pass content_director. Returns a ContentPlan or None (Sacred
+    Contract #3 — never raises). Enables the cross-provider fallback for Content
+    Mode (previously Gemini-only)."""
+    try:
+        if not _OPENAI_SDK or not api_key or not script or not script.strip():
+            return None
+        resolved_model = model or _DEFAULT_MODEL
+        from app.features.render.ai.llm.content_director import run_content_director
+        return run_content_director(
+            call_fn=lambda _sys, _usr: _call_openai_content(api_key, resolved_model, _sys, _usr),
+            script=script, target_duration_sec=target_duration_sec,
+            target_language=target_language, tone=tone, provider_label="openai",
+        )
+    except Exception as exc:
+        logger.warning("openai_client: select_content_plan unexpected error %s", exc, exc_info=True)
+        return None
