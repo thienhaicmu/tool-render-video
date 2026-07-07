@@ -112,7 +112,7 @@ def test_apply_style_helper():
 
 
 def test_stable_seed_deterministic_and_distinct():
-    from app.features.render.engine.pipeline.content_pipeline import _stable_seed
+    from app.features.render.engine.stages.content.context import stable_seed as _stable_seed
     assert _stable_seed("napoleon") == _stable_seed("napoleon")
     assert _stable_seed("napoleon") != _stable_seed("caesar")
     assert _stable_seed("") == 0

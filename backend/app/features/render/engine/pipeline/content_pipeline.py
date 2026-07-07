@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -70,41 +69,15 @@ from app.features.render.engine.pipeline.render_events import (
     unregister_job_log_dir,
 )
 from app.features.render.engine.stages.recap_assembler import concat_clips
-from app.features.render.engine.stages.content_scene_render import (
-    render_content_scene,
-    synthesize_scene_narration,
-)
-from app.features.render.engine.visual import SceneVisualRequest, resolve_scene_visual
+from app.features.render.engine.stages.content.context import ContentRenderContext, safe_filename
+from app.features.render.engine.stages.content.scene_stage import render_one_scene
 from app.features.render.engine.visual.decision import BudgetTracker, decide_provider
 
 logger = logging.getLogger("app.render.content")
 
 _SAMPLE_RATE = 48000
-_FS_ILLEGAL_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-
-
-def _stable_seed(key: str) -> int:
-    """CU-11 — a stable 31-bit seed from a key (character id / style) so the same
-    subject reproduces a consistent look across scenes. 0 for an empty key."""
-    key = (key or "").strip().lower()
-    if not key:
-        return 0
-    import hashlib
-    return int(hashlib.sha1(key.encode("utf-8", "ignore")).hexdigest()[:8], 16) & 0x7FFFFFFF
-
-
-def _safe_filename(name: str, max_len: int = 120) -> str:
-    """Make an AI-authored title/topic safe to use as a filename stem. Strips
-    illegal chars, collapses whitespace, trims trailing dots/spaces (Windows),
-    caps length. Returns '' if nothing usable survives. Never raises."""
-    try:
-        s = _FS_ILLEGAL_RE.sub(" ", str(name or ""))
-        s = re.sub(r"\s+", " ", s).strip().strip(".").strip()
-        if len(s) > max_len:
-            s = s[:max_len].rsplit(" ", 1)[0].strip() or s[:max_len].strip()
-        return s
-    except Exception:
-        return ""
+# CM-6: _stable_seed / _safe_filename moved to stages/content/context.py (shared
+# by scene_stage); safe_filename is imported above and used below.
 
 
 def run_content(
@@ -339,7 +312,7 @@ def run_content(
         scenes = plan.scenes
         total_parts = len(scenes)
         _output_stem = (
-            _safe_filename(getattr(payload, "title_overlay_text", "") or plan.topic or "")
+            safe_filename(getattr(payload, "title_overlay_text", "") or plan.topic or "")
             or f"content_{job_id[:8]}"
         )
 
@@ -389,6 +362,19 @@ def run_content(
         # MED-3: word-by-word opt-in via highlight_per_word (FE defaults it on).
         _word_by_word = bool(getattr(payload, "highlight_per_word", False))
 
+        # CM-6: gather the render-invariant params into one context so the
+        # per-scene stage takes `ctx` instead of ~15 closure-captured locals.
+        ctx = ContentRenderContext(
+            job_id=job_id, effective_channel=effective_channel, scenes_dir=scenes_dir,
+            width=width, height=height, fps=fps, sample_rate=_SAMPLE_RATE,
+            language=language, gender=gender, voice_id=voice_id, tts_engine=tts_engine,
+            add_subtitle=add_subtitle, word_by_word=_word_by_word,
+            visual_provider=visual_provider, bg_kind=bg_kind, bg_value=bg_value,
+            imagen_tier=(getattr(payload, "content_imagen_tier", "") or ""),
+            subtitle_pick=(getattr(payload, "subtitle_style", "") or ""),
+            cancel_cb=_cancel_cb,
+        )
+
         # CU-8/9: decide the cheapest-sufficient visual provider per scene UP FRONT
         # (budget applied deterministically in scene order) so the parallel loop
         # just executes. Uses est_duration_sec (no TTS needed). Only downgrades a
@@ -414,145 +400,6 @@ def run_content(
         _cap = max(1, min(int(os.getenv("CONTENT_MAX_PARALLEL", "3") or 3), _cpu))
         max_workers = max(1, min(_user_req, _cpu)) if _user_req > 0 else _cap
 
-        def _render_one_scene(i: int, scene) -> dict:
-            """Compose one scene → {idx, clip|None, error|None}. Resumes from a
-            valid existing scene clip. Raises JobCancelledError on cancel."""
-            part_name = f"scene_{i:03d}"
-            scene_out = str(scenes_dir / f"{part_name}.mp4")
-
-            # Resume (disk-truth): reuse a scene clip that already passes QA
-            # (retry keeps scenes_dir since it's only cleaned on success).
-            if Path(scene_out).exists() and Path(scene_out).stat().st_size > 0:
-                _rq = _validate_render_output(Path(scene_out), expect_audio=True)
-                if _rq.get("ok"):
-                    upsert_job_part(job_id, i, part_name, JobPartStage.DONE,
-                                    progress_percent=100,
-                                    duration=float(_rq["metadata"].get("duration") or 0.0),
-                                    output_file=scene_out, message=(scene.role or ""))
-                    return {"idx": i, "clip": scene_out, "error": None}
-
-            if _cancel_cb():
-                raise cancel_registry.JobCancelledError()
-            upsert_job_part(job_id, i, part_name, JobPartStage.RENDERING,
-                            progress_percent=20, message="synthesizing narration")
-
-            narr = synthesize_scene_narration(
-                scene=scene, job_id=job_id, language=language, gender=gender,
-                voice_id=voice_id, tts_engine=tts_engine,
-                out_path=str(scenes_dir / f"narr_{i:03d}.mp3"),
-            )
-            if narr is None:
-                upsert_job_part(job_id, i, part_name, JobPartStage.FAILED,
-                                progress_percent=0, message="TTS failed")
-                _job_log(effective_channel, job_id,
-                         f"Content scene {i} TTS failed — skipped", kind="warning")
-                return {"idx": i, "clip": None, "error": "tts_failed"}
-            audio_path, ndur = narr
-            if _cancel_cb():
-                raise cancel_registry.JobCancelledError()
-
-            # Provider chosen by the CU-8 pre-pass (decision tree + budget). A
-            # per-scene override still resolves via local with the user's asset.
-            _s_source = (getattr(scene, "visual_source", "") or "").strip().lower()
-            _s_ken_burns = bool(getattr(scene, "ken_burns", False))
-            _prov = _scene_providers.get(i, visual_provider)
-            if _s_source in ("color", "image", "video"):
-                _kind, _value = _s_source, (getattr(scene, "visual_path", "") or "").strip()
-            else:
-                _kind, _value = bg_kind, bg_value
-
-            # Stock search (Pexels/Pixabay) wants SHORT keywords, not a full
-            # cinematic prompt — prefer the short visual_hint for stock; AI
-            # generators (Imagen/DALL·E/Veo) want the rich visual_prompt.
-            _visual_query = (
-                (scene.visual_hint or scene.visual_prompt or "")
-                if _prov == "stock"
-                else (scene.visual_prompt or scene.visual_hint or "")
-            )
-            asset = resolve_scene_visual(
-                SceneVisualRequest(
-                    scene_index=i, kind=_kind, value=_value,
-                    prompt=_visual_query,
-                    negative_prompt=(getattr(scene, "negative_prompt", "") or ""),
-                    style=(getattr(plan, "video_style", "") or ""),
-                    # CU-11: seed by the scene's primary character (else the video
-                    # style) so the same subject stays visually consistent.
-                    # CU-11 + B1: stable seed by the scene's character, else the
-                    # plan's video_style, else its topic — so even a character-less
-                    # scene keeps a coherent look across the whole video (never 0).
-                    seed=_stable_seed(
-                        (getattr(scene, "characters", None) or [""])[0]
-                        or (getattr(plan, "video_style", "") or "")
-                        or (getattr(plan, "topic", "") or "")
-                    ),
-                    width=width, height=height, fps=fps, duration_sec=ndur,
-                    work_dir=str(scenes_dir), cancel_check=_cancel_cb,
-                    imagen_tier=(getattr(payload, "content_imagen_tier", "") or ""),
-                ),
-                provider=_prov,
-            )
-            if asset is None:
-                upsert_job_part(job_id, i, part_name, JobPartStage.FAILED,
-                                progress_percent=0, message="visual resolve failed")
-                return {"idx": i, "clip": None, "error": "visual_failed"}
-            # A requested online provider (stock / ai_image / ai_video) that yields
-            # a 'local' asset SILENTLY fell back to the plain background (no key /
-            # no access / API error / empty visual_prompt). Flag it so the user is
-            # told WHY "AI images" produced only backgrounds instead of guessing.
-            _fell_back = _prov != "local" and (asset.provider or "local") == "local"
-            if _fell_back:
-                upsert_job_part(job_id, i, part_name, JobPartStage.RENDERING,
-                                progress_percent=55,
-                                message=f"{_prov} unavailable — using background")
-                _job_log(effective_channel, job_id,
-                         f"Content scene {i}: visual provider '{_prov}' fell back to "
-                         f"local background (no key / no access / error / empty prompt)",
-                         kind="warning")
-            if _cancel_cb():
-                raise cancel_registry.JobCancelledError()
-
-            # Subtitle style precedence (P1.1): the user's explicit UI pick is
-            # authoritative. Only when the user leaves it on "auto" (or empty)
-            # does the AI-chosen style apply — per-scene override first, else the
-            # plan-level suggestion. Fixes the prior order where the AI plan style
-            # silently overrode the user's dropdown choice.
-            _user_pick = (getattr(payload, "subtitle_style", "") or "").strip()
-            if _user_pick and _user_pick.lower() != "auto":
-                _sub_style = _user_pick
-            else:
-                _sub_style = (
-                    (getattr(scene, "subtitle_style", "") or "").strip()
-                    or (getattr(plan, "subtitle_style", "") or "").strip()
-                )
-            # A3: AI-directed camera move (image backgrounds only). "pan" alternates
-            # left/right by scene index for variety. Empty hint → build_background_clip
-            # falls back to the default Ken Burns zoom. Gated by CONTENT_CAMERA_MOTION.
-            _camera = ""
-            if asset.kind == "image" and os.getenv("CONTENT_CAMERA_MOTION", "1") == "1":
-                _ch = (getattr(scene, "camera_hint", "") or "").strip().lower()
-                if _ch == "pan":
-                    _ch = "pan_right" if (i % 2 == 0) else "pan_left"
-                _camera = _ch
-            ok = render_content_scene(
-                scene=scene, background_kind=asset.kind, background_value=asset.value,
-                narration_audio_path=audio_path, narration_dur=ndur,
-                width=width, height=height, fps=fps, sample_rate=_SAMPLE_RATE,
-                out_path=scene_out, work_dir=str(scenes_dir), subtitle_enabled=add_subtitle,
-                subtitle_style=_sub_style, word_by_word=_word_by_word,
-                camera=_camera,
-                ken_burns=asset.kind == "image" and (
-                    _s_ken_burns or asset.provider in ("stock", "ai_image", "ai_image_free")
-                ),
-            )
-            if ok:
-                upsert_job_part(job_id, i, part_name, JobPartStage.DONE,
-                                progress_percent=100, duration=ndur,
-                                output_file=scene_out, message=(scene.role or ""))
-                return {"idx": i, "clip": scene_out, "error": None, "fallback": _fell_back}
-            upsert_job_part(job_id, i, part_name, JobPartStage.FAILED,
-                            progress_percent=0, message="scene render failed")
-            return {"idx": i, "clip": None, "error": "render_failed"}
-
         def _collect(r: dict) -> None:
             if r.get("clip"):
                 _results[int(r["idx"])] = r["clip"]
@@ -567,7 +414,7 @@ def run_content(
             for i, scene in enumerate(scenes, start=1):
                 if _cancel_cb():
                     raise cancel_registry.JobCancelledError()
-                _collect(_render_one_scene(i, scene))
+                _collect(render_one_scene(ctx, plan, i, scene, _scene_providers.get(i, visual_provider)))
                 _done += 1
                 _set_stage(JobStage.RENDERING, 40 + int(45 * _done / max(1, total_parts)),
                            f"Rendered scene {_done}/{total_parts}")
@@ -579,7 +426,7 @@ def run_content(
                 for i, scene in enumerate(scenes, start=1):
                     if _cancel_cb():
                         break  # stop submitting; running futures self-check cancel
-                    _fut[_ex.submit(_render_one_scene, i, scene)] = i
+                    _fut[_ex.submit(render_one_scene, ctx, plan, i, scene, _scene_providers.get(i, visual_provider))] = i
                 for _f in as_completed(_fut):
                     _i = _fut[_f]
                     try:
