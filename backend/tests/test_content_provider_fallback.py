@@ -44,6 +44,9 @@ def test_claude_select_content_plan_produces_plan(monkeypatch):
 
 def test_dispatch_falls_through_gemini_to_openai(monkeypatch):
     monkeypatch.setattr(dispatch, "_LLM_FALLBACK_ENABLED", True, raising=False)
+    # A local .env may set LLM_DISABLED_PROVIDERS=openai,claude — clear it so the
+    # fallback chain actually includes openai (the provider under test here).
+    monkeypatch.setenv("LLM_DISABLED_PROVIDERS", "")
     # Primary gemini yields nothing; openai produces the plan.
     monkeypatch.setattr(gem, "select_content_plan", lambda **k: None)
     monkeypatch.setattr(cla, "select_content_plan", lambda **k: None)
@@ -59,6 +62,9 @@ def test_dispatch_falls_through_gemini_to_openai(monkeypatch):
 
 def test_dispatch_all_providers_none_returns_none(monkeypatch):
     monkeypatch.setattr(dispatch, "_LLM_FALLBACK_ENABLED", True, raising=False)
+    # Exercise the FULL chain (gemini→openai→claude), not just gemini, in case a
+    # local .env disables the fallback providers.
+    monkeypatch.setenv("LLM_DISABLED_PROVIDERS", "")
     for mod in (gem, oai, cla):
         monkeypatch.setattr(mod, "select_content_plan", lambda **k: None)
     plan = dispatch.select_content_plan(provider="gemini", script=_SHORT_SCRIPT, api_key="k")
