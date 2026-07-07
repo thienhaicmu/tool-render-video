@@ -292,4 +292,59 @@ Bản review tổng thể xác nhận CM-1…12 đạt, nhưng còn gap correctn
 | W5-4 | ✅ DONE | 2026-07-07 | Hợp nhất nguồn plan. **Audit:** `result_json.content_plan` (full JSON) có **0 consumer** (backend/FE/test) → bỏ (khử lưu 2× plan/job; plan lấy qua `get_content_plan(job_id)` cùng row = canonical). **Giữ** `content_topic/tone/audience` (rẻ, history, 1 test dùng topic). Approved (bỏ field response payload). finalize_stage (Sacred #1 surface) — full pytest. Docstring ghi canonical. |
 | W5-5 | ✅ DONE | 2026-07-07 | **Đánh giá lại:** heuristic sentence-level thực ra có nguyên tắc (char-proportional nhất quán model ~15 chars/sec, dùng duration thật) — không "crude". Align chính xác cần Whisper (đã có ở word-by-word). Cải thiện THẬT không cần Whisper = **readability**: `_refine_long_cues` sub-split câu dài tại ranh giới mệnh đề (dấu phẩy) khi còn headroom → tránh 1 cue wall-of-text; timing giữ char-proportional. MEDIUM (`content_scene_render.py`). Test `test_content_subtitle_cues.py` (5). Env `CONTENT_CAPTION_CHARS=42`. |
 | W5-6 | ✅ DONE | 2026-07-07 | **Đo trước** (harness tạm): per-scene transcribe = **2.2× chậm** hơn 1 lần (overhead per-call Whisper) → chứng minh có lợi. Thiết kế 2-pha: `narration_stage.prepare_narration_word_timings` synth-all → concat → transcribe **1 lần** (word) → split theo offset → `{i: word_srt}`. `render_one_scene`/`render_content_scene` nhận `pre_audio`/`word_srt` (skip synth+transcribe); default None → **per-scene cũ = fallback** (gate `word_by_word AND add_subtitle`; e2e word_by_word OFF → bit-identical). Xử lý resume (skip scene đã render) + partial fail. CRITICAL-adjacent — Render Edit Protocol, full pytest **2593**. **Runtime-verify:** render thật word_by_word ON → log "one-shot transcription split into 2 scene(s)", completed, video+audio OK. Test `test_content_narration_prepass.py` (5). |
-| W5-7 | ⬜ DEFER | — | (khảo sát) NVENC content — cần máy GPU |
+| W5-7 | ⬜ DEFER (plan sẵn) | 2026-07-07 | NVENC content — **CẦN MÁY GPU** để verify. Máy hiện tại `nvenc_runtime_ready('h264_nvenc')=False` (không có GPU) → không verify được → không ship code blind. Plan thực thi chi tiết ↓. |
+
+---
+
+## W5-7 — Execution plan (DEFERRED, chỉ chạy trên máy có NVIDIA GPU)
+
+> **Tiền đề bắt buộc:** máy có NVIDIA GPU và `nvenc_runtime_ready('h264_nvenc')`
+> trả `True`. Trên máy không GPU, MỌI thứ dưới đây phải fallback về libx264
+> byte-identical. **HIGH tier** — chạm bảo vệ phần cứng NVENC (CLAUDE.md
+> "Performance Protections"). KHÔNG bắt đầu nếu không verify được trên GPU.
+
+### Vì sao content đang CPU-only (giữ nguyên chỗ này)
+- `content_background.py` **libx264 CỐ Ý** — background nhiều & ngắn, không được
+  chiếm session NVENC (comment tại `content_background.py:11`). **KHÔNG đổi.**
+- `audio/mixer.py` (`-c:v copy`), các probe `-f null` → không encode. Giữ nguyên.
+
+### Scope (chỉ 2 chỗ encode-nặng)
+1. **Scene mux burn** — `content_scene_render.py:~485` (`-c:v libx264` khi burn
+   subtitle/overlay; nhánh `-c:v copy` khi không burn thì bỏ qua).
+2. **Assembler xfade** — `content_assembler.py:~115` (xfade luôn re-encode).
+
+### Thiết kế (tái dùng hạ tầng clip — KHÔNG hand-roll semaphore)
+- Chọn codec: `resolve_encoder("h264", "auto")` → `h264_nvenc` khi GPU sẵn sàng,
+  else `libx264`/`qsv` (đã probe runtime). Cờ codec-appropriate:
+  `encoder_video_args(video_crf, video_preset, ...)` + `map_preset_for_encoder`.
+- **Semaphore:** ĐỔI từ raw `subprocess.run` → `_run_ffmpeg_with_retry(cmd)`
+  (`encoder/ffmpeg_helpers.py`). Nó **AUTO-acquire `NVENC_SEMAPHORE`** khi argv
+  chứa codec NVENC (`_argv_uses_nvenc`). Không tự viết acquire → tránh đúng bug
+  "fail-all-sessions". Đây là điểm mấu chốt an toàn.
+- Content render **song song (max 3)** + có thể trùng clip/recap render → semaphore
+  GLOBAL (default 3) bảo vệ tổng. Vì dùng `_run_ffmpeg_with_retry`, tự xử lý.
+- Fallback: `nvenc_runtime_ready=False` → `resolve_encoder` trả libx264 →
+  byte-identical hành vi hiện tại (an toàn trên máy không GPU + trong CI).
+
+### Rủi ro & guard
+| Rủi ro | Xử lý |
+|--------|-------|
+| Vượt session limit → fail ALL | Bắt buộc qua `_run_ffmpeg_with_retry` auto-lock; KHÔNG raw subprocess cho nhánh NVENC |
+| Resolver phân kỳ | Dùng `resolve_encoder` chung; không hardcode. `test_nvenc_codec_resolver_parity` phải xanh |
+| `content_background` lỡ dính NVENC | Giữ libx264; `test_nvenc_semaphore_external_acquire` false-positive list phải bao gồm nó |
+
+### Verify BẮT BUỘC trên GPU (không có → không merge)
+1. `nvenc_runtime_ready('h264_nvenc') == True`.
+2. Render content thật → `ffprobe` output codec = `h264` do `h264_nvenc` (log encoder).
+3. **Đo speedup** vs libx264 (cùng plan) — ghi số.
+4. **Stress đồng thời:** N content (max_parallel=3) + M clip render cùng lúc →
+   xác nhận KHÔNG lỗi "all sessions failed"; theo dõi gauge `NVENC_ACTIVE_SESSIONS`
+   ≤ `NVENC_MAX_SESSIONS`.
+5. Full pytest gồm `test_nvenc_*` (parity + external-acquire).
+6. Fallback: chạy trên máy/GPU-off → output libx264, byte-identical.
+
+### DoD
+NVENC dùng cho scene-mux + xfade khi GPU sẵn sàng; libx264 fallback byte-identical
+khi không; semaphore không bao giờ vượt limit dưới tải đồng thời (đo được); mọi
+`test_nvenc_*` xanh; speedup ghi nhận. Env đề xuất: `CONTENT_ENCODER=auto|cpu`
+(kill-switch ép libx264).
