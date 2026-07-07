@@ -71,7 +71,7 @@ from app.features.render.engine.pipeline.render_events import (
 from app.features.render.engine.stages.recap_assembler import concat_clips
 from app.features.render.engine.stages.content.context import ContentRenderContext, safe_filename
 from app.features.render.engine.stages.content.scene_stage import render_one_scene
-from app.features.render.engine.visual.decision import BudgetTracker, decide_provider
+from app.features.render.engine.stages.content.provider_stage import plan_scene_providers
 
 logger = logging.getLogger("app.render.content")
 
@@ -376,29 +376,11 @@ def run_content(
         )
 
         # CU-8/9: decide the cheapest-sufficient visual provider per scene UP FRONT
-        # (budget applied deterministically in scene order) so the parallel loop
-        # just executes. Uses est_duration_sec (no TTS needed). Only downgrades a
-        # paid choice — never costs more than the user's provider selection.
-        # P4.1: per-render budget cap from the payload wins; fall back to the env
-        # CONTENT_AI_BUDGET. 0 (either source) = unlimited.
-        _budget = BudgetTracker(
-            float(getattr(payload, "content_ai_budget", 0.0) or 0.0)
-            or float(os.getenv("CONTENT_AI_BUDGET", "0") or 0)
+        # (deterministic, budget-bounded) + the parallel-render worker cap. Only
+        # downgrades a paid choice — never costs more than the user's selection.
+        _budget, _scene_providers, max_workers = plan_scene_providers(
+            payload, scenes, visual_provider,
         )
-        _scene_providers: dict[int, str] = {}
-        for _si, _s in enumerate(scenes, start=1):
-            _scene_providers[_si] = decide_provider(
-                _s, visual_provider, _budget,
-                float(getattr(_s, "est_duration_sec", 0.0) or 0.0),
-            )
-
-        try:
-            _user_req = int(getattr(payload, "max_parallel_parts", 0) or 0)
-        except Exception:
-            _user_req = 0
-        _cpu = os.cpu_count() or 4
-        _cap = max(1, min(int(os.getenv("CONTENT_MAX_PARALLEL", "3") or 3), _cpu))
-        max_workers = max(1, min(_user_req, _cpu)) if _user_req > 0 else _cap
 
         def _collect(r: dict) -> None:
             if r.get("clip"):
