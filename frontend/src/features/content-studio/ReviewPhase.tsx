@@ -3,7 +3,7 @@
  * AI Insights summary and the paid-visual cost preflight (CM-9 split). Extracted
  * verbatim from ContentStudio.tsx.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '../../components/ui/Button'
 import { AIChip } from '../../components/ui/AIChip'
 import {
@@ -14,14 +14,32 @@ import { Stepper, HeroHeader, sceneAudit } from './shared'
 import { SceneRow } from './SceneRow'
 import { _PROVIDER_LABELS, type Config, type VoiceCfg, type VisualCfg } from './types'
 
-export function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvider, targetDuration, aspectApi, imagenTier, voice, onBack, onApprove }: {
+export function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visualProvider, targetDuration, aspectApi, imagenTier, voice, onBack, onApprove, undo, redo, canUndo, canRedo }: {
   vi: boolean; plan: ContentPlan; setPlan: (p: ContentPlan) => void
   busy: boolean; error: string | null
   durationFit: DurationFit | null; visualProvider: Config['visualProvider']; targetDuration: number
   aspectApi: string; imagenTier: string
   voice: VoiceCfg; onBack: () => void; onApprove: () => void
+  undo: () => void; redo: () => void; canUndo: boolean; canRedo: boolean
 }) {
   const visualCfg: VisualCfg = { provider: visualProvider, aspectApi, style: plan.video_style || '', imagenTier }
+
+  // CM-10: Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo/redo the plan. Skip when the
+  // focus is in a text field so the browser's native text-undo keeps working —
+  // plan-level undo is for scene add/remove/reorder + committed field edits.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const t = e.target as HTMLElement | null
+      const tag = (t?.tagName || '').toUpperCase()
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || t?.isContentEditable) return
+      const k = e.key.toLowerCase()
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo])
   function updateScene(i: number, patch: Partial<ContentScene>) {
     setPlan({ ...plan, scenes: plan.scenes.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) })
   }
@@ -59,6 +77,15 @@ export function ReviewPhase({ vi, plan, setPlan, busy, error, durationFit, visua
       {visualProvider !== 'local' && (
         <CostEstimatePanel vi={vi} plan={plan} visualProvider={visualProvider} targetDuration={targetDuration} />
       )}
+
+      <div className="cs-row" style={{ gap: 6, justifyContent: 'flex-end' }}>
+        <Button variant="ghost" size="sm" disabled={!canUndo} onClick={undo} title="Ctrl+Z">
+          ↶ {vi ? 'Hoàn tác' : 'Undo'}
+        </Button>
+        <Button variant="ghost" size="sm" disabled={!canRedo} onClick={redo} title="Ctrl+Shift+Z">
+          ↷ {vi ? 'Làm lại' : 'Redo'}
+        </Button>
+      </div>
 
       <div className="cs-scene-list">
         {plan.scenes.map((s, i) => (

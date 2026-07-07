@@ -33,6 +33,7 @@ import {
 } from '../../api/content'
 import { getDefaultOutputDir } from '../../api/outputDir'
 import { DEFAULT_CFG, type Config, type Phase } from './types'
+import { usePlanHistory } from './usePlanHistory'
 import { ScriptPhase } from './ScriptPhase'
 import { ReviewPhase } from './ReviewPhase'
 import { ContentMonitor } from './ContentMonitor'
@@ -45,7 +46,10 @@ export function ContentStudio() {
   const [phase, setPhase] = useState<Phase>('script')
   const [script, setScript] = useState('')
   const [cfg, setCfg] = useState<Config>(DEFAULT_CFG)
-  const [plan, setPlan] = useState<ContentPlan | null>(null)
+  // CM-10: plan edits go through an undo/redo command stack. setPlan records an
+  // undoable edit; resetPlan installs a NEW plan (generate / draft / new) and
+  // clears history so undo can't cross into a different plan.
+  const { plan, setPlan, resetPlan, undo, redo, canUndo, canRedo } = usePlanHistory()
   const [durationFit, setDurationFit] = useState<DurationFit | null>(null)
   const [jobId, setJobId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -137,8 +141,8 @@ export function ContentStudio() {
       // Keep the current (prefilled/chosen) output folder — drafts don't store it.
       if (p.config) setCfg((cur) => ({ ...DEFAULT_CFG, ...(p.config as Partial<Config>), outputDir: cur.outputDir }))
       setProjectId(p.id)
-      if (p.plan && p.plan.scenes?.length) { setPlan(p.plan); setPhase('review') }
-      else { setPlan(null); setPhase('script') }
+      if (p.plan && p.plan.scenes?.length) { resetPlan(p.plan); setPhase('review') }
+      else { resetPlan(null); setPhase('script') }
       setError(null)
     } catch {
       setError(vi ? 'Không mở được bản nháp.' : 'Could not open draft.')
@@ -198,7 +202,7 @@ export function ContentStudio() {
       if (!p?.scenes?.length) {
         setError(vi ? 'AI không tạo được kế hoạch. Kiểm tra API key / thử lại.' : 'AI produced no plan. Check API key / retry.')
       } else {
-        setPlan(p)
+        resetPlan(p)
         setDurationFit(duration_fit ?? null)
         setPhase('review')
       }
@@ -242,7 +246,7 @@ export function ContentStudio() {
 
   if (jobId) {
     return <ContentMonitor jobId={jobId} vi={vi} plan={plan} voiceLang={cfg.voiceLang} onNew={() => {
-      setJobId(null); setPlan(null); setDurationFit(null); setPhase('script'); setError(null)
+      setJobId(null); resetPlan(null); setDurationFit(null); setPhase('script'); setError(null)
       setProjectId(null); setScript('')
       void listProjects().then((r) => setDrafts(r.projects)).catch(() => {})
     }} />
@@ -255,6 +259,7 @@ export function ContentStudio() {
         aspectApi={RATIO_INFO[cfg.ratio].api} imagenTier={cfg.imagenTier}
         voice={{ lang: cfg.voiceLang, gender: cfg.voiceGender, engine: cfg.ttsEngine }}
         onBack={() => setPhase('script')} onApprove={handleApproveRender}
+        undo={undo} redo={redo} canUndo={canUndo} canRedo={canRedo}
       />
     )
   }
