@@ -24,6 +24,7 @@ import os
 from typing import Callable, Optional
 
 from app.features.render.ai.llm.content_prompts import (
+    build_content_narration_refine_prompt,
     build_content_plan_prompt,
     build_content_plan_repair_prompt,
     build_story_bible_prompt,
@@ -33,6 +34,7 @@ from app.features.render.ai.llm.content_parser import (
     parse_content_plan_response,
     parse_story_bible_response,
 )
+from app.features.render.ai.llm.recap_parser import parse_episode_narration_response
 from app.features.render.ai.llm.content_quality import (
     inject_character_fragments,
     validate_and_repair,
@@ -133,6 +135,42 @@ def run_content_director(
                 setattr(plan, _k, meta[_k])
         plan = validate_and_repair(plan, plan.story_bible)       # CU-5
         plan = inject_character_fragments(plan, plan.story_bible)  # CU-6
+
+        # CM-7: multi-step "quality" mode (CONTENT_PLAN_MODE=quality, default
+        # "fast" = single plan pass, unchanged). Adds ONE focused narration-refine
+        # pass so the voice-over flows scene→scene and each scene's length matches
+        # its planned seconds — the plan's weakest point when written in one shot.
+        # Reuses the EXISTING refine prompt + parser via call_fn (no new prompt,
+        # no extra provider surface). Best-effort: any failure keeps the original
+        # narration (Sacred Contract #3 spirit).
+        if os.getenv("CONTENT_PLAN_MODE", "fast").strip().lower() == "quality" and plan.scenes:
+            try:
+                _payload = [
+                    {
+                        "index": i, "role": (s.role or ""),
+                        "seconds": float(getattr(s, "est_duration_sec", 0.0) or 0.0),
+                        "narration": (s.narration or ""),
+                    }
+                    for i, s in enumerate(plan.scenes)
+                ]
+                _nsys, _nuser = build_content_narration_refine_prompt(
+                    _payload, topic=(plan.topic or ""), tone=tone, target_language=target_language,
+                )
+                _nraw = call_fn(_nsys, _nuser)
+                _refined = parse_episode_narration_response(_nraw) if _nraw else {}
+                _n = 0
+                for i, s in enumerate(plan.scenes):
+                    _txt = _refined.get(i)
+                    if _txt and _txt.strip():
+                        s.narration = _txt.strip()
+                        _n += 1
+                if _n:
+                    logger.info(
+                        "content_director[%s]: quality narration refine applied (%d scene(s))", _p, _n,
+                    )
+            except Exception as _qexc:
+                logger.info("content_director[%s]: quality refine skipped (%s)", _p, _qexc)
+
         logger.info(
             "content_director[%s]: content OK scenes=%d total=%.0fs topic=%r chars=%d",
             _p, plan.scene_count(), plan.total_target_sec, plan.topic,
