@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,16 @@ _UUID_RE = re.compile(
     re.IGNORECASE,
 )
 _ACTIVE_STATUSES = frozenset({"running", "queued"})
+# CM-4: statuses whose work dir is worth keeping for a bounded window so a
+# /resume can reuse the already-rendered scenes. A crash/restart leaves a job
+# 'interrupted' (or 'paused'); its temp dir would otherwise be pruned within
+# ~30 min, forcing a full re-render on resume.
+_RESUMABLE_STATUSES = frozenset({"interrupted", "paused"})
+# How long (hours, by dir mtime) a resumable job's work dir is preserved. Past
+# this it is pruned like any inactive job — the ContentPlan lives in the DB
+# (content_plan_json), so a fresh render still works. 0 disables preservation
+# (restores the pre-CM-4 behaviour).
+_RESUME_KEEP_HOURS = int(os.getenv("CONTENT_RESUME_KEEP_HOURS", "72") or 72)
 
 
 def prune_preview_dirs(temp_dir: Path, max_age_hours: int = 6):
@@ -39,12 +50,19 @@ def prune_preview_dirs(temp_dir: Path, max_age_hours: int = 6):
     return {"removed": removed, "kept": kept}
 
 
-def prune_render_temp_dirs(temp_dir: Path) -> dict:
+def prune_render_temp_dirs(temp_dir: Path, resume_keep_hours: int = _RESUME_KEEP_HOURS) -> dict:
     """Remove render temp dirs for non-active jobs.
 
     Scans TEMP_DIR for UUID-named subdirectories (one per job). Skips dirs for
     jobs that are still running or queued. Deletes dirs for finished, failed,
     cancelled, or orphaned jobs (not found in DB).
+
+    CM-4: a resumable job (``interrupted`` / ``paused``) keeps its work dir for
+    ``resume_keep_hours`` (by dir mtime) so a subsequent /resume can reuse the
+    already-rendered scenes instead of re-rendering from scratch. Past that
+    window it is pruned like any inactive job (the ContentPlan is persisted in
+    the DB, so a fresh render still works). ``resume_keep_hours=0`` disables the
+    preservation (pre-CM-4 behaviour).
 
     Directories whose names are NOT UUID-format (e.g. preview/, downloads/, tmp/)
     are always left untouched.
@@ -53,6 +71,7 @@ def prune_render_temp_dirs(temp_dir: Path) -> dict:
     removed = kept = skipped = 0
     if not temp_dir.exists():
         return {"removed": removed, "kept": kept, "skipped": skipped}
+    resume_cutoff = datetime.now(timezone.utc) - timedelta(hours=max(0, resume_keep_hours))
     for d in temp_dir.iterdir():
         if not d.is_dir():
             continue
@@ -60,9 +79,21 @@ def prune_render_temp_dirs(temp_dir: Path) -> dict:
             skipped += 1
             continue
         job = get_job(d.name)
-        if job and str(job.get("status") or "").lower() in _ACTIVE_STATUSES:
+        status = str((job or {}).get("status") or "").lower()
+        if job and status in _ACTIVE_STATUSES:
             kept += 1  # active job — never touch its work dir
             continue
+        # CM-4: preserve a recently-touched resumable job's work dir so /resume
+        # can reuse its rendered scenes. Uses dir mtime (scene writes bump it) —
+        # no DB-timestamp parsing, mirrors prune_preview_dirs.
+        if job and status in _RESUMABLE_STATUSES and resume_keep_hours > 0:
+            try:
+                mtime = datetime.fromtimestamp(d.stat().st_mtime, tz=timezone.utc)
+                if mtime >= resume_cutoff:
+                    kept += 1
+                    continue
+            except Exception:
+                pass  # unreadable mtime → fall through and prune
         try:
             shutil.rmtree(d, ignore_errors=True)
             logger.info("maintenance: removed render temp dir job_id=%s", d.name)

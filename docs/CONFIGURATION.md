@@ -162,6 +162,7 @@ Content Director (`render_format="content"`) giờ chạy trên orchestrator dù
 | `DB_TIMEOUT` | `30` | Timeout kết nối SQLite (giây) |
 | `JOB_RETENTION_DAYS` | `0` | Xoá job non-active quá tuổi. `0` = tắt. UI Settings ghi đè qua DB |
 | `CLEANUP_INTERVAL_SEC` | `1800` | Chu kỳ vòng cleanup nền |
+| `CONTENT_RESUME_KEEP_HOURS` | `72` | CM-4: giữ thư mục temp của job `interrupted`/`paused` (theo mtime) để `/resume` tái dùng scene đã render, thay vì render lại. Quá hạn vẫn prune (plan còn trong DB). `0` = tắt (hành vi trước CM-4) |
 | `LOG_KEEP_LAST` | `30` | Giữ N log job gần nhất |
 | `LOG_KEEP_DAYS` | `10` | Xoá log job cũ hơn |
 | `LOG_LEVEL` | — | Mức log |
