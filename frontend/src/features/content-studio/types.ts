@@ -49,7 +49,14 @@ export const DEFAULT_CFG: Config = {
 export interface VoiceCfg { lang: string; gender: 'female' | 'male'; engine: string }
 export interface VisualCfg { provider: string; aspectApi: string; style: string; imagenTier: string }
 
-export interface SceneMeta { n: number; role?: string; narration?: string; scene_title?: string }
+export interface SceneMeta {
+  n: number; role?: string; narration?: string; scene_title?: string
+  // Rich per-scene fields carried on the content.plan.ready WS event context
+  // (mirror of content_pipeline.py's scene projection) so the live monitor can
+  // render emotion / pacing / visual / duration chips without the plan prop.
+  emotion?: string; reading_speed?: number; visual_hint?: string
+  est_duration_sec?: number; transition_hint?: string; visual_source?: string
+}
 
 // Client-side narration audit (mirror of the backend narration_audit) — shared by
 // SceneRow badges + the AiInsights summary. Same thresholds as
