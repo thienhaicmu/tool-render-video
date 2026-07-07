@@ -30,7 +30,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from app.core.config import CACHE_DIR
+from app.core.config import APP_DATA_DIR, CACHE_DIR
 from app.db.content_repo import (
     delete_content_project,
     get_content_project,
@@ -295,6 +295,10 @@ def visual_providers() -> dict:
 
 _VISUAL_PREVIEW_DIR = CACHE_DIR / "content_visual_preview"
 _IMG_EXT_MEDIA = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+# CM-12: pinned scene assets live OUTSIDE the cache/temp roots so the periodic
+# prune never reclaims an image the user chose for a scene (unlike the pruneable
+# preview above). Consumed by the render via scene.visual_path.
+_CONTENT_ASSETS_DIR = APP_DATA_DIR / "content_assets"
 
 
 class VisualPreviewRequest(BaseModel):
@@ -389,6 +393,43 @@ def visual_image(token: str):
         if p.exists() and p.stat().st_size > 0:
             return FileResponse(str(p), media_type=media)
     raise HTTPException(status_code=404, detail="not found")
+
+
+# ── CM-12: pin a previewed image as a durable per-scene asset ─────────────────
+
+class PinVisualRequest(BaseModel):
+    token: str = ""
+
+
+@router.post("/visual/pin")
+def pin_visual(req: PinVisualRequest) -> dict:
+    """Promote a preview image (by token) to a DURABLE asset the render consumes
+    via ``scene.visual_path``. The preview lives under the pruneable cache; this
+    copies it to APP_DATA_DIR/content_assets (never pruned) and returns its local
+    path. 404 on a malformed token or a missing/expired preview; 502 on copy
+    failure."""
+    token = (req.token or "").strip()
+    if not _TOKEN_RE.match(token):
+        raise HTTPException(status_code=404, detail="not found")
+    src = None
+    for ext in _IMG_EXT_MEDIA:
+        p = _VISUAL_PREVIEW_DIR / f"{token}{ext}"
+        if p.exists() and p.stat().st_size > 0:
+            src = p
+            break
+    if src is None:
+        raise HTTPException(status_code=404, detail="preview not found (may have expired)")
+    _CONTENT_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+    dst = _CONTENT_ASSETS_DIR / f"{uuid.uuid4().hex}{src.suffix.lower()}"
+    try:
+        import shutil as _sh
+        _sh.copyfile(src, dst)
+    except Exception as exc:
+        logger.warning("content pin: copy failed %s", exc)
+        raise HTTPException(status_code=502, detail="pin failed")
+    if not (dst.exists() and dst.stat().st_size > 0):
+        raise HTTPException(status_code=502, detail="pin produced no file")
+    return {"path": str(dst)}
 
 
 # ── CS-D: per-scene narration preview / regenerate ───────────────────────────

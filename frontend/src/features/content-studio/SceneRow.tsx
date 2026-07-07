@@ -4,7 +4,7 @@
  * per-scene background (Asset Manager). Extracted verbatim from ContentStudio.tsx.
  */
 import { useRef, useState } from 'react'
-import { previewNarration, previewVisual, type ContentScene } from '../../api/content'
+import { previewNarration, previewVisual, pinVisual, type ContentScene } from '../../api/content'
 import { BASE_URL } from '../../api/client'
 import { sceneAudit } from './shared'
 import { EMOTIONS, type VoiceCfg, type VisualCfg } from './types'
@@ -24,13 +24,15 @@ export function SceneRow({ vi, scene, index, total, voice, visualCfg, onChange, 
   const [vImg, setVImg] = useState<string | null>(null)      // shown image URL
   const [vNote, setVNote] = useState<string | null>(null)    // "fell back to background" / error
   const [vBusy, setVBusy] = useState(false)
+  const [vToken, setVToken] = useState<string | null>(null)  // CM-12: preview token (to pin)
+  const [pinned, setPinned] = useState(false)                // CM-12: this image pinned to the scene
   const vSeed = useRef(0)
   const hasPrompt = !!(scene.visual_prompt || '').trim()
   const canVisual = visualCfg.provider !== 'local' && hasPrompt
 
   async function doVisual(regen: boolean) {
     if (!canVisual || vBusy) return
-    if (regen) vSeed.current += 1
+    if (regen) { vSeed.current += 1; setPinned(false) }   // CM-12: a new image is no longer pinned
     setVBusy(true); setVNote(null)
     try {
       const r = await previewVisual({
@@ -42,13 +44,32 @@ export function SceneRow({ vi, scene, index, total, voice, visualCfg, onChange, 
       })
       if (r.kind === 'image' && r.url) {
         setVImg(BASE_URL + r.url + `?t=${Date.now()}`)   // bust cache on regen
+        setVToken(r.token || null)
         if (r.provider !== visualCfg.provider) {
           setVNote(vi ? `Đã dùng nguồn "${r.provider}" (nguồn chọn không tạo được).` : `Used "${r.provider}" (chosen source unavailable).`)
         }
       } else {
-        setVImg(null)
+        setVImg(null); setVToken(null)
         setVNote(vi ? 'Nguồn không tạo được ảnh — khi render sẽ dùng nền màu.' : 'No image produced — the render will use a background colour.')
       }
+    } catch (err) {
+      setVNote(err instanceof Error ? err.message : String(err))
+    } finally {
+      setVBusy(false)
+    }
+  }
+
+  // CM-12: pin the previewed image as a durable asset → the render uses THIS
+  // exact image for the scene (visual_source='image' + visual_path), instead of
+  // regenerating. Enables Ken Burns so a still image gets subtle motion.
+  async function doPin() {
+    if (!vToken || vBusy || pinned) return
+    setVBusy(true)
+    try {
+      const r = await pinVisual(vToken)
+      onChange({ visual_source: 'image', visual_path: r.path, ken_burns: true })
+      setPinned(true)
+      setVNote(vi ? '📌 Đã ghim — cảnh sẽ dùng đúng ảnh này khi render.' : '📌 Pinned — the scene will use this exact image.')
     } catch (err) {
       setVNote(err instanceof Error ? err.message : String(err))
     } finally {
@@ -136,6 +157,12 @@ export function SceneRow({ vi, scene, index, total, voice, visualCfg, onChange, 
             {vImg && (
               <button className="cs-icon-btn" title={vi ? 'Tạo lại ảnh' : 'Regenerate image'}
                 disabled={vBusy} onClick={() => doVisual(true)}>{vBusy ? '…' : '🔄'}</button>
+            )}
+            {vImg && vToken && (
+              <button className={`cs-icon-btn${pinned ? '' : ' is-accent'}`}
+                title={pinned ? (vi ? 'Đã ghim ảnh cho cảnh' : 'Pinned to the scene')
+                              : (vi ? 'Dùng ảnh này cho cảnh (ghim)' : 'Use this image for the scene (pin)')}
+                disabled={vBusy || pinned} onClick={doPin}>{pinned ? '📌✓' : '📌'}</button>
             )}
             {vNote && <span className="cs-hint" style={{ margin: 0, color: vImg ? undefined : 'var(--warn, #d6a200)' }}>{vNote}</span>}
           </div>
