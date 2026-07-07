@@ -292,11 +292,28 @@ Bản review tổng thể xác nhận CM-1…12 đạt, nhưng còn gap correctn
 | W5-4 | ✅ DONE | 2026-07-07 | Hợp nhất nguồn plan. **Audit:** `result_json.content_plan` (full JSON) có **0 consumer** (backend/FE/test) → bỏ (khử lưu 2× plan/job; plan lấy qua `get_content_plan(job_id)` cùng row = canonical). **Giữ** `content_topic/tone/audience` (rẻ, history, 1 test dùng topic). Approved (bỏ field response payload). finalize_stage (Sacred #1 surface) — full pytest. Docstring ghi canonical. |
 | W5-5 | ✅ DONE | 2026-07-07 | **Đánh giá lại:** heuristic sentence-level thực ra có nguyên tắc (char-proportional nhất quán model ~15 chars/sec, dùng duration thật) — không "crude". Align chính xác cần Whisper (đã có ở word-by-word). Cải thiện THẬT không cần Whisper = **readability**: `_refine_long_cues` sub-split câu dài tại ranh giới mệnh đề (dấu phẩy) khi còn headroom → tránh 1 cue wall-of-text; timing giữ char-proportional. MEDIUM (`content_scene_render.py`). Test `test_content_subtitle_cues.py` (5). Env `CONTENT_CAPTION_CHARS=42`. |
 | W5-6 | ✅ DONE | 2026-07-07 | **Đo trước** (harness tạm): per-scene transcribe = **2.2× chậm** hơn 1 lần (overhead per-call Whisper) → chứng minh có lợi. Thiết kế 2-pha: `narration_stage.prepare_narration_word_timings` synth-all → concat → transcribe **1 lần** (word) → split theo offset → `{i: word_srt}`. `render_one_scene`/`render_content_scene` nhận `pre_audio`/`word_srt` (skip synth+transcribe); default None → **per-scene cũ = fallback** (gate `word_by_word AND add_subtitle`; e2e word_by_word OFF → bit-identical). Xử lý resume (skip scene đã render) + partial fail. CRITICAL-adjacent — Render Edit Protocol, full pytest **2593**. **Runtime-verify:** render thật word_by_word ON → log "one-shot transcription split into 2 scene(s)", completed, video+audio OK. Test `test_content_narration_prepass.py` (5). |
-| W5-7 | ⬜ DEFER (plan sẵn) | 2026-07-07 | NVENC content — **CẦN MÁY GPU** để verify. Máy hiện tại `nvenc_runtime_ready('h264_nvenc')=False` (không có GPU) → không verify được → không ship code blind. Plan thực thi chi tiết ↓. |
+| W5-7 | ✅ DONE (opt-in, default CPU) | 2026-07-08 | NVENC content — **verify trên RTX 3060** (`nvenc_runtime_ready('h264_nvenc')=True`). Code: gate `_content_gpu_encode`/`_gpu_encode` (nvenc_available + env `CONTENT_ENCODER`), scene-mux ([content_scene_render.py](../backend/app/features/render/engine/stages/content_scene_render.py)) + xfade ([content_assembler.py](../backend/app/features/render/engine/stages/content_assembler.py)) đổi raw `subprocess.run` → `_run_ffmpeg_with_retry` (auto-acquire NVENC_SEMAPHORE khi argv có `h264_nvenc`). **Verify GPU:** NVENC chạy thật (argv `h264_nvenc`, output h264) cả 2 site; **semaphore cap giữ vững** (8 song song → peak=3=cap, 8/8 ok, không "all sessions failed"); fallback libx264 byte-identical. **Speedup đo thật: 0.86× (3s) / 0.97× (15s) / 1.01× (song song 6×8s) → KHÔNG uplift** (scene filter-bound + nền vẫn CPU). Quyết định: **opt-in, default `cpu`** (Sacred #2 spirit — tính năng mới default bảo thủ; tránh bỏ đói session NVENC của clip render). HIGH tier — Render Edit Protocol: baseline `2597 passed, 1 pre-existing fail` → edit → full pytest giữ nguyên + `test_content_encoder.py` (4) + `content_background` pinned vào false-positive list. Env `CONTENT_ENCODER` (docs/CONFIGURATION.md). Chưa commit. |
 
 ---
 
-## W5-7 — Execution plan (DEFERRED, chỉ chạy trên máy có NVIDIA GPU)
+## W5-7 — Execution plan (✅ IMPLEMENTED 2026-07-08 trên RTX 3060)
+
+> **Đã triển khai** với 2 điều chỉnh có chủ đích so với plan gốc dưới đây:
+> 1. **Gate `nvenc_available()` thay vì `resolve_encoder`** — `resolve_encoder`
+>    sẽ chọn QSV trên máy Intel iGPU → phá yêu cầu "libx264 fallback
+>    byte-identical". Gate chỉ NVENC-hoặc-libx264 (không QSV), tái dùng
+>    `nvenc_available()` cached (không đẻ resolver mới → không phân kỳ).
+> 2. **Opt-in, default `cpu`** thay vì bật-khi-GPU-sẵn-sàng — verify đo được
+>    NVENC **không cho speedup** cho content (0.86–1.01×) + tranh session NVENC
+>    với clip render. Theo Sacred #2 spirit, default bảo thủ (byte-identical);
+>    NVENC bật qua `CONTENT_ENCODER=auto|nvenc`.
+>
+> Kết quả verify GPU (bắt buộc): NVENC chạy thật cả scene-mux + xfade (argv
+> `h264_nvenc`, output h264); semaphore cap giữ vững (8 song song → peak=3=cap,
+> không "all sessions failed"); fallback libx264 byte-identical; full pytest giữ
+> baseline + `test_content_encoder.py` (4) + `content_background` pinned false-positive.
+
+### (Plan gốc — DEFERRED, chỉ chạy trên máy có NVIDIA GPU)
 
 > **Tiền đề bắt buộc:** máy có NVIDIA GPU và `nvenc_runtime_ready('h264_nvenc')`
 > trả `True`. Trên máy không GPU, MỌI thứ dưới đây phải fallback về libx264

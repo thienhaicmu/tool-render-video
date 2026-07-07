@@ -140,6 +140,7 @@ Content Director (`render_format="content"`) giờ chạy trên orchestrator dù
 |-----|----------|---------|
 | `CONTENT_PLAN_MODE` | `fast` | CM-7: `fast` = 1 pass plan (mặc định, không đổi). `quality` = thêm 1 pass narration-refine (tái dùng prompt refine sẵn có qua content_director — không thêm prompt) để lời kể mượt scene→scene + khớp thời lượng. **Experimental** — nên đo bằng ai_eval trước khi bật default |
 | `CONTENT_PLAN_REPAIR` | `1` | CM-8: khi parse plan hỏng cả sau salvage, chạy 1 vòng LLM-repair (model tự sửa JSON) rồi parse lại. `0` = tắt. Prompt version log qua `content_director` (`CONTENT_PLAN_PROMPT_VERSION`) |
+| `CONTENT_ENCODER` | `cpu` | W5-7: encoder cho scene-mux burn + xfade assembler của Content Mode. `cpu` (mặc định) = libx264 (byte-identical). `auto`/`nvenc` = **opt-in** dùng `h264_nvenc` khi GPU sẵn sàng (qua `_run_ffmpeg_with_retry` → tự khoá `NVENC_SEMAPHORE`, cap dùng chung). **Đo trên RTX 3060: KHÔNG speedup (0.86–1.01×)** — scene content filter-bound + tranh session NVENC với clip render → default để CPU. `content_background` LUÔN CPU bất kể biến này |
 | `OPENAI_CONTENT_MAX_TOKENS` | `8192` | Token tối đa cho plan Content (lớn hơn story vì plan nhiều scene) |
 | `OPENAI_CONTENT_TEMPERATURE` | `0.5` | Nhiệt độ plan Content (OpenAI) |
 | `CLAUDE_CONTENT_MAX_TOKENS` | `8192` | Token tối đa cho plan Content (Claude) |

@@ -62,6 +62,12 @@ _FALSE_POSITIVE_FILES = (
     _BACKEND_APP / "features" / "render" / "engine" / "encoder" / "clip_ops.py",
     _BACKEND_APP / "features" / "render" / "engine" / "audio" / "mixer.py",
     _BACKEND_APP / "features" / "render" / "engine" / "preview" / "ffmpeg_probers.py",
+    # W5-7: content_background must NEVER use NVENC — backgrounds are many and
+    # short; borrowing a GPU session for them would starve the real scene-mux /
+    # xfade encodes (mirrors the recap act-title-card CPU policy documented in
+    # content_background.py). The W5-7 NVENC path lives in content_scene_render
+    # and content_assembler, which route through _run_ffmpeg_with_retry.
+    _BACKEND_APP / "features" / "render" / "engine" / "stages" / "content_background.py",
 )
 
 

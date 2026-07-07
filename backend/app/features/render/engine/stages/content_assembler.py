@@ -39,6 +39,26 @@ def _xtype(hint: str) -> str:
     return _XFADE_MAP.get((hint or "").strip().lower(), "fade")
 
 
+def _gpu_encode() -> bool:
+    """W5-7 — whether the xfade re-encode may use NVENC (h264_nvenc).
+
+    OPT-IN, default CPU (see content_scene_render._content_gpu_encode for the
+    measured rationale — NVENC gave no speedup for content and steals a scarce
+    shared GPU session). NVENC only engages when ``CONTENT_ENCODER`` is
+    ``auto``/``nvenc`` AND the GPU is ready; the default keeps the byte-identical
+    libx264 path. Gated on the canonical cached ``nvenc_available()`` check
+    (reused — no divergent resolver). The ``NVENC_SEMAPHORE`` acquire is
+    delegated to ``_run_ffmpeg_with_retry`` (auto-locks on an h264_nvenc argv).
+    Never raises."""
+    if os.getenv("CONTENT_ENCODER", "cpu").strip().lower() not in ("auto", "nvenc", "gpu"):
+        return False
+    try:
+        from app.features.render.engine.encoder.ffmpeg_helpers import nvenc_available
+        return bool(nvenc_available())
+    except Exception:
+        return False
+
+
 def _probe_duration(path: str) -> float:
     try:
         r = subprocess.run(
@@ -108,16 +128,22 @@ def concat_with_transitions(
             prev_a = out_lbl
 
         graph = ";".join(vparts + aparts)
+        if _gpu_encode():
+            # W5-7: NVENC when GPU-ready; _run_ffmpeg_with_retry auto-acquires
+            # NVENC_SEMAPHORE for the h264_nvenc argv.
+            _vargs = ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "20", "-pix_fmt", "yuv420p"]
+        else:
+            _vargs = ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"]
         cmd = [
             get_ffmpeg_bin(), "-y", *inputs,
             "-filter_complex", graph,
             "-map", prev_v, "-map", prev_a,
-            "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+            *_vargs,
             "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
             "-r", f"{float(fps):.3f}", out_path,
         ]
-        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                       check=True, timeout=_FFMPEG_TIMEOUT_SEC)
+        from app.features.render.engine.encoder.ffmpeg_helpers import _run_ffmpeg_with_retry
+        _run_ffmpeg_with_retry(cmd)
         if Path(out_path).exists() and Path(out_path).stat().st_size > 0:
             return {"ok": True, "method": "xfade", "expected_duration": round(running, 3)}
         return {"ok": False, "method": "empty", "expected_duration": round(running, 3)}

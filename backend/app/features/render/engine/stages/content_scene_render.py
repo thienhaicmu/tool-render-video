@@ -70,6 +70,31 @@ _CLAUSE_SPLIT_RE = re.compile(r"(?<=[,;:—–])\s+")
 _CAPTION_CHAR_TARGET: int = max(16, int(os.getenv("CONTENT_CAPTION_CHARS", "42")))
 
 
+def _content_gpu_encode() -> bool:
+    """W5-7 — whether the scene-mux burn may use NVENC (h264_nvenc).
+
+    OPT-IN, default CPU. NVENC only engages when ``CONTENT_ENCODER`` is set to
+    ``auto``/``nvenc`` AND the GPU is ready; the default (``cpu``) keeps the
+    byte-identical libx264 path. Rationale (measured on an RTX 3060): NVENC gave
+    NO speedup for content scenes (0.86–1.01× — backgrounds are simple and the
+    burn is filter-bound, not encode-bound) while consuming a scarce shared NVENC
+    session that clip/recap renders benefit from more, so enabling it by default
+    would starve those for zero gain. The path is kept, tested, and available for
+    anyone who opts in. Gated on the canonical cached ``nvenc_available()`` check
+    (reused — no divergent resolver); QSV is intentionally NOT used so the CPU
+    path stays byte-identical. The actual ``NVENC_SEMAPHORE`` acquire is delegated
+    to ``_run_ffmpeg_with_retry`` (auto-locks for an h264_nvenc argv — scenes
+    render in parallel, so the global GPU session cap must hold). Never raises
+    (Sacred Contract #3 spirit)."""
+    if os.getenv("CONTENT_ENCODER", "cpu").strip().lower() not in ("auto", "nvenc", "gpu"):
+        return False
+    try:
+        from app.features.render.engine.encoder.ffmpeg_helpers import nvenc_available
+        return bool(nvenc_available())
+    except Exception:
+        return False
+
+
 def probe_audio_duration(path: str) -> float:
     """Return audio duration in seconds via ffprobe, or 0.0 on any error."""
     try:
@@ -482,7 +507,12 @@ def render_content_scene(
             _vf.append(f"ass='{safe_filter_path(overlay_path)}'")
         if _vf:
             cmd += ["-vf", ",".join(_vf)]
-            cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-bf", "0"]
+            if _content_gpu_encode():
+                # W5-7: NVENC when GPU-ready. The h264_nvenc argv makes
+                # _run_ffmpeg_with_retry (below) auto-acquire NVENC_SEMAPHORE.
+                cmd += ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "20", "-pix_fmt", "yuv420p", "-bf", "0"]
+            else:
+                cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-bf", "0"]
         else:
             # No burn needed — the background is already at spec; copy the video.
             cmd += ["-c:v", "copy"]
@@ -493,10 +523,11 @@ def render_content_scene(
             "-t", f"{scene_dur:.3f}",
             str(out_path),
         ]
-        subprocess.run(
-            cmd, capture_output=True, text=True, encoding="utf-8",
-            check=True, timeout=_FFMPEG_TIMEOUT_SEC,
-        )
+        # W5-7: route through _run_ffmpeg_with_retry so an h264_nvenc argv
+        # auto-acquires NVENC_SEMAPHORE (global GPU session cap) and the encode
+        # gets cancel/timeout handling. libx264 output stays byte-identical.
+        from app.features.render.engine.encoder.ffmpeg_helpers import _run_ffmpeg_with_retry
+        _run_ffmpeg_with_retry(cmd)
         ok = Path(out_path).exists() and Path(out_path).stat().st_size > 0
         if not ok:
             logger.warning("content_scene_render: output missing/empty (scene idx=%s)", idx)
