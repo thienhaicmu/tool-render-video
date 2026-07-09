@@ -28,6 +28,7 @@ helpers) #8 (single concatenated output passes qa_pipeline before DONE).
 from __future__ import annotations
 
 import logging
+import os
 from typing import Callable
 
 from app.core.config import TEMP_DIR
@@ -104,13 +105,13 @@ def _resolve_story_plan(payload, *, job_id, resume_mode, chapter, language, art_
                 logger.info("story: resume — using persisted story_plan_json (%d scenes)", plan.scene_count())
                 return plan
 
-    # 3. Fresh AI plan (P1 understanding + P2 storyboard).
+    # 3. Fresh AI plan (P1 understanding + P2 storyboard). Story is GPT-centric by
+    # design: the provider comes from the payload, else STORY_AI_PROVIDER (.env,
+    # default "openai") — NOT the global AI_PROVIDER_DEFAULT (which the install may
+    # set to gemini for clips/recap). Configurable, never hardcoded.
     provider = (getattr(payload, "ai_provider", "") or "").strip().lower()
-    try:
-        from app.core import config as _cfg
-        provider = provider or getattr(_cfg, "AI_PROVIDER_DEFAULT", "openai") or "openai"
-    except Exception:
-        provider = provider or "openai"
+    if not provider:
+        provider = (os.getenv("STORY_AI_PROVIDER", "openai") or "openai").strip().lower()
     api_key = ""
     resolve_key = None
     try:

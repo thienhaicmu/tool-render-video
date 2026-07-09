@@ -38,12 +38,13 @@ def _model() -> str:
 
 
 def _default_voice(gender: str) -> str:
-    """Fallback ElevenLabs voice when the caller passes no voice_id. Env-overridable
-    (STORY_ELEVEN_VOICE_FEMALE / _MALE). Defaults are well-known ElevenLabs voices."""
+    """Fallback ElevenLabs VOICE ID when the caller passes no voice_id. Env-overridable
+    (STORY_ELEVEN_VOICE_FEMALE / _MALE). Defaults are well-known ElevenLabs default
+    voice IDs (Rachel / Josh) — the API needs an ID, not a name."""
     g = (gender or "").strip().lower()
     if g == "male":
-        return (os.getenv("STORY_ELEVEN_VOICE_MALE", "Josh").strip() or "Josh")
-    return (os.getenv("STORY_ELEVEN_VOICE_FEMALE", "Rachel").strip() or "Rachel")
+        return (os.getenv("STORY_ELEVEN_VOICE_MALE", "TxGEqnHWrfWFTfGW9XjX").strip() or "TxGEqnHWrfWFTfGW9XjX")
+    return (os.getenv("STORY_ELEVEN_VOICE_FEMALE", "21m00Tcm4TlvDq8ikWAM").strip() or "21m00Tcm4TlvDq8ikWAM")
 
 
 def synthesize_elevenlabs(

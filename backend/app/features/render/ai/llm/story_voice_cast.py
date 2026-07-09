@@ -34,9 +34,14 @@ def _pool(env_name: str, default: "list[str]") -> "list[str]":
 # Prebuilt Gemini TTS voices (native VI). Env: STORY_GEMINI_VOICES_FEMALE/_MALE.
 _GEMINI_F = lambda: _pool("STORY_GEMINI_VOICES_FEMALE", ["Kore", "Aoede", "Leda", "Callirrhoe"])
 _GEMINI_M = lambda: _pool("STORY_GEMINI_VOICES_MALE", ["Puck", "Charon", "Fenrir", "Orus"])
-# ElevenLabs voices (EN/JP). Env: STORY_ELEVEN_VOICES_FEMALE/_MALE.
-_ELEVEN_F = lambda: _pool("STORY_ELEVEN_VOICES_FEMALE", ["Rachel", "Bella", "Elli"])
-_ELEVEN_M = lambda: _pool("STORY_ELEVEN_VOICES_MALE", ["Josh", "Antoni", "Arnold"])
+# ElevenLabs voices (EN/JP) — the ElevenLabs API needs a VOICE ID (not a name).
+# Defaults are the library's well-known public default voices (Rachel/Bella/Elli,
+# Josh/Antoni/Arnold). Override with your own voice IDs via
+# STORY_ELEVEN_VOICES_FEMALE / _MALE in .env.
+_ELEVEN_F = lambda: _pool("STORY_ELEVEN_VOICES_FEMALE",
+                          ["21m00Tcm4TlvDq8ikWAM", "EXAVITQu4vr4xnSDxMaL", "MF3mGyEYCl7XYWbV9V6O"])
+_ELEVEN_M = lambda: _pool("STORY_ELEVEN_VOICES_MALE",
+                          ["TxGEqnHWrfWFTfGW9XjX", "ErXwobaYiN019PkySvjV", "VR6AewLTigWG4xSOukaG"])
 
 
 def _pools_for(engine: str) -> "tuple[list[str], list[str]]":
