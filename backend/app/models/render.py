@@ -28,7 +28,10 @@ _security_logger = logging.getLogger("app.api.security")
 # (_validate_render_format below) tolerates legacy casing/whitespace.
 # "content" (2026-07-03) = Content Mode: Script → AI narration → Video (no
 # source footage). Additive third value — clips/recap paths untouched.
-RenderFormat = Literal["clips", "recap", "content"]
+# "story" (2026-07-09) = Story-to-Video: Chapter → AI storyboard (scenes→shots) →
+# consistent AI images + narration → Video. Additive fourth value — all prior
+# paths untouched (routes to run_story via a fully separate orchestrator).
+RenderFormat = Literal["clips", "recap", "content", "story"]
 
 
 class PrepareSourceRequest(BaseModel):
@@ -391,6 +394,23 @@ class RenderRequest(BaseModel):
     # the AI Director as before (Sacred Contract #2: default inert → unchanged).
     content_plan_override: str = ""
 
+    # ── Story Mode (render_format="story") ────────────────────────────────────
+    # Chapter → AI storyboard → consistent images + narration → Video. Sacred
+    # Contract #2: every field below defaults INERT, so a stored clips/recap/
+    # content payload replays with NO story behaviour. Story reuses the CHAPTER
+    # text via ``content_script`` (the shared text-input field) — Story Mode only
+    # activates when render_format=="story" AND a non-empty content_script is
+    # supplied. BE-only for now (NOT in render_public.FE_FACING_FIELDS); the wire
+    # surface lands in P6.
+    story_series_id: str = ""       # "" = one-off chapter (no cross-chapter Character DB)
+    story_chapter_no: int = 0
+    story_art_style: str = ""       # anime|wuxia|romance|realistic|inkwash|... ("" = infer)
+    story_reading_pace: str = "normal"  # slow|normal|fast (global reading-speed lever)
+    # An APPROVED/edited StoryPlan JSON from the Storyboard review (Duyệt #2). When
+    # set, run_story renders FROM this plan and SKIPS the AI planning call. "" =
+    # generate via the Story Director (Sacred Contract #2: default inert).
+    story_plan_override: str = ""
+
     target_duration: int = 90
     output_count: int = 1
     video_type: str = "auto"          # auto|viral|storytelling|educational|emotional|high_retention
@@ -506,7 +526,7 @@ class RenderRequest(BaseModel):
         # the closed set — any value outside {clips, recap, content} falls back
         # to "clips" here so historical payloads with unknown values keep loading.
         v = str(v or "clips").strip().lower()
-        return v if v in {"clips", "recap", "content"} else "clips"
+        return v if v in {"clips", "recap", "content", "story"} else "clips"
 
     @field_validator("content_background_kind", mode="before")
     @classmethod

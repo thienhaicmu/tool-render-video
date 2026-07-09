@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from app.db.jobs_repo import clear_part_output, delete_job, get_content_plan, get_job, get_recap_plan, get_story_model, list_job_parts, list_job_parts_bulk, list_jobs_page, save_error_kind
+from app.db.jobs_repo import clear_part_output, delete_job, get_content_plan, get_job, get_recap_plan, get_story_model, get_story_plan, list_job_parts, list_job_parts_bulk, list_jobs_page, save_error_kind
 from app.services.maintenance import prune_job_logs
 from app.core.config import CHANNELS_DIR, TEMP_DIR
 from app.models.schemas import JobStatusResponse
@@ -569,6 +569,34 @@ def api_get_job_content_plan(job_id: str):
             return _empty
         # to_json() is asdict(self) dumped; round-trip to a plain dict for the
         # JSON response (avoids a dataclasses.asdict import here).
+        return {"job_id": job_id, "available": True, "plan": json.loads(plan.to_json())}
+    except Exception:
+        return _empty
+
+
+@router.get("/{job_id}/story-plan")
+def api_get_job_story_plan(job_id: str):
+    """Polling / reattach fallback for a Story render's plan (P6).
+
+    Returns the PERSISTED StoryPlan (scenes → shots → narration → visual prompts +
+    story_bible) so the FE Story monitor / Storyboard review can re-render when the
+    ``plan`` prop is null (reattach from the topbar badge) or on a WS→HTTP-polling
+    downgrade. The stored ``story_plan_json`` is ``asdict(StoryPlan)`` — the same
+    schema the FE StoryPlan type mirrors.
+
+    Never raises — returns ``{available: False}`` for a missing / legacy / malformed
+    / non-story job so the FE keeps its existing sources. Mirrors
+    ``api_get_job_content_plan``."""
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _empty = {"job_id": job_id, "available": False, "plan": None}
+    try:
+        from app.domain.story_plan import StoryPlan
+
+        plan = StoryPlan.from_json(get_story_plan(job_id))
+        if plan is None or not plan.scenes:
+            return _empty
         return {"job_id": job_id, "available": True, "plan": json.loads(plan.to_json())}
     except Exception:
         return _empty

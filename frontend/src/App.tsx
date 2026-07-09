@@ -27,6 +27,7 @@ const importEditor     = () => import('./features/editor/EditorScreen').then(m =
 const importDownloader = () => import('./features/download/DownloadScreen').then(m => ({ default: m.DownloadScreen }))
 const importClipStudio = () => import('./features/clip-studio/ClipStudio').then(m => ({ default: m.ClipStudio }))
 const importContentStudio = () => import('./features/content-studio/ContentStudio').then(m => ({ default: m.ContentStudio }))
+const importStoryStudio = () => import('./features/story-studio/StoryStudio').then(m => ({ default: m.StoryStudio }))
 const importSettings   = () => import('./features/settings/SettingsScreen').then(m => ({ default: m.SettingsScreen }))
 const importQueue      = () => import('./features/queue/QueueScreen').then(m => ({ default: m.QueueScreen }))
 
@@ -35,6 +36,7 @@ const EditorScreen     = lazy(importEditor)
 const DownloadScreen   = lazy(importDownloader)
 const ClipStudio       = lazy(importClipStudio)
 const ContentStudio    = lazy(importContentStudio)
+const StoryStudio      = lazy(importStoryStudio)
 const SettingsScreen   = lazy(importSettings)
 const QueueScreen      = lazy(importQueue)
 
@@ -55,6 +57,7 @@ const PANEL_MAP: Record<ActivePanel, React.ComponentType> = {
   home:          HistoryScreen,
   'clip-studio': ClipStudio,
   'content-studio': ContentStudio,
+  'story-studio': StoryStudio,
   queue:         QueueScreen,
   library:       HistoryScreen,
   publish:       PublishPlaceholder,

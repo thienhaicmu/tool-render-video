@@ -195,7 +195,7 @@ export interface RenderRequest {
   // Vision v2 — surviving wired fields
   target_duration?: number
   output_count?: number
-  render_format?: 'clips' | 'recap' | 'content'
+  render_format?: 'clips' | 'recap' | 'content' | 'story'
   video_type?: string
   hook_strength?: string
 
@@ -215,6 +215,17 @@ export interface RenderRequest {
   // CS-A: edited/approved ContentPlan JSON from the Review step. When set, the
   // backend renders from it and skips AI planning.
   content_plan_override?: string
+
+  // Story Mode (render_format="story", 2026-07-09): Chapter → AI storyboard →
+  // consistent AI images + narration → Video. The chapter text reuses
+  // `content_script` above. All optional + inert by default (Sacred Contract #2).
+  story_series_id?: string       // '' = one-off chapter (no cross-chapter Character DB)
+  story_chapter_no?: number
+  story_art_style?: string       // anime|wuxia|romance|realistic|inkwash|... ('' = infer)
+  story_reading_pace?: 'slow' | 'normal' | 'fast'
+  // Approved/edited StoryPlan JSON from the Storyboard review. When set, the
+  // backend renders from it and skips AI planning.
+  story_plan_override?: string
 
   // Architecture-review C.1 Phase 1 (2026-06-30): Clip-path feature flag
   // for the Comprehension stage. When true AND render_format === 'clips',
@@ -453,8 +464,8 @@ export interface HistoryItem {
   job_id: string
   kind: 'render' | 'download'
   /** Render mode — routes an active render to the right studio (content →
-   *  Content Studio; clips/recap → Clip Studio). Default 'clips'. */
-  render_format?: 'clips' | 'recap' | 'content'
+   *  Content Studio; story → Story Studio; clips/recap → Clip Studio). Default 'clips'. */
+  render_format?: 'clips' | 'recap' | 'content' | 'story'
   status: string
   stage: string
   title: string

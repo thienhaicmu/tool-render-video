@@ -263,6 +263,40 @@ def get_content_plan(job_id: str) -> str | None:
         return None
 
 
+def update_story_plan(job_id: str, plan_json: str | None) -> None:
+    """Persist the StoryPlan JSON blob for a job (story mode). None clears it.
+    Never raises — logs and returns on DB error so a failure to persist does
+    not crash a live render. Mirrors update_content_plan."""
+    try:
+        with db_conn() as conn:
+            conn.execute(
+                "UPDATE jobs SET story_plan_json = ?, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?",
+                (plan_json, job_id),
+            )
+            conn.commit()
+        _count_write("update_story_plan")
+    except Exception as exc:
+        logger.warning("update_story_plan failed for job_id=%s: %s", job_id, exc)
+
+
+def get_story_plan(job_id: str) -> str | None:
+    """Return the raw StoryPlan JSON blob for a job, or None. Feed the result to
+    StoryPlan.from_json() (itself defensive). Never raises."""
+    try:
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT story_plan_json FROM jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            value = row[0] if isinstance(row, tuple) else row["story_plan_json"]
+            return value if isinstance(value, str) and value else None
+    except Exception as exc:
+        logger.warning("get_story_plan failed for job_id=%s: %s", job_id, exc)
+        return None
+
+
 def update_story_model(job_id: str, model_json: str | None) -> None:
     """Persist the StoryModel JSON blob for a job. None clears it.
 

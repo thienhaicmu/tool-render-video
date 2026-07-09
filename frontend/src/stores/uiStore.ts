@@ -9,6 +9,7 @@ export type ActivePanel =
   | 'home'
   | 'clip-studio'
   | 'content-studio'
+  | 'story-studio'
   | 'queue'
   | 'library'
   | 'publish'

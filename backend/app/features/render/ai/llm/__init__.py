@@ -237,6 +237,157 @@ def select_content_plan(
     return None
 
 
+def _get_story_call_fn(provider_name: str, api_key: str, model: Optional[str]):
+    """Return a bound ``call_fn(system, user) -> str | None`` for Story Intelligence
+    by reusing the provider's raw content-style call (``_call_<p>_content``), or
+    None when that provider has no such call. Defensive — never raises.
+
+    This keeps ALL Story orchestration in story_director + this dispatcher and
+    touches the provider modules ZERO (they already expose the raw content call
+    for Content Mode)."""
+    try:
+        if provider_name == "openai":
+            from app.features.render.ai.llm.providers import openai as _mod
+        elif provider_name == "claude":
+            from app.features.render.ai.llm.providers import claude as _mod
+        else:
+            from app.features.render.ai.llm.providers import gemini as _mod
+        raw_call = getattr(_mod, f"_call_{provider_name}_content", None)
+        if raw_call is None:
+            return None
+        resolved_model = model or getattr(_mod, "_DEFAULT_MODEL", None)
+        if not resolved_model:
+            return None
+        return lambda _sys, _usr: raw_call(api_key, resolved_model, _sys, _usr)
+    except Exception as exc:
+        logger.warning("llm: _get_story_call_fn(%s) failed %s", provider_name, exc)
+        return None
+
+
+def analyze_story(
+    *,
+    provider: str = "openai",
+    chapter_text: str,
+    language: str = "vi",
+    tone: str = "",
+    prior_context: str = "",
+    api_key: str = "",
+    model: Optional[str] = None,
+    resolve_key: Optional[Callable[[str], str]] = None,
+) -> Optional[dict]:
+    """Story Intelligence (P1) — turn a raw chapter into a Story Bible.
+
+    Returns ``{"bible": StoryBible, "meta": {...}}`` or None (Sacred Contract #3 —
+    never raises). Default provider "openai" (Story stack is GPT-centric). When
+    LLM_FALLBACK_ENABLED=1 and the primary yields None, the remaining providers
+    that expose a raw content call are tried in order. ``resolve_key`` (LOW-1)
+    resolves the correct key per provider on a cross-provider fallback."""
+    if not chapter_text or not str(chapter_text).strip():
+        return None
+    from app.features.render.ai.llm.story_director import run_story_intelligence
+    primary = (provider or "openai").strip().lower()
+    if primary not in SUPPORTED_PROVIDERS:
+        primary = "openai" if "openai" in SUPPORTED_PROVIDERS else DEFAULT_PROVIDER
+    chain = _provider_chain(primary)
+    for _p in chain:
+        _key = api_key
+        if resolve_key is not None:
+            try:
+                _key = resolve_key(_p) or ""
+            except Exception:
+                _key = api_key
+        if not _key:
+            continue
+        call_fn = _get_story_call_fn(_p, _key, model)
+        if call_fn is None:
+            continue
+        try:
+            result = run_story_intelligence(
+                call_fn=call_fn, chapter_text=chapter_text, language=language,
+                tone=tone, prior_context=prior_context, provider_label=_p,
+            )
+        except Exception as exc:  # defensive — director already never raises
+            logger.warning("llm: analyze_story provider=%s raised %s", _p, exc)
+            result = None
+        if result is not None:
+            if _p != primary:
+                logger.info("llm: story-intelligence fallback succeeded provider=%s (primary=%s None)", _p, primary)
+            return result
+    logger.warning("llm: analyze_story produced no bible (providers tried=%s)", chain)
+    return None
+
+
+def generate_story_plan(
+    *,
+    provider: str = "openai",
+    chapter_text: str,
+    bible: Optional[Any] = None,
+    meta: Optional[dict] = None,
+    language: str = "vi",
+    tone: str = "",
+    art_style: str = "",
+    series_id: str = "",
+    chapter_no: int = 0,
+    aspect_ratio: str = "9:16",
+    reading_pace: str = "normal",
+    api_key: str = "",
+    model: Optional[str] = None,
+    resolve_key: Optional[Callable[[str], str]] = None,
+) -> Optional["StoryPlan"]:
+    """Story Planning (P2) — turn a chapter (+ its Story Bible) into a full
+    StoryPlan (scenes → shots → narration → visual prompts).
+
+    When ``bible`` is None, Story Intelligence (P1 ``analyze_story``) runs first to
+    build it. Returns a StoryPlan or None (Sacred Contract #3 — never raises).
+    GPT-centric default provider; cross-provider fallback via _provider_chain."""
+    if not chapter_text or not str(chapter_text).strip():
+        return None
+    from app.features.render.ai.llm.story_director import run_story_planning
+    primary = (provider or "openai").strip().lower()
+    if primary not in SUPPORTED_PROVIDERS:
+        primary = "openai" if "openai" in SUPPORTED_PROVIDERS else DEFAULT_PROVIDER
+
+    # Build the bible first if not supplied (P1).
+    if bible is None:
+        _res = analyze_story(
+            provider=primary, chapter_text=chapter_text, language=language, tone=tone,
+            api_key=api_key, model=model, resolve_key=resolve_key,
+        )
+        if _res is not None:
+            bible = _res.get("bible")
+            meta = meta or _res.get("meta")
+
+    chain = _provider_chain(primary)
+    for _p in chain:
+        _key = api_key
+        if resolve_key is not None:
+            try:
+                _key = resolve_key(_p) or ""
+            except Exception:
+                _key = api_key
+        if not _key:
+            continue
+        call_fn = _get_story_call_fn(_p, _key, model)
+        if call_fn is None:
+            continue
+        try:
+            plan = run_story_planning(
+                call_fn=call_fn, chapter_text=chapter_text, bible=bible, meta=meta,
+                language=language, tone=tone, art_style=art_style, series_id=series_id,
+                chapter_no=chapter_no, aspect_ratio=aspect_ratio, reading_pace=reading_pace,
+                provider_label=_p,
+            )
+        except Exception as exc:  # defensive — director already never raises
+            logger.warning("llm: generate_story_plan provider=%s raised %s", _p, exc)
+            plan = None
+        if plan is not None:
+            if _p != primary:
+                logger.info("llm: story-plan fallback succeeded provider=%s (primary=%s None)", _p, primary)
+            return plan
+    logger.warning("llm: generate_story_plan produced no plan (providers tried=%s)", chain)
+    return None
+
+
 def generate_publish_meta(
     *,
     provider: str = DEFAULT_PROVIDER,

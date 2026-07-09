@@ -62,6 +62,7 @@ interface NavItem {
 const MAIN_NAV: NavItem[] = [
   { panel: 'clip-studio', labelKey: 'nav_studio',   icon: <IconSpark size={19} /> },
   { panel: 'content-studio', labelKey: 'nav_content', icon: <IconContent /> },
+  { panel: 'story-studio', labelKey: 'nav_story',   icon: <IconContent /> },
   { panel: 'queue',       labelKey: 'nav_queue',    icon: <IconQueue size={19} /> },
   { panel: 'library',     labelKey: 'nav_library',  icon: <IconGrid /> },
   { panel: 'download',    labelKey: 'nav_download', icon: <IconDownload /> },

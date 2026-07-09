@@ -147,9 +147,13 @@ def test_public_field_count_pinned():
     # Imagen quality selector). FE 83→84, BE-only 80, total 163→164.
     # P4.1 (2026-07-06): +1 content_ai_budget, FE-facing (Content Studio paid-visual
     # budget cap). FE 84→85, BE-only 80, total 164→165.
-    assert len(FE_FACING_FIELDS) == 85, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    # Story Mode P5 (2026-07-09): +5 story fields, ALL BE-only at P5, total 165→170.
+    # Story Mode P6 (2026-07-09): the 5 story fields PROMOTED to FE-facing (wire
+    # surface — /api/render/process must accept them so the Story Studio can submit
+    # a story render). FE 85→90, BE-only 85→80, total stays 170.
+    assert len(FE_FACING_FIELDS) == 90, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
     assert len(BE_ONLY_FIELDS)   == 80, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
-    assert len(RenderRequest.model_fields) == 165, (
+    assert len(RenderRequest.model_fields) == 170, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
     )
