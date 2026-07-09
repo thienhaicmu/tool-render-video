@@ -14,9 +14,9 @@ from app.models.render import RenderFormat, RenderRequest
 
 
 def test_render_format_literal_args():
-    """The Literal carries exactly the three supported modes."""
+    """The Literal carries exactly the supported modes (Story Mode added 2026-07-09)."""
     args = typing.get_args(RenderFormat)
-    assert set(args) == {"clips", "recap", "content"}
+    assert set(args) == {"clips", "recap", "content", "story"}
 
 
 def test_default_is_clips():
@@ -69,4 +69,4 @@ def test_schema_lists_closed_set():
     assert enum_values is not None, (
         f"render_format schema does not expose enum values: {field_schema}"
     )
-    assert set(enum_values) == {"clips", "recap", "content"}
+    assert set(enum_values) == {"clips", "recap", "content", "story"}

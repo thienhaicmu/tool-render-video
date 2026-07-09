@@ -22,6 +22,7 @@ nvidia-cuda-nvrtc-cu12
 piper-tts
 # Cloud LLM providers for segment selection.
 # Each is optional; install the one matching your configured ai_provider.
-openai>=1.0.0              # ai_provider=openai
+openai>=1.0.0              # ai_provider=openai; Story Mode text + gpt-image-1 + Vision QA
 google-genai>=2.0.0        # ai_provider=gemini (default — free 1M tokens/day)
 anthropic>=0.40.0          # ai_provider=claude
+elevenlabs>=1.0.0          # Story Mode TTS (English/Japanese narration)

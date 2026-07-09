@@ -25,6 +25,7 @@ from app.core.logging_setup import configure_logging as _configure_logging
 _configure_logging(LOGS_DIR)
 from app.features.render.router import router as render_router
 from app.features.content.router import router as content_router
+from app.features.story.router import router as story_router
 from app.routes.jobs import router as jobs_router
 from app.routes.voice import router as voice_router
 from app.routes.files import router as files_router
@@ -156,6 +157,7 @@ app = FastAPI(title="YT TikTok Desktop Local Platform")
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(render_router)
 app.include_router(content_router)  # Content Studio (CS-A): plan-only endpoint
+app.include_router(story_router)  # Story Studio (P1): Story Intelligence /api/story/analyze
 app.include_router(jobs_router)
 # Security: POST /api/dev/command executes arbitrary shell commands with no auth.
 # Disabled by default. Set ENABLE_DEVTOOLS=1 only in trusted local dev environments.

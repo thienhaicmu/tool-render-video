@@ -230,9 +230,46 @@ def _validate_content_source(payload: RenderRequest):
     _validate_output_dir(payload)
 
 
+def _validate_story_source(payload: RenderRequest):
+    """Case-aware validation for a Story-mode render (render_format="story").
+
+    Story has NO source video — its "source" is the CHAPTER text (reused via
+    content_script) or an approved StoryPlan override. Mirrors _validate_content_source:
+      1. A non-empty content_script OR a non-empty story_plan_override.
+      2. If the job-level fallback background is an image/video, its path must exist.
+      3. A usable, writable output_dir.
+    The image provider (gpt-image-1) is NOT hard-validated for a key — story_image
+    falls back to the background when a key is missing (graceful degradation)."""
+    script = (getattr(payload, "content_script", "") or "").strip()
+    plan_override = (getattr(payload, "story_plan_override", "") or "").strip()
+    if not script and not plan_override:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "content_script is required for a story render — paste a chapter "
+                "(or generate + approve a storyboard) before rendering."
+            ),
+        )
+    bg_kind = (getattr(payload, "content_background_kind", "") or "color").strip().lower()
+    bg_value = (getattr(payload, "content_background_value", "") or "").strip()
+    if bg_kind in ("image", "video"):
+        if not bg_value:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Background is set to '{bg_kind}' but no file was chosen.",
+            )
+        if not Path(bg_value).expanduser().exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Background {bg_kind} not found on disk: {bg_value}",
+            )
+    _validate_output_dir(payload)
+
+
 def _validate_render_source(payload: RenderRequest):
     # Validation is per render_format — each mode has a DIFFERENT "source":
     #   content → the SCRIPT (or an approved plan override); NO video file.
+    #   story   → the CHAPTER (content_script) or an approved storyboard; NO video.
     #   clips / recap → a local source video file (or an editor session).
     # Validating source_video_path unconditionally (the pre-2026-07 behaviour)
     # rejected every Content-mode render with "source_video_path is required",
@@ -240,6 +277,9 @@ def _validate_render_source(payload: RenderRequest):
     render_format = str(getattr(payload, "render_format", "clips") or "clips").strip().lower()
     if render_format == "content":
         _validate_content_source(payload)
+        return
+    if render_format == "story":
+        _validate_story_source(payload)
         return
 
     # When an editor session is provided, the pipeline uses the session's video_path;
@@ -316,6 +356,17 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
             # Content Mode: Script → AI narration → Video (no source footage).
             from app.features.render.engine.pipeline.content_pipeline import run_content
             run_content(
+                job_id=job_id,
+                payload=payload,
+                resume_mode=resume_mode,
+                load_session_fn=_load_session,
+                cleanup_session_fn=_cleanup_preview_session,
+            )
+        elif _rf == "story":
+            # Story Mode: Chapter → AI storyboard → consistent images + narration
+            # → Video (no source footage). Fully separate orchestrator.
+            from app.features.render.engine.pipeline.story_pipeline import run_story
+            run_story(
                 job_id=job_id,
                 payload=payload,
                 resume_mode=resume_mode,

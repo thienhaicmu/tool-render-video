@@ -524,6 +524,22 @@ def generate_narration_mp3(
     raise RuntimeError(f"AI voice generation failed: {_last_exc}")
 
 
+def resolve_story_tts_engine(language: str) -> str:
+    """Story Mode TTS engine routing by language (§ P4 decision C):
+      Vietnamese → 'gemini' (native, cheap); English/Japanese → 'elevenlabs'
+      (audiobook-grade); anything else → 'gemini'. STORY_TTS_ENGINE_OVERRIDE forces
+      a single engine (kill-switch). All engines fall back to the free edge chain
+      inside generate_narration_audio, so this only picks the PREFERRED engine.
+      Never raises."""
+    force = (os.environ.get("STORY_TTS_ENGINE_OVERRIDE", "") or "").strip().lower()
+    if force:
+        return force
+    lang = (language or "").strip().lower()
+    if lang.startswith("en") or lang.startswith("ja"):
+        return "elevenlabs"
+    return "gemini"
+
+
 def generate_narration_audio(
     *,
     text: str,
@@ -650,6 +666,32 @@ def generate_narration_audio(
             logger.warning(
                 "gemini_tts_failed_fallback job_id=%s: %s — falling back to edge chain",
                 job_id, gemini_exc,
+            )
+
+    # ── ElevenLabs requested (cloud, audiobook-grade — Story EN/JP) ──────
+    # Opt-in only (Story routes EN/JP here). On ANY failure (SDK/key absent,
+    # quota, network) it falls THROUGH to the default Edge → Piper → XTTS chain
+    # below, so a paid-provider outage never loses a render's narration.
+    if engine == "elevenlabs":
+        try:
+            from app.features.render.engine.audio.tts_elevenlabs import (
+                elevenlabs_available,
+                synthesize_elevenlabs,
+            )
+            if elevenlabs_available():
+                _clean = _sanitize_plain_tts(str(text or "").strip())
+                return synthesize_elevenlabs(
+                    text=_clean, language=language, gender=gender, job_id=job_id,
+                    voice_id=voice_id, output_path=output_path,
+                )
+            logger.warning(
+                "elevenlabs_unavailable_fallback job_id=%s — SDK or API key absent, using edge chain",
+                job_id,
+            )
+        except Exception as el_exc:
+            logger.warning(
+                "elevenlabs_failed_fallback job_id=%s: %s — falling back to edge chain",
+                job_id, el_exc,
             )
 
     # ── Default: Edge-TTS, with automatic offline fallback ───────────────

@@ -123,8 +123,13 @@ def test_render_request_field_count_unchanged():
     # content_visual_provider="ai_image".
     # 2026-07-06 P4.1: +1 (content_ai_budget, default 0.0) → 165. Sacred #2
     # verified: 0.0 = unlimited = the env CONTENT_AI_BUDGET (pre-P4.1 behaviour).
-    assert field_count == 165, (
-        f"RenderRequest now has {field_count} fields (expected 165). "
+    # 2026-07-09 Story Mode (P5): +5 story fields → 170. All BE-only, all inert
+    # (story_series_id="", story_chapter_no=0, story_art_style="",
+    # story_reading_pace="normal", story_plan_override=""). Sacred Contract #2
+    # verified: a stored payload replays with NO story behaviour — Story Mode only
+    # activates on render_format=="story" AND a non-empty content_script.
+    assert field_count == 170, (
+        f"RenderRequest now has {field_count} fields (expected 170). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

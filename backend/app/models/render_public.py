@@ -166,6 +166,15 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # Clip-path Comprehension stage. Phase 1 ships the field only; Phase 2/3
     # wire it through render_pipeline.py + providers + prompts.
     "use_story_intelligence",
+    # Story Mode (render_format="story", 2026-07-09 — P6 wire surface) — Chapter →
+    # AI storyboard → consistent images + narration → Video. The chapter text
+    # reuses ``content_script`` (already FE-facing above). These are the Story
+    # Studio knobs the FE sends: the optional cross-chapter series link, the art
+    # style, the reading pace, and the approved-storyboard override. All inert by
+    # default (Sacred Contract #2). /api/render/process (extra="forbid") accepts
+    # them so the FE can submit a story render.
+    "story_series_id", "story_chapter_no", "story_art_style",
+    "story_reading_pace", "story_plan_override",
 })
 
 

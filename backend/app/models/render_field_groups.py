@@ -44,6 +44,13 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
         "content_ai_budget",
         "content_plan_override",
     }),
+    "story": frozenset({
+        # Story Mode (render_format="story") — Chapter → AI storyboard → consistent
+        # images + narration → Video. BE-only (wire surface lands in P6). The
+        # chapter text reuses content_script (in the "content" group).
+        "story_series_id", "story_chapter_no", "story_art_style",
+        "story_reading_pace", "story_plan_override",
+    }),
     "lifecycle": frozenset({
         "resume_job_id", "resume_from_last", "render_profile", "render_preset",
         "render_preset_id", "render_preset_label", "retry_count",

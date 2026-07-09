@@ -1,0 +1,51 @@
+/* StoryStudio.css — reuses the Content Studio design language (cs- classes,
+   tokens, cards, inputs, stepper) so Story Studio matches the app exactly, plus
+   a few Story-specific bits for the Bible + Storyboard rows. */
+@import url('../content-studio/ContentStudio.css');
+
+/* Bible review — character / environment rows */
+.st-entity {
+  padding: 12px 0;
+  border-top: 1px solid var(--border, #2a2a33);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.st-entity:first-child { border-top: none; }
+.st-entity-desc {
+  font-size: 13px;
+  color: var(--text-secondary, #9aa0a6);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+.st-ref-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--ok, #38c172) 22%, transparent);
+  color: var(--ok, #38c172);
+}
+
+/* Storyboard editor — scene + shot rows */
+.st-scene-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.st-shot {
+  padding: 12px 0;
+  border-top: 1px solid var(--border, #2a2a33);
+}
+.st-shot-meta {
+  font-size: 12px;
+  color: var(--text-secondary, #9aa0a6);
+  margin-bottom: 6px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.st-tier {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
