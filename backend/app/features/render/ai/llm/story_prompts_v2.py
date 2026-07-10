@@ -121,10 +121,26 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
     )
 
 
+def _series_memory_block(prior_context: str) -> str:
+    """Optional cross-chapter grounding (G1): reproduced VERBATIM from the caller
+    (concatenated, never str.format'd) so arbitrary characters in it are safe. "" when
+    there is no prior context — one-off chapters stay byte-identical."""
+    pc = (prior_context or "").strip()
+    if not pc:
+        return ""
+    return (
+        "\n═══ SERIES MEMORY (earlier chapters — STAY CONSISTENT) ═══\n"
+        + pc
+        + "\nReuse the SAME character ids + canonical look above; do NOT rename or "
+        "redesign a returning character. Continue the story faithfully from here.\n"
+    )
+
+
 def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str = "",
                              aspect_ratio: str = "16:9", subtitle_mode: str = "hook_only",
-                             ceiling: int = 15) -> "tuple[str, str]":
-    """Mode A — (system, user) to ADAPT an existing story into a StoryPlan v2."""
+                             ceiling: int = 15, prior_context: str = "") -> "tuple[str, str]":
+    """Mode A — (system, user) to ADAPT an existing story into a StoryPlan v2.
+    ``prior_context`` (G1) grounds a later chapter on earlier ones when non-empty."""
     lang_name = _lang_name(language)
     method = (
         "═══ METHOD (follow this order) ═══\n"
@@ -137,6 +153,7 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
     user = (
         f"NARRATION LANGUAGE: {lang_name}\n{style_line}"
         + method
+        + _series_memory_block(prior_context)
         + "\n═══ SOURCE STORY (adapt THIS) ═══\n" + _fit(chapter) + "\n\n"
         + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode)
@@ -146,8 +163,10 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
 
 def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
                             language: str = "vi", art_style: str = "", aspect_ratio: str = "16:9",
-                            subtitle_mode: str = "hook_only", ceiling: int = 15) -> "tuple[str, str]":
-    """Mode B — (system, user) to CREATE a story from an idea then storyboard it (same schema)."""
+                            subtitle_mode: str = "hook_only", ceiling: int = 15,
+                            prior_context: str = "") -> "tuple[str, str]":
+    """Mode B — (system, user) to CREATE a story from an idea then storyboard it (same schema).
+    ``prior_context`` (G1) grounds a later chapter on earlier ones when non-empty."""
     lang_name = _lang_name(language)
     cps = _CPS.get((language or "").strip().lower()[:2], 14.0)
     budget = int(max(0, duration_sec) * cps) if duration_sec and duration_sec > 0 else 0
@@ -167,6 +186,7 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
     user = (
         f"NARRATION LANGUAGE: {lang_name}\n{genre_line}{dur_line}{style_line}"
         + method
+        + _series_memory_block(prior_context)
         + "\n═══ STORY IDEA (create FROM this) ═══\n" + _fit(idea, 8000) + "\n\n"
         + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode)

@@ -115,12 +115,16 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
         resolve_key = lambda _p: _resolve_api_key(payload, _p)[0]  # noqa: E731
     except Exception:
         api_key, resolve_key = "", None
+    _sid = (getattr(payload, "story_series_id", "") or "")
+    _cno = int(getattr(payload, "story_chapter_no", 0) or 0)
+    # G1: ground a later series chapter on earlier ones (no-op when series_id empty).
+    from app.features.render.engine.pipeline.story_series_memory import build_prior_context
+    prior_context = build_prior_context(_sid, before_chapter=(_cno or None))
     plan = generate_story_plan_v2(
         provider=provider, source=source, chapter=chapter, idea=idea,
         duration_sec=duration_sec, genre=genre, language=language, art_style=art_style,
         aspect_ratio=aspect, subtitle_mode=subtitle_mode,
-        series_id=(getattr(payload, "story_series_id", "") or ""),
-        chapter_no=int(getattr(payload, "story_chapter_no", 0) or 0),
+        series_id=_sid, chapter_no=_cno, prior_context=prior_context,
         api_key=api_key, model=(getattr(payload, "llm_model", None) or None),
         resolve_key=resolve_key,
     )
@@ -392,6 +396,17 @@ def run_story_v2(
         )
         update_story_plan(job_id, plan.to_json())
 
+        # G1: ensure the series row exists BEFORE any character / reference-sheet
+        # upsert (FK parent) — a first chapter would otherwise silently fail to pin
+        # its reference sheets. No-op when story_series_id is empty (one-off chapter).
+        _series_id = (getattr(payload, "story_series_id", "") or "").strip()
+        if _series_id:
+            try:
+                from app.db import story_repo as _story_repo
+                _story_repo.upsert_series(_series_id, language=language, art_style=art_style)
+            except Exception:
+                pass
+
         # ── 2. Voice cast (AI-decided; fills render.voices) ─────────────────
         apply_voice_cast_v2(plan, language, narrator_gender=narrator_gender)
 
@@ -529,6 +544,15 @@ def run_story_v2(
             output_stem=_output_stem, final_out=final_out, assembly=assembly,
             clips=clips, shots_dir=shots_dir, total_parts=total_parts,
             failed_parts=failed_parts, visual_fallbacks=visual_fallbacks,
+        )
+
+        # ── 9. Series memory (G1) — persist canonical characters + a rolling
+        #      summary so the NEXT chapter grounds on this one. Best-effort; a
+        #      no-op when story_series_id is empty (one-off chapter).
+        from app.features.render.engine.pipeline.story_series_memory import persist_series_memory
+        persist_series_memory(
+            plan, (getattr(payload, "story_series_id", "") or ""),
+            int(getattr(payload, "story_chapter_no", 0) or 0),
         )
     finally:
         try:

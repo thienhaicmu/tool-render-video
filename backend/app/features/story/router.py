@@ -168,13 +168,19 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         _os.getenv("STORY_AI_PROVIDER", "openai") or "openai").strip().lower()
     api_key, _ = _resolve_api_key(req, provider)
 
+    # G1: ground a later series chapter on earlier ones (no-op when series_id empty).
+    from app.features.render.engine.pipeline.story_series_memory import build_prior_context
+    _sid = (req.series_id or "")
+    _cno = int(req.chapter_no or 0)
+    prior_context = build_prior_context(_sid, before_chapter=(_cno or None))
+
     plan = generate_story_plan_v2(
         provider=provider, source=source, chapter=chapter, idea=idea,
         duration_sec=int(req.duration_sec or 0), genre=(req.genre or ""),
         language=(req.language or "vi"), art_style=(req.art_style or ""),
         aspect_ratio=(req.aspect_ratio or "16:9"),
         subtitle_mode=(req.subtitle_mode or "hook_only"), ceiling=req.ceiling,
-        series_id=(req.series_id or ""), chapter_no=int(req.chapter_no or 0),
+        series_id=_sid, chapter_no=_cno, prior_context=prior_context,
         api_key=api_key, model=req.llm_model,
         resolve_key=lambda _p: _resolve_api_key(req, _p)[0],
     )
