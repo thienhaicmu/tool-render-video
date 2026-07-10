@@ -1,22 +1,16 @@
 """
-Story Studio API (P1) — Story Intelligence endpoint.
+Story Studio API — Story-to-Video v2 pre-render review endpoints.
 
-Story-to-Video's first pipeline step reads a whole chapter and reconstructs a
-Story Bible (setting/hook/cta + canonical characters + environments + rolling
-summary) BEFORE any storyboard/render. This router exposes it plan-only so the FE
-Bible-review screen (Duyệt #1) can show/edit it, and so P1 is testable in
-isolation:
+The render itself goes through the shared render API (render_format="story"); this
+router covers the review flow the FE Story Studio drives before render:
 
-    POST /api/story/analyze  {chapter_text, language, tone, series_id, chapter_no, ...}
-        → {"bible": <StoryBible dict>, "meta": {...}}   (no render)
+    POST /api/story/plan                     — ONE super call → StoryPlan v2
+    POST /api/story/visual/preview           — one key-visual image (preview/regen)
+    POST /api/story/character/reference-sheet — canonical character reference sheet
+    POST /api/story/narration/preview        — one beat's narration to audio
 
-When ``series_id`` is provided the result is PERSISTED to the cross-chapter
-Character/Environment DB (story_repo) and the chapter's rolling summary is
-appended — so a later chapter grounds on it. A one-off chapter (empty series_id)
-just returns the bible without persisting.
-
-Sacred Contract #3: analyze_story already returns None on any failure; here that
-surfaces as a clean 502 (no unhandled raise reaches the client).
+All AI calls are defensive (Sacred Contract #3): a None/empty result surfaces as a
+clean 4xx/502 — no unhandled raise reaches the client.
 """
 from __future__ import annotations
 
@@ -24,7 +18,6 @@ import json
 import logging
 import re
 import uuid
-from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
@@ -34,7 +27,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import CACHE_DIR
 from app.db import story_repo
-from app.features.render.ai.llm import analyze_story, generate_story_plan_v2
+from app.features.render.ai.llm import generate_story_plan_v2
 
 logger = logging.getLogger("app.story.api")
 
@@ -45,81 +38,6 @@ router = APIRouter(prefix="/api/story", tags=["story"])
 _PREVIEW_DIR = CACHE_DIR / "story_preview"
 _VISUAL_DIR = CACHE_DIR / "story_preview_visual"
 _TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
-
-
-class StoryAnalyzeRequest(BaseModel):
-    chapter_text: str = Field(default="", description="Raw chapter text")
-    language: str = "vi"
-    tone: str = ""
-    series_id: str = ""          # "" = one-off chapter (no cross-chapter persist)
-    chapter_no: int = 0
-    ai_provider: Optional[str] = None
-    llm_model: Optional[str] = None
-
-
-def _persist_bible(series_id: str, chapter_no: int, bible, rolling_summary: str) -> None:
-    """Persist canonical characters/environments + the rolling summary for a
-    series so later chapters reuse them. Best-effort — story_repo is defensive."""
-    try:
-        story_repo.upsert_series(series_id)
-        for c in bible.characters:
-            story_repo.upsert_character(
-                c.id or c.name, series_id=series_id, name=c.name,
-                canonical_desc=c.description, reference_image_path=c.reference_image_path,
-                voice_engine=c.voice_engine, voice_id=c.voice_id, age=c.age, gender=c.gender,
-            )
-        for e in bible.environments:
-            story_repo.upsert_environment(
-                e.id or e.name, series_id=series_id, name=e.name,
-                canonical_desc=e.description, reference_image_path=e.reference_image_path,
-            )
-        if rolling_summary:
-            story_repo.add_chapter_summary(series_id, chapter_no, rolling_summary)
-    except Exception as exc:  # never break the response on a persist hiccup
-        logger.warning("story: persist bible failed series=%s: %s", series_id, exc)
-
-
-@router.post("/analyze")
-def analyze_chapter(req: StoryAnalyzeRequest) -> dict:
-    """Run Story Intelligence on a chapter (no render). 422 empty text; 502 when
-    the AI produced no usable bible (missing key / provider error — analyze_story
-    returned None per Sacred Contract #3)."""
-    text = (req.chapter_text or "").strip()
-    if not text:
-        raise HTTPException(status_code=422, detail="chapter_text is required")
-
-    from app.core import config as _cfg
-    from app.features.render.engine.pipeline.llm_stage import _resolve_api_key
-
-    provider = (req.ai_provider or "").strip().lower() or getattr(_cfg, "AI_PROVIDER_DEFAULT", "openai")
-    api_key, _ = _resolve_api_key(req, provider)
-
-    # Cross-chapter context: earlier chapter summaries of this series (if any).
-    prior_context = ""
-    if (req.series_id or "").strip():
-        try:
-            prior = story_repo.list_chapter_summaries(req.series_id, before_chapter=req.chapter_no or None)
-            prior_context = "\n".join(
-                f"[Ch.{p['chapter_no']}] {p['rolling_summary']}" for p in prior if p.get("rolling_summary")
-            )
-        except Exception:
-            prior_context = ""
-
-    result = analyze_story(
-        provider=provider, chapter_text=text, language=(req.language or "vi"),
-        tone=(req.tone or ""), prior_context=prior_context, api_key=api_key,
-        model=req.llm_model, resolve_key=lambda _p: _resolve_api_key(req, _p)[0],
-    )
-    if result is None or result.get("bible") is None:
-        raise HTTPException(status_code=502, detail="Story Intelligence returned no usable bible")
-
-    bible = result["bible"]
-    meta = result.get("meta") or {}
-
-    if (req.series_id or "").strip():
-        _persist_bible(req.series_id, req.chapter_no or 0, bible, meta.get("rolling_summary", ""))
-
-    return {"bible": asdict(bible), "meta": meta}
 
 
 class StoryPlanRequest(BaseModel):
