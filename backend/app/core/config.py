@@ -46,10 +46,14 @@ COOKIES_DIR = APP_DATA_DIR / "cookies"
 # pipeline_cache.py, motion/crop.py và helper prune trong maintenance.
 CACHE_DIR   = APP_DATA_DIR / "cache"
 REQUEST_LOG = LOGS_DIR / "request.log"   # Type 1: request/validation errors
-# Thư mục gốc thư viện BGM. Người dùng đặt file nhạc tại
-# {BGM_DIR}/{mood}/*.mp3 (hoặc .wav/.m4a/.ogg/.flac). Repo không kèm
-# file nào; thư mục được tạo lúc khởi động cho tiện.
+# Thư mục gốc thư viện BGM của NGƯỜI DÙNG: {BGM_DIR}/{mood}/*.mp3
+# (hoặc .wav/.m4a/.ogg/.flac). Ưu tiên cao nhất — người dùng ghi đè nhạc riêng.
 BGM_DIR     = APP_DATA_DIR / "bgm"
+# Thư viện BGM ĐÓNG GÓI theo repo (assets/bgm/{mood}/*.mp3) — nạp sẵn bởi
+# backend/scripts/fetch_free_bgm.py và commit vào project để KHỎI tải lại. Dùng
+# làm fallback khi BGM_DIR của người dùng chưa có nhạc cho mood đó. Ghi công CC-BY
+# ở assets/bgm/ATTRIBUTION.txt.
+BUNDLED_BGM_DIR = PROJECT_ROOT / "assets" / "bgm"
 
 for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, COOKIES_DIR, CACHE_DIR, BGM_DIR, DATABASE_PATH.parent]:
     p.mkdir(parents=True, exist_ok=True)
@@ -61,21 +65,25 @@ _BGM_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".ogg", ".flac"}
 def _pick_bgm_file(mood: str) -> "str | None":
     """Return a random BGM file path for the requested mood, or None.
 
-    Scan order: ``BGM_DIR/{mood}/`` first, then ``BGM_DIR/default/`` as
-    fallback. Returns None when neither directory contains audio files.
-    Never raises.
+    Scan priority (first non-empty dir wins): user's ``BGM_DIR/{mood}`` →
+    bundled ``BUNDLED_BGM_DIR/{mood}`` → user's ``BGM_DIR/default`` → bundled
+    ``BUNDLED_BGM_DIR/default``. So a specific mood (even the repo-bundled one)
+    beats a generic default, while the user's own files always win their tier.
+    Returns None when no directory contains audio. Never raises.
     """
     try:
-        candidates: list[Path] = []
-        for subdir in [mood.strip().lower(), "default"]:
-            if not subdir:
-                continue
-            d = BGM_DIR / subdir
+        m = (mood or "").strip().lower()
+        dirs: list[Path] = []
+        if m and m != "default":
+            dirs += [BGM_DIR / m, BUNDLED_BGM_DIR / m]
+        dirs += [BGM_DIR / "default", BUNDLED_BGM_DIR / "default"]
+        for d in dirs:
             if d.is_dir():
-                candidates = [f for f in d.iterdir() if f.is_file() and f.suffix.lower() in _BGM_AUDIO_EXTS]
+                candidates = [f for f in d.iterdir()
+                              if f.is_file() and f.suffix.lower() in _BGM_AUDIO_EXTS]
                 if candidates:
-                    break
-        return str(random.choice(candidates)) if candidates else None
+                    return str(random.choice(candidates))
+        return None
     except Exception:
         return None
 

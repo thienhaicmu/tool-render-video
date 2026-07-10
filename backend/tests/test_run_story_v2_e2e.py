@@ -88,7 +88,7 @@ def _mock_cast(plan, language, narrator_gender="female"):
     return plan.render.voices
 
 
-def _mock_image(visual, refs, art_style, width, height, out_path, seed=0):
+def _mock_image(visual, refs, art_style, width, height, out_path, seed=0, provider="gpt_image"):
     from app.services.bin_paths import get_ffmpeg_bin
     subprocess.run(
         [get_ffmpeg_bin(), "-y", "-f", "lavfi", "-i", f"testsrc=size={width}x{height}",
@@ -219,6 +219,36 @@ def test_run_story_v2_honors_cancel(_story_sandbox, monkeypatch):
             resume_mode=False, load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None,
         )
     assert not list((output_dir / "story-cancel").rglob("*.mp4"))
+
+
+@_NEEDS_FFMPEG
+@pytest.mark.parametrize("workers,sub", [("3", "story-par"), ("1", "story-serial")])
+def test_run_story_v2_parallel_matches_serial(_story_sandbox, monkeypatch, workers, sub):
+    """Phase 3 — the cue render + image gen run in a bounded pool. workers=3 (parallel)
+    and workers=1 (serial rollback) must BOTH deliver all 3 cues, in order, with a
+    valid final mp4. The hook overlay on b1 also exercises the per-cue textfile
+    namespacing (no parallel write race)."""
+    monkeypatch.setenv("STORY_RENDER_WORKERS", workers)
+    monkeypatch.setenv("STORY_IMAGE_WORKERS", workers)
+    job_id = str(uuid.uuid4())
+    output_dir = _story_sandbox["output_dir"]
+    _wire_mocks(monkeypatch, lambda **k: _make_plan_v2())
+
+    sp2.run_story_v2(
+        job_id=job_id, payload=_payload(output_dir, sub=sub), resume_mode=False,
+        load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None,
+    )
+
+    from app.db.jobs_repo import get_job
+    row = get_job(job_id)
+    assert row is not None and row["status"] == "completed", row and row.get("status")
+    result = json.loads(row.get("result_json") or "{}")
+    assert result.get("beat_count") == 3 and result.get("image_count") == 2
+    assert result.get("selected_segments_count") == 3      # every cue delivered
+    assert result.get("failed_outputs_count") == 0 and not result.get("is_partial_success")
+    mp4s = list((output_dir / sub).rglob("*.mp4"))
+    assert mp4s, f"no .mp4 produced (workers={workers})"
+    assert _probe_has(str(mp4s[0]), "v:0") and _probe_has(str(mp4s[0]), "a:0")
 
 
 @_NEEDS_FFMPEG

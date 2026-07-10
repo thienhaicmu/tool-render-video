@@ -18,8 +18,16 @@ Gốc dữ liệu `APP_DATA_DIR`:
 | `CHANNELS_DIR` | `<repo>/channels` hoặc `APP_DATA_DIR/channels` | Output + log theo channel |
 | `TEMP_DIR` | `APP_DATA_DIR/temp` | Thư mục làm việc tạm |
 
-Dẫn xuất (không phải env): `LOGS_DIR`, `COOKIES_DIR`, `CACHE_DIR`, `BGM_DIR`.
-Tất cả được `mkdir` lúc import. BGM người dùng đặt tại `{BGM_DIR}/{mood}/*.mp3`.
+Dẫn xuất (không phải env): `LOGS_DIR`, `COOKIES_DIR`, `CACHE_DIR`, `BGM_DIR`,
+`BUNDLED_BGM_DIR`. Tất cả được `mkdir` lúc import. Nhạc nền quét theo thứ tự ưu
+tiên: `{BGM_DIR}/{mood}/*.mp3` (của người dùng) → `{BUNDLED_BGM_DIR}/{mood}`
+(`<repo>/assets/bgm`, đóng gói theo repo) → `default/` của mỗi tầng. Nạp thư viện
+free: `python backend/scripts/fetch_free_bgm.py` (tải CC0+CC-BY vào `assets/bgm`,
+commit vào repo để khỏi tải lại; ghi công CC-BY ở `assets/bgm/ATTRIBUTION.txt`).
+
+Story Mode nhạc nền **per-scene**: AI gán `bgm_mood` cho mỗi key-visual (schema
+super-prompt s2); pipeline dựng 1 track khớp timeline + duck dưới lời kể. Bật/tắt
+bằng env `STORY_AUTO_BGM` (mặc định `1`; đặt `0` để tắt hoàn toàn).
 
 Cache dir cũng nhận: `XDG_CACHE_HOME`, `TORCH_HOME`, `HF_HOME`,
 `TRANSFORMERS_CACHE`, `OLLAMA_MODELS`, `TEMP`/`TMP`, `FONTCONFIG_FILE` —

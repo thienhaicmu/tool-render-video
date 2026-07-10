@@ -131,8 +131,10 @@ def test_render_request_field_count_unchanged():
     # 2026-07-10 Story Mode v2 B0: +4 story input-source fields → 174. All inert
     # (story_source="", story_idea="", story_duration_sec=0, story_genre="").
     # Sacred #2 verified: "" source = the paste path = unchanged behaviour.
-    assert field_count == 174, (
-        f"RenderRequest now has {field_count} fields (expected 174). "
+    # 2026-07-10 Story Mode v2 Phase 2: +1 story_image_provider → 175. Sacred #2
+    # verified: default "gpt_image" reproduces the existing paid behaviour.
+    assert field_count == 175, (
+        f"RenderRequest now has {field_count} fields (expected 175). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

@@ -265,3 +265,68 @@
   color: var(--text-inverse, #fff);
   border-radius: var(--radius-sm);
 }
+
+/* Phase 2 — final image-provider toggle (free/premium) in the review bar. */
+.st-provider {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.st-provider-opt {
+  padding: 4px var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  background: var(--bg-panel);
+  border: none;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.st-provider-opt + .st-provider-opt { border-left: 1px solid var(--border); }
+.st-provider-opt.is-on { color: var(--text-inverse, #fff); background: var(--accent); }
+.st-provider-opt:disabled { opacity: .55; cursor: default; }
+
+/* Phase 5 — reveal + shimmer polish (UI sinh động). */
+@keyframes st-reveal { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+/* Key-visuals pop in when they land. Monitor tiles hold the final frame (both);
+   review thumbs DON'T fill so the Ken-Burns hover transform can take over. */
+.st-vt-img { animation: st-reveal 0.45s ease both; }
+/* B — Ken Burns on hover: rê chuột → ảnh zoom/pan chậm (mô phỏng chuyển động thật,
+   không tốn render). transition (không phải animation-fill) để hover transform thắng. */
+.st-visual-thumb img { animation: st-reveal 0.45s ease; transition: transform 6s ease-out; }
+.st-visual-thumb:hover img { transform: scale(1.12) translate(-2%, -1.5%); }
+
+@keyframes st-shimmer { 100% { transform: translateX(100%); } }
+/* Pending tiles (no image yet) sweep a soft highlight so the wait feels alive. */
+.st-vt:has(.st-vt-ph)::after,
+.st-visual-thumb:has(.st-visual-badge)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.10), transparent);
+  transform: translateX(-100%);
+  animation: st-shimmer 1.4s ease-in-out infinite;
+}
+/* Smooth the cue-strip fill + done state. */
+.st-mon-cue { transition: background 0.35s ease, border-color 0.35s ease; }
+
+/* Voice-preview tag reads as tappable. */
+.st-tag--voice {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+.st-tag--voice:hover { border-color: var(--accent); color: var(--text-1); }
+
+/* D — cost guardrail hint under the review bar. */
+.st-cost-hint {
+  margin: calc(-1 * var(--space-2)) 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  background: var(--bg-panel);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}

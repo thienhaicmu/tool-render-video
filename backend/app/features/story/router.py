@@ -197,6 +197,9 @@ class StoryVisualPreviewRequest(BaseModel):
     art_style: str = ""
     aspect_ratio: str = "16:9"
     tier: str = "medium"               # low | medium | high (capped at STORY_IMAGE_MAX_TIER)
+    # Phase 2 — draft/final split: the Storyboard review previews with the FREE
+    # provider by default ($0 to regenerate). "gpt_image" available for a paid preview.
+    provider: str = "pollinations"     # pollinations (free) | gpt_image (paid)
 
 
 @router.post("/visual/preview")
@@ -216,7 +219,10 @@ def visual_preview(req: StoryVisualPreviewRequest) -> dict:
     out = _VISUAL_DIR / f"{token}.png"
     visual = Visual(id=token, prompt=prompt, negative_prompt=(req.negative_prompt or ""),
                     tier=(req.tier or "medium"))
-    path = generate_visual_image(visual, {}, (req.art_style or ""), w, h, str(out))
+    provider = (req.provider or "pollinations").strip().lower()
+    if provider not in ("pollinations", "gpt_image"):
+        provider = "pollinations"
+    path = generate_visual_image(visual, {}, (req.art_style or ""), w, h, str(out), provider=provider)
     if not path or not Path(path).exists() or Path(path).stat().st_size <= 0:
         raise HTTPException(status_code=502, detail="visual generation failed")
     return {"token": token, "url": f"/api/story/visual/image/{token}"}

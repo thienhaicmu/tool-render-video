@@ -33,6 +33,11 @@ TRANSITION = ("cut", "fade", "slide", "zoom", "flash", "to_black")
 TIER = ("low", "medium", "high")
 GENDER = ("male", "female", "")
 SUBTITLE_MODE = ("hook_only", "full", "off")
+# Background-music moods the AI may tag a Visual with. Each maps to a folder under
+# BGM_DIR/{mood}/ (see core.config._pick_bgm_file); "" / unknown → "default" folder.
+# Kept in sync with story_prompts_v2 (the AI vocab) and scripts/fetch_free_bgm.py.
+BGM_MOODS = ("tense", "calm", "epic", "sad", "romantic", "mysterious",
+             "action", "hopeful", "dark", "default")
 # Pool a "random" transition resolves into (deterministic via seed).
 _RANDOM_TRANSITIONS = ("fade", "slide", "zoom", "flash")
 
@@ -91,6 +96,7 @@ class Visual:
     negative_prompt: str = ""
     character_ids: list[str] = field(default_factory=list)
     tier: str = "medium"      # ∈ TIER
+    bgm_mood: str = ""        # ∈ BGM_MOODS — AI-chosen music mood for this scene
 
 
 @dataclass
@@ -342,6 +348,32 @@ class StoryPlan:
         """[(visual_id, start_sec, end_sec), ...] — 'hình nào ở giây nào'."""
         return [(c.visual_id, c.start_sec, c.end_sec) for c in self.render.cues]
 
+    def bgm_scenes(self) -> list[tuple]:
+        """[(mood, start_sec, end_sec), ...] — gộp cue liên tiếp cùng visual_id thành
+        'cảnh', gán mood nhạc của Visual đó. Dùng để dựng track nhạc nền theo timeline
+        (per-scene BGM). start được kẹp ≥0 (cue đầu có thể âm do transition). Pure,
+        never raises."""
+        out: list[tuple] = []
+        try:
+            vis_mood = {v.id: (v.bgm_mood or "") for v in self.visuals}
+            cur_vid = None
+            cur_start = 0.0
+            cur_end = 0.0
+            cur_mood = ""
+            for c in self.render.cues:
+                if c.visual_id != cur_vid:
+                    if cur_vid is not None and cur_end > cur_start:
+                        out.append((cur_mood, round(max(0.0, cur_start), 3), round(cur_end, 3)))
+                    cur_vid = c.visual_id
+                    cur_start = float(c.start_sec)
+                    cur_mood = vis_mood.get(c.visual_id, "")
+                cur_end = float(c.end_sec)
+            if cur_vid is not None and cur_end > cur_start:
+                out.append((cur_mood, round(max(0.0, cur_start), 3), round(cur_end, 3)))
+        except Exception:
+            return out
+        return out
+
     # ── Serialisation ────────────────────────────────────────────────────
     def to_json(self) -> str:
         return json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -467,7 +499,8 @@ def _visual_from(x) -> Visual:
     if not isinstance(x, dict): return Visual()
     return Visual(id=_str(x.get("id")), setting_id=_str(x.get("setting_id")),
                   prompt=_str(x.get("prompt")), negative_prompt=_str(x.get("negative_prompt")),
-                  character_ids=_str_list(x.get("character_ids")), tier=_norm(x.get("tier"), TIER, "medium"))
+                  character_ids=_str_list(x.get("character_ids")), tier=_norm(x.get("tier"), TIER, "medium"),
+                  bgm_mood=_norm(x.get("bgm_mood"), BGM_MOODS, ""))
 def _beat_from(x, i) -> Beat:
     if not isinstance(x, dict): return Beat(id=f"b{i}")
     return Beat(id=(_str(x.get("id")) or f"b{i}"), narration=_str(x.get("narration")),
@@ -512,6 +545,6 @@ def _render_from(x) -> RenderState:
 __all__ = [
     "StoryPlan", "CharacterDef", "SettingDef", "Visual", "Beat",
     "Word", "BeatAudio", "Cue", "RenderState",
-    "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE",
+    "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE", "BGM_MOODS",
     "ASPECT_SIZE", "CPS", "CROP_RECT", "TRANSITION_SEC", "MIN_BEAT_SEC", "cps_for",
 ]

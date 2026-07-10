@@ -21,8 +21,12 @@ from __future__ import annotations
 
 import os as _os
 
+from app.domain.story_plan_v2 import BGM_MOODS
+
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s1"
+SUPER_PROMPT_VERSION = "s2"   # s2: per-scene bgm_mood on visuals
+# AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
+_MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
 _LANG_NAMES = {
     "vi": "Vietnamese (Tiếng Việt)", "vi-VN": "Vietnamese (Tiếng Việt)",
@@ -74,7 +78,8 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
     { "id": "v1", "setting_id": "<a settings id>",
       "prompt": "<FULL English image prompt: a WIDE 16:9 scene; place key elements in clear LEFT / CENTER / RIGHT zones so the camera can pan to them; reuse each present character's canonical look; cinematic, detailed>",
       "negative_prompt": "text, watermark, distorted faces",
-      "character_ids": ["<characters ids present>"], "tier": "low|medium|high" }
+      "character_ids": ["<characters ids present>"], "tier": "low|medium|high",
+      "bgm_mood": "<MOOD_VOCAB>" }
   ],
   "timeline": [
     { "id": "b1", "narration": "<voice-over for this beat, in target language>",
@@ -107,7 +112,9 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
         f"6. narration in {lang_name}; each beat = ONE contiguous idea (~1-3 sentences); the beats "
         "in order narrate the whole story faithfully (preserve names/facts, never invent).\n"
         f"7. {hook_rule}\n"
-        "8. DO NOT output any render/asset/audio/timestamp/duration/seconds field.\n"
+        f"8. Each visuals[].bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood matching "
+        "that scene's emotional tone (a creative label only, NOT an audio file/timestamp).\n"
+        "9. DO NOT output any render/asset/path/timestamp/duration/seconds field.\n"
         "═══ SELF-CHECK before answering ═══\n"
         "Verify every visual_id / speaker_id / character_ids exists in the arrays above; if not, fix it.\n"
         "═══ OUTPUT JSON ═══"
@@ -131,7 +138,7 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
         f"NARRATION LANGUAGE: {lang_name}\n{style_line}"
         + method
         + "\n═══ SOURCE STORY (adapt THIS) ═══\n" + _fit(chapter) + "\n\n"
-        + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language) + "\n\n"
+        + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode)
     )
     return _SYSTEM, user
@@ -161,7 +168,7 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
         f"NARRATION LANGUAGE: {lang_name}\n{genre_line}{dur_line}{style_line}"
         + method
         + "\n═══ STORY IDEA (create FROM this) ═══\n" + _fit(idea, 8000) + "\n\n"
-        + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language) + "\n\n"
+        + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode)
     )
     return _SYSTEM, user

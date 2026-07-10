@@ -119,6 +119,9 @@ export interface VisualPreviewRequest {
   art_style?: string
   aspect_ratio?: string
   tier?: string
+  // Phase 2 — draft/final split. Omit → backend defaults to the FREE provider
+  // (Pollinations) so storyboard previews/regenerates cost $0.
+  provider?: 'pollinations' | 'gpt_image'
 }
 
 export interface VisualPreviewResponse {

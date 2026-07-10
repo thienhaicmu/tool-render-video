@@ -11,9 +11,11 @@
  * TimelineEditor can show a thumbnail once a visual has been previewed. Uses the
  * Studio BASE (F0) only — no content-studio.
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { StoryPlanV2, Beat, Visual, CharacterDef } from '../../../api/story'
-import type { Aspect, StoryLang } from '../types'
+import { previewVisual } from '../../../api/story'
+import type { Aspect, ImageProvider, StoryLang } from '../types'
+import { PREMIUM_IMG_COST_USD } from '../types'
 import { beatEstSec, visualColorMap } from './helpers'
 import { CharactersPanel } from './CharactersPanel'
 import { VisualsPanel } from './VisualsPanel'
@@ -26,7 +28,8 @@ function newBeatId(existing: Beat[]): string {
   return `b${i}`
 }
 
-export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language, onRender, onBack }: {
+export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language,
+  imageProvider, onImageProvider, onRender, onBack }: {
   vi: boolean
   plan: StoryPlanV2
   setPlan: (p: StoryPlanV2) => void
@@ -35,10 +38,50 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
   artStyle: string
   aspect: Aspect
   language: StoryLang
+  imageProvider: ImageProvider
+  onImageProvider: (p: ImageProvider) => void
   onRender: () => void
   onBack: () => void
 }) {
   const [previews, setPreviews] = useState<Record<string, string>>({})
+  const setPreview = (id: string, url: string) => setPreviews((p) => ({ ...p, [id]: url }))
+
+  // Phase 2 (draft/final split): on entering Review, auto-generate a FREE draft image
+  // for the whole storyboard so the user sees it BEFORE paying for the premium final.
+  // Sequential + best-effort (gentle on the free service; one bad image never blocks).
+  const draftRan = useRef(false)
+  const [drafting, setDrafting] = useState(false)
+  const [draftMsg, setDraftMsg] = useState('')
+
+  async function draftAll(force = false) {
+    if (drafting) return
+    const targets = plan.visuals.filter((v) => v.prompt.trim() && (force || !previews[v.id]))
+    if (!targets.length) return
+    setDrafting(true)
+    let done = 0
+    for (const v of targets) {
+      setDraftMsg(vi ? `Đang tạo nháp ${done + 1}/${targets.length}…` : `Drafting ${done + 1}/${targets.length}…`)
+      try {
+        const r = await previewVisual({
+          prompt: v.prompt, negative_prompt: v.negative_prompt,
+          art_style: artStyle, aspect_ratio: aspect, tier: v.tier,
+          provider: 'pollinations',   // draft = FREE regardless of the final choice
+        })
+        setPreview(v.id, r.url)
+      } catch { /* best-effort per visual */ }
+      done++
+    }
+    setDrafting(false); setDraftMsg('')
+  }
+
+  useEffect(() => {
+    if (draftRan.current) return
+    draftRan.current = true
+    void draftAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const premiumCost = (plan.visuals.length * PREMIUM_IMG_COST_USD).toFixed(2)
   const colors = visualColorMap(plan.visuals)
   const liveTotal = plan.timeline.reduce(
     (s, b) => s + beatEstSec(b, language) + Math.max(0, b.pause_after || 0), 0)
@@ -91,19 +134,46 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
           </div>
         </div>
         <div className="st-actions">
+          {/* Phase 2 — pick what the FINAL render uses (draft above is always free). */}
+          <div className="st-provider" role="group" aria-label={vi ? 'Chất lượng ảnh' : 'Image quality'}>
+            <button type="button" className={`st-provider-opt${imageProvider === 'pollinations' ? ' is-on' : ''}`}
+              disabled={busy} onClick={() => onImageProvider('pollinations')}
+              title={vi ? 'Ảnh miễn phí (Flux) — $0' : 'Free images (Flux) — $0'}>
+              {vi ? 'Free' : 'Free'} · $0
+            </button>
+            <button type="button" className={`st-provider-opt${imageProvider === 'gpt_image' ? ' is-on' : ''}`}
+              disabled={busy} onClick={() => onImageProvider('gpt_image')}
+              title={vi ? 'Ảnh cao cấp (gpt-image-1) — nhân vật nhất quán' : 'Premium (gpt-image-1) — consistent characters'}>
+              {vi ? 'Premium' : 'Premium'} · ~${premiumCost}
+            </button>
+          </div>
+          <button type="button" className="st-btn" disabled={busy || drafting} onClick={() => void draftAll(true)}>
+            {drafting ? draftMsg : (vi ? '↻ Nháp lại' : '↻ Re-draft')}
+          </button>
           <button type="button" className="st-btn" disabled={busy} onClick={onBack}>
             {vi ? '‹ Sửa nguồn' : '‹ Edit source'}
           </button>
           <button type="button" className="st-btn st-btn--primary" disabled={busy} onClick={onRender}>
-            {busy ? (vi ? 'Đang gửi…' : 'Submitting…') : (vi ? '🎥 Render' : '🎥 Render')}
+            {busy ? (vi ? 'Đang gửi…' : 'Submitting…')
+              : imageProvider === 'gpt_image'
+                ? (vi ? `🎥 Render · ~$${premiumCost}` : `🎥 Render · ~$${premiumCost}`)
+                : (vi ? '🎥 Render · Free' : '🎥 Render · Free')}
           </button>
         </div>
       </div>
 
+      {imageProvider === 'gpt_image' && plan.visuals.length >= 8 && (
+        <div className="st-cost-hint">
+          {vi
+            ? `💡 ${plan.visuals.length} ảnh Premium ≈ $${premiumCost}. Bản nháp trên đã miễn phí — chuyển "Free" nếu muốn render $0.`
+            : `💡 ${plan.visuals.length} premium images ≈ $${premiumCost}. The drafts above are free — switch to "Free" to render at $0.`}
+        </div>
+      )}
+
       <CharactersPanel vi={vi} plan={plan} artStyle={artStyle} onChange={updateCharacter} />
       <VisualsPanel
         vi={vi} plan={plan} artStyle={artStyle} aspect={aspect} colors={colors}
-        previews={previews} setPreview={(id, url) => setPreviews((p) => ({ ...p, [id]: url }))}
+        previews={previews} setPreview={setPreview}
         onChange={updateVisual}
       />
       <TimelineEditor

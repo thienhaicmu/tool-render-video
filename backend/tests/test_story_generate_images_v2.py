@@ -21,7 +21,7 @@ def test_incremental_persist_and_persistent_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(sp2, 'update_story_plan', lambda jid, blob: persisted.append(blob))
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **kw: events.append(kw))
 
-    def fake_img(visual, refs, art_style, w, h, out_path, seed=0):
+    def fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
         Path(out_path).write_bytes(b'\x89PNG')
         return out_path
     monkeypatch.setattr(sp2, 'generate_visual_image', fake_img)
@@ -50,7 +50,7 @@ def test_fallback_skips_persist(monkeypatch, tmp_path):
     monkeypatch.setattr(sp2, 'update_story_plan', lambda jid, blob: persisted.append(blob))
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **kw: None)
     # v1 ok, v2 fails (None).
-    def fake_img(visual, refs, art_style, w, h, out_path, seed=0):
+    def fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
         if visual.id == 'v2':
             return None
         Path(out_path).write_bytes(b'\x89PNG')

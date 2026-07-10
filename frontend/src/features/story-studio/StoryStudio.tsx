@@ -105,6 +105,7 @@ export function StoryStudio() {
       story_series_id: cfg.seriesId,
       story_chapter_no: cfg.chapterNo,
       story_plan_override: JSON.stringify(p),
+      story_image_provider: cfg.imageProvider,
       voice_language: VOICE_LOCALE[cfg.language],
       aspect_ratio: cfg.aspect,
       add_subtitle: cfg.subtitles,
@@ -142,6 +143,7 @@ export function StoryStudio() {
         <PlanReview
           vi={vi} plan={plan} setPlan={setPlan} estTotal={estTotal} busy={busy}
           artStyle={cfg.artStyle} aspect={cfg.aspect} language={cfg.language}
+          imageProvider={cfg.imageProvider} onImageProvider={(p) => setKey('imageProvider', p)}
           onRender={onRender} onBack={reset}
         />
       )}

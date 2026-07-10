@@ -1,8 +1,11 @@
+import logging
 import os
 import subprocess
 from pathlib import Path
 
 from app.services.bin_paths import get_ffmpeg_bin, get_ffprobe_bin
+
+logger = logging.getLogger("app.render.audio.mixer")
 
 # Wall-clock ceilings so a stalled ffprobe/ffmpeg can't hang the render worker
 # (these audio helpers run inside the per-part render path, bypassing the
@@ -277,3 +280,111 @@ def mix_with_bgm(
     if not bgm_output.exists() or bgm_output.stat().st_size <= 0:
         raise RuntimeError("BGM mix failed: output file was not created")
     return str(bgm_output)
+
+
+_BGM_SAMPLE_RATE = 48000
+
+
+def _render_bgm_segment(ffmpeg_bin, src_path, dur, out_wav, fade_sec):
+    """Render ONE scene's BGM to a pcm_s16le/48k/stereo wav of length ``dur``.
+
+    ``src_path`` None → silence. Otherwise the music file is stream-looped to fill
+    ``dur`` with a short afade in/out so scenes don't click at the seams. Returns
+    True on success. Never raises (best-effort — a bad segment degrades to silence)."""
+    try:
+        dur = max(0.1, float(dur))
+        if src_path:
+            fin = min(fade_sec, dur / 2.0)
+            fout_st = max(0.0, dur - fin)
+            af = (f"afade=t=in:st=0:d={fin:.3f},afade=t=out:st={fout_st:.3f}:d={fin:.3f},"
+                  f"aformat=sample_rates={_BGM_SAMPLE_RATE}:channel_layouts=stereo")
+            cmd = [ffmpeg_bin, "-y", "-stream_loop", "-1", "-i", str(src_path),
+                   "-t", f"{dur:.3f}", "-af", af,
+                   "-c:a", "pcm_s16le", "-ar", str(_BGM_SAMPLE_RATE), "-ac", "2", str(out_wav)]
+        else:
+            cmd = [ffmpeg_bin, "-y", "-f", "lavfi", "-t", f"{dur:.3f}",
+                   "-i", f"anullsrc=r={_BGM_SAMPLE_RATE}:cl=stereo",
+                   "-c:a", "pcm_s16le", "-ar", str(_BGM_SAMPLE_RATE), "-ac", "2", str(out_wav)]
+        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", check=True, timeout=_AUDIO_FFMPEG_TIMEOUT_SEC)
+        return Path(out_wav).exists() and Path(out_wav).stat().st_size > 0
+    except Exception as exc:
+        logger.warning("bgm: segment render failed (%s)", exc)
+        return False
+
+
+def build_scene_bgm_track(segments, total_sec, output_path, *, pick_fn=None, fade_sec=0.8):
+    """Dựng 1 track nhạc nền khớp timeline video từ các 'cảnh'
+    ``segments = [(mood, start_sec, end_sec), ...]`` (thứ tự thời gian).
+
+    Mỗi cảnh: ``pick_fn(mood)`` chọn 1 file nhạc theo mood → loop/trim khớp độ dài
+    cảnh + afade in/out; cảnh không có file → im lặng độ dài đó. Nối tất cả → 1 file
+    wav (pcm_s16le/48k/stereo) tại ``output_path``. Trả về ``output_path`` khi có ÍT
+    NHẤT 1 cảnh có nhạc thật; ``None`` khi không mood nào có file (caller bỏ qua mix)
+    hoặc khi dựng thất bại. Best-effort — never raises.
+
+    Track khớp timeline → ``mix_with_bgm(duck=True)`` chỉ cần duck dưới lời kể, không
+    cần biết ranh giới cảnh."""
+    try:
+        segs = [s for s in (segments or []) if s and float(s[2]) > float(s[1])]
+        if not segs:
+            return None
+        if pick_fn is None:
+            from app.core.config import _pick_bgm_file as pick_fn  # lazy — avoid import cycle
+
+        # Resolve music per scene FIRST — if no mood has a file, bail before any ffmpeg.
+        resolved: list[tuple] = []   # (src|None, dur)
+        any_music = False
+        for mood, start, end in segs:
+            src = None
+            try:
+                src = pick_fn(mood or "")
+            except Exception:
+                src = None
+            if src and Path(src).exists() and Path(src).stat().st_size > 0:
+                any_music = True
+            else:
+                src = None
+            resolved.append((src, float(end) - float(start)))
+        if not any_music:
+            return None
+
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp_dir = out.parent / f".{out.stem}_segs"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        ffmpeg_bin = get_ffmpeg_bin()
+
+        seg_files: list[Path] = []
+        for i, (src, dur) in enumerate(resolved):
+            seg_wav = tmp_dir / f"seg_{i:04d}.wav"
+            if _render_bgm_segment(ffmpeg_bin, src, dur, seg_wav, fade_sec):
+                seg_files.append(seg_wav)
+
+        if not seg_files:
+            _cleanup_dir(tmp_dir)
+            return None
+
+        # Concat các đoạn cùng format (pcm_s16le) → copy, không re-encode.
+        list_file = tmp_dir / "concat.txt"
+        list_file.write_text(
+            "".join(f"file '{p.as_posix()}'\n" for p in seg_files), encoding="utf-8")
+        cmd = [ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+               "-c", "copy", str(out)]
+        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", check=True, timeout=_AUDIO_FFMPEG_TIMEOUT_SEC)
+        _cleanup_dir(tmp_dir)
+        if out.exists() and out.stat().st_size > 0:
+            return str(out)
+        return None
+    except Exception as exc:
+        logger.warning("bgm: build_scene_bgm_track failed (%s)", exc)
+        return None
+
+
+def _cleanup_dir(d: Path) -> None:
+    try:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
+    except Exception:
+        pass
