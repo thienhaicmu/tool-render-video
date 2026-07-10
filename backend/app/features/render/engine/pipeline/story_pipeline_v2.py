@@ -115,12 +115,16 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
         resolve_key = lambda _p: _resolve_api_key(payload, _p)[0]  # noqa: E731
     except Exception:
         api_key, resolve_key = "", None
+    _sid = (getattr(payload, "story_series_id", "") or "")
+    _cno = int(getattr(payload, "story_chapter_no", 0) or 0)
+    # G1: ground a later series chapter on earlier ones (no-op when series_id empty).
+    from app.features.render.engine.pipeline.story_series_memory import build_prior_context
+    prior_context = build_prior_context(_sid, before_chapter=(_cno or None))
     plan = generate_story_plan_v2(
         provider=provider, source=source, chapter=chapter, idea=idea,
         duration_sec=duration_sec, genre=genre, language=language, art_style=art_style,
         aspect_ratio=aspect, subtitle_mode=subtitle_mode,
-        series_id=(getattr(payload, "story_series_id", "") or ""),
-        chapter_no=int(getattr(payload, "story_chapter_no", 0) or 0),
+        series_id=_sid, chapter_no=_cno, prior_context=prior_context,
         api_key=api_key, model=(getattr(payload, "llm_model", None) or None),
         resolve_key=resolve_key,
     )
@@ -150,8 +154,11 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
         # only reads plan.render.refs. Returns (visual_id, path|None). Never raises.
         try:
             out = out_dir / f"{v.id}.png"
-            refs = {cid: plan.render.refs[cid] for cid in getattr(v, "character_ids", [])
-                    if cid in plan.render.refs}
+            _rids = list(getattr(v, "character_ids", []) or [])
+            _sid = (getattr(v, "setting_id", "") or "").strip()
+            if _sid:
+                _rids.append(_sid)                       # G6: environment ref too
+            refs = {rid: plan.render.refs[rid] for rid in _rids if rid in plan.render.refs}
             return v.id, generate_visual_image(v, refs, art_style, img_w, img_h, str(out),
                                                seed=seed, provider=provider)
         except Exception:
@@ -264,6 +271,77 @@ def _generate_reference_sheets(plan, art_style: str, *, job_id: str,
                 pass
     except Exception as exc:
         logger.warning("story v2: reference sheets failed (non-fatal): %s", exc)
+
+
+def _generate_env_reference_sheets(plan, art_style: str, *, job_id: str,
+                                   effective_channel: str, provider: str) -> None:
+    """Fill ``plan.render.refs[setting_id]`` with a canonical ENVIRONMENT reference
+    sheet for each setting used by the visuals, so gpt-image-1's image-edit keeps the
+    LOCATION consistent across shots + chapters (G6).
+
+    ONLY for provider='gpt_image' AND a series (series_id set) — a one-off chapter
+    can't reuse the sheet across chapters, so it pays nothing. OPT-IN via
+    STORY_ENV_REFERENCE_SHEETS (default OFF): it adds a gpt-image-1 generation per
+    setting AND an extra input image to every visual's image-edit, and its quality
+    benefit is unproven — enable it only for a consistency-critical series. A
+    series-pinned sheet is reused; a freshly generated one is pinned. Never raises."""
+    series_id = (getattr(plan, "series_id", "") or "").strip()
+    if (provider != "gpt_image" or not series_id
+            or os.getenv("STORY_ENV_REFERENCE_SHEETS", "0") != "1"):
+        return
+    try:
+        used: list[str] = []
+        seen: set[str] = set()
+        for v in plan.visuals:
+            sid = (getattr(v, "setting_id", "") or "").strip()
+            if sid and sid not in seen:
+                seen.add(sid); used.append(sid)
+        if not used:
+            return
+        from app.features.render.engine.visual.story_reference_sheet import (
+            generate_environment_reference_sheet,
+        )
+        from app.db import story_repo
+        for sid in used:
+            if plan.render.refs.get(sid):
+                continue
+            s = plan.setting(sid)
+            if s is None:
+                continue
+            path = None
+            try:                                   # reuse a sheet pinned by an earlier chapter
+                row = story_repo.get_environment(sid)
+                rp = (row.get("reference_image_path") or "").strip() if row else ""
+                if rp and Path(rp).exists() and Path(rp).stat().st_size > 0:
+                    path = rp
+            except Exception:
+                path = None
+            if not path:
+                path = generate_environment_reference_sheet(s, art_style=art_style)
+                if path:                           # pin for later chapters
+                    try:
+                        story_repo.upsert_environment(
+                            sid, series_id=series_id, name=s.name,
+                            canonical_desc=s.canonical_desc, reference_image_path=path)
+                    except Exception:
+                        pass
+            if not path:
+                continue
+            plan.render.refs[sid] = path
+            try:
+                update_story_plan(job_id, plan.to_json())
+            except Exception:
+                pass
+            try:
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.envref.ready", level="INFO",
+                    message=f"Environment reference ready for {s.name or sid}",
+                    step="render.story", context={"setting_id": sid, "refs": len(plan.render.refs)})
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("story v2: env reference sheets failed (non-fatal): %s", exc)
 
 
 def _delivered_transitions(cues: list, delivered_idx: list) -> list:
@@ -392,6 +470,17 @@ def run_story_v2(
         )
         update_story_plan(job_id, plan.to_json())
 
+        # G1: ensure the series row exists BEFORE any character / reference-sheet
+        # upsert (FK parent) — a first chapter would otherwise silently fail to pin
+        # its reference sheets. No-op when story_series_id is empty (one-off chapter).
+        _series_id = (getattr(payload, "story_series_id", "") or "").strip()
+        if _series_id:
+            try:
+                from app.db import story_repo as _story_repo
+                _story_repo.upsert_series(_series_id, language=language, art_style=art_style)
+            except Exception:
+                pass
+
         # ── 2. Voice cast (AI-decided; fills render.voices) ─────────────────
         apply_voice_cast_v2(plan, language, narrator_gender=narrator_gender)
 
@@ -412,6 +501,10 @@ def run_story_v2(
         # image-edit keeps characters consistent. Best-effort; runs before image gen.
         _generate_reference_sheets(plan, art_style, job_id=job_id,
                                    effective_channel=effective_channel, provider=image_provider)
+        # G6 — environment reference sheets (gpt_image + series only) → keep locations
+        # consistent across shots + chapters. Best-effort; runs before image gen.
+        _generate_env_reference_sheets(plan, art_style, job_id=job_id,
+                                       effective_channel=effective_channel, provider=image_provider)
         visual_fallbacks = _generate_images(
             plan, visuals_dir, art_style, img_w, img_h,
             job_id=job_id, effective_channel=effective_channel, provider=image_provider,
@@ -529,6 +622,15 @@ def run_story_v2(
             output_stem=_output_stem, final_out=final_out, assembly=assembly,
             clips=clips, shots_dir=shots_dir, total_parts=total_parts,
             failed_parts=failed_parts, visual_fallbacks=visual_fallbacks,
+        )
+
+        # ── 9. Series memory (G1) — persist canonical characters + a rolling
+        #      summary so the NEXT chapter grounds on this one. Best-effort; a
+        #      no-op when story_series_id is empty (one-off chapter).
+        from app.features.render.engine.pipeline.story_series_memory import persist_series_memory
+        persist_series_memory(
+            plan, (getattr(payload, "story_series_id", "") or ""),
+            int(getattr(payload, "story_chapter_no", 0) or 0),
         )
     finally:
         try:

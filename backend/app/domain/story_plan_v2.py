@@ -96,7 +96,6 @@ class Visual:
     negative_prompt: str = ""
     character_ids: list[str] = field(default_factory=list)
     tier: str = "medium"      # ∈ TIER
-    bgm_mood: str = ""        # ∈ BGM_MOODS — AI-chosen music mood for this scene
 
 
 @dataclass
@@ -114,6 +113,7 @@ class Beat:
     transition_in: str = "cut"  # ∈ TRANSITION (only used when the visual changes)
     hook: bool = False
     hook_text: str = ""
+    bgm_mood: str = ""          # ∈ BGM_MOODS — AI-chosen music mood for THIS beat
 
 
 # ── Render-state dataclasses (pipeline-filled) ───────────────────────────────
@@ -144,7 +144,7 @@ class Cue:
     hook: bool = False
     hook_text: str = ""
     audio_path: str = ""
-    subtitle: str = ""
+    bgm_mood: str = ""          # ∈ BGM_MOODS — carried from the beat for per-beat BGM
 
 
 @dataclass
@@ -307,7 +307,10 @@ class StoryPlan:
     # ── CUE SHEET (INV10-14) — deterministic resolve after images + TTS ──
     def build_cues(self, subtitle_mode: str = "hook_only") -> "StoryPlan":
         """Resolve the absolute cue sheet from (contract + render.beat_audio.dur +
-        seed). Pure + deterministic; never raises. Fills render.cues + total_sec."""
+        seed). Pure + deterministic; never raises. Fills render.cues + total_sec.
+
+        On-screen text is HOOK-ONLY (climactic beats carry hook_text) — there is no
+        full-video subtitle. ``subtitle_mode`` is reserved for hook gating upstream."""
         try:
             rng = random.Random(int(self.seed or 0))
             cues: list[Cue] = []
@@ -333,7 +336,7 @@ class StoryPlan:
                     crop_to=tuple(round(x, 4) for x in crop_to),
                     transition=trans, transition_sec=tsec, hook=bool(b.hook), hook_text=b.hook_text,
                     audio_path=(ba.path if ba else ""),
-                    subtitle=(b.narration if subtitle_mode == "full" else ""),
+                    bgm_mood=(b.bgm_mood or ""),
                 ))
                 t = end
                 prev_vid = b.visual_id
@@ -349,26 +352,28 @@ class StoryPlan:
         return [(c.visual_id, c.start_sec, c.end_sec) for c in self.render.cues]
 
     def bgm_scenes(self) -> list[tuple]:
-        """[(mood, start_sec, end_sec), ...] — gộp cue liên tiếp cùng visual_id thành
-        'cảnh', gán mood nhạc của Visual đó. Dùng để dựng track nhạc nền theo timeline
-        (per-scene BGM). start được kẹp ≥0 (cue đầu có thể âm do transition). Pure,
-        never raises."""
+        """[(mood, start_sec, end_sec), ...] — gộp cue liên tiếp CÙNG bgm_mood thành một
+        'đoạn nhạc' (per-beat mood → mood-run). Dùng để dựng track nhạc nền theo
+        timeline. start kẹp ≥0 (cue đầu có thể âm do transition). Pure, never raises."""
         out: list[tuple] = []
         try:
-            vis_mood = {v.id: (v.bgm_mood or "") for v in self.visuals}
-            cur_vid = None
+            started = False
+            cur_mood = ""
             cur_start = 0.0
             cur_end = 0.0
-            cur_mood = ""
             for c in self.render.cues:
-                if c.visual_id != cur_vid:
-                    if cur_vid is not None and cur_end > cur_start:
-                        out.append((cur_mood, round(max(0.0, cur_start), 3), round(cur_end, 3)))
-                    cur_vid = c.visual_id
+                mood = (c.bgm_mood or "")
+                if not started:
+                    started = True
+                    cur_mood = mood
                     cur_start = float(c.start_sec)
-                    cur_mood = vis_mood.get(c.visual_id, "")
+                elif mood != cur_mood:
+                    if cur_end > cur_start:
+                        out.append((cur_mood, round(max(0.0, cur_start), 3), round(cur_end, 3)))
+                    cur_mood = mood
+                    cur_start = float(c.start_sec)
                 cur_end = float(c.end_sec)
-            if cur_vid is not None and cur_end > cur_start:
+            if started and cur_end > cur_start:
                 out.append((cur_mood, round(max(0.0, cur_start), 3), round(cur_end, 3)))
         except Exception:
             return out
@@ -499,8 +504,7 @@ def _visual_from(x) -> Visual:
     if not isinstance(x, dict): return Visual()
     return Visual(id=_str(x.get("id")), setting_id=_str(x.get("setting_id")),
                   prompt=_str(x.get("prompt")), negative_prompt=_str(x.get("negative_prompt")),
-                  character_ids=_str_list(x.get("character_ids")), tier=_norm(x.get("tier"), TIER, "medium"),
-                  bgm_mood=_norm(x.get("bgm_mood"), BGM_MOODS, ""))
+                  character_ids=_str_list(x.get("character_ids")), tier=_norm(x.get("tier"), TIER, "medium"))
 def _beat_from(x, i) -> Beat:
     if not isinstance(x, dict): return Beat(id=f"b{i}")
     return Beat(id=(_str(x.get("id")) or f"b{i}"), narration=_str(x.get("narration")),
@@ -511,7 +515,8 @@ def _beat_from(x, i) -> Beat:
                 pause_after=_clampf(x.get("pause_after"), 0.0, _PAUSE_MAX, 0.0),
                 hold_sec=max(0.0, _float(x.get("hold_sec"))),
                 transition_in=_norm(x.get("transition_in"), TRANSITION, "cut"),
-                hook=_bool(x.get("hook")), hook_text=_str(x.get("hook_text")))
+                hook=_bool(x.get("hook")), hook_text=_str(x.get("hook_text")),
+                bgm_mood=_norm(x.get("bgm_mood"), BGM_MOODS, ""))
 def _render_from(x) -> RenderState:
     if not isinstance(x, dict): return RenderState()
     rs = RenderState()
@@ -535,7 +540,8 @@ def _render_from(x) -> RenderState:
                     crop_to=tuple(_float(z) for z in _list(c.get("crop_to"))[:4]) or (0.0, 0.0, 1.0, 1.0),
                     transition=_norm(c.get("transition"), TRANSITION, "cut"), transition_sec=_float(c.get("transition_sec")),
                     hook=_bool(c.get("hook")), hook_text=_str(c.get("hook_text")),
-                    audio_path=_str(c.get("audio_path")), subtitle=_str(c.get("subtitle"))))
+                    audio_path=_str(c.get("audio_path")),
+                    bgm_mood=_norm(c.get("bgm_mood"), BGM_MOODS, "")))
         rs.total_sec = _float(x.get("total_sec"))
     except Exception:
         pass

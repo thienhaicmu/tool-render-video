@@ -1,8 +1,8 @@
 """Story-to-Video P4 — Voice Casting tests (deterministic, offline, Sacred #3)."""
 from __future__ import annotations
 
-from app.domain.story_plan import StoryCharacter, StoryBible
-from app.features.render.ai.llm.story_voice_cast import cast_voices, apply_voice_cast
+from app.domain.story_plan import StoryCharacter
+from app.features.render.ai.llm.story_voice_cast import cast_voices
 
 
 def _chars():
@@ -36,16 +36,6 @@ def test_distinct_voices_per_same_gender():
     assert cast["tuyet_nhi"]["gender"] == "female"
 
 
-def test_apply_voice_cast_stamps_characters():
-    bible = StoryBible(characters=_chars())
-    mapping = apply_voice_cast(bible, "en")
-    assert mapping  # non-empty
-    for c in bible.characters:
-        assert c.voice_engine == "elevenlabs"
-        assert c.voice_id  # stamped
-
-
 def test_never_raises_on_bad_input():
     assert isinstance(cast_voices(None, "vi"), dict)
     assert isinstance(cast_voices([{"no_id": 1}], "en"), dict)
-    assert isinstance(apply_voice_cast(None, "vi"), dict)

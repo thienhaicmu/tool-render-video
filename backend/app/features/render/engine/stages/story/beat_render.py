@@ -12,9 +12,9 @@ sharp), then panned/zoomed. ``crop_*`` rects are equal-fraction (w==h) on that
 aspect-correct frame, so the pan never distorts. CPU libx264 only — a Story clip
 must never contend for an NVENC session (mirrors content_background policy).
 
-Hook-text / full-subtitle BURN-IN is intentionally NOT done here yet (B7.1): it
-needs the shared text_overlay font pipeline. ``cue.hook`` / ``cue.subtitle`` are
-carried on the cue and rendered in a follow-up pass without changing this contract.
+Hook-title BURN-IN (upper third) uses the shared text_overlay font pipeline
+(``cue.hook`` / ``cue.hook_text``). On-screen text is HOOK-ONLY by design — there is
+no full-video subtitle track.
 
 Sacred Contract #3 spirit: never raises; returns ``{clip, error, fallback}`` so one
 bad cue degrades to a skipped/failed part, never aborts the whole render.
@@ -123,8 +123,9 @@ def _drawtext(text: str, width: int, height: int, *, fs: int, family: str, bold:
 
 def _overlay_suffix(cue, width: int, height: int, part_no: int = 0) -> str:
     """Filtergraph suffix (leading comma) that burns the cue's hook title (upper
-    third) and/or full-mode subtitle (lower). "" when nothing to burn. ``part_no``
-    namespaces the drawtext textfiles so parallel cues never share a file."""
+    third). On-screen text is HOOK-ONLY — no full-video subtitle. "" when nothing to
+    burn. ``part_no`` namespaces the drawtext textfiles so parallel cues never share
+    a file."""
     try:
         parts: list[str] = []
         _u = f"{int(part_no):04d}_"
@@ -132,11 +133,6 @@ def _overlay_suffix(cue, width: int, height: int, part_no: int = 0) -> str:
             parts.append(_drawtext(
                 cue.hook_text, width, height, fs=max(28, int(height * 0.060)),
                 family="Anton", bold=True, y="h*0.10", box_alpha=0.55, uniq=_u + "h"))
-        sub = (getattr(cue, "subtitle", "") or "").strip()
-        if sub:
-            parts.append(_drawtext(
-                sub, width, height, fs=max(22, int(height * 0.042)),
-                family="Oswald", bold=False, y="h-text_h-h*0.07", box_alpha=0.50, uniq=_u + "s"))
         parts = [p for p in parts if p]
         return ("," + ",".join(parts)) if parts else ""
     except Exception:
@@ -164,7 +160,7 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
             col = _norm_color(getattr(ctx, "bg_value", "") or "#101820")
             cmd += ["-f", "lavfi", "-t", f"{dur:.3f}", "-i", f"color=c={col}:s={width}x{height}:r={fps:.3f}"]
             vf = f"scale={width}:{height},setsar=1,format=yuv420p,fps={fps:.3f}"
-        vf += _overlay_suffix(cue, width, height, part_no)   # burn hook title / full subtitle (B7.1)
+        vf += _overlay_suffix(cue, width, height, part_no)   # burn hook title (hook-only)
         if have_audio:
             cmd += ["-i", str(cue.audio_path)]
         else:

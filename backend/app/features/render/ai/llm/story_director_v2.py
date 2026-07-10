@@ -113,20 +113,26 @@ def _merge_plans(a: StoryPlan, b: StoryPlan) -> StoryPlan:
 
 
 def _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio, subtitle_mode,
-                       ceiling, threshold) -> Optional[StoryPlan]:
-    """Split an over-long chapter at a paragraph boundary into 2 halves, super-plan each,
-    merge. Bounded to 2 calls. None if neither half planned."""
+                       ceiling, threshold, prior_context="") -> Optional[StoryPlan]:
+    """Split an over-long chapter at a paragraph boundary into 2 halves, super-plan each
+    under a PER-HALF slice of the visual budget, merge. Bounded to 2 calls. None if
+    neither half planned."""
     mid = len(chapter) // 2
     cut = chapter.rfind("\n\n", 0, mid)
     if cut < threshold // 3:
         cut = mid
-    parts = [chapter[:cut].strip(), chapter[cut:].strip()]
+    parts = [p for p in (chapter[:cut].strip(), chapter[cut:].strip()) if p]
+    if not parts:
+        return None
+    # G2 fix: budget the ceiling ACROSS the halves (ceil division) so the merged plan
+    # stays ~ceiling — otherwise each half planned at the FULL ceiling and the outer
+    # cap_visuals dropped a whole half (the back of the story) after merge.
+    per_half = max(1, -(-int(ceiling) // len(parts)))
     plans = []
     for part in parts:
-        if not part:
-            continue
-        sysm, user = build_super_story_prompt(part, language, art_style, aspect_ratio, subtitle_mode, ceiling)
-        p = _call_and_parse(call_fn, sysm, user, ceiling)
+        sysm, user = build_super_story_prompt(part, language, art_style, aspect_ratio,
+                                              subtitle_mode, per_half, prior_context)
+        p = _call_and_parse(call_fn, sysm, user, per_half)
         if p is not None:
             plans.append(p)
     if not plans:
@@ -153,10 +159,12 @@ def run_super_plan(
     series_id: str = "",
     chapter_no: int = 0,
     seed: int = 0,
+    prior_context: str = "",
     provider_label: str = "",
 ) -> Optional[StoryPlan]:
-    """Turn a source (chapter text OR idea) into a StoryPlan v2. Returns None on any
-    failure (Sacred Contract #3 — never raises)."""
+    """Turn a source (chapter text OR idea) into a StoryPlan v2. ``prior_context`` (G1)
+    grounds a later series chapter on earlier ones. Returns None on any failure
+    (Sacred Contract #3 — never raises)."""
     try:
         src = (source or "paste").strip().lower()
         _p = provider_label or "?"
@@ -165,7 +173,7 @@ def run_super_plan(
             if not idea:
                 return None
             sysm, user = build_super_idea_prompt(idea, duration_sec, genre, language, art_style,
-                                                 aspect_ratio, subtitle_mode, ceiling)
+                                                 aspect_ratio, subtitle_mode, ceiling, prior_context)
             logger.info("story_director_v2[%s]: super=%s IDEA len=%d dur=%ds ceiling=%d",
                         _p, SUPER_PROMPT_VERSION, len(idea), duration_sec, ceiling)
             plan = _call_and_parse(call_fn, sysm, user, ceiling)
@@ -179,10 +187,10 @@ def run_super_plan(
                         _p, SUPER_PROMPT_VERSION, len(chapter), ceiling)
             if len(chapter) > int(threshold * 1.2):
                 plan = _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio,
-                                          subtitle_mode, ceiling, threshold)
+                                          subtitle_mode, ceiling, threshold, prior_context)
             else:
                 sysm, user = build_super_story_prompt(chapter, language, art_style, aspect_ratio,
-                                                      subtitle_mode, ceiling)
+                                                      subtitle_mode, ceiling, prior_context)
                 plan = _call_and_parse(call_fn, sysm, user, ceiling)
             _seed_src = chapter
         if plan is None:

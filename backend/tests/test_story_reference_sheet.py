@@ -39,6 +39,58 @@ def test_generate_none_when_no_description():
     assert rs.generate_character_reference_sheet(StoryCharacter(id="x")) is None
 
 
+# ── C3 cost knob: STORY_REFSHEET_QUALITY ──────────────────────────────────────
+
+def test_refsheet_quality_default_and_override(monkeypatch):
+    monkeypatch.delenv("STORY_REFSHEET_QUALITY", raising=False)
+    assert rs._refsheet_quality() == "high"          # historical default
+    monkeypatch.setenv("STORY_REFSHEET_QUALITY", "medium")
+    assert rs._refsheet_quality() == "medium"
+    monkeypatch.setenv("STORY_REFSHEET_QUALITY", "bogus")
+    assert rs._refsheet_quality() == "high"          # invalid → default
+
+
+def test_refsheet_quality_passed_and_cache_namespaced(monkeypatch):
+    cap = {}
+
+    def _gen(*a, **k):
+        cap["q"] = k.get("quality")
+        return b"\x89PNG_sheet"
+    monkeypatch.setattr(rs, "generate_image_bytes", _gen)
+    # Unique subject so we never collide with a sheet cached by another run.
+    char = StoryCharacter(id="cost_knob_" + uuid.uuid4().hex[:8],
+                          name="X", description="unique-" + uuid.uuid4().hex)
+
+    monkeypatch.setenv("STORY_REFSHEET_QUALITY", "medium")
+    p_med = rs.generate_character_reference_sheet(char, art_style="wuxia")
+    assert cap["q"] == "medium"
+
+    monkeypatch.setenv("STORY_REFSHEET_QUALITY", "high")
+    p_high = rs.generate_character_reference_sheet(char, art_style="wuxia")
+    assert cap["q"] == "high"
+
+    # Same subject, different tier → different cache file (no cross-tier reuse).
+    assert p_med and p_high and p_med != p_high
+
+
+# ── G6: environment reference sheet ───────────────────────────────────────────
+
+def test_env_reference_sheet_writes_durable_path(monkeypatch):
+    from app.domain.story_plan_v2 import SettingDef
+    monkeypatch.setattr(rs, "generate_image_bytes", lambda *a, **k: b"\x89PNG_env")
+    s = SettingDef(id="hall_" + uuid.uuid4().hex[:6], name="Cloud Hall",
+                   canonical_desc="cold stone hall, tall pillars")
+    path = rs.generate_environment_reference_sheet(s, art_style="wuxia")
+    assert path and path.endswith(".png") and "envsheet_" in path
+    from pathlib import Path
+    assert Path(path).exists() and Path(path).read_bytes() == b"\x89PNG_env"
+
+
+def test_env_reference_sheet_none_without_desc():
+    from app.domain.story_plan_v2 import SettingDef
+    assert rs.generate_environment_reference_sheet(SettingDef(id="x")) is None
+
+
 # ── endpoint ──────────────────────────────────────────────────────────────────
 
 def test_endpoint_422_without_description():
