@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s2"   # s2: per-scene bgm_mood on visuals
+SUPER_PROMPT_VERSION = "s3"   # s3: per-beat bgm_mood on timeline
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -78,8 +78,7 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
     { "id": "v1", "setting_id": "<a settings id>",
       "prompt": "<FULL English image prompt: a WIDE 16:9 scene; place key elements in clear LEFT / CENTER / RIGHT zones so the camera can pan to them; reuse each present character's canonical look; cinematic, detailed>",
       "negative_prompt": "text, watermark, distorted faces",
-      "character_ids": ["<characters ids present>"], "tier": "low|medium|high",
-      "bgm_mood": "<MOOD_VOCAB>" }
+      "character_ids": ["<characters ids present>"], "tier": "low|medium|high" }
   ],
   "timeline": [
     { "id": "b1", "narration": "<voice-over for this beat, in target language>",
@@ -88,6 +87,7 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
       "focus": "wide|left|center|right|top|bottom|close",
       "motion": "zoom_in|zoom_out|pan_left|pan_right|pan_up|pan_down|static",
       "transition_in": "cut|fade|slide|zoom|flash|to_black",
+      "bgm_mood": "<MOOD_VOCAB>",
       "hook": false, "hook_text": "" }
   ]
 }"""
@@ -112,8 +112,8 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
         f"6. narration in {lang_name}; each beat = ONE contiguous idea (~1-3 sentences); the beats "
         "in order narrate the whole story faithfully (preserve names/facts, never invent).\n"
         f"7. {hook_rule}\n"
-        f"8. Each visuals[].bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood matching "
-        "that scene's emotional tone (a creative label only, NOT an audio file/timestamp).\n"
+        f"8. Each timeline beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood "
+        "matching THAT beat's emotional tone (a creative label only, NOT an audio file/timestamp).\n"
         "9. DO NOT output any render/asset/path/timestamp/duration/seconds field.\n"
         "═══ SELF-CHECK before answering ═══\n"
         "Verify every visual_id / speaker_id / character_ids exists in the arrays above; if not, fix it.\n"

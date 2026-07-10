@@ -1,5 +1,5 @@
-"""Story Mode v2 — B7.1 cue overlay builder (_overlay_suffix): hook title + full
-subtitle drawtext (no ffmpeg — filtergraph string only)."""
+"""Story Mode v2 — B7.1 cue overlay builder (_overlay_suffix): hook-title drawtext
+(hook-only, no full subtitle; no ffmpeg — filtergraph string only)."""
 from __future__ import annotations
 
 from app.domain.story_plan_v2 import Cue
@@ -25,17 +25,10 @@ def test_hook_ignored_when_no_text():
     assert br._overlay_suffix(c, 1920, 1080) == ""
 
 
-def test_full_subtitle_burns_lower_drawtext():
-    c = Cue(beat_id="b1", visual_id="v1", start_sec=0, end_sec=3, subtitle="Hàn Phong bước vào đại sảnh.")
-    s = br._overlay_suffix(c, 1920, 1080)
-    assert "drawtext=" in s and "y=h-text_h-h*0.07" in s
-
-
-def test_hook_and_subtitle_two_drawtext():
-    c = Cue(beat_id="b1", visual_id="v1", start_sec=0, end_sec=3,
-            hook=True, hook_text="Mở đầu", subtitle="Một câu phụ đề.")
-    s = br._overlay_suffix(c, 1920, 1080)
-    assert s.count("drawtext=") == 2
+def test_no_full_subtitle_burn():
+    # There is no full-video subtitle anymore — only hooks burn on screen.
+    c = Cue(beat_id="b1", visual_id="v1", start_sec=0, end_sec=3)
+    assert br._overlay_suffix(c, 1920, 1080) == ""
 
 
 def test_writes_textfile(tmp_path, monkeypatch):
