@@ -1,11 +1,164 @@
 /*
- * StoryStudio.css — Story Studio v2 STORY-SPECIFIC styles only.
+ * StoryStudio.css — Story Studio v2 STORY-SPECIFIC styles.
  *
  * The shared look lives in the Studio BASE (components/studio/studio.css, `.st-*`,
- * imported via StudioScreen). This file holds only what is unique to Story (the
- * timeline editor + monitor land here in F3/F4). Tokens only — no cs-* reuse.
+ * imported via StudioScreen). This file holds the review-editor bits (F3):
+ * characters, key-visual grid, and the timeline editor. Tokens only.
  */
 
-/* Placeholder anchor — story-specific rules (TimelineEditor, StoryMonitor grid)
- * are added in F3/F4. Kept as a stable import target for StoryStudio.tsx. */
-.story-studio-v2 { display: contents; }
+/* Small control variants (used across the review panels). */
+.st-textarea--sm { min-height: 0; font-size: var(--text-sm); }
+.st-select--sm,
+.st-input--sm { padding: 4px var(--space-2); font-size: var(--text-xs); }
+.st-btn--sm { padding: 4px var(--space-3); font-size: var(--text-xs); }
+
+/* Tags + chips. */
+.st-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.st-tag--dim { color: var(--text-3); }
+.st-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-chip {
+  padding: 3px var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.st-chip.is-on { color: var(--text-inverse, #fff); background: var(--accent); border-color: var(--accent); }
+
+/* Review bar. */
+.st-review-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.st-review-topic { font-size: var(--text-md); font-weight: var(--font-weight-semibold, 600); color: var(--text-1); }
+
+/* Characters. */
+.st-char-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.st-char {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.st-char-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.st-char-side { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
+
+/* Key-visual grid. */
+.st-visual-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+}
+.st-visual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.st-visual-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-active, var(--bg-hover));
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.st-visual-thumb--16-9 { aspect-ratio: 16 / 9; }
+.st-visual-thumb--9-16 { aspect-ratio: 9 / 16; max-height: 320px; }
+.st-visual-thumb--1-1  { aspect-ratio: 1 / 1; }
+.st-visual-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.st-visual-badge {
+  padding: 4px var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-inverse, #fff);
+  border-radius: var(--radius-sm);
+}
+.st-visual-spin {
+  position: absolute;
+  width: 26px; height: 26px;
+  border: 3px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: st-spin 0.8s linear infinite;
+}
+@keyframes st-spin { to { transform: rotate(360deg); } }
+.st-visual-body { display: flex; flex-direction: column; gap: var(--space-2); }
+.st-visual-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+
+/* Timeline editor. */
+.st-tl { display: flex; flex-direction: column; gap: var(--space-2); }
+.st-tl-row {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.st-tl-badge {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px; height: 44px;
+  overflow: hidden;
+  color: var(--text-inverse, #fff);
+  font-weight: var(--font-weight-bold, 700);
+  border-radius: var(--radius-sm);
+}
+.st-tl-badge img { width: 100%; height: 100%; object-fit: cover; }
+.st-tl-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.st-tl-controls { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
+.st-tl-sel { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-xs); color: var(--text-3); }
+.st-tl-hook {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.st-tl-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
+.st-tl-sec { font-size: var(--text-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.st-tl-ops { display: flex; gap: 4px; }
+.st-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 26px; height: 26px;
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.st-icon-btn:hover:not(:disabled) { color: var(--text-1); border-color: var(--border-hi, var(--accent)); }
+.st-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.st-icon-btn--danger:hover:not(:disabled) { color: var(--fail); border-color: var(--fail); }
