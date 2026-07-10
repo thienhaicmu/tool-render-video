@@ -54,4 +54,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s1"
+    assert SUPER_PROMPT_VERSION == "s2"   # s2: per-scene bgm_mood on visuals

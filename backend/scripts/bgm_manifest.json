@@ -1,0 +1,43 @@
+{
+  "_comment": "Nhạc nền free cho Story Mode. Mỗi mood → danh sách track. license: CC0 (không cần ghi công) hoặc CC-BY (BẮT BUỘC ghi công — fetch_free_bgm.py sẽ gom vào ATTRIBUTION.txt). URL là 'seed' best-effort; nếu 404 script bỏ qua + báo. Bạn tự sửa/mở rộng file này rồi chạy lại. Kevin MacLeod (incompetech.com) là CC BY 3.0.",
+  "moods": {
+    "tense": [
+      {"title": "Darkling", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Darkling.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"},
+      {"title": "Anxiety", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Anxiety.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"}
+    ],
+    "calm": [
+      {"title": "Healing", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Healing.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"},
+      {"title": "Meditation Impromptu 01", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Meditation%20Impromptu%2001.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"}
+    ],
+    "epic": [
+      {"title": "Rites", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Rites.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"},
+      {"title": "Volatile Reaction", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Volatile%20Reaction.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"}
+    ],
+    "sad": [
+      {"title": "Wounded", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Wounded.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"},
+      {"title": "Ossuary 5 - Rest", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Ossuary%205%20-%20Rest.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"}
+    ],
+    "romantic": [
+      {"title": "Sardana", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Sardana.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"}
+    ],
+    "mysterious": [
+      {"title": "Long Note Four", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Long%20Note%20Four.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"},
+      {"title": "Crypto", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Crypto.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"}
+    ],
+    "action": [
+      {"title": "Clash Defiant", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Clash%20Defiant.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"},
+      {"title": "Killers", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Killers.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"}
+    ],
+    "hopeful": [
+      {"title": "Inspired", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Inspired.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"},
+      {"title": "Wallpaper", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Wallpaper.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"}
+    ],
+    "dark": [
+      {"title": "Ossuary 6 - Air", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Ossuary%206%20-%20Air.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"},
+      {"title": "Mesmerize", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Mesmerize.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"}
+    ],
+    "default": [
+      {"title": "Enchanted Journey", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Enchanted%20Journey.mp3", "license": "CC-BY", "author": "Kevin MacLeod (incompetech.com)", "source": "https://incompetech.com/"}
+    ]
+  }
+}

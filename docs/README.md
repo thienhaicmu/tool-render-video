@@ -27,6 +27,7 @@ cho desktop.
 | [API_CONTRACT.md](API_CONTRACT.md) | REST + WebSocket API, các contract đóng băng |
 | [FRONTEND.md](FRONTEND.md) | Cấu trúc frontend React + vỏ Electron |
 | [CONTENT_STRATEGY.md](CONTENT_STRATEGY.md) | Chiến lược nội dung / các lớp "intelligence" chọn & xếp hạng clip |
+| [STORY_ROADMAP.md](STORY_ROADMAP.md) | Plan tổng tối ưu Story Mode v2 (chi phí/chất lượng/tốc độ/UI) theo phase |
 | [RECAP_TESTING.md](RECAP_TESTING.md) | Hướng dẫn kiểm thử chế độ recap (video dài, act-structured) |
 
 ## Đọc theo nhu cầu

@@ -85,6 +85,10 @@ temp/
 *.wav
 *.mp3
 *.png
+# Exception: bundled royalty-free BGM library ships WITH the repo so users don't
+# re-download (see assets/bgm/ATTRIBUTION.txt for CC-BY credits).
+!assets/bgm/
+!assets/bgm/**
 # ================================================
 # AI / ML models & cache
 # ================================================
