@@ -38,6 +38,14 @@ logger = logging.getLogger("app.render.story")
 _FFMPEG_TIMEOUT_SEC: int = max(120, int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "1800")))
 _SAMPLE_RATE = 48000
 
+# Q4 — a cue clip is an INTERMEDIATE: the assembler re-encodes it through xfade
+# (which cannot stream-copy). Encode cues near-lossless + fast so that SECOND pass
+# is the only quality-defining step — this removes the double-encode quality loss
+# without touching the shared assembler. Env-tunable; STORY_CUE_CRF=20 +
+# STORY_CUE_PRESET=medium restores the pre-Q4 behaviour.
+_CUE_CRF = (os.getenv("STORY_CUE_CRF", "15").strip() or "15")
+_CUE_PRESET = (os.getenv("STORY_CUE_PRESET", "veryfast").strip() or "veryfast")
+
 
 def _norm_color(value: str) -> str:
     v = (value or "").strip()
@@ -169,7 +177,7 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
             "-map", "[v]", "-map", "[a]",
             "-r", f"{fps:.3f}", "-t", f"{dur:.3f}",
             *(["-threads", str(threads)] if threads > 0 else []),
-            "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+            "-c:v", "libx264", "-preset", _CUE_PRESET, "-crf", _CUE_CRF, "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k", "-ar", str(_SAMPLE_RATE), "-ac", "2",
             "-movflags", "+faststart", str(out),
         ]
