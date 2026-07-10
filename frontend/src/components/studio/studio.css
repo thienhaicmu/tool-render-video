@@ -158,6 +158,26 @@
   font-size: var(--text-xs);
   color: var(--text-3);
 }
+.st-field-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+.st-foot-actions { display: inline-flex; gap: var(--space-3); }
+.st-warn { color: var(--fail); }
+.st-link {
+  padding: 0;
+  font-size: var(--text-xs);
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.st-link:hover { text-decoration: underline; }
+.st-input--invalid { border-color: var(--fail); }
 
 /* Base controls (opt-in via these class names). */
 .st-input,
@@ -315,6 +335,9 @@
 
 .st-actions { display: flex; justify-content: flex-end; gap: var(--space-3); }
 .st-actions--split { justify-content: space-between; }
+.st-actions--col { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+.st-actions-hint { text-align: center; }
+.st-btn--lg { padding: var(--space-3) var(--space-6); font-size: var(--text-md); }
 
 /* ── Stat row (plan summary) ─────────────────────────────────────────────── */
 .st-stat-row { display: flex; gap: var(--space-6); flex-wrap: wrap; }
