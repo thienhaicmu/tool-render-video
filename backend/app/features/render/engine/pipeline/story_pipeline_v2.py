@@ -195,6 +195,77 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
     return fallbacks
 
 
+def _generate_reference_sheets(plan, art_style: str, *, job_id: str,
+                               effective_channel: str, provider: str) -> None:
+    """Fill ``plan.render.refs[char_id]`` with a canonical reference-sheet path for
+    every character present in the visuals, so gpt-image-1's image-edit keeps that
+    character consistent across shots (Q3).
+
+    ONLY for provider='gpt_image' (Pollinations is a URL API — it can't condition on a
+    reference image, so free renders skip this and pay nothing extra). Env-gated by
+    STORY_REFERENCE_SHEETS (default on). A series-pinned sheet is reused; a freshly
+    generated one is pinned for later chapters. Best-effort — never raises."""
+    if provider != "gpt_image" or os.getenv("STORY_REFERENCE_SHEETS", "1") != "1":
+        return
+    try:
+        used: list[str] = []
+        seen: set[str] = set()
+        for v in plan.visuals:
+            for cid in (getattr(v, "character_ids", None) or []):
+                if cid and cid not in seen:
+                    seen.add(cid); used.append(cid)
+        if not used:
+            return
+        from app.features.render.engine.visual.story_reference_sheet import (
+            generate_character_reference_sheet,
+        )
+        series_id = (getattr(plan, "series_id", "") or "").strip()
+        for cid in used:
+            if plan.render.refs.get(cid):
+                continue
+            c = plan.character(cid)
+            if c is None:
+                continue
+            path = None
+            if series_id:                      # reuse a sheet pinned by an earlier chapter
+                try:
+                    from app.db import story_repo
+                    row = story_repo.get_character(cid)
+                    rp = (row.get("reference_image_path") or "").strip() if row else ""
+                    if rp and Path(rp).exists() and Path(rp).stat().st_size > 0:
+                        path = rp
+                except Exception:
+                    path = None
+            if not path:
+                path = generate_character_reference_sheet(c, art_style=art_style)
+                if path and series_id:         # pin for later chapters
+                    try:
+                        from app.db import story_repo
+                        story_repo.upsert_character(
+                            cid, series_id=series_id, name=c.name,
+                            canonical_desc=c.canonical_desc, reference_image_path=path)
+                    except Exception:
+                        pass
+            if not path:
+                continue
+            plan.render.refs[cid] = path
+            try:
+                update_story_plan(job_id, plan.to_json())
+            except Exception:
+                pass
+            try:
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.refsheet.ready", level="INFO",
+                    message=f"Reference sheet ready for {c.name or cid}",
+                    step="render.story", context={"character_id": cid, "refs": len(plan.render.refs)},
+                )
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("story v2: reference sheets failed (non-fatal): %s", exc)
+
+
 def _delivered_transitions(cues: list, delivered_idx: list) -> list:
     """len-1 transition list aligned to the DELIVERED clips (skips failed cues): use
     the NEXT delivered cue's transition. Pure, never raises."""
@@ -337,6 +408,10 @@ def run_story_v2(
         image_provider = (getattr(payload, "story_image_provider", "gpt_image") or "gpt_image").strip().lower()
         if image_provider not in ("gpt_image", "pollinations"):
             image_provider = "gpt_image"
+        # Q3 — character reference sheets (gpt_image only) → fill plan.render.refs so
+        # image-edit keeps characters consistent. Best-effort; runs before image gen.
+        _generate_reference_sheets(plan, art_style, job_id=job_id,
+                                   effective_channel=effective_channel, provider=image_provider)
         visual_fallbacks = _generate_images(
             plan, visuals_dir, art_style, img_w, img_h,
             job_id=job_id, effective_channel=effective_channel, provider=image_provider,

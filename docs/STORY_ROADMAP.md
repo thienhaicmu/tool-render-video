@@ -168,6 +168,23 @@ reference-sheet vào flow v2 (giải Q3), hoặc (b) **dọn** theo chuẩn dead
 
 **Test gate:** `test_story_reference_sheet`, `test_story_voice_cast`, e2e.
 
+### ✅ Đã làm (2026-07-10) — Q3 nối reference-sheet vào v2
+`_generate_reference_sheets` chạy trước image gen, điền `plan.render.refs[cid]` cho
+mỗi nhân vật trong visuals (chỉ provider=gpt_image; Free bỏ qua). Series pin/reuse
+qua `story_repo`; reference-sheet content-addressed cache (sinh 1 lần/nhân vật).
+Env `STORY_REFERENCE_SHEETS` (default on). 6 test mới; full pytest 2822.
+
+### ⏸ HOÃN — dọn dead-code v1 (audit riêng, frozen-API)
+Bằng chứng mồ côi thu thập 2026-07-10 (điểm khởi đầu cho audit tương lai):
+- `run_story` (v1) **KHÔNG được dispatch** — `routers/_common` chỉ gọi `run_story_v2`.
+- `/api/story/analyze` (StoryBible) **FE không dùng** (grep `frontend/src` = 0).
+- `ai/vision/qa.py` **không có caller production** (chỉ test + `StoryRenderContext.vision_qa`
+  dataclass field). Content mode dùng `provider_ai_image._verify_image` KHÁC.
+- Ứng viên xóa: `story_director.py`/`story_prompts.py`/`story_parser.py` (v1),
+  `story_plan.py` (StoryBible), `ai/vision/qa.py`, `StoryRenderContext`, endpoint
+  `/api/story/analyze`. **CHẶN:** `/analyze` là REST route công khai → Backward Compat
+  Protocol (enumerate consumer + duyệt migration). `reference-sheet` KHÔNG xóa (Q3 dùng).
+
 ---
 
 ## PHASE 5 — UI/UX Story Studio
@@ -216,6 +233,6 @@ reference-sheet vào flow v2 (giải Q3), hoặc (b) **dọn** theo chuẩn dead
 | 1 — Nhạc nền Q1 | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | per-scene bgm_mood (prompt s2) · `build_scene_bgm_track` + duck · thư viện nhạc CC0/CC-BY đóng gói trong `assets/bgm` (bundled, git-tracked, khỏi tải lại) · env `STORY_AUTO_BGM` |
 | 2 — Ảnh C1+C2 | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | multi-provider `story_image` (gpt_image \| pollinations free) · draft/final split: Review tự sinh storyboard FREE, final theo `story_image_provider` (mặc định premium, Sacred #2) · UI toggle free/premium + cost hint · field trên RenderRequest + wire surface + TS. Full suite 2814 pass |
 | 3 — Tốc độ | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | song song hóa sinh ảnh + render cue (ThreadPoolExecutor; work trong thread, thu trên main thread → không lock, worker DB-free) · `-threads` cap + textfile per-cue chống race · env `STORY_RENDER_WORKERS`(2)/`STORY_IMAGE_WORKERS`(3), =1 rollback serial · JobStage/PartStage giữ nguyên · full pytest 2816 pass |
-| 4 — Nhất quán + dọn v1 | Chưa lập plan chi tiết | cần quyết số phận v1 trước |
+| 4 — Nhất quán nhân vật (Q3) | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | auto reference-sheet điền `plan.render.refs` → gpt-image-1 image-edit giữ nhân vật nhất quán · CHỈ khi provider=gpt_image (Free bỏ qua) · env `STORY_REFERENCE_SHEETS` (default on) · series pin/reuse · reference-sheet content-addressed cache (sinh 1 lần). Full pytest 2822. **Dọn dead-code v1 = HOÃN** (audit riêng — xem dưới) |
 | 5 — UI/UX | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | Phase 2 đã có cost estimate + regenerate draft; Phase 5 thêm: (A) nghe thử giọng per-nhân vật (`previewNarration`), (B) Ken Burns hover preview, (C) reveal + shimmer sinh động, (D) cost guardrail. Thuần FE, `tsc -b` xanh. Cần `npm run build` để vào static-v2 |
 | 6 — Chất lượng nâng cao | Chưa lập plan chi tiết | phụ thuộc 3 & 4 |
