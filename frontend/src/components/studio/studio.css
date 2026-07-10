@@ -1,0 +1,249 @@
+/*
+ * studio.css — Studio BASE design system (F0). Mode-agnostic `.st-*` classes
+ * shared by the Story Studio (and later a migrated Content Studio). Uses ONLY
+ * styles/tokens.css variables so dark + light themes both work and no single
+ * studio owns the look. No studio-specific selectors live here.
+ */
+
+/* ── Screen shell + hero ─────────────────────────────────────────────────── */
+.st-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: var(--content-max-width, 1080px);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) var(--space-10);
+}
+
+.st-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.st-hero-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.st-hero-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  font-size: var(--text-2xl);
+  border-radius: var(--radius-lg);
+  background: var(--brand-gradient, var(--accent-subtle));
+  box-shadow: var(--shadow-sm);
+}
+.st-hero-text { min-width: 0; flex: 1 1 auto; }
+.st-hero-h1 {
+  margin: 0;
+  font-family: var(--font-display, var(--font-family-base));
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold, 700);
+  line-height: var(--leading-tight, 1.15);
+  color: var(--text-1);
+}
+.st-hero-sub {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+.st-hero-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.st-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ── Stepper ─────────────────────────────────────────────────────────────── */
+.st-stepper {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.st-step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-3);
+  font-weight: var(--font-weight-medium, 500);
+}
+.st-step-dot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+.st-step.is-active { color: var(--text-1); }
+.st-step.is-active .st-step-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-inverse, #fff);
+}
+.st-step.is-done .st-step-dot {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--text-inverse, #fff);
+}
+.st-step-sep {
+  margin: 0 var(--space-1);
+  color: var(--text-3);
+  opacity: 0.6;
+}
+
+/* ── Card / section ──────────────────────────────────────────────────────── */
+.st-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card, var(--shadow-sm));
+}
+.st-card-hd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.st-card-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  background: var(--accent-subtle);
+  font-size: var(--text-md);
+}
+.st-card-title {
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-1);
+}
+.st-card-aside {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+
+/* ── Field ───────────────────────────────────────────────────────────────── */
+.st-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.st-field-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-2);
+}
+.st-field-hint {
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+/* Base controls (opt-in via these class names). */
+.st-input,
+.st-textarea,
+.st-select {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  color: var(--text-1);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--duration-fast, 120ms) var(--ease-out, ease);
+}
+.st-textarea { min-height: 120px; resize: vertical; line-height: var(--leading-normal, 1.5); }
+.st-input:focus,
+.st-textarea:focus,
+.st-select:focus { border-color: var(--border-focus, var(--accent)); }
+.st-input::placeholder,
+.st-textarea::placeholder { color: var(--text-3); }
+
+/* ── Segmented row ───────────────────────────────────────────────────────── */
+.st-seg-row {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.st-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--duration-fast, 120ms) var(--ease-out, ease);
+}
+.st-seg:hover { color: var(--text-1); background: var(--bg-hover); }
+.st-seg.is-on {
+  color: var(--text-1);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+.st-seg-icon { font-size: var(--text-md); }
+
+/* ── Ratio picker ────────────────────────────────────────────────────────── */
+.st-ratio-row { display: flex; gap: var(--space-3); }
+.st-ratio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  min-width: 72px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--duration-fast, 120ms) var(--ease-out, ease);
+}
+.st-ratio:hover { border-color: var(--border-hi, var(--accent)); }
+.st-ratio.is-on { border-color: var(--accent); background: var(--accent-subtle); }
+.st-ratio-frame {
+  display: block;
+  background: var(--bg-active, var(--bg-hover));
+  border: 1.5px solid var(--text-3);
+  border-radius: 3px;
+}
+.st-ratio.is-on .st-ratio-frame { border-color: var(--accent); }
+.st-ratio-frame--16-9 { width: 40px; height: 22px; }
+.st-ratio-frame--9-16 { width: 22px; height: 40px; }
+.st-ratio-frame--1-1  { width: 30px; height: 30px; }
+.st-ratio-frame--4-5  { width: 26px; height: 32px; }
+.st-ratio-frame--3-4  { width: 27px; height: 36px; }
+.st-ratio-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-2);
+}
+.st-ratio.is-on .st-ratio-label { color: var(--text-1); }
