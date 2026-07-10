@@ -214,7 +214,7 @@ reference-sheet vào flow v2 (giải Q3), hoặc (b) **dọn** theo chuẩn dead
 | Phase | Trạng thái | Ghi chú |
 |-------|-----------|---------|
 | 1 — Nhạc nền Q1 | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | per-scene bgm_mood (prompt s2) · `build_scene_bgm_track` + duck · thư viện nhạc CC0/CC-BY đóng gói trong `assets/bgm` (bundled, git-tracked, khỏi tải lại) · env `STORY_AUTO_BGM` |
-| 2 — Ảnh C1+C2 | Chưa lập plan chi tiết | đòn bẩy chi phí lớn nhất |
+| 2 — Ảnh C1+C2 | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | multi-provider `story_image` (gpt_image \| pollinations free) · draft/final split: Review tự sinh storyboard FREE, final theo `story_image_provider` (mặc định premium, Sacred #2) · UI toggle free/premium + cost hint · field trên RenderRequest + wire surface + TS. Full suite 2814 pass |
 | 3 — Tốc độ | Chưa lập plan chi tiết | CRITICAL — Render Edit Protocol |
 | 4 — Nhất quán + dọn v1 | Chưa lập plan chi tiết | cần quyết số phận v1 trước |
 | 5 — UI/UX | Chưa lập plan chi tiết | LOW-tier, làm ngay được |

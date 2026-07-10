@@ -184,6 +184,34 @@ def _copy(src, dst: str) -> None:
         logger.info("story_image: copy failed %s", exc)
 
 
+def _pollinations_visual(visual, art_style: str, width: int, height: int,
+                         out_path: str, seed: int) -> Optional[str]:
+    """FREE image path (Phase 2) — generate ONE Visual via Pollinations/Flux and copy
+    it to ``out_path``. No reference-image conditioning (URL API), so this is the
+    draft/low-cost provider. Returns the path or None. Never raises."""
+    try:
+        prompt = (getattr(visual, "prompt", "") or "").strip()
+        if not prompt:
+            return None
+        from app.features.render.engine.visual import SceneVisualRequest
+        from app.features.render.engine.visual.provider_pollinations import resolve_pollinations
+        req = SceneVisualRequest(
+            scene_index=0, kind="image", value="", prompt=prompt,
+            width=int(width), height=int(height), fps=30.0, duration_sec=0.0,
+            work_dir="", negative_prompt=(getattr(visual, "negative_prompt", "") or ""),
+            style=(art_style or ""), seed=int(seed or 0),
+        )
+        asset = resolve_pollinations(req)
+        src = getattr(asset, "value", "") if asset is not None else ""
+        if not src or not Path(src).exists() or Path(src).stat().st_size <= 0:
+            return None
+        _copy(src, out_path)
+        return out_path if (Path(out_path).exists() and Path(out_path).stat().st_size > 0) else None
+    except Exception as exc:
+        logger.info("story_image: pollinations visual error %s", exc)
+        return None
+
+
 def generate_visual_image(
     visual,
     refs: "dict[str, str] | None",
@@ -192,13 +220,17 @@ def generate_visual_image(
     height: int,
     out_path: str,
     seed: int = 0,
+    provider: str = "gpt_image",
 ) -> Optional[str]:
-    """Story v2 — generate the image for ONE Visual → ``out_path``. Uses the
-    visual's quality tier (capped at STORY_IMAGE_MAX_TIER) + the reference sheets of
-    the characters present (``refs``: character_id → reference image path) so the
-    same character stays consistent. Returns the written path or None (→ caller
-    falls back to a local background). Cached by (prompt, size, tier, refs, seed).
-    Never raises."""
+    """Story v2 — generate the image for ONE Visual → ``out_path``.
+
+    ``provider`` (Phase 2): "gpt_image" (default — gpt-image-1, character-consistent
+    via the reference sheets in ``refs``, paid) or "pollinations" (free Flux, $0, no
+    reference conditioning). Returns the written path or None (→ caller falls back to
+    a local background). gpt_image is cached by (prompt, size, tier, refs, seed);
+    pollinations by its own (prompt, size, seed). Never raises."""
+    if (provider or "").strip().lower() == "pollinations":
+        return _pollinations_visual(visual, art_style, width, height, out_path, seed)
     try:
         prompt = (getattr(visual, "prompt", "") or "").strip()
         if not prompt:

@@ -88,7 +88,7 @@ def _mock_cast(plan, language, narrator_gender="female"):
     return plan.render.voices
 
 
-def _mock_image(visual, refs, art_style, width, height, out_path, seed=0):
+def _mock_image(visual, refs, art_style, width, height, out_path, seed=0, provider="gpt_image"):
     from app.services.bin_paths import get_ffmpeg_bin
     subprocess.run(
         [get_ffmpeg_bin(), "-y", "-f", "lavfi", "-i", f"testsrc=size={width}x{height}",

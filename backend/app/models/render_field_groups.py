@@ -52,6 +52,8 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
         "story_reading_pace", "story_plan_override",
         # v2 (B0): input source — paste text vs AI-authored from an idea.
         "story_source", "story_idea", "story_duration_sec", "story_genre",
+        # Phase 2: final image provider (gpt_image paid | pollinations free).
+        "story_image_provider",
     }),
     "lifecycle": frozenset({
         "resume_job_id", "resume_from_last", "render_profile", "render_preset",

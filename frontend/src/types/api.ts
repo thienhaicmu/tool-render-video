@@ -232,6 +232,10 @@ export interface RenderRequest {
   story_idea?: string
   story_duration_sec?: number
   story_genre?: string
+  // Phase 2 — image provider for the FINAL render: 'gpt_image' (default, paid,
+  // character-consistent) | 'pollinations' (free Flux). Review always previews
+  // with the free provider (draft/final split).
+  story_image_provider?: 'gpt_image' | 'pollinations'
 
   // Architecture-review C.1 Phase 1 (2026-06-30): Clip-path feature flag
   // for the Comprehension stage. When true AND render_format === 'clips',

@@ -121,7 +121,7 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
 
 
 def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int,
-                     *, job_id: str, effective_channel: str) -> list:
+                     *, job_id: str, effective_channel: str, provider: str = "gpt_image") -> list:
     """Generate one image per Visual → plan.render.visual_assets[vid]. Returns the
     list of visual_ids that FELL BACK (no image). Never raises per-visual.
 
@@ -136,7 +136,8 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
         out = out_dir / f"{v.id}.png"
         refs = {cid: plan.render.refs[cid] for cid in getattr(v, "character_ids", [])
                 if cid in plan.render.refs}
-        p = generate_visual_image(v, refs, art_style, img_w, img_h, str(out), seed=int(plan.seed or 0))
+        p = generate_visual_image(v, refs, art_style, img_w, img_h, str(out),
+                                  seed=int(plan.seed or 0), provider=provider)
         if p:
             plan.render.visual_assets[v.id] = p
             try:
@@ -295,16 +296,22 @@ def run_story_v2(
         # by the periodic cache prune).
         visuals_dir = CACHE_DIR / "story_visuals" / job_id
         visuals_dir.mkdir(parents=True, exist_ok=True)
+        # Phase 2 — FINAL image provider from the payload (validator guarantees a valid
+        # value; default "gpt_image" = the existing paid, character-consistent path).
+        image_provider = (getattr(payload, "story_image_provider", "gpt_image") or "gpt_image").strip().lower()
+        if image_provider not in ("gpt_image", "pollinations"):
+            image_provider = "gpt_image"
         visual_fallbacks = _generate_images(
             plan, visuals_dir, art_style, img_w, img_h,
-            job_id=job_id, effective_channel=effective_channel,
+            job_id=job_id, effective_channel=effective_channel, provider=image_provider,
         )
         if visual_fallbacks:
+            _hint = "OPENAI_API_KEY / prompts" if image_provider == "gpt_image" else "network / prompts"
             _emit_render_event(
                 channel_code=effective_channel, job_id=job_id,
                 event="story.visual.fallback", level="WARNING",
                 message=(f"{len(visual_fallbacks)}/{plan.image_count()} image(s) unavailable — "
-                         f"used a solid background. Check OPENAI_API_KEY / prompts."),
+                         f"used a solid background. Check {_hint}."),
                 step="render.story",
                 context={"fallback_visuals": visual_fallbacks, "total": plan.image_count()},
             )

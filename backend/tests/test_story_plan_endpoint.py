@@ -99,7 +99,7 @@ def test_visual_preview_success_returns_token(monkeypatch, tmp_path):
     monkeypatch.setattr(story_router, "_VISUAL_DIR", tmp_path)
     from app.features.render.engine.visual import story_image
 
-    def _fake_img(visual, refs, art_style, w, h, out_path, seed=0):
+    def _fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
         from pathlib import Path
         Path(out_path).write_bytes(b"\x89PNG_preview")
         return out_path

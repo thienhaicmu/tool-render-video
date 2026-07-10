@@ -420,6 +420,12 @@ class RenderRequest(BaseModel):
     story_idea: str = ""            # premise for story_source="idea" ("" = not an idea job)
     story_duration_sec: int = 0     # target length for the idea path (0 = model decides)
     story_genre: str = ""           # wuxia|romance|horror|fantasy|... (idea path hint)
+    # Image provider for the FINAL render (Phase 2). "gpt_image" (default — gpt-image-1,
+    # character-consistent, paid) | "pollinations" (free Flux, $0). Sacred Contract #2:
+    # the default reproduces the existing paid behavior so stored payloads replay
+    # identically. The Storyboard review always previews with the FREE provider
+    # (draft/final split) regardless of this final choice.
+    story_image_provider: str = "gpt_image"  # gpt_image|pollinations
 
     target_duration: int = 90
     output_count: int = 1
@@ -546,6 +552,14 @@ class RenderRequest(BaseModel):
         # "" (paste). Only "idea" activates the AI-authored path.
         v = str(v or "").strip().lower()
         return v if v in {"paste", "idea"} else ""
+
+    @field_validator("story_image_provider", mode="before")
+    @classmethod
+    def _validate_story_image_provider(cls, v) -> str:
+        # Coerce (never raise) — Sacred Contract #2: default/unknown → "gpt_image"
+        # (the existing paid behavior), so stored payloads replay identically.
+        v = str(v or "gpt_image").strip().lower()
+        return v if v in {"gpt_image", "pollinations"} else "gpt_image"
 
     @field_validator("content_background_kind", mode="before")
     @classmethod

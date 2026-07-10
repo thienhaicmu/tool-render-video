@@ -265,3 +265,23 @@
   color: var(--text-inverse, #fff);
   border-radius: var(--radius-sm);
 }
+
+/* Phase 2 — final image-provider toggle (free/premium) in the review bar. */
+.st-provider {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.st-provider-opt {
+  padding: 4px var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  background: var(--bg-panel);
+  border: none;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.st-provider-opt + .st-provider-opt { border-left: 1px solid var(--border); }
+.st-provider-opt.is-on { color: var(--text-inverse, #fff); background: var(--accent); }
+.st-provider-opt:disabled { opacity: .55; cursor: default; }
