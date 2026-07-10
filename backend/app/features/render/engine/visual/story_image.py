@@ -24,8 +24,7 @@ from app.features.render.engine.visual import cache_key, visual_cache_dir
 
 logger = logging.getLogger("app.render.visual.story_image")
 
-# gpt-image-1 quality tier per shot importance (§7 decision 5). "auto" left to the
-# model. establishing→low, medium→medium, close_up/hero→high (set on the Shot).
+# gpt-image-1 quality tiers. "auto" leaves the choice to the model.
 _QUALITY_TIERS = ("low", "medium", "high", "auto")
 
 
@@ -107,71 +106,6 @@ def generate_image_bytes(
         return base64.b64decode(b64) if b64 else None
     except Exception as exc:
         logger.info("story_image: gpt-image-1 generation failed: %s", exc)
-        return None
-
-
-def _reference_paths_for_shot(shot, bible) -> "list[str]":
-    """Collect pinned reference-sheet paths for the characters present in a shot."""
-    out: list[str] = []
-    if bible is None:
-        return out
-    try:
-        for cid in (getattr(shot, "characters", None) or []):
-            c = bible.character(cid)
-            ref = (getattr(c, "reference_image_path", "") or "").strip() if c is not None else ""
-            if ref and Path(ref).exists() and ref not in out:
-                out.append(ref)
-    except Exception:
-        pass
-    return out
-
-
-def generate_shot_image(
-    shot,
-    bible,
-    art_style: str,
-    width: int,
-    height: int,
-    out_path: str,
-    variant: int = 0,
-) -> Optional[str]:
-    """Generate the image for one Shot → ``out_path``. Uses the shot's quality_tier
-    + any present character's reference sheet (consistency). Returns the written
-    path or None (→ caller falls back to a local background). Cached by
-    (prompt, size, quality, refs, variant). Never raises.
-
-    ``variant`` (>0) nudges the prompt + cache key so a Vision-QA-rejected image is
-    REGENERATED as a genuinely different take rather than served from cache."""
-    try:
-        prompt = (getattr(shot, "visual_prompt", "") or "").strip()
-        if not prompt:
-            return None
-        if (art_style or "").strip():
-            prompt = f"{prompt}, {art_style.strip()} style"
-        if variant and variant > 0:
-            prompt = f"{prompt}. (alternative composition {variant})"
-        tier = _norm_tier(getattr(shot, "quality_tier", "medium"))
-        refs = _reference_paths_for_shot(shot, bible)
-        w, h = int(width), int(height)
-        # Cache: same prompt+size+tier+refs+variant → generated once (cost control).
-        ckey = cache_key("story_image", _model(), prompt, w, h, tier, "|".join(refs), variant)
-        cached = visual_cache_dir() / f"{ckey}.png"
-        if cached.exists() and cached.stat().st_size > 0:
-            _copy(cached, out_path)
-            return out_path
-        data = generate_image_bytes(
-            prompt, w, h, quality=tier, reference_paths=refs,
-            negative=(getattr(shot, "negative_prompt", "") or ""),
-        )
-        if not data:
-            return None
-        cached.write_bytes(data)
-        if not (cached.exists() and cached.stat().st_size > 0):
-            return None
-        _copy(cached, out_path)
-        return out_path
-    except Exception as exc:
-        logger.info("story_image: generate_shot_image error %s", exc)
         return None
 
 
@@ -270,4 +204,4 @@ def generate_visual_image(
         return None
 
 
-__all__ = ["generate_image_bytes", "generate_shot_image", "generate_visual_image", "_openai_client"]
+__all__ = ["generate_image_bytes", "generate_visual_image", "_openai_client"]

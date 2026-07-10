@@ -142,25 +142,6 @@ def _locked_voices(series_id: str, engine: str) -> dict:
     return out
 
 
-def apply_voice_cast(bible, language: str, narrator_gender: str = "female") -> dict:
-    """Cast voices for a StoryBible AND stamp each character's ``voice_engine`` /
-    ``voice_id`` in place (so persistence + the render use them). Returns the cast
-    mapping (incl. the narrator ""). Never raises."""
-    try:
-        chars = getattr(bible, "characters", None) or []
-        mapping = cast_voices(chars, language, narrator_gender)
-        for c in chars:
-            cid = (getattr(c, "id", "") or getattr(c, "name", "") or "").strip()
-            entry = mapping.get(cid)
-            if entry:
-                c.voice_engine = entry["engine"]
-                c.voice_id = entry["voice_id"]
-        return mapping
-    except Exception as exc:
-        logger.info("story_voice_cast: apply error %s", exc)
-        return {}
-
-
 def apply_voice_cast_v2(plan, language: str, narrator_gender: str = "female") -> dict:
     """Story v2 — cast voices for a StoryPlan and fill ``plan.render.voices`` (keyed
     by character id; "" = narrator) with ``[engine, voice_id]``. Prefers each
@@ -185,4 +166,4 @@ def apply_voice_cast_v2(plan, language: str, narrator_gender: str = "female") ->
         return {}
 
 
-__all__ = ["cast_voices", "apply_voice_cast", "apply_voice_cast_v2"]
+__all__ = ["cast_voices", "apply_voice_cast_v2"]
