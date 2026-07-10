@@ -28,6 +28,7 @@ import logging
 import os
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable
@@ -66,6 +67,16 @@ from app.features.render.engine.stages.story.assembly_stage import assemble_shot
 from app.features.render.engine.stages.story.beat_render import render_one_cue
 
 logger = logging.getLogger("app.render.story")
+
+
+def _worker_count(env_name: str, default: int, n_items: int) -> int:
+    """Bounded worker count for a parallel phase: env override, capped at the item
+    count, floored at 1. ``=1`` restores the serial path (byte-identical rollback)."""
+    try:
+        w = int(os.getenv(env_name, str(default)) or default)
+    except (TypeError, ValueError):
+        w = default
+    return max(1, min(w, max(1, int(n_items or 1))))
 
 
 def _subtitle_mode(payload) -> str:
@@ -132,14 +143,24 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
     visuals one by one (best-effort — a persist/emit hiccup never fails a visual)."""
     fallbacks: list = []
     total = plan.image_count()
-    for v in plan.visuals:
-        out = out_dir / f"{v.id}.png"
-        refs = {cid: plan.render.refs[cid] for cid in getattr(v, "character_ids", [])
-                if cid in plan.render.refs}
-        p = generate_visual_image(v, refs, art_style, img_w, img_h, str(out),
-                                  seed=int(plan.seed or 0), provider=provider)
+    seed = int(plan.seed or 0)
+
+    def _gen_one(v):
+        # WORKER thread: pure image gen (network/file I/O). No DB, no plan mutation —
+        # only reads plan.render.refs. Returns (visual_id, path|None). Never raises.
+        try:
+            out = out_dir / f"{v.id}.png"
+            refs = {cid: plan.render.refs[cid] for cid in getattr(v, "character_ids", [])
+                    if cid in plan.render.refs}
+            return v.id, generate_visual_image(v, refs, art_style, img_w, img_h, str(out),
+                                               seed=seed, provider=provider)
+        except Exception:
+            return v.id, None
+
+    def _collect(vid, p):
+        # MAIN thread only: mutate plan + persist + emit (serial → no lock needed).
         if p:
-            plan.render.visual_assets[v.id] = p
+            plan.render.visual_assets[vid] = p
             try:
                 update_story_plan(job_id, plan.to_json())
             except Exception:
@@ -148,14 +169,29 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
                 _emit_render_event(
                     channel_code=effective_channel, job_id=job_id,
                     event="story.visual.ready", level="INFO",
-                    message=f"Key-visual {v.id} ready ({len(plan.render.visual_assets)}/{total})",
+                    message=f"Key-visual {vid} ready ({len(plan.render.visual_assets)}/{total})",
                     step="render.story",
-                    context={"visual_id": v.id, "done": len(plan.render.visual_assets), "total": total},
+                    context={"visual_id": vid, "done": len(plan.render.visual_assets), "total": total},
                 )
             except Exception:
                 pass
         else:
-            fallbacks.append(v.id)
+            fallbacks.append(vid)
+
+    workers = _worker_count("STORY_IMAGE_WORKERS", 3, total)
+    if workers <= 1:
+        for v in plan.visuals:
+            vid, p = _gen_one(v)
+            _collect(vid, p)
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = {ex.submit(_gen_one, v): v.id for v in plan.visuals}
+            for f in as_completed(futs):
+                try:
+                    vid, p = f.result()
+                except Exception:
+                    vid, p = futs[f], None
+                _collect(vid, p)
     return fallbacks
 
 
@@ -337,21 +373,31 @@ def run_story_v2(
                             progress_percent=0, duration=max(0.0, float(c.end_sec - c.start_sec)),
                             message=(c.visual_id or ""))
 
+        _cue_workers = _worker_count("STORY_RENDER_WORKERS", 2, total_parts)
+        # Cap per-encode threads so N parallel libx264 encodes don't oversubscribe the
+        # CPU (0 = ffmpeg auto, used for the serial path).
+        _cue_threads = max(1, (os.cpu_count() or 4) // _cue_workers) if _cue_workers > 1 else 0
         ctx = SimpleNamespace(
             job_id=job_id, effective_channel=effective_channel, shots_dir=shots_dir,
-            width=width, height=height, fps=fps, bg_value=bg_value,
+            width=width, height=height, fps=fps, bg_value=bg_value, ffmpeg_threads=_cue_threads,
         )
 
-        # ── 6. Render cues — SERIAL (image/TTS are API-sequential) ──────────
+        # ── 6. Render cues (parallel; libx264/CPU → no NVENC contention) ────
+        # WORKER threads run render_one_cue (pure ffmpeg, unique output file, no DB /
+        # no plan mutation). Result COLLECTION happens on the MAIN thread in the
+        # as_completed loop, so part-status writes + progress stay serial (no lock,
+        # no worker-thread DB conn). STORY_RENDER_WORKERS=1 restores the serial path.
         _set_stage(JobStage.RENDERING, 55, f"Rendering {total_parts} cue(s)")
         results: dict[int, str] = {}
         failed_parts: list[dict] = []
+        _rendered = 0
+        # Mark every cue RENDERING up front (main thread) before the pool starts.
         for i, c in enumerate(cues, start=1):
-            if cancel_registry.is_cancelled(job_id):
-                raise cancel_registry.JobCancelledError()
             upsert_job_part(job_id, i, f"cue_{i:04d}", JobPartStage.RENDERING,
                             progress_percent=10, message=(c.visual_id or ""))
-            r = render_one_cue(ctx, plan, i, c)
+
+        def _collect_cue(i, r):
+            nonlocal _rendered
             if r.get("clip"):
                 results[i] = r["clip"]
                 upsert_job_part(job_id, i, f"cue_{i:04d}", JobPartStage.DONE,
@@ -360,8 +406,31 @@ def run_story_v2(
                 failed_parts.append({"part_no": i, "error": r.get("error", "")})
                 upsert_job_part(job_id, i, f"cue_{i:04d}", JobPartStage.FAILED,
                                 progress_percent=100, message=(r.get("error", "") or "")[:200])
-            _set_stage(JobStage.RENDERING, 55 + int(30 * i / max(1, total_parts)),
-                       f"Rendered {i}/{total_parts}")
+            _rendered += 1
+            _set_stage(JobStage.RENDERING, 55 + int(30 * _rendered / max(1, total_parts)),
+                       f"Rendered {_rendered}/{total_parts}")
+
+        if _cue_workers <= 1:
+            for i, c in enumerate(cues, start=1):
+                if cancel_registry.is_cancelled(job_id):
+                    raise cancel_registry.JobCancelledError()
+                _collect_cue(i, render_one_cue(ctx, plan, i, c))
+        else:
+            with ThreadPoolExecutor(max_workers=_cue_workers) as _ex:
+                _futs = {}
+                for i, c in enumerate(cues, start=1):
+                    if cancel_registry.is_cancelled(job_id):
+                        break  # stop submitting; running futures drain on __exit__
+                    _futs[_ex.submit(render_one_cue, ctx, plan, i, c)] = i
+                for f in as_completed(_futs):
+                    i = _futs[f]
+                    try:
+                        r = f.result()
+                    except Exception as exc:   # render_one_cue never raises, but be safe
+                        r = {"clip": None, "error": str(exc)}
+                    _collect_cue(i, r)
+            if cancel_registry.is_cancelled(job_id):
+                raise cancel_registry.JobCancelledError()
 
         delivered_idx = sorted(results)
         clips = [results[i] for i in delivered_idx]
