@@ -363,10 +363,11 @@ def process_render(job_id: str, payload: RenderRequest, resume_mode: bool = Fals
                 cleanup_session_fn=_cleanup_preview_session,
             )
         elif _rf == "story":
-            # Story Mode: Chapter → AI storyboard → consistent images + narration
-            # → Video (no source footage). Fully separate orchestrator.
-            from app.features.render.engine.pipeline.story_pipeline import run_story
-            run_story(
+            # Story Mode v2: Chapter/idea → 1 super plan → consistent wide images +
+            # per-run narration → deterministic CUE SHEET → Ken Burns render → Video
+            # (no source footage). Flat AI cost vs length. Fully separate orchestrator.
+            from app.features.render.engine.pipeline.story_pipeline_v2 import run_story_v2
+            run_story_v2(
                 job_id=job_id,
                 payload=payload,
                 resume_mode=resume_mode,

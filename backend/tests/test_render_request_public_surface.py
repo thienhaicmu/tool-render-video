@@ -151,9 +151,12 @@ def test_public_field_count_pinned():
     # Story Mode P6 (2026-07-09): the 5 story fields PROMOTED to FE-facing (wire
     # surface — /api/render/process must accept them so the Story Studio can submit
     # a story render). FE 85→90, BE-only 85→80, total stays 170.
-    assert len(FE_FACING_FIELDS) == 90, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    # Story Mode v2 B0 (2026-07-10): +4 story input-source fields, ALL FE-facing
+    # (Story Studio sends them): story_source, story_idea, story_duration_sec,
+    # story_genre. FE 90→94, BE-only 80, total 170→174.
+    assert len(FE_FACING_FIELDS) == 94, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
     assert len(BE_ONLY_FIELDS)   == 80, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
-    assert len(RenderRequest.model_fields) == 170, (
+    assert len(RenderRequest.model_fields) == 174, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
     )

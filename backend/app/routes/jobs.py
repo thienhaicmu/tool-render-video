@@ -592,10 +592,10 @@ def api_get_job_story_plan(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     _empty = {"job_id": job_id, "available": False, "plan": None}
     try:
-        from app.domain.story_plan import StoryPlan
+        from app.domain.story_plan_v2 import StoryPlan
 
         plan = StoryPlan.from_json(get_story_plan(job_id))
-        if plan is None or not plan.scenes:
+        if plan is None or not plan.timeline:
             return _empty
         return {"job_id": job_id, "available": True, "plan": json.loads(plan.to_json())}
     except Exception:

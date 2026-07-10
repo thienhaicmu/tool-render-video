@@ -1,0 +1,219 @@
+"""
+story_director_v2.py — provider-agnostic Super-Prompt orchestration for Story v2.
+
+ONE super call → StoryPlan v2 (mode A adapt / mode B create-from-idea, same schema),
++ a bounded repair pass, + a chunk-and-merge path for very long chapters, + the
+deterministic post-passes (inject character canon, cap/validate/reindex, seed).
+
+Parameterised by ``call_fn(system, user) -> str | None`` so every provider binds its
+own raw model call (key rotation / retry / cache inside call_fn) — mirrors v1
+content_director. Sacred Contract #3: never raises; returns None on total failure.
+"""
+from __future__ import annotations
+
+import hashlib
+import logging
+import os
+from typing import Callable, Optional
+
+from app.domain.story_plan_v2 import StoryPlan
+from app.features.render.ai.llm.story_prompts_v2 import (
+    build_super_story_prompt, build_super_idea_prompt, build_super_repair_prompt,
+    SUPER_PROMPT_VERSION,
+)
+from app.features.render.ai.llm.story_parser_v2 import parse_super_plan_response
+
+logger = logging.getLogger("app.render.story_director_v2")
+
+SuperCall = Callable[[str, str], Optional[str]]
+
+
+def _stable_seed(text: str) -> int:
+    try:
+        return int(hashlib.sha1((text or "").encode("utf-8", "ignore")).hexdigest()[:8], 16)
+    except Exception:
+        return 0
+
+
+def inject_character_canon(plan: StoryPlan) -> StoryPlan:
+    """Append each present character's canonical_desc to a visual's prompt (idempotent)
+    so image gen keeps the character consistent. No-op without characters. Never raises."""
+    try:
+        canon = {c.id: (c.canonical_desc or "").strip() for c in plan.characters if (c.canonical_desc or "").strip()}
+        if not canon:
+            return plan
+        for v in plan.visuals:
+            frags = []
+            for cid in v.character_ids:
+                d = canon.get(cid)
+                if d and d not in frags:
+                    frags.append(d)
+            if not frags:
+                continue
+            inject = "; ".join(frags)
+            base = (v.prompt or "").strip()
+            if inject in base:
+                continue
+            v.prompt = f"{base}. {inject}" if base else inject
+        return plan
+    except Exception as exc:
+        logger.info("story_director_v2: inject canon skipped: %s", exc)
+        return plan
+
+
+def _call_and_parse(call_fn: SuperCall, system: str, user: str, ceiling: int) -> Optional[StoryPlan]:
+    """One call + parse; on parse-failure, one bounded repair pass (CM-8)."""
+    try:
+        raw = call_fn(system, user)
+    except Exception as exc:
+        logger.info("story_director_v2: call raised %s", exc)
+        return None
+    if not raw:
+        return None
+    plan = parse_super_plan_response(raw, ceiling)
+    if plan is None and os.getenv("STORY_PLAN_REPAIR", "1") == "1":
+        try:
+            rsys, ruser = build_super_repair_prompt(raw)
+            fixed = call_fn(rsys, ruser)
+            if fixed:
+                plan = parse_super_plan_response(fixed, ceiling)
+                if plan is not None:
+                    logger.info("story_director_v2: plan recovered via repair pass")
+        except Exception as exc:
+            logger.info("story_director_v2: repair pass failed %s", exc)
+    return plan
+
+
+def _merge_plans(a: StoryPlan, b: StoryPlan) -> StoryPlan:
+    """Concatenate plan b after a: dedupe characters/settings by id, re-id b's visuals
+    to avoid collision (remapping its beats), concat timelines. Never raises."""
+    try:
+        a_char = {c.id for c in a.characters}
+        a.characters += [c for c in b.characters if c.id not in a_char]
+        a_set = {s.id for s in a.settings}
+        a.settings += [s for s in b.settings if s.id not in a_set]
+        a_vis = {v.id for v in a.visuals}
+        remap: dict = {}
+        for v in b.visuals:
+            new_id = v.id
+            n = 2
+            while new_id in a_vis:
+                new_id = f"{v.id}_{n}"; n += 1
+            remap[v.id] = new_id
+            v.id = new_id
+            a_vis.add(new_id)
+            a.visuals.append(v)
+        for beat in b.timeline:
+            beat.visual_id = remap.get(beat.visual_id, beat.visual_id)
+            a.timeline.append(beat)
+        return a
+    except Exception as exc:
+        logger.info("story_director_v2: merge failed %s", exc)
+        return a
+
+
+def _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio, subtitle_mode,
+                       ceiling, threshold) -> Optional[StoryPlan]:
+    """Split an over-long chapter at a paragraph boundary into 2 halves, super-plan each,
+    merge. Bounded to 2 calls. None if neither half planned."""
+    mid = len(chapter) // 2
+    cut = chapter.rfind("\n\n", 0, mid)
+    if cut < threshold // 3:
+        cut = mid
+    parts = [chapter[:cut].strip(), chapter[cut:].strip()]
+    plans = []
+    for part in parts:
+        if not part:
+            continue
+        sysm, user = build_super_story_prompt(part, language, art_style, aspect_ratio, subtitle_mode, ceiling)
+        p = _call_and_parse(call_fn, sysm, user, ceiling)
+        if p is not None:
+            plans.append(p)
+    if not plans:
+        return None
+    merged = plans[0]
+    for p in plans[1:]:
+        merged = _merge_plans(merged, p)
+    return merged
+
+
+def run_super_plan(
+    *,
+    call_fn: SuperCall,
+    source: str = "paste",
+    chapter: Optional[str] = None,
+    idea: Optional[str] = None,
+    duration_sec: int = 0,
+    genre: str = "",
+    language: str = "vi",
+    art_style: str = "",
+    aspect_ratio: str = "16:9",
+    subtitle_mode: str = "hook_only",
+    ceiling: int = 15,
+    series_id: str = "",
+    chapter_no: int = 0,
+    seed: int = 0,
+    provider_label: str = "",
+) -> Optional[StoryPlan]:
+    """Turn a source (chapter text OR idea) into a StoryPlan v2. Returns None on any
+    failure (Sacred Contract #3 — never raises)."""
+    try:
+        src = (source or "paste").strip().lower()
+        _p = provider_label or "?"
+        if src == "idea":
+            idea = (idea or "").strip()
+            if not idea:
+                return None
+            sysm, user = build_super_idea_prompt(idea, duration_sec, genre, language, art_style,
+                                                 aspect_ratio, subtitle_mode, ceiling)
+            logger.info("story_director_v2[%s]: super=%s IDEA len=%d dur=%ds ceiling=%d",
+                        _p, SUPER_PROMPT_VERSION, len(idea), duration_sec, ceiling)
+            plan = _call_and_parse(call_fn, sysm, user, ceiling)
+            _seed_src = idea
+        else:
+            chapter = (chapter or "").strip()
+            if not chapter:
+                return None
+            threshold = int(os.getenv("STORY_MAX_CHAPTER_CHARS_SINGLE", "18000") or 18000)
+            logger.info("story_director_v2[%s]: super=%s PASTE len=%d ceiling=%d",
+                        _p, SUPER_PROMPT_VERSION, len(chapter), ceiling)
+            if len(chapter) > int(threshold * 1.2):
+                plan = _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio,
+                                          subtitle_mode, ceiling, threshold)
+            else:
+                sysm, user = build_super_story_prompt(chapter, language, art_style, aspect_ratio,
+                                                      subtitle_mode, ceiling)
+                plan = _call_and_parse(call_fn, sysm, user, ceiling)
+            _seed_src = chapter
+        if plan is None:
+            logger.warning("story_director_v2[%s]: no usable plan", _p)
+            return None
+
+        # ── Deterministic post-passes ────────────────────────────────────────
+        inject_character_canon(plan)
+        plan.cap_visuals(ceiling)
+        plan.validate_refs()
+        plan.reindex()
+        plan.seed = int(seed) if seed else _stable_seed(_seed_src)
+        if series_id:
+            plan.series_id = series_id
+        if chapter_no:
+            plan.chapter_no = chapter_no
+        if language:
+            plan.language = language
+        if not plan.art_style and art_style:
+            plan.art_style = art_style
+        if aspect_ratio:
+            plan.aspect_ratio = aspect_ratio
+
+        if plan.is_empty() or not plan.visuals:
+            return None
+        logger.info("story_director_v2[%s]: OK chars=%d visuals=%d beats=%d topic=%r",
+                    _p, len(plan.characters), plan.image_count(), plan.beat_count(), plan.topic)
+        return plan
+    except Exception as exc:
+        logger.warning("story_director_v2[%s]: unexpected %s", provider_label or "?", exc, exc_info=True)
+        return None
+
+
+__all__ = ["run_super_plan", "inject_character_canon", "SuperCall"]

@@ -175,6 +175,8 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # them so the FE can submit a story render.
     "story_series_id", "story_chapter_no", "story_art_style",
     "story_reading_pace", "story_plan_override",
+    # Story v2 (B0) — input source: paste story text vs AI-authored from an idea.
+    "story_source", "story_idea", "story_duration_sec", "story_genre",
 })
 
 

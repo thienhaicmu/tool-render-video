@@ -41,6 +41,24 @@ def tier_cost(tier: str) -> float:
     return _TIER_COST.get((tier or "").strip().lower(), _TIER_COST["medium"])
 
 
+_TIER_RANK = {"low": 0, "medium": 1, "high": 2}
+
+
+def clamp_tier(tier: str, max_tier: "str | None" = None) -> str:
+    """Story v2 — cap a visual's quality tier at STORY_IMAGE_MAX_TIER (env, default
+    medium) so cost stays bounded. Unknown → medium. Never raises."""
+    try:
+        mt = (max_tier or os.getenv("STORY_IMAGE_MAX_TIER", "medium") or "medium").strip().lower()
+        t = (tier or "medium").strip().lower()
+        if t not in _TIER_RANK:
+            t = "medium"
+        if mt not in _TIER_RANK:
+            mt = "medium"
+        return t if _TIER_RANK[t] <= _TIER_RANK[mt] else mt
+    except Exception:
+        return "medium"
+
+
 def decide_shot_asset(shot, budget: "BudgetTracker | None" = None) -> "tuple[str, str]":
     """Return ``(asset_type, quality_tier)`` for a Shot. asset_type ∈
     {ai_image, local, pin}. Deterministic; never raises."""

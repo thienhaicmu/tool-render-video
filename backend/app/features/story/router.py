@@ -34,15 +34,16 @@ from pydantic import BaseModel, Field
 
 from app.core.config import CACHE_DIR
 from app.db import story_repo
-from app.features.render.ai.llm import analyze_story, generate_story_plan
+from app.features.render.ai.llm import analyze_story, generate_story_plan_v2
 
 logger = logging.getLogger("app.story.api")
 
 router = APIRouter(prefix="/api/story", tags=["story"])
 
-# Per-scene narration PREVIEW audio lives under the cache root (pruneable). Keyed
-# by an opaque 32-hex token; the audio GET validates the token shape.
+# Per-beat narration + key-visual PREVIEW assets live under the cache root
+# (pruneable). Keyed by an opaque 32-hex token; the GET validates the token shape.
 _PREVIEW_DIR = CACHE_DIR / "story_preview"
+_VISUAL_DIR = CACHE_DIR / "story_preview_visual"
 _TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
 
 
@@ -122,55 +123,114 @@ def analyze_chapter(req: StoryAnalyzeRequest) -> dict:
 
 
 class StoryPlanRequest(BaseModel):
-    chapter_text: str = Field(default="", description="Raw chapter text")
+    source: str = "paste"              # paste (source A) | idea (source B)
+    chapter_text: str = Field(default="", description="Raw chapter text (source=paste)")
+    idea: str = ""                     # short idea (source=idea)
+    duration_sec: int = 0              # target length (source=idea)
+    genre: str = ""
     language: str = "vi"
-    tone: str = ""
     art_style: str = ""
+    aspect_ratio: str = "16:9"
+    subtitle_mode: str = "hook_only"   # hook_only | full | off
+    ceiling: Optional[int] = None      # max key-visuals (default env STORY_MAX_IMAGES)
     series_id: str = ""
     chapter_no: int = 0
-    aspect_ratio: str = "9:16"
-    reading_pace: str = "normal"       # slow|normal|fast
-    bible: Optional[dict] = None       # a pre-analysed Story Bible (skip re-analysis)
     ai_provider: Optional[str] = None
     llm_model: Optional[str] = None
 
 
 @router.post("/plan")
 def plan_storyboard(req: StoryPlanRequest) -> dict:
-    """Generate a full StoryPlan (scenes → shots → narration → visual prompts) from
-    a chapter (the Storyboard-review step, Duyệt #2). Runs Story Intelligence first
-    when no ``bible`` is supplied. Returns the plan + a narration audit + duration
-    estimate. 422 empty text; 502 when the AI produced no usable plan (Sacred
-    Contract #3 — analyze/plan returned None)."""
-    text = (req.chapter_text or "").strip()
-    if not text:
+    """Story v2 — ONE super call → StoryPlan v2 (characters/settings/visuals/timeline).
+    source=paste (A) adapts a whole chapter; source=idea (B) authors from a short idea
+    + target duration — SAME output schema. Returns the plan + counts for the FE
+    review screen. 422 when the chosen source's text is empty; 502 when the AI
+    produced no usable plan (Sacred Contract #3 — generate_story_plan_v2 returned
+    None)."""
+    import os as _os
+
+    source = (req.source or "paste").strip().lower()
+    if source not in ("paste", "idea"):
+        source = "paste"
+    chapter = (req.chapter_text or "").strip()
+    idea = (req.idea or "").strip()
+    if source == "idea":
+        if not idea:
+            raise HTTPException(status_code=422, detail="idea is required for source=idea")
+    elif not chapter:
         raise HTTPException(status_code=422, detail="chapter_text is required")
 
-    from app.core import config as _cfg
     from app.features.render.engine.pipeline.llm_stage import _resolve_api_key
-    from app.domain.story_plan import _story_bible_from_dict
 
-    provider = (req.ai_provider or "").strip().lower() or getattr(_cfg, "AI_PROVIDER_DEFAULT", "openai")
+    # GPT-centric like the render pipeline: provider from payload else STORY_AI_PROVIDER
+    # (.env, default "openai") — NOT the global AI_PROVIDER_DEFAULT.
+    provider = (req.ai_provider or "").strip().lower() or (
+        _os.getenv("STORY_AI_PROVIDER", "openai") or "openai").strip().lower()
     api_key, _ = _resolve_api_key(req, provider)
-    bible = _story_bible_from_dict(req.bible) if req.bible else None
 
-    plan = generate_story_plan(
-        provider=provider, chapter_text=text, bible=bible, language=(req.language or "vi"),
-        tone=(req.tone or ""), art_style=(req.art_style or ""), series_id=(req.series_id or ""),
-        chapter_no=(req.chapter_no or 0), aspect_ratio=(req.aspect_ratio or "9:16"),
-        reading_pace=(req.reading_pace or "normal"), api_key=api_key, model=req.llm_model,
+    plan = generate_story_plan_v2(
+        provider=provider, source=source, chapter=chapter, idea=idea,
+        duration_sec=int(req.duration_sec or 0), genre=(req.genre or ""),
+        language=(req.language or "vi"), art_style=(req.art_style or ""),
+        aspect_ratio=(req.aspect_ratio or "16:9"),
+        subtitle_mode=(req.subtitle_mode or "hook_only"), ceiling=req.ceiling,
+        series_id=(req.series_id or ""), chapter_no=int(req.chapter_no or 0),
+        api_key=api_key, model=req.llm_model,
         resolve_key=lambda _p: _resolve_api_key(req, _p)[0],
     )
-    if plan is None or plan.scene_count() == 0:
+    if plan is None or plan.is_empty() or plan.image_count() == 0:
         raise HTTPException(status_code=502, detail="Story planning returned no usable plan")
 
     return {
         "plan": json.loads(plan.to_json()),
-        "scene_count": plan.scene_count(),
-        "shot_count": plan.shot_count(),
+        "image_count": plan.image_count(),
+        "beat_count": plan.beat_count(),
         "estimated_total_sec": round(plan.estimated_total_sec(), 1),
-        "narration_audit": plan.narration_audit(),
     }
+
+
+# ── B8: single key-visual preview (Storyboard review) ─────────────────────────
+
+class StoryVisualPreviewRequest(BaseModel):
+    prompt: str = Field(default="", description="The key-visual image prompt")
+    negative_prompt: str = ""
+    art_style: str = ""
+    aspect_ratio: str = "16:9"
+    tier: str = "medium"               # low | medium | high (capped at STORY_IMAGE_MAX_TIER)
+
+
+@router.post("/visual/preview")
+def visual_preview(req: StoryVisualPreviewRequest) -> dict:
+    """Story v2 — generate ONE key-visual image from a prompt so the FE storyboard
+    can preview/regenerate a Visual before render. Returns ``{token, url}``. 422 empty
+    prompt; 502 when generation failed (no key / error — Sacred Contract #3)."""
+    from app.domain.story_plan_v2 import Visual, ASPECT_SIZE
+    from app.features.render.engine.visual.story_image import generate_visual_image
+
+    prompt = (req.prompt or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=422, detail="prompt is required")
+    w, h = ASPECT_SIZE.get((req.aspect_ratio or "16:9"), ASPECT_SIZE["16:9"])
+    _VISUAL_DIR.mkdir(parents=True, exist_ok=True)
+    token = uuid.uuid4().hex
+    out = _VISUAL_DIR / f"{token}.png"
+    visual = Visual(id=token, prompt=prompt, negative_prompt=(req.negative_prompt or ""),
+                    tier=(req.tier or "medium"))
+    path = generate_visual_image(visual, {}, (req.art_style or ""), w, h, str(out))
+    if not path or not Path(path).exists() or Path(path).stat().st_size <= 0:
+        raise HTTPException(status_code=502, detail="visual generation failed")
+    return {"token": token, "url": f"/api/story/visual/image/{token}"}
+
+
+@router.get("/visual/image/{token}")
+def visual_image(token: str):
+    """Stream a key-visual preview png by token. 404 on a malformed/expired token."""
+    if not _TOKEN_RE.match(token or ""):
+        raise HTTPException(status_code=404, detail="not found")
+    p = _VISUAL_DIR / f"{token}.png"
+    if not p.exists() or p.stat().st_size <= 0:
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(str(p), media_type="image/png")
 
 
 # ── P3: Character Reference Sheet (Duyệt #1 — visual consistency) ─────────────

@@ -50,6 +50,8 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
         # chapter text reuses content_script (in the "content" group).
         "story_series_id", "story_chapter_no", "story_art_style",
         "story_reading_pace", "story_plan_override",
+        # v2 (B0): input source — paste text vs AI-authored from an idea.
+        "story_source", "story_idea", "story_duration_sec", "story_genre",
     }),
     "lifecycle": frozenset({
         "resume_job_id", "resume_from_last", "render_profile", "render_preset",

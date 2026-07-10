@@ -410,6 +410,16 @@ class RenderRequest(BaseModel):
     # set, run_story renders FROM this plan and SKIPS the AI planning call. "" =
     # generate via the Story Director (Sacred Contract #2: default inert).
     story_plan_override: str = ""
+    # ── Story v2 input source (B0) ────────────────────────────────────────────
+    # Two ways to feed Story Mode, both → the SAME super-prompt StoryPlan v2:
+    #   ""|"paste" = adapt the story text in ``content_script`` (default, inert).
+    #   "idea"     = the AI CREATES the story from ``story_idea`` (+ duration/genre),
+    #                then storyboards it — one super call. Sacred Contract #2: ""
+    #                defaults to the paste path, so stored payloads are unaffected.
+    story_source: str = ""          # ""|paste|idea
+    story_idea: str = ""            # premise for story_source="idea" ("" = not an idea job)
+    story_duration_sec: int = 0     # target length for the idea path (0 = model decides)
+    story_genre: str = ""           # wuxia|romance|horror|fantasy|... (idea path hint)
 
     target_duration: int = 90
     output_count: int = 1
@@ -527,6 +537,15 @@ class RenderRequest(BaseModel):
         # to "clips" here so historical payloads with unknown values keep loading.
         v = str(v or "clips").strip().lower()
         return v if v in {"clips", "recap", "content", "story"} else "clips"
+
+    @field_validator("story_source", mode="before")
+    @classmethod
+    def _validate_story_source(cls, v) -> str:
+        # Coerce (never raise) — Sacred Contract #2: "" (default) = the paste path,
+        # so a stored payload without it behaves exactly as before. Unknown/None →
+        # "" (paste). Only "idea" activates the AI-authored path.
+        v = str(v or "").strip().lower()
+        return v if v in {"paste", "idea"} else ""
 
     @field_validator("content_background_kind", mode="before")
     @classmethod

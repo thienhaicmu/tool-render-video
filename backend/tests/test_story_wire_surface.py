@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from app.db.connection import init_db
 from app.db.jobs_repo import upsert_job, update_story_plan
-from app.domain.story_plan import StoryPlan, StoryScene, Shot
+from app.domain.story_plan_v2 import StoryPlan, Visual, Beat
 from app.models.render_public import RenderRequestPublic, FE_FACING_FIELDS
 from app.routes.jobs import api_get_job_story_plan
 
@@ -73,11 +73,12 @@ def test_story_plan_available_false_when_no_plan():
 
 def test_story_plan_returns_persisted_plan():
     jid = _job()
-    plan = StoryPlan(language="vi", topic="tiên hiệp", scenes=[
-        StoryScene(index=0, shots=[Shot(index=0, sid="a", narration="Đêm lạnh.", visual_prompt="peak")]),
-    ])
+    plan = StoryPlan(language="vi", topic="tiên hiệp",
+                     visuals=[Visual(id="v1", prompt="peak")],
+                     timeline=[Beat(id="b1", narration="Đêm lạnh.", visual_id="v1")])
     update_story_plan(jid, plan.to_json())
     out = api_get_job_story_plan(jid)
     assert out["available"] is True
     assert out["plan"]["topic"] == "tiên hiệp"
-    assert out["plan"]["scenes"][0]["shots"][0]["narration"] == "Đêm lạnh."
+    assert out["plan"]["schema_version"] == 2
+    assert out["plan"]["timeline"][0]["narration"] == "Đêm lạnh."
