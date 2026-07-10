@@ -93,7 +93,9 @@ def test_plan_returns_cost_preflight(monkeypatch):
 
 
 def test_plan_cost_preflight_counts_env_sheets_for_series(monkeypatch):
-    """G6: a series render also generates one environment sheet per distinct setting."""
+    """G6: a series render (with env sheets opted in) also generates one environment
+    sheet per distinct setting."""
+    monkeypatch.setenv("STORY_ENV_REFERENCE_SHEETS", "1")   # opt-in (default off)
     monkeypatch.setattr(story_router, "generate_story_plan_v2", lambda **kw: _plan())
     out = plan_storyboard(StoryPlanRequest(source="paste", chapter_text="x",
                                            series_id="ser-x", chapter_no=1))

@@ -280,12 +280,14 @@ def _generate_env_reference_sheets(plan, art_style: str, *, job_id: str,
     LOCATION consistent across shots + chapters (G6).
 
     ONLY for provider='gpt_image' AND a series (series_id set) — a one-off chapter
-    can't reuse the sheet across chapters, so it pays nothing. Env-gated by
-    STORY_ENV_REFERENCE_SHEETS (default on). A series-pinned sheet is reused; a freshly
-    generated one is pinned for later chapters. Best-effort — never raises."""
+    can't reuse the sheet across chapters, so it pays nothing. OPT-IN via
+    STORY_ENV_REFERENCE_SHEETS (default OFF): it adds a gpt-image-1 generation per
+    setting AND an extra input image to every visual's image-edit, and its quality
+    benefit is unproven — enable it only for a consistency-critical series. A
+    series-pinned sheet is reused; a freshly generated one is pinned. Never raises."""
     series_id = (getattr(plan, "series_id", "") or "").strip()
     if (provider != "gpt_image" or not series_id
-            or os.getenv("STORY_ENV_REFERENCE_SHEETS", "1") != "1"):
+            or os.getenv("STORY_ENV_REFERENCE_SHEETS", "0") != "1"):
         return
     try:
         used: list[str] = []

@@ -30,10 +30,52 @@ logger = logging.getLogger("app.render.story.series_memory")
 
 _MAX_CONTEXT_CHARS = int(os.getenv("STORY_SERIES_CONTEXT_CHARS", "4000") or 4000)
 _MAX_SUMMARY_CHARS = int(os.getenv("STORY_SERIES_SUMMARY_CHARS", "1500") or 1500)
+# Budget for the STORY-SO-FAR section — keeps the MOST RECENT chapters (continuity
+# matters most), not the oldest.
+_MAX_SUMMARY_SECTION = int(os.getenv("STORY_SERIES_SUMMARY_SECTION_CHARS", "2000") or 2000)
 
 
 def _enabled() -> bool:
     return os.getenv("STORY_SERIES_MEMORY", "1") == "1"
+
+
+def _head_tail(text: str, budget: int, head_frac: float = 0.4) -> str:
+    """Fit ``text`` into ``budget`` chars keeping BOTH the setup (head) and — weighted
+    heavier — the ending (tail), joined by an ellipsis. A plain head cut would drop the
+    climax/ending, which is exactly what the next chapter needs. Never raises."""
+    t = (text or "").strip()
+    if budget <= 0:
+        return ""
+    if len(t) <= budget:
+        return t
+    sep = " … "
+    avail = budget - len(sep)
+    if avail <= 0:
+        return t[:budget].rstrip()
+    head_n = max(0, int(avail * head_frac))
+    tail_n = avail - head_n
+    return (t[:head_n].rstrip() + sep + t[-tail_n:].lstrip()) if tail_n > 0 else t[:head_n].rstrip()
+
+
+def _recent_summaries(sums: list, budget: int) -> str:
+    """Render the MOST RECENT chapter summaries that fit ``budget`` (newest kept first),
+    then present them chronologically. ``sums`` is oldest-first. Never raises."""
+    lines: list[str] = []
+    used = 0
+    try:
+        for s in reversed(sums or []):
+            txt = (s.get("rolling_summary") or "").strip()
+            if not txt:
+                continue
+            line = f"[Ch.{s.get('chapter_no')}] {txt}"
+            if lines and used + len(line) + 1 > budget:
+                break
+            lines.append(line)
+            used += len(line) + 1
+    except Exception:
+        return ""
+    lines.reverse()
+    return "\n".join(lines)
 
 
 def build_prior_context(series_id: str, before_chapter: Optional[int] = None) -> str:
@@ -60,12 +102,9 @@ def build_prior_context(series_id: str, before_chapter: Optional[int] = None) ->
                       for e in envs if (e.get('id') or '').strip()]
             if elines:
                 parts.append("KNOWN SETTINGS (reuse these ids + look):\n" + "\n".join(elines))
-        if sums:
-            so_far = "\n".join(
-                f"[Ch.{s['chapter_no']}] {(s.get('rolling_summary') or '').strip()}"
-                for s in sums if (s.get('rolling_summary') or '').strip())
-            if so_far:
-                parts.append("STORY SO FAR:\n" + so_far)
+        so_far = _recent_summaries(sums, _MAX_SUMMARY_SECTION)
+        if so_far:
+            parts.append("STORY SO FAR (most recent chapters):\n" + so_far)
         block = "\n\n".join(parts).strip()
         return block[:_MAX_CONTEXT_CHARS].rstrip() if block else ""
     except Exception as exc:
@@ -74,14 +113,16 @@ def build_prior_context(series_id: str, before_chapter: Optional[int] = None) ->
 
 
 def rolling_summary_for(plan) -> str:
-    """Deterministic rolling summary of a rendered chapter (topic + narration), capped.
-    No LLM call — pure + free. Never raises."""
+    """Deterministic rolling summary of a rendered chapter: topic + a head+tail slice of
+    the narration (so the chapter's ENDING — what the next chapter continues from — is
+    kept, not just its opening). No LLM call — pure + free. Never raises."""
     try:
         topic = (getattr(plan, "topic", "") or "").strip()
         narr = " ".join((b.narration or "").strip()
                         for b in getattr(plan, "timeline", []) if (b.narration or "").strip())
-        s = (f"{topic}. {narr}" if topic else narr).strip()
-        return s[:_MAX_SUMMARY_CHARS].rstrip()
+        prefix = f"{topic}. " if topic else ""
+        body = _head_tail(narr, max(0, _MAX_SUMMARY_CHARS - len(prefix)))
+        return (prefix + body).strip()[:_MAX_SUMMARY_CHARS].rstrip()
     except Exception:
         return ""
 

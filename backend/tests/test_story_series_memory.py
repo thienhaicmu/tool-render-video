@@ -100,6 +100,37 @@ def test_rolling_summary_is_topic_plus_narration_capped(monkeypatch):
     assert len(s) <= 20
 
 
+def test_rolling_summary_keeps_the_ending(monkeypatch):
+    """R1: a head+tail slice keeps the chapter's ENDING (what the next chapter
+    continues from), not just its opening."""
+    from app.features.render.engine.pipeline import story_series_memory as _sm
+    monkeypatch.setattr(_sm, "_MAX_SUMMARY_CHARS", 60)
+    plan = StoryPlan(topic="T", timeline=[
+        Beat(id="b1", narration="STARTMARK " + "x" * 100),
+        Beat(id="b2", narration="y" * 100 + " ENDMARK"),
+    ])
+    s = _sm.rolling_summary_for(plan)
+    assert "ENDMARK" in s          # a head-only cut would have lost this
+    assert len(s) <= 60
+
+
+def test_prior_context_keeps_recent_chapters(monkeypatch):
+    """R1: the STORY-SO-FAR section keeps the MOST RECENT chapters within budget, not
+    the oldest."""
+    from app.features.render.engine.pipeline import story_series_memory as _sm
+    monkeypatch.setattr(_sm, "_MAX_SUMMARY_SECTION", 60)
+    sid = _sid()
+    try:
+        story_repo.upsert_series(sid, title="S")
+        for n in range(1, 6):
+            story_repo.add_chapter_summary(sid, n, f"CHAP{n}_" + "z" * 20)
+        ctx = _sm.build_prior_context(sid)
+        assert "CHAP5" in ctx          # most recent kept
+        assert "CHAP1" not in ctx      # oldest dropped by the budget
+    finally:
+        story_repo.delete_series(sid)
+
+
 # ── WRITE: persist_series_memory ──────────────────────────────────────────────
 
 def test_persist_writes_characters_voice_and_summary():
