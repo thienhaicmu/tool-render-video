@@ -15,7 +15,7 @@ import pytest
 
 from app.db.connection import init_db
 from app.db import story_repo
-from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
+from app.domain.story_plan_v2 import StoryPlan, CharacterDef, SettingDef, Visual, Beat
 from app.features.render.engine.pipeline.story_series_memory import (
     build_prior_context, rolling_summary_for, persist_series_memory,
 )
@@ -141,6 +141,38 @@ def test_persist_preserves_pinned_reference_sheet():
         row = story_repo.get_character(cid)
         assert row["reference_image_path"] == "/assets/ref.png"   # NOT wiped
         assert row["canonical_desc"] == "new"                     # updated
+    finally:
+        story_repo.delete_series(sid)
+
+
+def test_build_prior_context_includes_settings():
+    sid = _sid()
+    try:
+        story_repo.upsert_series(sid, title="S")
+        story_repo.upsert_environment(sid + "-hall", series_id=sid, name="Cloud Hall",
+                                      canonical_desc="cold stone hall")
+        ctx = build_prior_context(sid)
+        assert "KNOWN SETTINGS" in ctx and (sid + "-hall") in ctx and "cold stone" in ctx
+    finally:
+        story_repo.delete_series(sid)
+
+
+def test_persist_writes_settings_and_preserves_env_ref():
+    sid = _sid()
+    eid = sid + "-hall"
+    try:
+        story_repo.upsert_series(sid, title="S")
+        story_repo.upsert_environment(eid, series_id=sid, name="Hall", canonical_desc="old",
+                                      reference_image_path="/assets/env.png")
+        plan = StoryPlan(
+            series_id=sid, settings=[SettingDef(id=eid, name="Hall", canonical_desc="new")],
+            visuals=[Visual(id="v1", prompt="p", setting_id=eid)],
+            timeline=[Beat(id="b1", narration="n", visual_id="v1")],
+        )
+        persist_series_memory(plan, sid, 1)
+        row = story_repo.get_environment(eid)
+        assert row and row["canonical_desc"] == "new"
+        assert row["reference_image_path"] == "/assets/env.png"   # preserved
     finally:
         story_repo.delete_series(sid)
 

@@ -154,8 +154,11 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
         # only reads plan.render.refs. Returns (visual_id, path|None). Never raises.
         try:
             out = out_dir / f"{v.id}.png"
-            refs = {cid: plan.render.refs[cid] for cid in getattr(v, "character_ids", [])
-                    if cid in plan.render.refs}
+            _rids = list(getattr(v, "character_ids", []) or [])
+            _sid = (getattr(v, "setting_id", "") or "").strip()
+            if _sid:
+                _rids.append(_sid)                       # G6: environment ref too
+            refs = {rid: plan.render.refs[rid] for rid in _rids if rid in plan.render.refs}
             return v.id, generate_visual_image(v, refs, art_style, img_w, img_h, str(out),
                                                seed=seed, provider=provider)
         except Exception:
@@ -268,6 +271,75 @@ def _generate_reference_sheets(plan, art_style: str, *, job_id: str,
                 pass
     except Exception as exc:
         logger.warning("story v2: reference sheets failed (non-fatal): %s", exc)
+
+
+def _generate_env_reference_sheets(plan, art_style: str, *, job_id: str,
+                                   effective_channel: str, provider: str) -> None:
+    """Fill ``plan.render.refs[setting_id]`` with a canonical ENVIRONMENT reference
+    sheet for each setting used by the visuals, so gpt-image-1's image-edit keeps the
+    LOCATION consistent across shots + chapters (G6).
+
+    ONLY for provider='gpt_image' AND a series (series_id set) — a one-off chapter
+    can't reuse the sheet across chapters, so it pays nothing. Env-gated by
+    STORY_ENV_REFERENCE_SHEETS (default on). A series-pinned sheet is reused; a freshly
+    generated one is pinned for later chapters. Best-effort — never raises."""
+    series_id = (getattr(plan, "series_id", "") or "").strip()
+    if (provider != "gpt_image" or not series_id
+            or os.getenv("STORY_ENV_REFERENCE_SHEETS", "1") != "1"):
+        return
+    try:
+        used: list[str] = []
+        seen: set[str] = set()
+        for v in plan.visuals:
+            sid = (getattr(v, "setting_id", "") or "").strip()
+            if sid and sid not in seen:
+                seen.add(sid); used.append(sid)
+        if not used:
+            return
+        from app.features.render.engine.visual.story_reference_sheet import (
+            generate_environment_reference_sheet,
+        )
+        from app.db import story_repo
+        for sid in used:
+            if plan.render.refs.get(sid):
+                continue
+            s = plan.setting(sid)
+            if s is None:
+                continue
+            path = None
+            try:                                   # reuse a sheet pinned by an earlier chapter
+                row = story_repo.get_environment(sid)
+                rp = (row.get("reference_image_path") or "").strip() if row else ""
+                if rp and Path(rp).exists() and Path(rp).stat().st_size > 0:
+                    path = rp
+            except Exception:
+                path = None
+            if not path:
+                path = generate_environment_reference_sheet(s, art_style=art_style)
+                if path:                           # pin for later chapters
+                    try:
+                        story_repo.upsert_environment(
+                            sid, series_id=series_id, name=s.name,
+                            canonical_desc=s.canonical_desc, reference_image_path=path)
+                    except Exception:
+                        pass
+            if not path:
+                continue
+            plan.render.refs[sid] = path
+            try:
+                update_story_plan(job_id, plan.to_json())
+            except Exception:
+                pass
+            try:
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.envref.ready", level="INFO",
+                    message=f"Environment reference ready for {s.name or sid}",
+                    step="render.story", context={"setting_id": sid, "refs": len(plan.render.refs)})
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("story v2: env reference sheets failed (non-fatal): %s", exc)
 
 
 def _delivered_transitions(cues: list, delivered_idx: list) -> list:
@@ -427,6 +499,10 @@ def run_story_v2(
         # image-edit keeps characters consistent. Best-effort; runs before image gen.
         _generate_reference_sheets(plan, art_style, job_id=job_id,
                                    effective_channel=effective_channel, provider=image_provider)
+        # G6 — environment reference sheets (gpt_image + series only) → keep locations
+        # consistent across shots + chapters. Best-effort; runs before image gen.
+        _generate_env_reference_sheets(plan, art_style, job_id=job_id,
+                                       effective_channel=effective_channel, provider=image_provider)
         visual_fallbacks = _generate_images(
             plan, visuals_dir, art_style, img_w, img_h,
             job_id=job_id, effective_channel=effective_channel, provider=image_provider,

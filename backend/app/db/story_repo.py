@@ -249,6 +249,21 @@ def list_environments(series_id: str) -> list[dict]:
         return []
 
 
+def get_environment(env_id: str) -> Optional[dict]:
+    """Return one environment dict, or None. Never raises."""
+    try:
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT id, series_id, name, canonical_desc, reference_image_path, "
+                "created_at, updated_at FROM environments WHERE id = ?",
+                (env_id,),
+            ).fetchone()
+            return _environment_row(row) if row is not None else None
+    except Exception as exc:
+        logger.warning("get_environment failed id=%s: %s", env_id, exc)
+        return None
+
+
 # ── chapter_summary (rolling cross-chapter memory) ───────────────────────────
 
 def add_chapter_summary(series_id: str, chapter_no: int, rolling_summary: str) -> bool:

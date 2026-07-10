@@ -73,6 +73,24 @@ def test_refsheet_quality_passed_and_cache_namespaced(monkeypatch):
     assert p_med and p_high and p_med != p_high
 
 
+# ── G6: environment reference sheet ───────────────────────────────────────────
+
+def test_env_reference_sheet_writes_durable_path(monkeypatch):
+    from app.domain.story_plan_v2 import SettingDef
+    monkeypatch.setattr(rs, "generate_image_bytes", lambda *a, **k: b"\x89PNG_env")
+    s = SettingDef(id="hall_" + uuid.uuid4().hex[:6], name="Cloud Hall",
+                   canonical_desc="cold stone hall, tall pillars")
+    path = rs.generate_environment_reference_sheet(s, art_style="wuxia")
+    assert path and path.endswith(".png") and "envsheet_" in path
+    from pathlib import Path
+    assert Path(path).exists() and Path(path).read_bytes() == b"\x89PNG_env"
+
+
+def test_env_reference_sheet_none_without_desc():
+    from app.domain.story_plan_v2 import SettingDef
+    assert rs.generate_environment_reference_sheet(SettingDef(id="x")) is None
+
+
 # ── endpoint ──────────────────────────────────────────────────────────────────
 
 def test_endpoint_422_without_description():

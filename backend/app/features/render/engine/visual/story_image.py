@@ -240,7 +240,13 @@ def generate_visual_image(
         from app.features.render.engine.visual.story_decision import clamp_tier
         tier = clamp_tier(getattr(visual, "tier", "medium"))
         refs = refs or {}
-        ref_paths = [refs[c] for c in (getattr(visual, "character_ids", None) or [])
+        # Character refs first (primary consistency), then the environment ref (G6) so
+        # the location stays consistent too; capped downstream at 4 by image-edit.
+        _ref_ids = list(getattr(visual, "character_ids", None) or [])
+        _sid = (getattr(visual, "setting_id", "") or "").strip()
+        if _sid:
+            _ref_ids.append(_sid)
+        ref_paths = [refs[c] for c in _ref_ids
                      if refs.get(c) and Path(refs[c]).exists() and Path(refs[c]).stat().st_size > 0]
         w, h = int(width), int(height)
         ckey = cache_key("story_visual", _model(), prompt, w, h, tier, "|".join(ref_paths), seed)

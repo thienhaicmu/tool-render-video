@@ -86,3 +86,25 @@ def test_generate_shot_image_reference_from_bible(monkeypatch, tmp_path):
 def test_empty_prompt_returns_none(monkeypatch):
     monkeypatch.setattr(story_image, "_openai_client", lambda: _FakeClient([]))
     assert story_image.generate_shot_image(Shot(index=0, visual_prompt="  "), None, "", 1024, 1024, "x.png") is None
+
+
+def test_generate_visual_image_conditions_on_setting_ref(monkeypatch, tmp_path):
+    """G6: generate_visual_image feeds the environment reference (setting_id) to the
+    image-edit alongside the character refs, character first."""
+    from app.domain.story_plan_v2 import Visual
+    cap = {}
+
+    def _fake_bytes(prompt, w, h, quality="medium", reference_paths=None, negative=""):
+        cap["refs"] = list(reference_paths or [])
+        return b"\x89PNG"
+    monkeypatch.setattr(story_image, "generate_image_bytes", _fake_bytes)
+
+    char_ref = tmp_path / "han.png"; char_ref.write_bytes(b"c")
+    env_ref = tmp_path / "hall.png"; env_ref.write_bytes(b"e")
+    v = Visual(id="v1", prompt=f"wide hall {uuid.uuid4().hex}", setting_id="hall", character_ids=["han"])
+    out = tmp_path / "v1.png"
+    refs = {"han": str(char_ref), "hall": str(env_ref)}
+    p = story_image.generate_visual_image(v, refs, "wuxia", 1024, 1024, str(out), seed=1, provider="gpt_image")
+    assert p == str(out)
+    assert str(char_ref) in cap["refs"] and str(env_ref) in cap["refs"]
+    assert cap["refs"].index(str(char_ref)) < cap["refs"].index(str(env_ref))  # character first

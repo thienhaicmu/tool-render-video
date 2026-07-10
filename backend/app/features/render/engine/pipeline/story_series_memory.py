@@ -44,6 +44,7 @@ def build_prior_context(series_id: str, before_chapter: Optional[int] = None) ->
         return ""
     try:
         chars = story_repo.list_characters(series_id)
+        envs = story_repo.list_environments(series_id)
         sums = story_repo.list_chapter_summaries(series_id, before_chapter=before_chapter)
         parts: list[str] = []
         if chars:
@@ -53,6 +54,12 @@ def build_prior_context(series_id: str, before_chapter: Optional[int] = None) ->
             if lines:
                 parts.append("KNOWN CHARACTERS (reuse these ids + canonical look):\n"
                              + "\n".join(lines))
+        if envs:
+            elines = [f"- {e['id']} ({(e.get('name') or '').strip()}): "
+                      f"{(e.get('canonical_desc') or '').strip()}"
+                      for e in envs if (e.get('id') or '').strip()]
+            if elines:
+                parts.append("KNOWN SETTINGS (reuse these ids + look):\n" + "\n".join(elines))
         if sums:
             so_far = "\n".join(
                 f"[Ch.{s['chapter_no']}] {(s.get('rolling_summary') or '').strip()}"
@@ -108,11 +115,22 @@ def persist_series_memory(plan, series_id: str, chapter_no: int) -> None:
                 age=(getattr(c, "age", "") or ""),
                 gender=((getattr(c, "voice_gender", "") or getattr(c, "gender", "") or "")),
             )
+        # G6: persist canonical settings too (preserve any pinned environment ref).
+        for s in (getattr(plan, "settings", None) or []):
+            sid = (getattr(s, "id", "") or "").strip()
+            if not sid:
+                continue
+            existing = story_repo.get_environment(sid) or {}
+            ref = (existing.get("reference_image_path") or "").strip()
+            story_repo.upsert_environment(
+                sid, series_id=series_id, name=(s.name or ""),
+                canonical_desc=(s.canonical_desc or ""), reference_image_path=ref)
         summary = rolling_summary_for(plan)
         if summary:
             story_repo.add_chapter_summary(series_id, int(chapter_no or 0), summary)
-        logger.info("series_memory: persisted series=%s ch=%s chars=%d",
-                    series_id, chapter_no, len(getattr(plan, "characters", None) or []))
+        logger.info("series_memory: persisted series=%s ch=%s chars=%d settings=%d",
+                    series_id, chapter_no, len(getattr(plan, "characters", None) or []),
+                    len(getattr(plan, "settings", None) or []))
     except Exception as exc:
         logger.warning("series_memory: persist failed series=%s: %s", series_id, exc)
 

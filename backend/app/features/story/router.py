@@ -193,6 +193,10 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     # (upper bound — series-pinned sheets are reused at render, so actual may be fewer).
     _ref_chars = {cid for v in plan.visuals for cid in (v.character_ids or []) if cid}
     _refsheet_count = len(_ref_chars)
+    # G6: environment reference sheets are generated only for a SERIES (one per distinct
+    # setting) — count them only when a series_id is present.
+    _envsheet_count = len({(v.setting_id or "").strip() for v in plan.visuals
+                           if (v.setting_id or "").strip()}) if _sid.strip() else 0
     _visual_count = plan.image_count()
     return {
         "plan": json.loads(plan.to_json()),
@@ -204,7 +208,8 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
             "visual_count": _visual_count,
             "character_count": len(plan.characters),
             "reference_sheet_count": _refsheet_count,
-            "premium_image_count": _visual_count + _refsheet_count,
+            "environment_sheet_count": _envsheet_count,
+            "premium_image_count": _visual_count + _refsheet_count + _envsheet_count,
         },
     }
 

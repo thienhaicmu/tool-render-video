@@ -88,7 +88,19 @@ def test_plan_returns_cost_preflight(monkeypatch):
     assert cp["visual_count"] == 1
     assert cp["character_count"] == 1
     assert cp["reference_sheet_count"] == 1        # v1 references character "han"
+    assert cp["environment_sheet_count"] == 0      # no series → no env sheets
     assert cp["premium_image_count"] == 2          # 1 visual + 1 reference sheet
+
+
+def test_plan_cost_preflight_counts_env_sheets_for_series(monkeypatch):
+    """G6: a series render also generates one environment sheet per distinct setting."""
+    monkeypatch.setattr(story_router, "generate_story_plan_v2", lambda **kw: _plan())
+    out = plan_storyboard(StoryPlanRequest(source="paste", chapter_text="x",
+                                           series_id="ser-x", chapter_no=1))
+    cp = out["cost_preflight"]
+    assert cp["reference_sheet_count"] == 1        # character "han"
+    assert cp["environment_sheet_count"] == 1      # setting "s1"
+    assert cp["premium_image_count"] == 3          # 1 visual + 1 refsheet + 1 env
 
 
 # ── /api/story/visual/preview ─────────────────────────────────────────────────
