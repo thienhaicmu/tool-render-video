@@ -55,26 +55,50 @@ def _norm_gender(g: str) -> str:
     return "male" if g in ("male", "m", "nam") else "female"
 
 
-def cast_voices(characters, language: str, narrator_gender: str = "female") -> dict:
+def cast_voices(characters, language: str, narrator_gender: str = "female",
+                locked: "dict | None" = None) -> dict:
     """Return ``{char_id: {"engine", "voice_id", "gender"}}`` plus a ``""`` entry for
     the narrator. Deterministic; never raises. ``characters`` is an iterable of
-    objects with ``.id``/``.name``/``.gender`` (StoryCharacter) or dicts."""
+    objects with ``.id``/``.name``/``.gender`` (StoryCharacter) or dicts.
+
+    ``locked`` (G3 — cross-chapter consistency): ``{char_id: voice_id}`` already cast
+    for this character in an earlier chapter. A locked character REUSES its voice; new
+    characters rotate AROUND the locked voices (used-skip) so they don't collide. The
+    narrator keeps a stable first-pick regardless of ``locked`` so it doesn't drift as
+    the cast grows. ``locked=None`` (or empty) is byte-identical to the legacy path."""
     out: dict = {}
+    locked = locked or {}
     try:
         engine = resolve_story_tts_engine(language)
         pool_f, pool_m = _pools_for(engine)
         idx = {"female": 0, "male": 0}
+        used: set = set()
 
-        def _assign(gender: str) -> str:
+        def _rotate(gender: str) -> str:
             g = _norm_gender(gender)
             pool = pool_m if g == "male" else pool_f
-            i = idx[g]
+            if not pool:
+                return ""
+            n = len(pool)
+            for _ in range(n):                       # first pool voice not already used
+                v = pool[idx[g] % n]
+                idx[g] += 1
+                if v not in used:
+                    used.add(v)
+                    return v
+            v = pool[idx[g] % n]                      # pool exhausted → allow a repeat
             idx[g] += 1
-            return pool[i % len(pool)] if pool else ""
+            return v
 
-        # Narrator first (own voice).
-        out[""] = {"engine": engine, "voice_id": _assign(narrator_gender),
-                   "gender": _norm_gender(narrator_gender)}
+        # Narrator first, STABLE (plain first pick — ignores locked so it doesn't drift
+        # across chapters as the locked set grows).
+        ng = _norm_gender(narrator_gender)
+        npool = pool_m if ng == "male" else pool_f
+        narrator_voice = npool[0] if npool else ""
+        out[""] = {"engine": engine, "voice_id": narrator_voice, "gender": ng}
+        if narrator_voice:
+            used.add(narrator_voice)
+
         for c in (characters or []):
             if isinstance(c, dict):
                 cid = (c.get("id") or c.get("name") or "").strip()
@@ -84,12 +108,38 @@ def cast_voices(characters, language: str, narrator_gender: str = "female") -> d
                 gender = getattr(c, "gender", "")
             if not cid or cid in out:
                 continue
-            out[cid] = {"engine": engine, "voice_id": _assign(gender),
-                        "gender": _norm_gender(gender)}
+            lv = (locked.get(cid) or "").strip()
+            if lv:                                   # reuse the earlier-chapter voice
+                out[cid] = {"engine": engine, "voice_id": lv, "gender": _norm_gender(gender)}
+                used.add(lv)
+            else:
+                out[cid] = {"engine": engine, "voice_id": _rotate(gender),
+                            "gender": _norm_gender(gender)}
         return out
     except Exception as exc:
         logger.info("story_voice_cast: cast error %s — narrator-only default", exc)
         return out or {"": {"engine": "edge", "voice_id": "", "gender": "female"}}
+
+
+def _locked_voices(series_id: str, engine: str) -> dict:
+    """``{char_id: voice_id}`` for characters of this series with a persisted voice on
+    the SAME engine (a voice cast for a different-language engine can't be reused).
+    Gated by STORY_SERIES_MEMORY. Empty on disable / no series / error. Never raises."""
+    if os.getenv("STORY_SERIES_MEMORY", "1") != "1" or not (series_id or "").strip():
+        return {}
+    out: dict = {}
+    try:
+        from app.db import story_repo
+        for row in story_repo.list_characters(series_id):
+            cid = (row.get("id") or "").strip()
+            vid = (row.get("voice_id") or "").strip()
+            veng = (row.get("voice_engine") or "").strip()
+            if cid and vid and veng == engine:
+                out[cid] = vid
+    except Exception as exc:
+        logger.info("story_voice_cast: locked lookup failed series=%s: %s", series_id, exc)
+        return {}
+    return out
 
 
 def apply_voice_cast(bible, language: str, narrator_gender: str = "female") -> dict:
@@ -122,7 +172,11 @@ def apply_voice_cast_v2(plan, language: str, narrator_gender: str = "female") ->
         adapters = [SimpleNamespace(id=c.id, name=c.name,
                                     gender=((getattr(c, "voice_gender", "") or getattr(c, "gender", "") or "")))
                     for c in chars]
-        mapping = cast_voices(adapters, language, narrator_gender)
+        # G3: lock voices already cast for this series' characters (same engine) so a
+        # returning character keeps its voice across chapters. No-op for a one-off.
+        series_id = (getattr(plan, "series_id", "") or "").strip()
+        locked = _locked_voices(series_id, resolve_story_tts_engine(language)) if series_id else {}
+        mapping = cast_voices(adapters, language, narrator_gender, locked=locked)
         for cid, entry in mapping.items():
             plan.render.voices[cid] = [entry["engine"], entry["voice_id"]]
         return mapping
