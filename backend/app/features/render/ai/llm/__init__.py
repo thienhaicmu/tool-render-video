@@ -388,6 +388,69 @@ def generate_story_plan(
     return None
 
 
+def generate_story_plan_v2(
+    *,
+    provider: str = "openai",
+    source: str = "paste",
+    chapter: Optional[str] = None,
+    idea: Optional[str] = None,
+    duration_sec: int = 0,
+    genre: str = "",
+    language: str = "vi",
+    art_style: str = "",
+    aspect_ratio: str = "16:9",
+    subtitle_mode: str = "hook_only",
+    ceiling: Optional[int] = None,
+    series_id: str = "",
+    chapter_no: int = 0,
+    seed: int = 0,
+    api_key: str = "",
+    model: Optional[str] = None,
+    resolve_key: Optional[Callable[[str], str]] = None,
+) -> Optional["StoryPlan"]:
+    """Story v2 — ONE super call → StoryPlan v2 (mode A adapt / B idea). GPT-centric
+    default; super model from ``STORY_SUPER_MODEL`` (gpt-4o, big context). Returns a
+    StoryPlan or None (Sacred Contract #3 — never raises)."""
+    from app.features.render.ai.llm.story_director_v2 import run_super_plan
+    if ceiling is None:
+        try:
+            ceiling = int(os.getenv("STORY_MAX_IMAGES", "15") or 15)
+        except (TypeError, ValueError):
+            ceiling = 15
+    super_model = model or (os.getenv("STORY_SUPER_MODEL", "gpt-4o").strip() or "gpt-4o")
+    primary = (provider or "openai").strip().lower()
+    if primary not in SUPPORTED_PROVIDERS:
+        primary = "openai" if "openai" in SUPPORTED_PROVIDERS else DEFAULT_PROVIDER
+    for _p in _provider_chain(primary):
+        _key = api_key
+        if resolve_key is not None:
+            try:
+                _key = resolve_key(_p) or ""
+            except Exception:
+                _key = api_key
+        if not _key:
+            continue
+        call_fn = _get_story_call_fn(_p, _key, super_model)
+        if call_fn is None:
+            continue
+        try:
+            plan = run_super_plan(
+                call_fn=call_fn, source=source, chapter=chapter, idea=idea,
+                duration_sec=duration_sec, genre=genre, language=language, art_style=art_style,
+                aspect_ratio=aspect_ratio, subtitle_mode=subtitle_mode, ceiling=ceiling,
+                series_id=series_id, chapter_no=chapter_no, seed=seed, provider_label=_p,
+            )
+        except Exception as exc:
+            logger.warning("llm: generate_story_plan_v2 provider=%s raised %s", _p, exc)
+            plan = None
+        if plan is not None:
+            if _p != primary:
+                logger.info("llm: story-plan-v2 fallback succeeded provider=%s (primary=%s None)", _p, primary)
+            return plan
+    logger.warning("llm: generate_story_plan_v2 produced no plan")
+    return None
+
+
 def generate_publish_meta(
     *,
     provider: str = DEFAULT_PROVIDER,

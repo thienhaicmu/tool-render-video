@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSoc
 from fastapi.responses import FileResponse
 from app.db.jobs_repo import clear_part_output, delete_job, get_content_plan, get_job, get_recap_plan, get_story_model, get_story_plan, list_job_parts, list_job_parts_bulk, list_jobs_page, save_error_kind
 from app.services.maintenance import prune_job_logs
-from app.core.config import CHANNELS_DIR, TEMP_DIR
+from app.core.config import CACHE_DIR, CHANNELS_DIR, TEMP_DIR
 from app.models.schemas import JobStatusResponse
 from app.features.render.engine.quality.report_locator import load_quality_report_for_part
 from app.features.render.engine.quality.report_summary import build_job_quality_summary
@@ -592,14 +592,54 @@ def api_get_job_story_plan(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     _empty = {"job_id": job_id, "available": False, "plan": None}
     try:
-        from app.domain.story_plan import StoryPlan
+        from app.domain.story_plan_v2 import StoryPlan
 
         plan = StoryPlan.from_json(get_story_plan(job_id))
-        if plan is None or not plan.scenes:
+        if plan is None or not plan.timeline:
             return _empty
         return {"job_id": job_id, "available": True, "plan": json.loads(plan.to_json())}
     except Exception:
         return _empty
+
+
+# Story key-visual ids are ``v<hex>`` / ``v1`` — a strict charset so the id can
+# never carry a path fragment (defence-in-depth on top of the dict lookup).
+_STORY_VISUAL_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+@router.get("/{job_id}/story-visual/{visual_id}")
+def api_get_job_story_visual(job_id: str, visual_id: str):
+    """Serve a Story render's key-visual image by id — the live monitor's
+    "visuals appear as they render" thumbnails.
+
+    Path safety (this router is unauthenticated / loopback): the file path is read
+    from the PERSISTED plan's ``render.visual_assets`` (server-generated — NEVER
+    built from the URL); ``visual_id`` is only a dict key (strict charset). The
+    resolved path must sit inside an allowed root (TEMP_DIR / CACHE_DIR) or it is
+    refused. 404 for a missing job / visual / file; 403 for a path outside roots."""
+    if not _STORY_VISUAL_ID_RE.match(visual_id or ""):
+        raise HTTPException(status_code=404, detail="not found")
+    if not get_job(job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        from app.domain.story_plan_v2 import StoryPlan
+        plan = StoryPlan.from_json(get_story_plan(job_id))
+    except Exception:
+        plan = None
+    path_str = ((plan.render.visual_assets.get(visual_id) or "").strip()
+                if plan is not None and plan.render else "")
+    if not path_str:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        p = Path(path_str).resolve()
+    except Exception:
+        raise HTTPException(status_code=404, detail="not found")
+    _safe_roots = tuple(r.resolve() for r in [TEMP_DIR, CACHE_DIR] if r.exists())
+    if not any(p == r or p.is_relative_to(r) for r in _safe_roots):
+        raise HTTPException(status_code=403, detail="visual is outside allowed roots")
+    if not p.exists() or p.stat().st_size <= 0:
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(str(p), media_type="image/png", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/{job_id}/logs")

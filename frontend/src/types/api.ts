@@ -226,6 +226,12 @@ export interface RenderRequest {
   // Approved/edited StoryPlan JSON from the Storyboard review. When set, the
   // backend renders from it and skips AI planning.
   story_plan_override?: string
+  // Story v2 (B0) — input source: 'paste' adapts story text in content_script;
+  // 'idea' has the AI author the story from story_idea (+ duration/genre).
+  story_source?: 'paste' | 'idea'
+  story_idea?: string
+  story_duration_sec?: number
+  story_genre?: string
 
   // Architecture-review C.1 Phase 1 (2026-06-30): Clip-path feature flag
   // for the Comprehension stage. When true AND render_format === 'clips',

@@ -111,4 +111,24 @@ def apply_voice_cast(bible, language: str, narrator_gender: str = "female") -> d
         return {}
 
 
-__all__ = ["cast_voices", "apply_voice_cast"]
+def apply_voice_cast_v2(plan, language: str, narrator_gender: str = "female") -> dict:
+    """Story v2 — cast voices for a StoryPlan and fill ``plan.render.voices`` (keyed
+    by character id; "" = narrator) with ``[engine, voice_id]``. Prefers each
+    CharacterDef.voice_gender over gender. Reuses ``cast_voices`` (engine by language
+    + gender pool rotation). Returns the mapping. Never raises."""
+    from types import SimpleNamespace
+    try:
+        chars = getattr(plan, "characters", None) or []
+        adapters = [SimpleNamespace(id=c.id, name=c.name,
+                                    gender=((getattr(c, "voice_gender", "") or getattr(c, "gender", "") or "")))
+                    for c in chars]
+        mapping = cast_voices(adapters, language, narrator_gender)
+        for cid, entry in mapping.items():
+            plan.render.voices[cid] = [entry["engine"], entry["voice_id"]]
+        return mapping
+    except Exception as exc:
+        logger.info("story_voice_cast: apply_v2 error %s", exc)
+        return {}
+
+
+__all__ = ["cast_voices", "apply_voice_cast", "apply_voice_cast_v2"]

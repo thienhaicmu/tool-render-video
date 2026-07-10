@@ -184,4 +184,52 @@ def _copy(src, dst: str) -> None:
         logger.info("story_image: copy failed %s", exc)
 
 
-__all__ = ["generate_image_bytes", "generate_shot_image", "_openai_client"]
+def generate_visual_image(
+    visual,
+    refs: "dict[str, str] | None",
+    art_style: str,
+    width: int,
+    height: int,
+    out_path: str,
+    seed: int = 0,
+) -> Optional[str]:
+    """Story v2 — generate the image for ONE Visual → ``out_path``. Uses the
+    visual's quality tier (capped at STORY_IMAGE_MAX_TIER) + the reference sheets of
+    the characters present (``refs``: character_id → reference image path) so the
+    same character stays consistent. Returns the written path or None (→ caller
+    falls back to a local background). Cached by (prompt, size, tier, refs, seed).
+    Never raises."""
+    try:
+        prompt = (getattr(visual, "prompt", "") or "").strip()
+        if not prompt:
+            return None
+        if (art_style or "").strip():
+            prompt = f"{prompt}, {art_style.strip()} style"
+        from app.features.render.engine.visual.story_decision import clamp_tier
+        tier = clamp_tier(getattr(visual, "tier", "medium"))
+        refs = refs or {}
+        ref_paths = [refs[c] for c in (getattr(visual, "character_ids", None) or [])
+                     if refs.get(c) and Path(refs[c]).exists() and Path(refs[c]).stat().st_size > 0]
+        w, h = int(width), int(height)
+        ckey = cache_key("story_visual", _model(), prompt, w, h, tier, "|".join(ref_paths), seed)
+        cached = visual_cache_dir() / f"{ckey}.png"
+        if cached.exists() and cached.stat().st_size > 0:
+            _copy(cached, out_path)
+            return out_path
+        data = generate_image_bytes(
+            prompt, w, h, quality=tier, reference_paths=ref_paths,
+            negative=(getattr(visual, "negative_prompt", "") or ""),
+        )
+        if not data:
+            return None
+        cached.write_bytes(data)
+        if not (cached.exists() and cached.stat().st_size > 0):
+            return None
+        _copy(cached, out_path)
+        return out_path
+    except Exception as exc:
+        logger.info("story_image: generate_visual_image error %s", exc)
+        return None
+
+
+__all__ = ["generate_image_bytes", "generate_shot_image", "generate_visual_image", "_openai_client"]

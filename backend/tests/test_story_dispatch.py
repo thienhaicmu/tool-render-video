@@ -8,8 +8,6 @@ delivered-clip transition builder (cut within a scene, fade between scenes).
 """
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 from fastapi import HTTPException
 
@@ -22,12 +20,12 @@ def _route(monkeypatch, render_format: str, **extra) -> str:
     from app.features.render.routers import _common
     import app.features.render.engine.pipeline.content_pipeline as cp
     import app.features.render.engine.pipeline.recap_pipeline as rp
-    import app.features.render.engine.pipeline.story_pipeline as sp
+    import app.features.render.engine.pipeline.story_pipeline_v2 as sp
 
     hit: dict[str, bool] = {}
     monkeypatch.setattr(cp, "run_content", lambda **k: hit.__setitem__("content", True))
     monkeypatch.setattr(rp, "run_recap", lambda **k: hit.__setitem__("recap", True))
-    monkeypatch.setattr(sp, "run_story", lambda **k: hit.__setitem__("story", True))
+    monkeypatch.setattr(sp, "run_story_v2", lambda **k: hit.__setitem__("story", True))
     monkeypatch.setattr(_common, "run_render_pipeline", lambda **k: hit.__setitem__("clips", True))
 
     payload = RenderRequest(render_format=render_format, output_dir="", **extra)
@@ -102,33 +100,5 @@ def test_validate_story_source_passes_with_chapter(tmp_path):
 def test_validate_story_source_accepts_plan_override(tmp_path):
     from app.features.render.routers._common import _validate_render_source
     _validate_render_source(RenderRequest(
-        render_format="story", story_plan_override='{"scenes":[]}', output_dir=str(tmp_path),
+        render_format="story", story_plan_override='{"visuals":[]}', output_dir=str(tmp_path),
     ))
-
-
-# ── 2-tier transition builder ─────────────────────────────────────────────────
-
-def _shot(t="cut"):
-    return SimpleNamespace(transition_out=t)
-
-
-def _scene(t="fade"):
-    return SimpleNamespace(transition_out=t)
-
-
-def test_build_transitions_two_tier():
-    from app.features.render.engine.pipeline.story_pipeline import _build_transitions
-    # scene 0 has 2 shots, scene 1 has 2 shots → 4 clips, 3 boundaries.
-    ordered = [
-        ("c0", 0, _shot("cut"), _scene("fade")),
-        ("c1", 0, _shot("cut"), _scene("fade")),   # within scene 0 → cut
-        ("c2", 1, _shot("cut"), _scene("to_black")),
-        ("c3", 1, _shot("cut"), _scene("to_black")),  # within scene 1 → cut
-    ]
-    tr = _build_transitions(ordered)
-    assert tr == ["cut", "fade", "cut"]  # [0]=within, [1]=scene boundary(scene0.fade), [2]=within
-
-
-def test_build_transitions_single_clip_empty():
-    from app.features.render.engine.pipeline.story_pipeline import _build_transitions
-    assert _build_transitions([("c0", 0, _shot(), _scene())]) == []

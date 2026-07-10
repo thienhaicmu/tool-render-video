@@ -1,145 +1,129 @@
 /**
- * Story Studio API — /api/story/* (Story-to-Video).
+ * Story Studio API — /api/story/* (Story-to-Video v2, Super-Prompt + Cue Sheet).
  *
  * The render itself goes through the shared render API (submitRender) with
- * render_format="story" + story_plan_override (the approved storyboard). These
- * endpoints cover the pre-render review flow: analyze → storyboard → reference
- * sheet → narration preview. Types mirror the backend StoryPlan (asdict).
+ * render_format="story" (+ optional story_plan_override = the approved v2 plan).
+ * These endpoints cover the pre-render review flow: one super plan call
+ * (source A=paste chapter / B=idea) → per-Visual preview → per-beat narration
+ * preview. Types mirror the backend app/domain/story_plan_v2.py.
  */
 import { apiFetch } from './client'
 
-// ── Domain types (mirror backend app/domain/story_plan.py) ──────────────────
+// ── Domain types (mirror backend app/domain/story_plan_v2.py) ────────────────
 
-export interface StoryCharacter {
+export interface CharacterDef {
   id: string
   name: string
-  description: string
+  canonical_desc: string
   age?: string
   gender?: string
-  voice_engine?: string
-  voice_id?: string
-  reference_image_path?: string
+  voice_gender?: string
+  voice_style?: string
 }
 
-export interface StoryEnvironment {
+export interface SettingDef {
   id: string
   name: string
-  description: string
-  reference_image_path?: string
+  canonical_desc: string
 }
 
-export interface StoryBible {
-  setting: string
-  hook: string
-  cta: string
-  characters: StoryCharacter[]
-  environments: StoryEnvironment[]
+export interface Visual {
+  id: string
+  setting_id: string
+  prompt: string
+  negative_prompt: string
+  character_ids: string[]
+  tier: string
 }
 
-export interface Shot {
-  index: number
-  sid?: string
-  shot_type: string
+export interface Beat {
+  id: string
   narration: string
-  speaker?: string
-  emotion?: string
-  reading_speed?: number
-  pause_before?: number
-  pause_after?: number
-  est_duration_sec?: number
-  camera?: string
-  composition?: string
-  lighting?: string
-  characters?: string[]
-  environment_ref?: string
-  asset_type?: string
-  quality_tier?: string
-  visual_prompt?: string
-  negative_prompt?: string
-  visual_source?: string
-  visual_path?: string
-  transition_out?: string
-  subtitle_style?: string
+  speaker_id: string
+  visual_id: string
+  focus: string
+  motion: string
+  emotion: string
+  reading_speed: number
+  pause_after: number
+  hold_sec: number
+  transition_in: string
+  hook: boolean
+  hook_text: string
 }
 
-export interface StoryScene {
-  index: number
-  scene_title?: string
-  role?: string
-  setting_ref?: string
-  emotion?: string
-  characters?: string[]
-  transition_out?: string
-  shots: Shot[]
+export interface Cue {
+  beat_id: string
+  visual_id: string
+  start_sec: number
+  end_sec: number
+  transition: string
+  hook: boolean
+  hook_text: string
 }
 
-export interface StoryPlan {
-  schema_version?: number
-  series_id?: string
-  chapter_no?: number
-  language?: string
-  art_style?: string
-  aspect_ratio?: string
-  reading_pace?: string
-  topic?: string
-  tone?: string
-  story_bible: StoryBible
-  scenes: StoryScene[]
+export interface RenderState {
+  visual_assets: Record<string, string>
+  voices: Record<string, [string, string]>
+  refs: Record<string, string>
+  cues: Cue[]
+  total_sec: number
+}
+
+export interface StoryPlanV2 {
+  schema_version: number
+  seed: number
+  series_id: string
+  chapter_no: number
+  language: string
+  art_style: string
+  aspect_ratio: string
+  topic: string
+  tone: string
+  characters: CharacterDef[]
+  settings: SettingDef[]
+  visuals: Visual[]
+  timeline: Beat[]
+  render: RenderState
 }
 
 // ── Request/response shapes ──────────────────────────────────────────────────
 
-export interface AnalyzeRequest {
-  chapter_text: string
+export interface StoryPlanRequest {
+  source: 'paste' | 'idea'
+  chapter_text?: string
+  idea?: string
+  duration_sec?: number
+  genre?: string
   language?: string
-  tone?: string
-  series_id?: string
-  chapter_no?: number
-  ai_provider?: string
-  llm_model?: string
-}
-
-export interface AnalyzeResponse {
-  bible: StoryBible
-  meta: Record<string, string>
-}
-
-export interface PlanRequest {
-  chapter_text: string
-  language?: string
-  tone?: string
   art_style?: string
-  series_id?: string
-  chapter_no?: number
   aspect_ratio?: string
-  reading_pace?: string
-  bible?: StoryBible | null
+  subtitle_mode?: string
+  ceiling?: number | null
+  series_id?: string
+  chapter_no?: number
   ai_provider?: string
   llm_model?: string
 }
 
-export interface NarrationAudit {
-  weak: boolean
-  rated: number
-  overloaded: number
-  sparse: number
-  shots: Array<{ n: number; chars: number; load: number | null; flag: string }>
-}
-
-export interface PlanResponse {
-  plan: StoryPlan
-  scene_count: number
-  shot_count: number
+export interface StoryPlanResponse {
+  plan: StoryPlanV2
+  image_count: number
+  beat_count: number
   estimated_total_sec: number
-  narration_audit: NarrationAudit
 }
 
-export interface ReferenceSheetRequest {
-  series_id?: string
-  character_id?: string
-  name?: string
-  description?: string
+export interface VisualPreviewRequest {
+  prompt: string
+  negative_prompt?: string
   art_style?: string
+  aspect_ratio?: string
+  tier?: string
+}
+
+export interface VisualPreviewResponse {
+  token: string
+  url: string
 }
 
 export interface NarrationPreviewRequest {
@@ -157,20 +141,42 @@ export interface NarrationPreviewResponse {
   duration_sec: number
 }
 
+export interface ReferenceSheetRequest {
+  series_id?: string
+  character_id?: string
+  name?: string
+  description?: string
+  art_style?: string
+}
+
+export interface JobStoryPlanResponse {
+  job_id: string
+  available: boolean
+  plan: StoryPlanV2 | null
+}
+
 // ── Calls ─────────────────────────────────────────────────────────────────────
 
 function post<T>(path: string, body: unknown): Promise<T> {
   return apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) })
 }
 
-export const analyzeChapter = (req: AnalyzeRequest) =>
-  post<AnalyzeResponse>('/api/story/analyze', req)
+/** One super plan call → StoryPlan v2 (source A=paste chapter / B=idea). */
+export const planStory = (req: StoryPlanRequest) =>
+  post<StoryPlanResponse>('/api/story/plan', req)
 
-export const planStoryboard = (req: PlanRequest) =>
-  post<PlanResponse>('/api/story/plan', req)
+/** Generate ONE key-visual image from a prompt (storyboard preview / regenerate). */
+export const previewVisual = (req: VisualPreviewRequest) =>
+  post<VisualPreviewResponse>('/api/story/visual/preview', req)
 
+/** Synthesize ONE beat's narration to previewable audio. */
+export const previewNarration = (req: NarrationPreviewRequest) =>
+  post<NarrationPreviewResponse>('/api/story/narration/preview', req)
+
+/** Generate a canonical Character Reference Sheet (optional consistency aid). */
 export const generateReferenceSheet = (req: ReferenceSheetRequest) =>
   post<{ path: string }>('/api/story/character/reference-sheet', req)
 
-export const previewNarration = (req: NarrationPreviewRequest) =>
-  post<NarrationPreviewResponse>('/api/story/narration/preview', req)
+/** Reattach: fetch a job's persisted StoryPlan v2 (polling fallback). */
+export const fetchJobStoryPlan = (jobId: string) =>
+  apiFetch<JobStoryPlanResponse>(`/api/jobs/${encodeURIComponent(jobId)}/story-plan`)
