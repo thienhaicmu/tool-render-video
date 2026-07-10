@@ -1,10 +1,14 @@
 /**
- * types.ts — shared types + constants for the Story Studio.
- * Mirrors the Content Studio structure (types split from the phase components).
+ * types.ts — Story Studio v2 config + constants (Super-Prompt + Cue Sheet).
+ *
+ * The heavy domain types (StoryPlanV2, Beat, Visual…) live in api/story.ts
+ * (they mirror the backend). This file holds the FE-only input config + the enum
+ * option lists the review editors (F3) drive their selects from.
  */
-import type { Ratio } from '../clip-studio/render/types'
 
-export type StoryPhase = 'input' | 'bible' | 'storyboard'
+export type StoryPhase = 'input' | 'review' | 'monitor'
+export type StorySource = 'paste' | 'idea'
+export type Aspect = '16:9' | '9:16' | '1:1'
 
 export const STORY_LANGS = [
   { code: 'vi', label: 'Tiếng Việt', locale: 'vi-VN' },
@@ -13,39 +17,59 @@ export const STORY_LANGS = [
 ] as const
 export type StoryLang = typeof STORY_LANGS[number]['code']
 
-export const STORY_RATIOS: Ratio[] = ['r916', 'r11', 'r169']
-export const READING_PACES = ['slow', 'normal', 'fast'] as const
-export type ReadingPace = typeof READING_PACES[number]
-export const STORY_SUB_STYLES = ['auto', 'opus_pop', 'capcut_box', 'punch_green', 'karaoke_clean', 'smooth_premiere'] as const
-export const ART_STYLE_PRESETS = ['wuxia', 'xianxia', 'anime', 'romance', 'realistic', 'ink wash', 'fantasy', 'horror'] as const
-
-// Story UI language → RenderRequest.voice_language locale (backend routes TTS by
-// this: vi→Gemini, en/ja→ElevenLabs via resolve_story_tts_engine).
+// Story UI language → RenderRequest.voice_language locale (backend routes TTS:
+// vi→Gemini, en/ja→ElevenLabs via resolve_story_tts_engine).
 export const VOICE_LOCALE: Record<StoryLang, 'vi-VN' | 'en-US' | 'ja-JP'> = {
   vi: 'vi-VN', en: 'en-US', ja: 'ja-JP',
 }
 
+export const ASPECTS: Aspect[] = ['16:9', '9:16', '1:1']
+export const ART_STYLE_PRESETS = [
+  'wuxia', 'xianxia', 'anime', 'romance', 'realistic', 'ink wash', 'fantasy', 'horror',
+] as const
+export const GENRE_PRESETS = [
+  'tien-hiep', 'huyen-huyen', 'ngon-tinh', 'kiem-hiep', 'do-thi', 'khoa-huyen', 'kinh-di',
+] as const
+
+// Cue-sheet enums the TimelineEditor (F3) drives its selects from — mirror the
+// backend story_plan_v2 enum tuples.
+export const FOCUS = ['wide', 'left', 'center', 'right', 'top', 'bottom', 'close'] as const
+export const MOTION = ['zoom_in', 'zoom_out', 'pan_left', 'pan_right', 'pan_up', 'pan_down', 'static'] as const
+export const TRANSITION = ['cut', 'fade', 'slide', 'zoom', 'flash', 'to_black'] as const
+export const TIER = ['low', 'medium', 'high'] as const
+
+/**
+ * FE input config. Minimal by design — the AI decides tone / image count / voices.
+ * Source A (paste) uses ``chapterText``; source B (idea) uses ``idea`` +
+ * ``durationSec``. ``subtitles`` is off by default (voice-only, hook titles burn
+ * regardless on the backend).
+ */
 export interface StoryConfig {
+  source: StorySource
+  chapterText: string
+  idea: string
+  durationSec: number      // source=idea target length (UI edits in minutes)
+  genre: string
   language: StoryLang
+  artStyle: string
+  aspect: Aspect
+  subtitles: boolean
   seriesId: string
   chapterNo: number
-  artStyle: string
-  ratio: Ratio
-  readingPace: ReadingPace
-  aiBudget: number
-  subEnabled: boolean
-  subStyle: string
-  wordByWord: boolean
   outputDir: string
 }
 
 export const DEFAULT_STORY_CFG: StoryConfig = {
-  language: 'vi', seriesId: '', chapterNo: 0, artStyle: '', ratio: 'r916',
-  readingPace: 'normal', aiBudget: 0, subEnabled: true, subStyle: 'auto',
-  // Story chapters are long — word-by-word (Whisper per shot) is off by default.
-  wordByWord: false, outputDir: '',
+  source: 'paste',
+  chapterText: '',
+  idea: '',
+  durationSec: 90,
+  genre: '',
+  language: 'vi',
+  artStyle: '',
+  aspect: '16:9',
+  subtitles: false,
+  seriesId: '',
+  chapterNo: 0,
+  outputDir: '',
 }
-
-// Client-side narration audit (mirror of the backend narration_audit) — shot cards.
-export const _CPS = 15
-export type AuditFlag = 'overloaded' | 'sparse' | 'ok' | 'none'

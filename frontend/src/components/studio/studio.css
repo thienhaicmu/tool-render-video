@@ -247,3 +247,82 @@
   color: var(--text-2);
 }
 .st-ratio.is-on .st-ratio-label { color: var(--text-1); }
+
+/* ── Layout utilities ────────────────────────────────────────────────────── */
+.st-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+.st-row { display: flex; gap: var(--space-2); align-items: center; }
+.st-row > .st-input { flex: 1 1 auto; }
+
+.st-range { width: 100%; accent-color: var(--accent); cursor: pointer; }
+
+.st-muted { margin: 0; font-size: var(--text-sm); color: var(--text-3); }
+.st-code {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Alert ───────────────────────────────────────────────────────────────── */
+.st-alert {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: var(--text-1);
+}
+.st-alert--fail {
+  border-color: var(--fail);
+  background: rgba(var(--fail-rgb), 0.08);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.st-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold, 600);
+  font-family: inherit;
+  color: var(--text-1);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--duration-fast, 120ms) var(--ease-out, ease),
+              border-color var(--duration-fast, 120ms) var(--ease-out, ease);
+}
+.st-btn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-hi, var(--accent)); }
+.st-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.st-btn--primary {
+  color: var(--text-inverse, #fff);
+  background: var(--brand-gradient, var(--accent));
+  border-color: transparent;
+  box-shadow: var(--shadow-accent, var(--shadow-sm));
+}
+.st-btn--primary:hover:not(:disabled) { filter: brightness(1.06); background: var(--brand-gradient, var(--accent)); }
+
+.st-actions { display: flex; justify-content: flex-end; gap: var(--space-3); }
+.st-actions--split { justify-content: space-between; }
+
+/* ── Stat row (plan summary) ─────────────────────────────────────────────── */
+.st-stat-row { display: flex; gap: var(--space-6); flex-wrap: wrap; }
+.st-stat { display: flex; flex-direction: column; gap: 2px; }
+.st-stat-n {
+  font-size: var(--text-xl);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-1);
+  line-height: 1;
+}
+.st-stat-l { font-size: var(--text-xs); color: var(--text-3); }

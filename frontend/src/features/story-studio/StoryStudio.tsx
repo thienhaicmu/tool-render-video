@@ -1,50 +1,34 @@
 /**
- * StoryStudio — dedicated Story-to-Video workflow (render_format="story").
+ * StoryStudio — Story-to-Video v2 workflow (render_format="story").
  *
- * Four phases (thin orchestrator; phases live in sibling files, mirroring the
- * Content Studio structure):
- *   input      — paste a chapter + config → "Analyze" (POST /api/story/analyze)
- *   bible      — review characters/environments + generate reference sheets
- *   storyboard — review + edit scenes → shots → "Approve & Render"
- *                (submitRender with story_plan_override = the edited storyboard)
- *   done       — render started, link to History
+ * Thin orchestrator over three phases (screens live in sibling files):
+ *   input    — source A (paste chapter) / B (idea) + minimal config → "Generate"
+ *              (POST /api/story/plan → one super plan call)
+ *   review   — review/edit the StoryPlan v2 (characters · key-visuals · timeline)
+ *              → "Render" (submitRender with story_plan_override = the edited plan)
+ *   monitor  — live render progress (cue sheet)
  *
- * Reuses the Content Studio design language (cs- classes via StoryStudio.css +
- * shared SectionCard/Field/RatioPreview) and the shared render engine.
+ * Uses the mode-agnostic Studio BASE (components/studio, F0). Imports NOTHING
+ * from content-studio (each studio owns its screens; the base is shared).
+ * F1 scaffolds the shell + state; F2/F3/F4 flesh out the three screens.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import './StoryStudio.css'
 import type { RenderRequest } from '@/types/api'
+import { StudioScreen, StudioStepper } from '../../components/studio'
 import { useI18n } from '../../i18n/useI18n'
 import { useRenderStore } from '../../stores/renderStore'
 import { useUIStore } from '../../stores/uiStore'
-import { RATIO_INFO } from '../clip-studio/render/constants'
 import { getDefaultOutputDir } from '../../api/outputDir'
-import { analyzeChapter, planStoryboard, type StoryBible, type StoryPlan } from '../../api/story'
-import { DEFAULT_STORY_CFG, VOICE_LOCALE, type StoryConfig, type StoryPhase } from './types'
-import { InputPhase } from './InputPhase'
-import { BiblePhase } from './BiblePhase'
-import { StoryboardPhase } from './StoryboardPhase'
+import { planStory, type StoryPlanV2 } from '../../api/story'
+import {
+  DEFAULT_STORY_CFG, VOICE_LOCALE, type StoryConfig, type StoryPhase,
+} from './types'
+import { InputScreen } from './InputScreen'
+import { PlanReview } from './PlanReview'
+import { StoryMonitor } from './StoryMonitor'
 
-const STEP_INDEX: Record<StoryPhase | 'done', 1 | 2 | 3 | 4> = { input: 1, bible: 2, storyboard: 3, done: 4 }
-
-function StoryStepper({ vi, step }: { vi: boolean; step: 1 | 2 | 3 | 4 }) {
-  const labels = vi ? ['Chương', 'Nhân vật', 'Storyboard', 'Render'] : ['Chapter', 'Characters', 'Storyboard', 'Render']
-  return (
-    <div className="cs-stepper">
-      {labels.map((l, i) => {
-        const n = (i + 1) as 1 | 2 | 3 | 4
-        const cls = `cs-step${n === step ? ' is-active' : ''}${n < step ? ' is-done' : ''}`
-        return (
-          <div key={l} className={cls}>
-            <span className="cs-step-dot">{n < step ? '✓' : n}</span>
-            {l}{i < labels.length - 1 && <span className="cs-step-sep">›</span>}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+const STEP: Record<StoryPhase, number> = { input: 1, review: 2, monitor: 3 }
 
 export function StoryStudio() {
   const { lang } = useI18n()
@@ -53,16 +37,15 @@ export function StoryStudio() {
   const setActivePanel = useUIStore((s) => s.setActivePanel)
 
   const [phase, setPhase] = useState<StoryPhase>('input')
-  const [chapter, setChapter] = useState('')
   const [cfg, setCfg] = useState<StoryConfig>(DEFAULT_STORY_CFG)
-  const [bible, setBible] = useState<StoryBible | null>(null)
-  const [plan, setPlan] = useState<StoryPlan | null>(null)
+  const [plan, setPlan] = useState<StoryPlanV2 | null>(null)
   const [estTotal, setEstTotal] = useState(0)
   const [jobId, setJobId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const setKey = <K extends keyof StoryConfig>(k: K, v: StoryConfig[K]) => setCfg((c) => ({ ...c, [k]: v }))
+  const setKey = <K extends keyof StoryConfig>(k: K, v: StoryConfig[K]) =>
+    setCfg((c) => ({ ...c, [k]: v }))
   const hasPicker = typeof window !== 'undefined' && !!window.electronAPI?.pickDirectory
 
   // Prefill the save folder from the saved default (never clobber a user choice).
@@ -79,124 +62,109 @@ export function StoryStudio() {
 
   function fail(e: unknown) { setError(e instanceof Error ? e.message : String(e)) }
 
-  async function onAnalyze() {
-    if (!chapter.trim() || busy) return
-    setBusy(true); setError(null)
-    try {
-      const r = await analyzeChapter({
-        chapter_text: chapter.trim(), language: cfg.language,
-        series_id: cfg.seriesId || undefined, chapter_no: cfg.chapterNo || undefined,
-      })
-      setBible(r.bible)
-      setPhase('bible')
-    } catch (e) { fail(e) } finally { setBusy(false) }
-  }
+  const inputReady = cfg.source === 'paste' ? !!cfg.chapterText.trim() : !!cfg.idea.trim()
 
-  async function onPlan() {
-    if (busy) return
+  async function onGenerate() {
+    if (!inputReady || busy) return
     setBusy(true); setError(null)
     try {
-      const r = await planStoryboard({
-        chapter_text: chapter.trim(), language: cfg.language, art_style: cfg.artStyle || undefined,
-        series_id: cfg.seriesId || undefined, chapter_no: cfg.chapterNo || undefined,
-        aspect_ratio: RATIO_INFO[cfg.ratio].api, reading_pace: cfg.readingPace, bible,
+      const r = await planStory({
+        source: cfg.source,
+        chapter_text: cfg.source === 'paste' ? cfg.chapterText.trim() : undefined,
+        idea: cfg.source === 'idea' ? cfg.idea.trim() : undefined,
+        duration_sec: cfg.source === 'idea' ? cfg.durationSec : undefined,
+        genre: cfg.genre || undefined,
+        language: cfg.language,
+        art_style: cfg.artStyle || undefined,
+        aspect_ratio: cfg.aspect,
+        subtitle_mode: cfg.subtitles ? 'hook_only' : 'off',
+        series_id: cfg.seriesId || undefined,
+        chapter_no: cfg.chapterNo || undefined,
       })
-      if (!r.plan?.scenes?.length) {
-        setError(vi ? 'AI không dựng được storyboard. Kiểm tra API key / thử lại.' : 'AI produced no storyboard. Check API key / retry.')
+      if (!r.plan?.timeline?.length) {
+        setError(vi ? 'AI không dựng được kế hoạch. Kiểm tra API key / thử lại.'
+                    : 'AI produced no plan. Check API key / retry.')
       } else {
         setPlan(r.plan)
         setEstTotal(r.estimated_total_sec || 0)
-        setPhase('storyboard')
+        setPhase('review')
       }
     } catch (e) { fail(e) } finally { setBusy(false) }
   }
 
-  function buildPayload(p: StoryPlan): RenderRequest {
-    // Reindex densely so per-shot temp files never collide after edits.
-    const reindexed: StoryPlan = {
-      ...p,
-      scenes: p.scenes.map((sc, i) => ({ ...sc, index: i, shots: sc.shots.map((sh, j) => ({ ...sh, index: j })) })),
-    }
+  function buildPayload(p: StoryPlanV2): RenderRequest {
     return {
-      source_mode: 'local',
-      source_video_path: '',
       render_format: 'story',
-      content_script: chapter.trim(),
-      story_plan_override: JSON.stringify(reindexed),
-      story_series_id: cfg.seriesId.trim() || undefined,
-      story_chapter_no: cfg.chapterNo || undefined,
-      story_art_style: cfg.artStyle.trim() || undefined,
-      story_reading_pace: cfg.readingPace,
+      story_source: cfg.source,
+      content_script: cfg.source === 'paste' ? cfg.chapterText.trim() : '',
+      story_idea: cfg.source === 'idea' ? cfg.idea.trim() : '',
+      story_duration_sec: cfg.source === 'idea' ? cfg.durationSec : 0,
+      story_genre: cfg.genre,
+      story_art_style: cfg.artStyle,
+      story_series_id: cfg.seriesId,
+      story_chapter_no: cfg.chapterNo,
+      story_plan_override: JSON.stringify(p),
       voice_language: VOICE_LOCALE[cfg.language],
-      aspect_ratio: RATIO_INFO[cfg.ratio].api,
-      add_subtitle: cfg.subEnabled,
-      subtitle_style: cfg.subStyle,
-      highlight_per_word: cfg.subEnabled && cfg.wordByWord ? true : undefined,
-      content_ai_budget: cfg.aiBudget > 0 ? cfg.aiBudget : undefined,
-      output_dir: cfg.outputDir.trim(),
-    }
+      aspect_ratio: cfg.aspect,
+      add_subtitle: cfg.subtitles,
+      output_dir: cfg.outputDir,
+    } as RenderRequest
   }
 
   async function onRender() {
     if (!plan || busy) return
-    setError(null)
-    if (!cfg.outputDir.trim()) { setError(vi ? 'Chưa chọn thư mục lưu video.' : 'Pick a save folder first.'); return }
-    setBusy(true)
+    setBusy(true); setError(null)
     try {
-      const exists = await window.electronAPI?.pathExists?.(cfg.outputDir.trim())
-      if (exists === false) {
-        setError(vi ? `Thư mục lưu không tồn tại: ${cfg.outputDir.trim()}` : `Save folder does not exist: ${cfg.outputDir.trim()}`)
-        setBusy(false); return
-      }
       const id = await submitRender(buildPayload(plan))
       setJobId(id)
+      setPhase('monitor')
     } catch (e) { fail(e) } finally { setBusy(false) }
   }
 
   function reset() {
-    setPhase('input'); setChapter(''); setBible(null); setPlan(null); setEstTotal(0)
-    setJobId(null); setError(null)
+    setPlan(null); setJobId(null); setError(null); setEstTotal(0); setPhase('input')
   }
 
-  const step = STEP_INDEX[jobId ? 'done' : phase]
+  const steps = vi ? ['Nhập truyện', 'Duyệt kế hoạch', 'Render'] : ['Input', 'Review', 'Render']
 
   return (
-    <>
-      <div className="cs-screen" style={{ paddingBottom: 0 }}>
-        <StoryStepper vi={vi} step={step} />
-      </div>
-
-      {jobId ? (
-        <div className="cs-screen">
-          <section className="cs-card">
-            <div className="cs-card-hd"><span className="cs-card-title">🎬 {vi ? 'Đã bắt đầu render' : 'Render started'}</span></div>
-            <div className="cs-hint" style={{ marginBottom: 12 }}>{vi ? 'Job' : 'Job'}: <code>{jobId}</code></div>
-            <div className="cs-row" style={{ gap: 8 }}>
-              <Btn primary onClick={() => setActivePanel('library')}>{vi ? 'Xem tiến độ trong Lịch sử →' : 'Track in History →'}</Btn>
-              <Btn onClick={reset}>{vi ? 'Chương mới' : 'New chapter'}</Btn>
-            </div>
-          </section>
-        </div>
-      ) : phase === 'input' ? (
-        <InputPhase vi={vi} chapter={chapter} setChapter={setChapter} cfg={cfg} setKey={setKey}
-          busy={busy} error={error} onAnalyze={onAnalyze} hasPicker={hasPicker} pickOutputDir={pickOutputDir} />
-      ) : phase === 'bible' && bible ? (
-        <BiblePhase vi={vi} bible={bible} setBible={setBible} cfg={cfg} busy={busy} error={error}
-          onBack={() => setPhase('input')} onNext={onPlan} />
-      ) : phase === 'storyboard' && plan ? (
-        <StoryboardPhase vi={vi} plan={plan} setPlan={setPlan} estTotal={estTotal} busy={busy} error={error}
-          onBack={() => setPhase('bible')} onRender={onRender} />
-      ) : null}
-    </>
+    <StoryStudioShell vi={vi} step={STEP[phase]} steps={steps}>
+      {error && <div className="st-alert st-alert--fail" role="alert">{error}</div>}
+      {phase === 'input' && (
+        <InputScreen
+          vi={vi} cfg={cfg} setKey={setKey} busy={busy} ready={inputReady}
+          hasPicker={hasPicker} pickOutputDir={pickOutputDir} onGenerate={onGenerate}
+        />
+      )}
+      {phase === 'review' && plan && (
+        <PlanReview
+          vi={vi} plan={plan} setPlan={setPlan} estTotal={estTotal} busy={busy}
+          artStyle={cfg.artStyle} aspect={cfg.aspect} language={cfg.language}
+          onRender={onRender} onBack={reset}
+        />
+      )}
+      {phase === 'monitor' && (
+        <StoryMonitor
+          vi={vi} jobId={jobId}
+          onDone={() => setActivePanel('history')} onNew={reset}
+        />
+      )}
+    </StoryStudioShell>
   )
 }
 
-// Tiny local button wrapper to keep the done card self-contained.
-function Btn({ primary, onClick, children }: { primary?: boolean; onClick: () => void; children: ReactNode }) {
+function StoryStudioShell({ vi, step, steps, children }: {
+  vi: boolean; step: number; steps: string[]; children: ReactNode
+}) {
   return (
-    <button className={primary ? 'cs-cta' : ''} onClick={onClick}
-      style={primary ? undefined : { background: 'transparent', border: '1px solid var(--border,#333)', color: 'inherit', padding: '8px 14px', borderRadius: 8, cursor: 'pointer' }}>
+    <StudioScreen
+      icon="📖"
+      title={vi ? 'Story Studio' : 'Story Studio'}
+      subtitle={vi ? 'Truyện → AI hiểu → hình ảnh nhất quán + lời kể → video'
+                   : 'Chapter → AI → consistent images + narration → video'}
+      stepper={<StudioStepper steps={steps} current={step} />}
+    >
       {children}
-    </button>
+    </StudioScreen>
   )
 }
