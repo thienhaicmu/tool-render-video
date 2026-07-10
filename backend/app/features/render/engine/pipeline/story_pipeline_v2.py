@@ -32,7 +32,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable
 
-from app.core.config import TEMP_DIR
+from app.core.config import CACHE_DIR, TEMP_DIR
 from app.core.stage import JobStage, JobPartStage, STAGE_TO_EVENT
 from app.db.connection import close_thread_conn
 from app.db.jobs_repo import (
@@ -120,17 +120,39 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
     return plan
 
 
-def _generate_images(plan, shots_dir: Path, art_style: str, img_w: int, img_h: int) -> list:
+def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int,
+                     *, job_id: str, effective_channel: str) -> list:
     """Generate one image per Visual → plan.render.visual_assets[vid]. Returns the
-    list of visual_ids that FELL BACK (no image). Never raises per-visual."""
+    list of visual_ids that FELL BACK (no image). Never raises per-visual.
+
+    Images land in a PERSISTENT dir (``out_dir`` under CACHE_DIR, not the temp
+    shots dir) so they survive the finalize cleanup and the live-monitor thumbnail
+    endpoint can serve them during AND after the render. The plan is persisted +
+    a ``story.visual.ready`` event emitted after EACH image so the FE reveals the
+    visuals one by one (best-effort — a persist/emit hiccup never fails a visual)."""
     fallbacks: list = []
+    total = plan.image_count()
     for v in plan.visuals:
-        out = shots_dir / f"img_{v.id}.png"
+        out = out_dir / f"{v.id}.png"
         refs = {cid: plan.render.refs[cid] for cid in getattr(v, "character_ids", [])
                 if cid in plan.render.refs}
         p = generate_visual_image(v, refs, art_style, img_w, img_h, str(out), seed=int(plan.seed or 0))
         if p:
             plan.render.visual_assets[v.id] = p
+            try:
+                update_story_plan(job_id, plan.to_json())
+            except Exception:
+                pass
+            try:
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.visual.ready", level="INFO",
+                    message=f"Key-visual {v.id} ready ({len(plan.render.visual_assets)}/{total})",
+                    step="render.story",
+                    context={"visual_id": v.id, "done": len(plan.render.visual_assets), "total": total},
+                )
+            except Exception:
+                pass
         else:
             fallbacks.append(v.id)
     return fallbacks
@@ -231,7 +253,15 @@ def run_story_v2(
         # ── 3. Images (≤ceiling; per Visual) ────────────────────────────────
         _set_stage(JobStage.SEGMENT_BUILDING, 30,
                    f"Storyboard: {plan.image_count()} image(s), {plan.beat_count()} beat(s)")
-        visual_fallbacks = _generate_images(plan, shots_dir, art_style, img_w, img_h)
+        # Persistent visuals dir (under CACHE_DIR — survives the shots_dir cleanup
+        # so the live-monitor thumbnail endpoint keeps serving after DONE; reclaimed
+        # by the periodic cache prune).
+        visuals_dir = CACHE_DIR / "story_visuals" / job_id
+        visuals_dir.mkdir(parents=True, exist_ok=True)
+        visual_fallbacks = _generate_images(
+            plan, visuals_dir, art_style, img_w, img_h,
+            job_id=job_id, effective_channel=effective_channel,
+        )
         if visual_fallbacks:
             _emit_render_event(
                 channel_code=effective_channel, job_id=job_id,

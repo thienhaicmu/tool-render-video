@@ -7,7 +7,7 @@
  * Narration → Render → Done) + %, a "now rendering" cue card, a per-cue strip,
  * an activity feed, and the finished video. Studio BASE tokens only.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRenderSocket } from '../../hooks/useRenderSocket'
 import { BASE_URL } from '../../api/client'
 import { fetchJobStoryPlan, type StoryPlanV2 } from '../../api/story'
@@ -25,6 +25,18 @@ function phaseIdx(stage: string | null, pct: number, terminal: boolean, ok: bool
   return 0
 }
 
+function visualUrl(jobId: string, vid: string): string {
+  return `${BASE_URL}/api/jobs/${encodeURIComponent(jobId)}/story-visual/${encodeURIComponent(vid)}`
+}
+
+/** A key-visual image (real thumbnail); falls back to a colour badge if the image
+ * hasn't landed yet or was pruned after the render. */
+function VisualThumb({ url, color, label }: { url?: string; color: string; label: string }) {
+  const [failed, setFailed] = useState(false)
+  if (url && !failed) return <img className="st-vt-img" src={url} alt={label} onError={() => setFailed(true)} />
+  return <span className="st-vt-ph" style={{ background: color }}>{label}</span>
+}
+
 export function StoryMonitor({ vi, jobId, onDone, onNew }: {
   vi: boolean
   jobId: string | null
@@ -33,21 +45,23 @@ export function StoryMonitor({ vi, jobId, onDone, onNew }: {
 }) {
   const { stage, jobStatus, progress, liveParts, liveEvents, isTerminal } = useRenderSocket(jobId)
   const [plan, setPlan] = useState<StoryPlanV2 | null>(null)
-  const planRef = useRef(false)
 
-  // Poll the persisted plan (survives reattach / WS→polling) until we have it.
+  // Poll the persisted plan (survives reattach / WS→polling) and KEEP refreshing
+  // while the render runs — the pipeline persists render.visual_assets one image at
+  // a time (V2), so re-polling is how the visuals grid fills in. Stops at terminal.
   useEffect(() => {
-    if (!jobId || planRef.current) return
+    if (!jobId) return
     let alive = true
     const tick = () => {
       void fetchJobStoryPlan(jobId).then((r) => {
-        if (alive && r.available && r.plan) { planRef.current = true; setPlan(r.plan) }
+        if (alive && r.available && r.plan) setPlan(r.plan)
       }).catch(() => {})
     }
     tick()
-    const t = setInterval(() => { if (!planRef.current) tick(); else clearInterval(t) }, 2500)
+    if (isTerminal) return () => { alive = false }
+    const t = setInterval(tick, 2500)
     return () => { alive = false; clearInterval(t) }
-  }, [jobId])
+  }, [jobId, isTerminal])
 
   const pct = progress?.overall_progress_percent ?? 0
   const ok = jobStatus === 'completed' || jobStatus === 'completed_with_errors'
@@ -86,10 +100,44 @@ export function StoryMonitor({ vi, jobId, onDone, onNew }: {
         </div>
       </div>
 
+      {/* Visuals grid — fills in as each key-visual renders (V2/V3) */}
+      {jobId && plan && plan.visuals.length > 0 && (
+        <div className="st-card">
+          <div className="st-card-hd">
+            <span className="st-card-title">{vi ? 'Hình' : 'Visuals'}</span>
+            <span className="st-card-aside">
+              {Object.keys(plan.render?.visual_assets || {}).length}/{plan.visuals.length}
+            </span>
+          </div>
+          <div className="st-vt-grid">
+            {plan.visuals.map((v) => {
+              const has = !!plan.render?.visual_assets?.[v.id]
+              return (
+                <div key={v.id} className={`st-vt st-vt--${plan.aspect_ratio.replace(':', '-')}`}
+                  style={{ borderColor: colors[v.id] }}>
+                  {has
+                    ? <VisualThumb url={visualUrl(jobId, v.id)} color={colors[v.id]} label={v.id} />
+                    : <>
+                        <span className="st-vt-ph" style={{ background: colors[v.id] }}>{v.id}</span>
+                        {!isTerminal && <span className="st-visual-spin" aria-hidden />}
+                      </>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Now rendering (live) */}
       {!isTerminal && (
         <div className="st-card st-mon-now">
-          {curVisual && <span className="st-tl-badge" style={{ background: colors[curVisual] || 'var(--border)' }}>{(current?.part_no) || ''}</span>}
+          {curVisual && (
+            <span className="st-tl-badge" style={{ background: colors[curVisual] || 'var(--border)' }}>
+              {jobId && plan?.render?.visual_assets?.[curVisual]
+                ? <img src={visualUrl(jobId, curVisual)} alt={curVisual} />
+                : <span>{current?.part_no || ''}</span>}
+            </span>
+          )}
           <div className="st-mon-now-body">
             <div className="st-muted">
               {vi ? `Cue ${current?.part_no || 0}/${cues.length || plan?.timeline.length || 0}` : `Cue ${current?.part_no || 0}/${cues.length || plan?.timeline.length || 0}`}

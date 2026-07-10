@@ -55,6 +55,7 @@ def _story_sandbox(tmp_path, monkeypatch):
     monkeypatch.setattr("app.core.config.TEMP_DIR", temp_dir, raising=False)
     monkeypatch.setattr("app.core.config.LOGS_DIR", data_dir / "logs", raising=False)
     monkeypatch.setattr(sp2, "TEMP_DIR", temp_dir, raising=False)
+    monkeypatch.setattr(sp2, "CACHE_DIR", data_dir / "cache", raising=False)
     from app.db.connection import init_db
     init_db()
     yield {"output_dir": output_dir, "tmp_path": tmp_path}
