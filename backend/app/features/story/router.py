@@ -181,11 +181,25 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     if plan is None or plan.is_empty() or plan.image_count() == 0:
         raise HTTPException(status_code=502, detail="Story planning returned no usable plan")
 
+    # Cost preflight (C6): the gpt_image (premium) render generates one image per
+    # Visual PLUS one reference sheet per distinct character present in the visuals.
+    # Surface both counts so a consumer's cost estimate isn't blind to the sheets
+    # (upper bound — series-pinned sheets are reused at render, so actual may be fewer).
+    _ref_chars = {cid for v in plan.visuals for cid in (v.character_ids or []) if cid}
+    _refsheet_count = len(_ref_chars)
+    _visual_count = plan.image_count()
     return {
         "plan": json.loads(plan.to_json()),
-        "image_count": plan.image_count(),
+        "image_count": _visual_count,
         "beat_count": plan.beat_count(),
         "estimated_total_sec": round(plan.estimated_total_sec(), 1),
+        "character_count": len(plan.characters),
+        "cost_preflight": {
+            "visual_count": _visual_count,
+            "character_count": len(plan.characters),
+            "reference_sheet_count": _refsheet_count,
+            "premium_image_count": _visual_count + _refsheet_count,
+        },
     }
 
 

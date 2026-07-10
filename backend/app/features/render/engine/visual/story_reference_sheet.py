@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +26,18 @@ logger = logging.getLogger("app.render.visual.story_ref_sheet")
 
 # Durable asset store (shared with Content's pinned assets — never pruned).
 _ASSETS_DIR = Path(APP_DATA_DIR) / "content_assets"
+
+# gpt-image-1 quality tiers a reference sheet may use.
+_REFSHEET_TIERS = ("low", "medium", "high", "auto")
+
+
+def _refsheet_quality() -> str:
+    """gpt-image-1 quality tier for reference sheets (C3 cost knob). Reference sheets
+    are INTERNAL conditioning images (fed to image-edit), not final output, so their
+    tier is env-tunable via ``STORY_REFSHEET_QUALITY``. Default ``high`` preserves the
+    historical behaviour (and the byte-identical cache key). Never raises."""
+    q = (os.getenv("STORY_REFSHEET_QUALITY", "high") or "high").strip().lower()
+    return q if q in _REFSHEET_TIERS else "high"
 
 
 def _safe_cid(character) -> str:
@@ -52,8 +65,12 @@ def generate_character_reference_sheet(
         if not subject:
             return None
         style = (art_style or "").strip() or "cinematic"
-        # Content-addressed cache: same subject+style+size → same file → generate once.
-        _key = hashlib.sha1(f"{subject}|{style}|{width}x{height}".encode("utf-8", "ignore")).hexdigest()[:12]
+        quality = _refsheet_quality()
+        # Non-default tiers namespace the cache so a cheaper sheet never masquerades as
+        # a "high" one; the default "high" keeps the historical key (no regen, no cost).
+        _qtag = "" if quality == "high" else f"|{quality}"
+        # Content-addressed cache: same subject+style+size(+tier) → same file → generate once.
+        _key = hashlib.sha1(f"{subject}|{style}|{width}x{height}{_qtag}".encode("utf-8", "ignore")).hexdigest()[:12]
         _ASSETS_DIR.mkdir(parents=True, exist_ok=True)
         dst = _ASSETS_DIR / f"refsheet_{_safe_cid(character)}_{_key}.png"
         if dst.exists() and dst.stat().st_size > 0:
@@ -64,7 +81,7 @@ def generate_character_reference_sheet(
             f"background, even lighting, consistent design, {style} style. "
             f"Clean reference art, no text, no watermark."
         )
-        data = generate_image_bytes(prompt, width, height, quality="high")
+        data = generate_image_bytes(prompt, width, height, quality=quality)
         if not data:
             return None
         dst.write_bytes(data)

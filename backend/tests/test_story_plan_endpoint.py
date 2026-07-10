@@ -78,6 +78,19 @@ def test_plan_source_idea_passes_idea_and_duration(monkeypatch):
     assert out["image_count"] == 1 and out["beat_count"] == 2
 
 
+def test_plan_returns_cost_preflight(monkeypatch):
+    """C6: /plan surfaces reference-sheet + premium-image counts so a consumer's
+    cost estimate isn't blind to the per-character sheets the gpt_image path adds."""
+    monkeypatch.setattr(story_router, "generate_story_plan_v2", lambda **kw: _plan())
+    out = plan_storyboard(StoryPlanRequest(source="paste", chapter_text="Nội dung.", language="vi"))
+    assert out["character_count"] == 1
+    cp = out["cost_preflight"]
+    assert cp["visual_count"] == 1
+    assert cp["character_count"] == 1
+    assert cp["reference_sheet_count"] == 1        # v1 references character "han"
+    assert cp["premium_image_count"] == 2          # 1 visual + 1 reference sheet
+
+
 # ── /api/story/visual/preview ─────────────────────────────────────────────────
 
 def test_visual_preview_422_empty_prompt():
