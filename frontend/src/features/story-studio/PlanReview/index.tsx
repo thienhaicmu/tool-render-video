@@ -162,6 +162,14 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
         </div>
       </div>
 
+      {imageProvider === 'gpt_image' && plan.visuals.length >= 8 && (
+        <div className="st-cost-hint">
+          {vi
+            ? `💡 ${plan.visuals.length} ảnh Premium ≈ $${premiumCost}. Bản nháp trên đã miễn phí — chuyển "Free" nếu muốn render $0.`
+            : `💡 ${plan.visuals.length} premium images ≈ $${premiumCost}. The drafts above are free — switch to "Free" to render at $0.`}
+        </div>
+      )}
+
       <CharactersPanel vi={vi} plan={plan} artStyle={artStyle} onChange={updateCharacter} />
       <VisualsPanel
         vi={vi} plan={plan} artStyle={artStyle} aspect={aspect} colors={colors}
