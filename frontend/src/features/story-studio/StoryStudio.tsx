@@ -27,6 +27,7 @@ import {
 import { InputScreen } from './InputScreen'
 import { PlanReview } from './PlanReview'
 import { StoryMonitor } from './StoryMonitor'
+import { StoryDirectorConsole } from './StoryDirectorConsole'
 
 const STEP: Record<StoryPhase, number> = { input: 1, review: 2, monitor: 3 }
 
@@ -130,6 +131,7 @@ export function StoryStudio() {
   return (
     <StoryStudioShell vi={vi} step={STEP[phase]} steps={steps}>
       {error && <div className="st-alert st-alert--fail" role="alert">{error}</div>}
+      {busy && phase === 'input' && <StoryDirectorConsole vi={vi} source={cfg.source} />}
       {phase === 'input' && (
         <InputScreen
           vi={vi} cfg={cfg} setKey={setKey} busy={busy} ready={inputReady}

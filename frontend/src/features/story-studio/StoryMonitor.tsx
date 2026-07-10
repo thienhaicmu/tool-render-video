@@ -1,11 +1,29 @@
 /**
- * StoryMonitor — Story v2 phase 3 (live render progress over the cue sheet).
+ * StoryMonitor — Story v2 phase 3 (F4b): live render progress over the cue sheet.
  *
- * F1 scaffold: confirms the render started + links to History. F4 fleshes this
- * out into the live "AI Story Director" console + per-cue monitor (WS stream +
- * /jobs/{id}/story-plan polling fallback). Uses the Studio BASE (F0) only.
+ * Binds the shared render socket (job / parts / summary + per-cue messages) and,
+ * as a reattach / polling fallback, the persisted StoryPlan v2
+ * (/api/jobs/{id}/story-plan). Surfaces: a stage rail (Analyze → Visuals →
+ * Narration → Render → Done) + %, a "now rendering" cue card, a per-cue strip,
+ * an activity feed, and the finished video. Studio BASE tokens only.
  */
-import { StudioCard } from '../../components/studio'
+import { useEffect, useRef, useState } from 'react'
+import { useRenderSocket } from '../../hooks/useRenderSocket'
+import { BASE_URL } from '../../api/client'
+import { fetchJobStoryPlan, type StoryPlanV2 } from '../../api/story'
+import { visualColorMap } from './PlanReview/helpers'
+
+const PHASES_VI = ['Phân tích', 'Dựng hình', 'Lời kể', 'Render', 'Xong']
+const PHASES_EN = ['Analyze', 'Visuals', 'Narration', 'Render', 'Done']
+
+function phaseIdx(stage: string | null, pct: number, terminal: boolean, ok: boolean): number {
+  if (terminal) return ok ? 4 : 3
+  const s = (stage || '').toLowerCase()
+  if (s.includes('done')) return 4
+  if (s.includes('render') || s.includes('writ') || s.includes('report') || s.includes('final') || s.includes('assembl')) return 3
+  if (s.includes('segment') || s.includes('build')) return pct >= 42 ? 2 : 1
+  return 0
+}
 
 export function StoryMonitor({ vi, jobId, onDone, onNew }: {
   vi: boolean
@@ -13,25 +31,115 @@ export function StoryMonitor({ vi, jobId, onDone, onNew }: {
   onDone: () => void
   onNew: () => void
 }) {
+  const { stage, jobStatus, progress, liveParts, liveEvents, isTerminal } = useRenderSocket(jobId)
+  const [plan, setPlan] = useState<StoryPlanV2 | null>(null)
+  const planRef = useRef(false)
+
+  // Poll the persisted plan (survives reattach / WS→polling) until we have it.
+  useEffect(() => {
+    if (!jobId || planRef.current) return
+    let alive = true
+    const tick = () => {
+      void fetchJobStoryPlan(jobId).then((r) => {
+        if (alive && r.available && r.plan) { planRef.current = true; setPlan(r.plan) }
+      }).catch(() => {})
+    }
+    tick()
+    const t = setInterval(() => { if (!planRef.current) tick(); else clearInterval(t) }, 2500)
+    return () => { alive = false; clearInterval(t) }
+  }, [jobId])
+
+  const pct = progress?.overall_progress_percent ?? 0
+  const ok = jobStatus === 'completed' || jobStatus === 'completed_with_errors'
+  const failed = jobStatus === 'failed'
+  const partial = liveParts.some((p) => p.status === 'failed') && ok
+  const phases = vi ? PHASES_VI : PHASES_EN
+  const pi = phaseIdx(stage, pct, isTerminal, ok)
+
+  const colors = plan ? visualColorMap(plan.visuals) : {}
+  const cues = [...liveParts].sort((a, b) => a.part_no - b.part_no)
+  const current = cues.find((p) => p.status === 'rendering') || (isTerminal ? undefined : cues.find((p) => p.status !== 'done' && p.status !== 'failed'))
+  const curBeat = current && plan ? plan.timeline[current.part_no - 1] : undefined
+  const curVisual = curBeat?.visual_id || current?.message || ''
+
+  const outputPart = liveParts.find((p) => p.output_file)
+  const streamUrl = outputPart ? `${BASE_URL}/api/jobs/${jobId}/parts/${outputPart.part_no}/stream` : ''
+
   return (
     <>
-      <StudioCard icon="🎥" title={vi ? 'Đang render' : 'Rendering'}>
-        <p className="st-muted">
-          {jobId
-            ? (vi ? 'Đã bắt đầu render. Màn hình live (console AI + tiến độ theo cue) sẽ có ở F4.'
-                  : 'Render started. The live console (AI + per-cue progress) lands in F4.')
-            : (vi ? 'Chưa có job.' : 'No job yet.')}
-        </p>
-        {jobId && <code className="st-code">job: {jobId}</code>}
-      </StudioCard>
+      {/* Header rail + progress */}
+      <div className="st-card">
+        <div className="st-mon-rail">
+          {phases.map((label, i) => (
+            <div key={label} className={`st-mon-ph${i === pi && !isTerminal ? ' is-active' : ''}${i < pi || (isTerminal && ok) ? ' is-done' : ''}`}>
+              <span className="st-mon-ph-dot">{i < pi || (isTerminal && ok) ? '✓' : i + 1}</span>
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="st-mon-bar"><span className="st-mon-fill" style={{ width: `${Math.max(2, pct)}%` }} /></div>
+        <div className="st-mon-meta">
+          <span>{pct}%</span>
+          {plan?.render?.total_sec ? <span>~{Math.round(plan.render.total_sec)}s</span> : null}
+          {partial && <span className="st-badge st-badge--warn">{vi ? 'Một phần lỗi' : 'Partial'}</span>}
+          {failed && <span className="st-badge st-badge--fail">{vi ? 'Thất bại' : 'Failed'}</span>}
+        </div>
+      </div>
+
+      {/* Now rendering (live) */}
+      {!isTerminal && (
+        <div className="st-card st-mon-now">
+          {curVisual && <span className="st-tl-badge" style={{ background: colors[curVisual] || 'var(--border)' }}>{(current?.part_no) || ''}</span>}
+          <div className="st-mon-now-body">
+            <div className="st-muted">
+              {vi ? `Cue ${current?.part_no || 0}/${cues.length || plan?.timeline.length || 0}` : `Cue ${current?.part_no || 0}/${cues.length || plan?.timeline.length || 0}`}
+              {pi === 1 && ` · 🖼 ${vi ? 'sinh hình' : 'visuals'}`}
+              {pi === 2 && ` · 🎙 ${vi ? 'lời kể' : 'narration'}`}
+              {pi === 3 && ` · 🎬 ${vi ? 'ghép cue' : 'compose'}`}
+            </div>
+            {curBeat && <div className="st-mon-now-narr">{curBeat.narration}</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Cue strip */}
+      {cues.length > 0 && (
+        <div className="st-card">
+          <div className="st-mon-strip">
+            {cues.map((p) => (
+              <span key={p.part_no} title={`cue ${p.part_no} · ${p.status}`}
+                className={`st-mon-cue is-${p.status}`}
+                style={p.status === 'done' ? { background: colors[plan?.timeline[p.part_no - 1]?.visual_id || ''] || 'var(--ok)' } : undefined} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Finished video */}
+      {isTerminal && ok && streamUrl && (
+        <div className="st-card">
+          <video className="st-mon-video" src={streamUrl} controls />
+        </div>
+      )}
+
+      {/* Activity feed */}
+      {liveEvents.length > 0 && (
+        <div className="st-card">
+          <div className="st-card-hd"><span className="st-card-title">{vi ? 'Hoạt động' : 'Activity'}</span></div>
+          <ul className="st-feed">
+            {liveEvents.slice(-8).map((e, i) => (
+              <li key={i} className={`st-feed-row st-feed--${(e.level || 'info').toLowerCase()}`}>
+                <span className="st-feed-ev">{e.step || e.event}</span>
+                <span>{e.message || ''}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="st-actions st-actions--split">
-        <button type="button" className="st-btn" onClick={onNew}>
-          {vi ? '+ Truyện mới' : '+ New story'}
-        </button>
-        <button type="button" className="st-btn st-btn--primary" onClick={onDone}>
-          {vi ? 'Xem lịch sử ›' : 'Open History ›'}
-        </button>
+        <button type="button" className="st-btn" onClick={onNew}>{vi ? '+ Truyện mới' : '+ New story'}</button>
+        <button type="button" className="st-btn st-btn--primary" onClick={onDone}>{vi ? 'Xem lịch sử ›' : 'Open History ›'}</button>
       </div>
     </>
   )
