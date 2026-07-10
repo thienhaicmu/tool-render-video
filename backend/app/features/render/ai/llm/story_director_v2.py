@@ -114,19 +114,24 @@ def _merge_plans(a: StoryPlan, b: StoryPlan) -> StoryPlan:
 
 def _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio, subtitle_mode,
                        ceiling, threshold) -> Optional[StoryPlan]:
-    """Split an over-long chapter at a paragraph boundary into 2 halves, super-plan each,
-    merge. Bounded to 2 calls. None if neither half planned."""
+    """Split an over-long chapter at a paragraph boundary into 2 halves, super-plan each
+    under a PER-HALF slice of the visual budget, merge. Bounded to 2 calls. None if
+    neither half planned."""
     mid = len(chapter) // 2
     cut = chapter.rfind("\n\n", 0, mid)
     if cut < threshold // 3:
         cut = mid
-    parts = [chapter[:cut].strip(), chapter[cut:].strip()]
+    parts = [p for p in (chapter[:cut].strip(), chapter[cut:].strip()) if p]
+    if not parts:
+        return None
+    # G2 fix: budget the ceiling ACROSS the halves (ceil division) so the merged plan
+    # stays ~ceiling — otherwise each half planned at the FULL ceiling and the outer
+    # cap_visuals dropped a whole half (the back of the story) after merge.
+    per_half = max(1, -(-int(ceiling) // len(parts)))
     plans = []
     for part in parts:
-        if not part:
-            continue
-        sysm, user = build_super_story_prompt(part, language, art_style, aspect_ratio, subtitle_mode, ceiling)
-        p = _call_and_parse(call_fn, sysm, user, ceiling)
+        sysm, user = build_super_story_prompt(part, language, art_style, aspect_ratio, subtitle_mode, per_half)
+        p = _call_and_parse(call_fn, sysm, user, per_half)
         if p is not None:
             plans.append(p)
     if not plans:

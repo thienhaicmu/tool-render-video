@@ -13,17 +13,15 @@ These tests drive ``run_super_plan`` down the long-chapter path with a fake
 half A → narration "alphaN"/visuals "vaN"; half B → "betaN"/"vbN". With a small
 ceiling the merge+cap must drop one half.
 
-  * ``test_g2_long_chapter_currently_truncates`` — GREEN: pins the observed loss
-    today (only half-A survives) so the regression is documented empirically.
-  * ``test_g2_long_chapter_second_half_survives`` — xfail(strict): the DESIRED
-    behaviour (some half-B content survives). Flips to xpass when Phase 2 balances
-    the per-half budget; strict-xfail then fails, prompting removal of the marker.
+Phase 2 budgets the ceiling ACROSS the halves so BOTH survive the cap:
+  * ``test_g2_long_chapter_keeps_both_halves`` — half-A AND half-B content is
+    present, and the plan never exceeds the ceiling (INV6).
+  * ``test_g2_long_chapter_second_half_survives`` — focused guard: at least one
+    second-half ('beta') beat survives (the exact loss this regression caused).
 """
 from __future__ import annotations
 
 import json
-
-import pytest
 
 from app.domain.story_plan_v2 import StoryPlan
 from app.features.render.ai.llm.story_director_v2 import run_super_plan
@@ -69,23 +67,20 @@ def _plan_long(monkeypatch) -> StoryPlan:
     return p
 
 
-def test_g2_long_chapter_currently_truncates(monkeypatch):
-    """GREEN characterization: the cap keeps only half-A and never exceeds ceiling —
-    every surviving beat is an 'alpha' beat; all 'beta' (second-half) content is gone."""
+def test_g2_long_chapter_keeps_both_halves(monkeypatch):
+    """The balanced per-half budget keeps content from BOTH halves of the chapter
+    (alpha AND beta beats) while never exceeding the ceiling (INV6)."""
     p = _plan_long(monkeypatch)
     assert p.image_count() <= _CEILING                       # INV6 respected
     narr = [b.narration for b in p.timeline]
     assert narr, "no beats survived at all"
-    assert all(n.startswith("alpha") for n in narr), (
-        f"expected only first-half beats to survive, got: {narr}")
-    assert not any(n.startswith("beta") for n in narr)       # second half dropped
+    assert any(n.startswith("alpha") for n in narr), f"first half dropped: {narr}"
+    assert any(n.startswith("beta") for n in narr), f"second half dropped: {narr}"
 
 
-@pytest.mark.xfail(strict=True, reason="G2: long-chapter merge+cap drops the second "
-                                       "half of the story (Phase 2 fix pending)")
 def test_g2_long_chapter_second_half_survives(monkeypatch):
-    """DESIRED: with a balanced per-half budget, some second-half ('beta') content
-    survives the cap so the whole story is narrated, not just its front."""
+    """Focused guard on the exact regression: at least one second-half ('beta') beat
+    survives the cap, so the whole story is narrated — not just its front."""
     p = _plan_long(monkeypatch)
     assert p.image_count() <= _CEILING
     narr = [b.narration for b in p.timeline]
