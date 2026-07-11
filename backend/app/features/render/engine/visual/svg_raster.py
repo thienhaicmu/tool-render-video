@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -22,18 +23,34 @@ logger = logging.getLogger("app.render.svg")
 # Lazy availability flag — resolved on first use so import never fails startup.
 _RESVG = None          # the resvg_py module once imported
 _RESVG_TRIED = False
+# The resvg-py native binding is not proven thread-safe, and its FIRST call also does a
+# one-time native init. Story renders rasterise from a ThreadPoolExecutor
+# (STORY_IMAGE_WORKERS), where a concurrent first-init could drop a visual (observed once
+# in /verify — it degraded to a solid bg, never crashed). Serialise every native call
+# through one lock: init+warm-up single-threaded, then guard each render. Raster is a few
+# ms so the lost parallelism is negligible.
+_LOCK = threading.Lock()
+_WARMUP_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" viewBox="0 0 4 4"><rect width="4" height="4"/></svg>'
 
 
 def _resvg():
     global _RESVG, _RESVG_TRIED
-    if not _RESVG_TRIED:
-        _RESVG_TRIED = True
+    if _RESVG_TRIED:
+        return _RESVG
+    with _LOCK:
+        if _RESVG_TRIED:                     # another thread won the race
+            return _RESVG
         try:
             import resvg_py  # type: ignore
+            try:
+                resvg_py.svg_to_bytes(svg_string=_WARMUP_SVG, width=4, height=4)  # force native init here
+            except Exception:
+                pass
             _RESVG = resvg_py
         except Exception as exc:  # ImportError or a broken wheel
             logger.warning("svg_raster: resvg-py unavailable (%s) — SVG gen disabled", exc)
             _RESVG = None
+        _RESVG_TRIED = True
     return _RESVG
 
 
@@ -53,7 +70,8 @@ def render_svg(svg: str, width: int, height: int, opaque_bg: str = "") -> Option
         kwargs = {"svg_string": svg, "width": int(width), "height": int(height)}
         if (opaque_bg or "").strip():
             kwargs["background"] = opaque_bg.strip()
-        out = mod.svg_to_bytes(**kwargs)
+        with _LOCK:                          # serialise native resvg calls (thread-safety)
+            out = mod.svg_to_bytes(**kwargs)
         b = bytes(out)
         return b if (len(b) >= 8 and b[:8] == b"\x89PNG\r\n\x1a\n") else None
     except Exception as exc:

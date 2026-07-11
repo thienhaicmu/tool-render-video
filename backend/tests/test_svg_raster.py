@@ -50,6 +50,24 @@ def test_empty_and_malformed_return_none():
     assert svg_raster.render_svg("<svg><rect width=broken></svg>", 100, 100) is None
 
 
+@requires_resvg
+def test_concurrent_render_all_succeed():
+    # N1 fix — the Story pipeline rasterises from parallel workers. Hammer render_svg
+    # from many threads at once (incl. first-init) → every call must return a valid PNG,
+    # none dropped (the /verify finding).
+    from concurrent.futures import ThreadPoolExecutor
+    import app.features.render.engine.visual.svg_raster as sr
+    # reset the one-time init so this exercises the concurrent first-init path
+    sr._RESVG = None
+    sr._RESVG_TRIED = False
+    svgs = [f'<svg xmlns="http://www.w3.org/2000/svg" width="60" height="40" viewBox="0 0 60 40">'
+            f'<circle cx="30" cy="20" r="{8 + i % 10}" fill="#4a6fa5"/></svg>' for i in range(48)]
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(lambda s: sr.render_svg(s, 300, 200), svgs))
+    assert all(r and r[:8] == b"\x89PNG\r\n\x1a\n" for r in results)   # zero drops
+    assert len(results) == 48
+
+
 def test_degrade_when_rasterizer_absent(monkeypatch):
     # Simulate resvg-py missing: _resvg() → None → available False, render None.
     monkeypatch.setattr(svg_raster, "_RESVG_TRIED", True)
