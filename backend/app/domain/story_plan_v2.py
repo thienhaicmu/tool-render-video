@@ -173,6 +173,12 @@ class Cue:
     bgm_cue: str = "under"      # ∈ BGM_CUE — carried from the beat (placed-BGM)
     bgm_intensity: str = "med"  # ∈ BGM_INTENSITY — carried from the beat
     text_anchor: str = "auto"   # ∈ TEXT_ANCHOR — carried from the beat (hook placement)
+    # A3 character overlay — carried from the beat so the cue render can composite the
+    # speaking character's master over a base video (consumed only with a base video).
+    speaker_id: str = ""        # → CharacterDef.id ∪ "" (whose master to overlay)
+    char_anchor: str = "none"   # ∈ CHAR_ANCHOR — overlay position ("none" = no overlay)
+    char_scale: str = "medium"  # ∈ CHAR_SCALE — overlay size
+    char_motion: str = "fade"   # ∈ CHAR_MOTION — overlay entrance/motion
 
 
 @dataclass
@@ -180,6 +186,7 @@ class RenderState:
     visual_assets: dict[str, str] = field(default_factory=dict)          # visual_id → path
     voices: dict[str, list] = field(default_factory=dict)                # char_id → [engine, voice_id]
     refs: dict[str, str] = field(default_factory=dict)                   # char_id → ref image path
+    masters: dict[str, str] = field(default_factory=dict)                # char_id → transparent master PNG (A3 overlay)
     beat_audio: dict[str, BeatAudio] = field(default_factory=dict)       # beat_id → BeatAudio
     cues: list[Cue] = field(default_factory=list)
     total_sec: float = 0.0
@@ -367,6 +374,8 @@ class StoryPlan:
                     bgm_mood=(b.bgm_mood or ""),
                     bgm_cue=(b.bgm_cue or "under"), bgm_intensity=(b.bgm_intensity or "med"),
                     text_anchor=(b.text_anchor or "auto"),
+                    speaker_id=(b.speaker_id or ""), char_anchor=(b.char_anchor or "none"),
+                    char_scale=(b.char_scale or "medium"), char_motion=(b.char_motion or "fade"),
                 ))
                 t = end
                 prev_vid = b.visual_id
@@ -594,6 +603,7 @@ def _render_from(x) -> RenderState:
         va = x.get("visual_assets"); rs.visual_assets = {str(k): _str(v) for k, v in va.items()} if isinstance(va, dict) else {}
         vo = x.get("voices"); rs.voices = {str(k): list(v)[:2] for k, v in vo.items()} if isinstance(vo, dict) else {}
         rf = x.get("refs"); rs.refs = {str(k): _str(v) for k, v in rf.items()} if isinstance(rf, dict) else {}
+        ms = x.get("masters"); rs.masters = {str(k): _str(v) for k, v in ms.items()} if isinstance(ms, dict) else {}
         ba = x.get("beat_audio")
         if isinstance(ba, dict):
             for k, v in ba.items():
@@ -614,7 +624,11 @@ def _render_from(x) -> RenderState:
                     bgm_mood=_norm(c.get("bgm_mood"), BGM_MOODS, ""),
                     bgm_cue=_norm(c.get("bgm_cue"), BGM_CUE, "under"),
                     bgm_intensity=_norm(c.get("bgm_intensity"), BGM_INTENSITY, "med"),
-                    text_anchor=_norm(c.get("text_anchor"), TEXT_ANCHOR, "auto")))
+                    text_anchor=_norm(c.get("text_anchor"), TEXT_ANCHOR, "auto"),
+                    speaker_id=_str(c.get("speaker_id")),
+                    char_anchor=_norm(c.get("char_anchor"), CHAR_ANCHOR, "none"),
+                    char_scale=_norm(c.get("char_scale"), CHAR_SCALE, "medium"),
+                    char_motion=_norm(c.get("char_motion"), CHAR_MOTION, "fade")))
         rs.total_sec = _float(x.get("total_sec"))
     except Exception:
         pass

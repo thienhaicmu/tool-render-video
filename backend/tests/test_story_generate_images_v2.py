@@ -66,3 +66,37 @@ def test_fallback_skips_persist(monkeypatch, tmp_path):
     assert fallbacks == ['v2']
     assert 'v1' in p.render.visual_assets and 'v2' not in p.render.visual_assets
     assert len(persisted) == 1  # only the successful visual persisted
+
+
+# ── A3: character masters for overlaid speakers ───────────────────────────────
+
+def test_generate_character_masters_only_overlaid_speakers(monkeypatch):
+    from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
+    import app.features.render.engine.visual.story_reference_sheet as rs
+    monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
+    monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
+    monkeypatch.setattr(rs, 'generate_character_master', lambda c, art_style='': f'/m/{c.id}.png')
+
+    p = StoryPlan(
+        characters=[CharacterDef(id='han', name='Han'), CharacterDef(id='lo', name='Lo')],
+        visuals=[Visual(id='v1', prompt='x')],
+        timeline=[
+            Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='left'),
+            Beat(id='b2', narration='b', visual_id='v1', speaker_id='lo', char_anchor='none'),  # not overlaid
+        ])
+    sp2._generate_character_masters(p, '', job_id='j', effective_channel='c')
+    # Only the speaker with char_anchor != 'none' gets a master.
+    assert p.render.masters == {'han': '/m/han.png'}
+
+
+def test_generate_character_masters_noop_without_overlay(monkeypatch):
+    from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
+    import app.features.render.engine.visual.story_reference_sheet as rs
+    called = {'n': 0}
+    monkeypatch.setattr(rs, 'generate_character_master',
+                        lambda c, art_style='': called.__setitem__('n', called['n'] + 1) or '/x.png')
+    p = StoryPlan(characters=[CharacterDef(id='han', name='Han')],
+                  visuals=[Visual(id='v1', prompt='x')],
+                  timeline=[Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='none')])
+    sp2._generate_character_masters(p, '', job_id='j', effective_channel='c')
+    assert p.render.masters == {} and called['n'] == 0   # no overlay beat → no gen

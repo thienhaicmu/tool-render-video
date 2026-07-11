@@ -93,6 +93,61 @@ def test_video_base_uses_segment_not_kenburns(monkeypatch, tmp_path):
     assert "zoompan" not in fc                         # no Ken Burns on video
 
 
+def _video_ctx(tmp_path, extra=None):
+    return SimpleNamespace(width=720, height=1280, fps=30.0, shots_dir=str(tmp_path),
+                           bg_value="#101820", ffmpeg_threads=0,
+                           base_video_path="/base.mp4", base_video_dur=4.0, **(extra or {}))
+
+
+def _overlay_cue(anchor="right", scale="large", motion="fade"):
+    return SimpleNamespace(start_sec=0.0, end_sec=2.0, crop_from=(0, 0, 1, 1), crop_to=(0, 0, 1, 1),
+                           visual_id="v1", audio_path="", hook=False, hook_text="", text_anchor="auto",
+                           speaker_id="han", char_anchor=anchor, char_scale=scale, char_motion=motion)
+
+
+def test_char_overlay_composites_master(monkeypatch, tmp_path):
+    captured = _capture(monkeypatch)
+    monkeypatch.setattr(br, "_ok_file", lambda p: p in ("/base.mp4", "/m.png") or bool(p) and Path(p).exists())
+    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={}, masters={"han": "/m.png"}))
+    br.render_one_cue(_video_ctx(tmp_path), plan, 1, _overlay_cue(scale="large", motion="fade"))
+    cmd = captured["cmd"]
+    assert "/m.png" in cmd                            # master added as an input
+    fc = cmd[cmd.index("-filter_complex") + 1]
+    assert "[2:v]" in fc and "overlay=x=" in fc       # composited from input [2]
+    assert f"scale=-1:{int(1280 * 0.90)}" in fc       # large → 0.90 of canvas height
+    assert "fade=t=in" in fc and "alpha=1" in fc      # fade motion on the fg
+
+
+def test_char_overlay_slide_uses_time_expr(monkeypatch, tmp_path):
+    captured = _capture(monkeypatch)
+    monkeypatch.setattr(br, "_ok_file", lambda p: p in ("/base.mp4", "/m.png") or bool(p) and Path(p).exists())
+    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={}, masters={"han": "/m.png"}))
+    br.render_one_cue(_video_ctx(tmp_path), plan, 1, _overlay_cue(anchor="left", motion="slide"))
+    fc = captured["cmd"][captured["cmd"].index("-filter_complex") + 1]
+    assert "if(lt(t," in fc                            # slide animates x over time
+
+
+def test_no_overlay_when_char_anchor_none(monkeypatch, tmp_path):
+    captured = _capture(monkeypatch)
+    monkeypatch.setattr(br, "_ok_file", lambda p: p == "/base.mp4" or bool(p) and Path(p).exists())
+    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={}, masters={"han": "/m.png"}))
+    br.render_one_cue(_video_ctx(tmp_path), plan, 1, _overlay_cue(anchor="none"))
+    cmd = captured["cmd"]
+    assert "/m.png" not in cmd                         # no overlay input
+    assert "overlay=x=" not in cmd[cmd.index("-filter_complex") + 1]
+
+
+def test_no_overlay_without_base_video(monkeypatch, tmp_path):
+    captured = _capture(monkeypatch)
+    monkeypatch.setattr(br, "_ok_file", lambda p: p == "/img.png" or bool(p) and Path(p).exists())
+    # image-based (no base video) → overlay never engages even if char_anchor is set.
+    ctx = SimpleNamespace(width=720, height=1280, fps=30.0, shots_dir=str(tmp_path),
+                          bg_value="#101820", ffmpeg_threads=0)
+    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={"v1": "/img.png"}, masters={"han": "/m.png"}))
+    br.render_one_cue(ctx, plan, 1, _overlay_cue())
+    assert "/m.png" not in captured["cmd"]
+
+
 def test_no_base_video_keeps_image_kenburns_path(monkeypatch, tmp_path):
     captured = _capture(monkeypatch)
     monkeypatch.setattr(br, "_ok_file", lambda p: p == "/img.png")

@@ -46,6 +46,12 @@ _SAMPLE_RATE = 48000
 _CUE_CRF = (os.getenv("STORY_CUE_CRF", "15").strip() or "15")
 _CUE_PRESET = (os.getenv("STORY_CUE_PRESET", "veryfast").strip() or "veryfast")
 
+# A3 character overlay — master HEIGHT as a fraction of the canvas per char_scale,
+# and the entrance/motion timings (seconds).
+_CHAR_SCALE_FRAC = {"small": 0.55, "medium": 0.72, "large": 0.90}
+_CHAR_SLIDE_SEC = 0.5
+_CHAR_FADE_SEC = 0.4
+
 
 def _norm_color(value: str) -> str:
     v = (value or "").strip()
@@ -156,6 +162,46 @@ def _overlay_suffix(cue, width: int, height: int, part_no: int = 0) -> str:
         return ""
 
 
+def _char_overlay_parts(cue, width: int, height: int, dur: float) -> "tuple[str, str, str]":
+    """(fg_chain, x_expr, y_expr) to composite a speaking character's transparent master
+    over the base. Scale by char_scale (height fraction of the canvas), position by
+    char_anchor, animate by char_motion. Uses overlay expression vars W/H (main), w/h
+    (overlay), t (time). x/y are single-quoted at the call site so commas inside
+    ``if(...)`` are safe in the filtergraph. Never raises."""
+    try:
+        frac = _CHAR_SCALE_FRAC.get((getattr(cue, "char_scale", "medium") or "medium"), 0.72)
+        ch = max(2, int(height * frac))
+        anchor = (getattr(cue, "char_anchor", "left") or "left")
+        motion = (getattr(cue, "char_motion", "fade") or "fade")
+        margin = width * 0.03
+        if anchor == "center":
+            xt = "(W-w)/2"
+        elif anchor == "right":
+            xt = f"W-w-{margin:.1f}"
+        else:                                   # left (default)
+            xt = f"{margin:.1f}"
+        yt = "H-h"                              # stand on the ground (bottom-aligned)
+        fg = f"scale=-1:{ch},format=rgba"
+        x, y = xt, yt
+        if motion == "fade":
+            fo = max(0.0, dur - _CHAR_FADE_SEC)
+            fg += (f",fade=t=in:st=0:d={_CHAR_FADE_SEC}:alpha=1"
+                   f",fade=t=out:st={fo:.3f}:d={_CHAR_FADE_SEC}:alpha=1")
+        elif motion == "slide":
+            s = _CHAR_SLIDE_SEC
+            if anchor == "right":
+                x = f"if(lt(t,{s}),W-(W-({xt}))*t/{s},{xt})"
+            else:                               # slide in from the left edge
+                x = f"if(lt(t,{s}),-w+(({xt})+w)*t/{s},{xt})"
+        elif motion == "float":
+            amp = max(2.0, height * 0.012)
+            y = f"({yt})+{amp:.1f}*sin(2*PI*t*0.5)"
+        # static → xt/yt as-is
+        return fg, x, y
+    except Exception:
+        return "scale=-1:{}".format(max(2, int(height * 0.72))) + ",format=rgba", f"{width * 0.03:.1f}", "H-h"
+
+
 def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
     """Render one ``Cue`` → an MP4 clip. Returns ``{clip, error, fallback}``.
     ``fallback`` True when the visual image was missing and a solid background was
@@ -178,6 +224,15 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         base_dur = float(getattr(ctx, "base_video_dur", 0.0) or 0.0)
         use_video = bool(base_video) and _ok_file(base_video)
 
+        # A3: overlay the speaking character's transparent master over the base video —
+        # ONLY with a base video + char_anchor set + a master available. "" → no overlay
+        # (the A2 base-video / image path is byte-identical).
+        overlay_master = ""
+        if use_video and (getattr(cue, "char_anchor", "none") or "none") != "none":
+            _m = (getattr(plan.render, "masters", None) or {}).get(getattr(cue, "speaker_id", "") or "")
+            if _ok_file(_m):
+                overlay_master = _m
+
         cmd = [get_ffmpeg_bin(), "-y"]
         if use_video:
             seek = (float(cue.start_sec) % base_dur) if base_dur > 0 else max(0.0, float(cue.start_sec))
@@ -197,10 +252,18 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         else:
             cmd += ["-f", "lavfi", "-t", f"{dur:.3f}",
                     "-i", f"anullsrc=channel_layout=stereo:sample_rate={_SAMPLE_RATE}"]
+        if overlay_master:                       # input [2] — a looped still so motion has frames
+            cmd += ["-loop", "1", "-t", f"{dur:.3f}", "-i", str(overlay_master)]
 
         af = f"aformat=sample_rates={_SAMPLE_RATE}:channel_layouts=stereo,apad"
+        if overlay_master:
+            _fg, _x, _y = _char_overlay_parts(cue, width, height, dur)
+            _fc = (f"[0:v]{vf}[bg];[2:v]{_fg}[fg];"
+                   f"[bg][fg]overlay=x='{_x}':y='{_y}':format=auto[v];[1:a]{af}[a]")
+        else:
+            _fc = f"[0:v]{vf}[v];[1:a]{af}[a]"
         cmd += [
-            "-filter_complex", f"[0:v]{vf}[v];[1:a]{af}[a]",
+            "-filter_complex", _fc,
             "-map", "[v]", "-map", "[a]",
             "-r", f"{fps:.3f}", "-t", f"{dur:.3f}",
             *(["-threads", str(threads)] if threads > 0 else []),

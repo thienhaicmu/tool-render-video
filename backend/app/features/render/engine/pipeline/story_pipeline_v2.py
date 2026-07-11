@@ -68,6 +68,7 @@ from app.features.render.engine.stages.story.visuals_stage import (
     _generate_images,
     _generate_reference_sheets,
     _generate_env_reference_sheets,
+    _generate_character_masters,
 )
 from app.features.render.engine.stages.story.bgm_stage import (
     _delivered_transitions,
@@ -287,6 +288,13 @@ def run_story_v2(
                 step="render.story",
                 context={"fallback_visuals": visual_fallbacks, "total": plan.image_count()},
             )
+
+        # ── 3b. Character masters (A3) — transparent PNG per overlaid speaker, ONLY
+        #        when a base video is present (overlay compositing target). Best-effort;
+        #        a no-op when no beat sets char_anchor. Fills plan.render.masters.
+        if base_video_path:
+            _generate_character_masters(plan, art_style, job_id=job_id,
+                                        effective_channel=effective_channel)
 
         # ── 4. Narration (per voice-run TTS → beat_audio) ───────────────────
         _set_stage(JobStage.SEGMENT_BUILDING, 45, "Narration timeline")

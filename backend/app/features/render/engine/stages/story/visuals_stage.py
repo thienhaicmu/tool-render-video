@@ -244,5 +244,47 @@ def _generate_env_reference_sheets(plan, art_style: str, *, job_id: str,
         logger.warning("story v2: env reference sheets failed (non-fatal): %s", exc)
 
 
-__all__ = ["_worker_count", "_generate_images",
-           "_generate_reference_sheets", "_generate_env_reference_sheets"]
+def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_channel: str) -> None:
+    """Fill ``plan.render.masters[speaker_id]`` with a cutout-ready transparent CHARACTER
+    MASTER PNG for every speaker the timeline overlays (a beat with char_anchor != 'none';
+    A3). Best-effort — a master that can't be generated (no key / error) simply leaves
+    that character with NO overlay (the cue renders video-only). One master per character,
+    content-addressed + reused (a Review preview is reused). Never raises."""
+    try:
+        used: list[str] = []
+        seen: set[str] = set()
+        for b in plan.timeline:
+            sp = (getattr(b, "speaker_id", "") or "").strip()
+            if sp and (getattr(b, "char_anchor", "none") or "none") != "none" and sp not in seen:
+                seen.add(sp); used.append(sp)
+        if not used:
+            return
+        from app.features.render.engine.visual.story_reference_sheet import generate_character_master
+        for cid in used:
+            if plan.render.masters.get(cid):
+                continue
+            c = plan.character(cid)
+            if c is None:
+                continue
+            path = generate_character_master(c, art_style=art_style)
+            if not path:
+                continue
+            plan.render.masters[cid] = path
+            try:
+                update_story_plan(job_id, plan.to_json())
+            except Exception:
+                pass
+            try:
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.master.ready", level="INFO",
+                    message=f"Character master ready for {c.name or cid}",
+                    step="render.story", context={"character_id": cid, "masters": len(plan.render.masters)})
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("story v2: character masters failed (non-fatal): %s", exc)
+
+
+__all__ = ["_worker_count", "_generate_images", "_generate_reference_sheets",
+           "_generate_env_reference_sheets", "_generate_character_masters"]
