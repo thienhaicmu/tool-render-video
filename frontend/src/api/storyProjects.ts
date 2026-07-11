@@ -42,3 +42,35 @@ export const getStoryProject = (id: string) =>
 
 export const deleteStoryProject = (id: string) =>
   apiFetch<{ deleted: boolean; id: string }>(`/api/story/projects/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+// ── SP3+: trash / restore / purge ─────────────────────────────────────────────
+
+export const listTrashedStoryProjects = () =>
+  apiFetch<{ projects: StoryProjectListItem[] }>('/api/story/projects/trash')
+
+export const restoreStoryProject = (id: string) =>
+  apiFetch<{ restored: boolean; id: string }>(`/api/story/projects/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+
+export const purgeStoryProject = (id: string) =>
+  apiFetch<{ purged: boolean; id: string }>(`/api/story/projects/${encodeURIComponent(id)}/purge`, { method: 'DELETE' })
+
+// ── SP3+: version history ─────────────────────────────────────────────────────
+
+export interface StoryProjectVersion {
+  id: string
+  project_id: string
+  label: string
+  created_at: string
+}
+
+export const snapshotStoryProjectVersion = (id: string, label = '') =>
+  apiFetch<{ version_id: string }>(`/api/story/projects/${encodeURIComponent(id)}/versions`,
+    { method: 'POST', body: JSON.stringify({ label }) })
+
+export const listStoryProjectVersions = (id: string) =>
+  apiFetch<{ versions: StoryProjectVersion[] }>(`/api/story/projects/${encodeURIComponent(id)}/versions`)
+
+export const restoreStoryProjectVersion = (id: string, versionId: string) =>
+  apiFetch<{ restored: boolean; config: Record<string, unknown>; plan: unknown | null }>(
+    `/api/story/projects/${encodeURIComponent(id)}/restore-version/${encodeURIComponent(versionId)}`,
+    { method: 'POST' })

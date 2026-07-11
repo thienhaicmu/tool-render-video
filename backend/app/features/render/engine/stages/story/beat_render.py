@@ -152,16 +152,17 @@ def _drawtext(text: str, width: int, height: int, *, fs: int, family: str, bold:
         return ""
 
 
-def _overlay_suffix(cue, width: int, height: int, part_no: int = 0) -> str:
+def _overlay_suffix(cue, width: int, height: int, part_no: int = 0, text_anchor: str = "") -> str:
     """Filtergraph suffix (leading comma) that burns the cue's hook title at its
-    ``text_anchor`` (s4; default auto = upper third). On-screen text is HOOK-ONLY — no
-    full-video subtitle. "" when nothing to burn. ``part_no`` namespaces the drawtext
-    textfiles so parallel cues never share a file."""
+    ``text_anchor`` (s4; default auto = upper third). ``text_anchor`` overrides the
+    cue's own (composition-QA: keep the hook clear of a character overlay). On-screen
+    text is HOOK-ONLY — no full-video subtitle. "" when nothing to burn. ``part_no``
+    namespaces the drawtext textfiles so parallel cues never share a file."""
     try:
         parts: list[str] = []
         _u = f"{int(part_no):04d}_"
         if getattr(cue, "hook", False) and (getattr(cue, "hook_text", "") or "").strip():
-            _x, _y = _anchor_xy(getattr(cue, "text_anchor", "auto"))
+            _x, _y = _anchor_xy(text_anchor or getattr(cue, "text_anchor", "auto"))
             parts.append(_drawtext(
                 cue.hook_text, width, height, fs=max(28, int(height * 0.060)),
                 family="Anton", bold=True, y=_y, x=_x, box_alpha=0.55, uniq=_u + "h"))
@@ -255,7 +256,11 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
             col = _norm_color(getattr(ctx, "bg_value", "") or "#101820")
             cmd += ["-f", "lavfi", "-t", f"{dur:.3f}", "-i", f"color=c={col}:s={width}x{height}:r={fps:.3f}"]
             vf = f"scale={width}:{height},setsar=1,format=yuv420p,fps={fps:.3f}"
-        vf += _overlay_suffix(cue, width, height, part_no)   # burn hook title (hook-only)
+        # Composition-QA: when a character is overlaid (bottom-aligned), keep an auto/
+        # bottom hook at the TOP so the character never covers it. Only affects the
+        # overlay path — the image/no-overlay hook position is unchanged.
+        _ta_qa = "top" if (overlay_master and (getattr(cue, "text_anchor", "auto") in ("auto", "bottom"))) else ""
+        vf += _overlay_suffix(cue, width, height, part_no, text_anchor=_ta_qa)   # burn hook title
         if have_audio:
             cmd += ["-i", str(cue.audio_path)]
         else:

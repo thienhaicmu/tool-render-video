@@ -47,6 +47,11 @@
 }
 .st-project-new:hover { background: var(--bg-hover); }
 .st-project-empty { padding: var(--space-2); font-size: var(--text-xs); }
+.st-project-sec {
+  padding: var(--space-2) var(--space-2) 2px; font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold, 600);
+  border-top: 1px solid var(--border-subtle); margin-top: 4px;
+}
 
 /* Tags + chips. */
 .st-tag {
