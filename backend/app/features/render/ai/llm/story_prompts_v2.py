@@ -32,6 +32,7 @@ _LANG_NAMES = {
     "vi": "Vietnamese (Tiếng Việt)", "vi-VN": "Vietnamese (Tiếng Việt)",
     "en": "English", "en-US": "English", "en-GB": "English",
     "ja": "Japanese (日本語)", "ja-JP": "Japanese (日本語)",
+    "ko": "Korean (한국어)", "ko-KR": "Korean (한국어)",
 }
 _CPS = {"vi": 15.0, "en": 14.0, "ja": 8.0, "ko": 9.0}
 

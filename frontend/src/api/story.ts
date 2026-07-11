@@ -111,6 +111,11 @@ export interface StoryPlanResponse {
   image_count: number
   beat_count: number
   estimated_total_sec: number
+  // Source-truncation transparency: true when the pasted chapter / idea exceeded
+  // the super-prompt limit and its tail was cut (FE warns the user to split it).
+  source_truncated?: boolean
+  source_chars?: number
+  source_char_limit?: number
 }
 
 export interface VisualPreviewRequest {
@@ -158,6 +163,12 @@ export interface JobStoryPlanResponse {
   plan: StoryPlanV2 | null
 }
 
+export interface StoryVoicesResponse {
+  engine: string
+  female: string[]
+  male: string[]
+}
+
 // ── Calls ─────────────────────────────────────────────────────────────────────
 
 function post<T>(path: string, body: unknown): Promise<T> {
@@ -183,3 +194,7 @@ export const generateReferenceSheet = (req: ReferenceSheetRequest) =>
 /** Reattach: fetch a job's persisted StoryPlan v2 (polling fallback). */
 export const fetchJobStoryPlan = (jobId: string) =>
   apiFetch<JobStoryPlanResponse>(`/api/jobs/${encodeURIComponent(jobId)}/story-plan`)
+
+/** Available voices for the language's TTS engine (per-character voice override). */
+export const getStoryVoices = (language: string) =>
+  apiFetch<StoryVoicesResponse>(`/api/story/voices?language=${encodeURIComponent(language)}`)

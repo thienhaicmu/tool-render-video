@@ -15,7 +15,7 @@ import {
 
 // Chars/sec per language (mirror backend story_plan_v2.CPS) — used for the
 // idea-mode narration budget hint (duration × cps ≈ target narration chars).
-const CPS: Record<StoryLang, number> = { vi: 15, en: 14, ja: 8 }
+const CPS: Record<StoryLang, number> = { vi: 15, en: 14, ja: 8, ko: 9 }
 const MIN_CHAPTER_CHARS = 200
 
 const SAMPLE_CHAPTER: Record<'vi' | 'other', string> = {
@@ -140,7 +140,7 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
       <StudioCard icon="⚙️" title={vi ? 'Cấu hình' : 'Config'}>
         <div className="st-grid-2">
           <StudioField label={vi ? 'Ngôn ngữ' : 'Language'}
-            hint={vi ? 'Quyết định giọng đọc (vi→Gemini, en/ja→ElevenLabs).' : 'Drives the TTS engine (vi→Gemini, en/ja→ElevenLabs).'}>
+            hint={vi ? 'Quyết định giọng đọc (vi/ko→Gemini, en/ja→ElevenLabs).' : 'Drives the TTS engine (vi/ko→Gemini, en/ja→ElevenLabs).'}>
             <SegRow<StoryLang>
               value={cfg.language} onChange={(v) => setKey('language', v)}
               options={STORY_LANGS.map((l) => ({ value: l.code, label: l.label }))}

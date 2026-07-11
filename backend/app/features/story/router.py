@@ -118,12 +118,22 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     _envsheet_count = len({(v.setting_id or "").strip() for v in plan.visuals
                            if (v.setting_id or "").strip()}) if _env_on else 0
     _visual_count = plan.image_count()
+    # Source-truncation transparency: the super-prompt fits the chapter to
+    # MAX_SOURCE_CHARS (idea path to 8000) — surface when we cut so the FE can warn
+    # the user to split a very long chapter instead of silently dropping the tail.
+    from app.features.render.ai.llm.story_prompts_v2 import MAX_SOURCE_CHARS
+    _IDEA_MAX = 8000
+    _src_len = len(chapter) if source == "paste" else len(idea)
+    _src_limit = MAX_SOURCE_CHARS if source == "paste" else _IDEA_MAX
     return {
         "plan": json.loads(plan.to_json()),
         "image_count": _visual_count,
         "beat_count": plan.beat_count(),
         "estimated_total_sec": round(plan.estimated_total_sec(), 1),
         "character_count": len(plan.characters),
+        "source_truncated": bool(_src_len > _src_limit),
+        "source_chars": _src_len,
+        "source_char_limit": _src_limit,
         "cost_preflight": {
             "visual_count": _visual_count,
             "character_count": len(plan.characters),
@@ -302,3 +312,14 @@ def narration_audio(token: str):
     if not p.exists() or p.stat().st_size <= 0:
         raise HTTPException(status_code=404, detail="not found")
     return FileResponse(str(p), media_type="audio/mpeg")
+
+
+# ── Phase 4: voice picker — available voices for the language's TTS engine ────
+
+@router.get("/voices")
+def story_voices(language: str = "vi") -> dict:
+    """Return the available Story voices for a language's TTS engine, split by gender:
+    ``{engine, female[], male[]}``. Lets the FE offer a per-character voice override
+    (written into the plan's render.voices, preserved at render). Never raises."""
+    from app.features.render.ai.llm.story_voice_cast import list_voices
+    return list_voices(language or "vi")

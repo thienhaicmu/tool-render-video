@@ -3,25 +3,36 @@
  * canonical description, show the auto-cast voice, and (optionally) generate a
  * canonical reference sheet for visual consistency. Studio BASE only.
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { StudioCard, StudioField } from '../../../components/studio'
 import { BASE_URL } from '../../../api/client'
-import type { StoryPlanV2, CharacterDef } from '../../../api/story'
-import { generateReferenceSheet, previewNarration } from '../../../api/story'
+import type { StoryPlanV2, CharacterDef, StoryVoicesResponse } from '../../../api/story'
+import { generateReferenceSheet, getStoryVoices, previewNarration } from '../../../api/story'
 
 // Short spoken sample when a character has no line yet in the timeline.
 const SAMPLE: Record<string, string> = {
   vi: 'Xin chào, đây là giọng của nhân vật này.',
   en: 'Hello, this is how this character sounds.',
   ja: 'こんにちは、これはこのキャラクターの声です。',
+  ko: '안녕하세요, 이것이 이 캐릭터의 목소리입니다.',
 }
 
-export function CharactersPanel({ vi, plan, artStyle, onChange }: {
+export function CharactersPanel({ vi, plan, artStyle, language, onChange, onVoiceChange }: {
   vi: boolean
   plan: StoryPlanV2
   artStyle: string
+  language: string
   onChange: (id: string, up: Partial<CharacterDef>) => void
+  onVoiceChange: (cid: string, engine: string, voiceId: string) => void
 }) {
+  // Available voices for this language's TTS engine (per-character override picker).
+  const [avail, setAvail] = useState<StoryVoicesResponse | null>(null)
+  useEffect(() => {
+    let alive = true
+    void getStoryVoices(language).then((r) => { if (alive) setAvail(r) }).catch(() => {})
+    return () => { alive = false }
+  }, [language])
+
   if (!plan.characters.length) return null
   const lang = (plan.language || 'vi').slice(0, 2)
   const sampleFor = (id: string): string => {
@@ -34,21 +45,24 @@ export function CharactersPanel({ vi, plan, artStyle, onChange }: {
       <div className="st-char-list">
         {plan.characters.map((c) => (
           <CharacterRow key={c.id} vi={vi} c={c} artStyle={artStyle} language={lang}
-            sample={sampleFor(c.id)} voice={plan.render?.voices?.[c.id]} onChange={onChange} />
+            sample={sampleFor(c.id)} voice={plan.render?.voices?.[c.id]} avail={avail}
+            onChange={onChange} onVoiceChange={onVoiceChange} />
         ))}
       </div>
     </StudioCard>
   )
 }
 
-function CharacterRow({ vi, c, artStyle, language, sample, voice, onChange }: {
+function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, onChange, onVoiceChange }: {
   vi: boolean
   c: CharacterDef
   artStyle: string
   language: string
   sample: string
   voice?: [string, string]
+  avail: StoryVoicesResponse | null
   onChange: (id: string, up: Partial<CharacterDef>) => void
+  onVoiceChange: (cid: string, engine: string, voiceId: string) => void
 }) {
   const [sheet, setSheet] = useState<'idle' | 'busy' | 'done' | 'err'>('idle')
   const [voiceState, setVoiceState] = useState<'idle' | 'busy' | 'playing' | 'err'>('idle')
@@ -105,6 +119,23 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, onChange }: {
         </button>
         {(c.gender || c.voice_gender) && (
           <span className="st-tag st-tag--dim">{c.voice_gender || c.gender}</span>
+        )}
+        {avail && (avail.female.length > 0 || avail.male.length > 0) && (
+          <select className="st-select st-select--sm" value={voice?.[1] || ''}
+            title={vi ? 'Chọn giọng (mặc định: tự động)' : 'Pick voice (default: auto)'}
+            onChange={(e) => onVoiceChange(c.id, avail.engine, e.target.value)}>
+            <option value="">{vi ? 'Giọng: tự động' : 'Voice: auto'}</option>
+            {avail.female.length > 0 && (
+              <optgroup label={vi ? 'Nữ' : 'Female'}>
+                {avail.female.map((vid) => <option key={vid} value={vid}>{vid}</option>)}
+              </optgroup>
+            )}
+            {avail.male.length > 0 && (
+              <optgroup label={vi ? 'Nam' : 'Male'}>
+                {avail.male.map((vid) => <option key={vid} value={vid}>{vid}</option>)}
+              </optgroup>
+            )}
+          </select>
         )}
         <button type="button" className="st-btn st-btn--sm" disabled={sheet === 'busy'} onClick={makeSheet}>
           {sheet === 'busy' ? (vi ? 'Đang tạo…' : 'Making…')

@@ -44,6 +44,7 @@ export function StoryStudio() {
   const [jobId, setJobId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const setKey = <K extends keyof StoryConfig>(k: K, v: StoryConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }))
@@ -67,7 +68,7 @@ export function StoryStudio() {
 
   async function onGenerate() {
     if (!inputReady || busy) return
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setNotice(null)
     try {
       const r = await planStory({
         source: cfg.source,
@@ -88,6 +89,13 @@ export function StoryStudio() {
       } else {
         setPlan(r.plan)
         setEstTotal(r.estimated_total_sec || 0)
+        if (r.source_truncated) {
+          const n = (r.source_chars ?? 0).toLocaleString()
+          const lim = (r.source_char_limit ?? 0).toLocaleString()
+          setNotice(vi
+            ? `Nguồn dài ${n} ký tự — chỉ ${lim} ký tự đầu được dùng, phần cuối bị lược. Cân nhắc tách chương để không mất nội dung.`
+            : `Source is ${n} chars — only the first ${lim} were used; the tail was cut. Consider splitting the chapter so no content is lost.`)
+        }
         setPhase('review')
       }
     } catch (e) { fail(e) } finally { setBusy(false) }
@@ -124,7 +132,7 @@ export function StoryStudio() {
   }
 
   function reset() {
-    setPlan(null); setJobId(null); setError(null); setEstTotal(0); setPhase('input')
+    setPlan(null); setJobId(null); setError(null); setNotice(null); setEstTotal(0); setPhase('input')
   }
 
   const steps = vi ? ['Nhập truyện', 'Duyệt kế hoạch', 'Render'] : ['Input', 'Review', 'Render']
@@ -132,6 +140,7 @@ export function StoryStudio() {
   return (
     <StoryStudioShell vi={vi} step={STEP[phase]} steps={steps}>
       {error && <div className="st-alert st-alert--fail" role="alert">{error}</div>}
+      {notice && <div className="st-alert st-alert--warn" role="status">{notice}</div>}
       {busy && phase === 'input' && <StoryDirectorConsole vi={vi} source={cfg.source} />}
       {phase === 'input' && (
         <InputScreen

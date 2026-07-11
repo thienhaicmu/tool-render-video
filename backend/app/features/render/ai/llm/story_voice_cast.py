@@ -158,12 +158,35 @@ def apply_voice_cast_v2(plan, language: str, narrator_gender: str = "female") ->
         series_id = (getattr(plan, "series_id", "") or "").strip()
         locked = _locked_voices(series_id, resolve_story_tts_engine(language)) if series_id else {}
         mapping = cast_voices(adapters, language, narrator_gender, locked=locked)
+        # Snapshot any pre-existing voices (from an approved plan override where the
+        # user picked a voice, or a resume's persisted cast) BEFORE overwriting.
+        existing = dict(getattr(plan.render, "voices", None) or {})
         for cid, entry in mapping.items():
-            plan.render.voices[cid] = [entry["engine"], entry["voice_id"]]
+            prev = existing.get(cid)
+            # A user-set voice ([engine, voice_id] with a non-empty voice_id) wins over
+            # the auto cast so a chosen/locked voice is never clobbered on render.
+            if isinstance(prev, (list, tuple)) and len(prev) >= 2 and str(prev[1] or "").strip():
+                plan.render.voices[cid] = [str(prev[0] or entry["engine"]), str(prev[1])]
+            else:
+                plan.render.voices[cid] = [entry["engine"], entry["voice_id"]]
         return mapping
     except Exception as exc:
         logger.info("story_voice_cast: apply_v2 error %s", exc)
         return {}
 
 
-__all__ = ["cast_voices", "apply_voice_cast_v2"]
+def list_voices(language: str) -> dict:
+    """Available Story voices for a language's TTS engine, split by gender:
+    ``{"engine", "female": [...], "male": [...]}``. Powers the FE voice picker so a
+    user can override a character's auto-cast voice. Never raises — returns an
+    edge/empty default on any error."""
+    try:
+        engine = resolve_story_tts_engine(language)
+        pool_f, pool_m = _pools_for(engine)
+        return {"engine": engine, "female": list(pool_f), "male": list(pool_m)}
+    except Exception as exc:
+        logger.info("story_voice_cast: list_voices error %s", exc)
+        return {"engine": "edge", "female": [], "male": []}
+
+
+__all__ = ["cast_voices", "apply_voice_cast_v2", "list_voices"]
