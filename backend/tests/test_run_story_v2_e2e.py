@@ -255,6 +255,41 @@ def test_run_story_v2_parallel_matches_serial(_story_sandbox, monkeypatch, worke
 
 
 @_NEEDS_FFMPEG
+def test_run_story_v2_base_video_skips_image_gen(_story_sandbox, monkeypatch, tmp_path):
+    """A6 — with a base video, the key-visual images are unused (the video is the base),
+    so image gen is skipped; the render still completes over the base video."""
+    from app.services.bin_paths import get_ffmpeg_bin
+    from app.features.render.engine.stages.story import visuals_stage as vs
+    output_dir = _story_sandbox["output_dir"]
+    base = tmp_path / "base.mp4"
+    subprocess.run(
+        [get_ffmpeg_bin(), "-y", "-f", "lavfi", "-i", "testsrc=size=320x568:rate=30",
+         "-t", "8", "-c:v", "libx264", str(base)], capture_output=True, check=True)
+
+    img_calls = {"n": 0}
+
+    def _counting_img(*a, **k):
+        img_calls["n"] += 1
+        return _mock_image(*a, **k)
+    monkeypatch.setattr(sp2, "generate_story_plan_v2", lambda **k: _make_plan_v2())
+    monkeypatch.setattr(sp2, "apply_voice_cast_v2", _mock_cast)
+    monkeypatch.setattr(vs, "generate_visual_image", _counting_img)
+    monkeypatch.setattr(sp2, "synthesize_timeline", _mock_synth)
+
+    job_id = str(uuid.uuid4())
+    sp2.run_story_v2(
+        job_id=job_id,
+        payload=_payload(output_dir, sub="story-basevid", story_base_video_path=str(base)),
+        resume_mode=False, load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None,
+    )
+    from app.db.jobs_repo import get_job
+    row = get_job(job_id)
+    assert row is not None and row["status"] == "completed"
+    assert img_calls["n"] == 0                       # A6: no key-visual images generated
+    assert list((output_dir / "story-basevid").rglob("*.mp4"))   # rendered over the base video
+
+
+@_NEEDS_FFMPEG
 def test_run_story_v2_no_plan_fails_cleanly(_story_sandbox, monkeypatch):
     """Super plan returns None → run_story_v2 raises; no output delivered (Sacred #3)."""
     job_id = str(uuid.uuid4())

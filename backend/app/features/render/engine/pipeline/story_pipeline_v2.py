@@ -271,28 +271,37 @@ def run_story_v2(
         image_provider = (getattr(payload, "story_image_provider", "gpt_image") or "gpt_image").strip().lower()
         if image_provider not in ("gpt_image", "pollinations"):
             image_provider = "gpt_image"
-        # Q3 — character reference sheets (gpt_image only) → fill plan.render.refs so
-        # image-edit keeps characters consistent. Best-effort; runs before image gen.
-        _generate_reference_sheets(plan, art_style, job_id=job_id,
-                                   effective_channel=effective_channel, provider=image_provider)
-        # G6 — environment reference sheets (gpt_image + series only) → keep locations
-        # consistent across shots + chapters. Best-effort; runs before image gen.
-        _generate_env_reference_sheets(plan, art_style, job_id=job_id,
+        visual_fallbacks = []
+        # A6 cost: when a base video is the visual layer, the key-visual images + reference
+        # sheets would be generated but NEVER used (render_one_cue draws from the video) —
+        # skip them entirely to save the gpt-image spend. Character masters (the overlay
+        # asset) are still generated in 3b below.
+        if base_video_path:
+            _job_log(effective_channel, job_id,
+                     "Story v2: base video present — skipping key-visual image gen (unused)")
+        else:
+            # Q3 — character reference sheets (gpt_image only) → fill plan.render.refs so
+            # image-edit keeps characters consistent. Best-effort; runs before image gen.
+            _generate_reference_sheets(plan, art_style, job_id=job_id,
                                        effective_channel=effective_channel, provider=image_provider)
-        visual_fallbacks = _generate_images(
-            plan, visuals_dir, art_style, img_w, img_h,
-            job_id=job_id, effective_channel=effective_channel, provider=image_provider,
-        )
-        if visual_fallbacks:
-            _hint = "OPENAI_API_KEY / prompts" if image_provider == "gpt_image" else "network / prompts"
-            _emit_render_event(
-                channel_code=effective_channel, job_id=job_id,
-                event="story.visual.fallback", level="WARNING",
-                message=(f"{len(visual_fallbacks)}/{plan.image_count()} image(s) unavailable — "
-                         f"used a solid background. Check {_hint}."),
-                step="render.story",
-                context={"fallback_visuals": visual_fallbacks, "total": plan.image_count()},
+            # G6 — environment reference sheets (gpt_image + series only) → keep locations
+            # consistent across shots + chapters. Best-effort; runs before image gen.
+            _generate_env_reference_sheets(plan, art_style, job_id=job_id,
+                                           effective_channel=effective_channel, provider=image_provider)
+            visual_fallbacks = _generate_images(
+                plan, visuals_dir, art_style, img_w, img_h,
+                job_id=job_id, effective_channel=effective_channel, provider=image_provider,
             )
+            if visual_fallbacks:
+                _hint = "OPENAI_API_KEY / prompts" if image_provider == "gpt_image" else "network / prompts"
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.visual.fallback", level="WARNING",
+                    message=(f"{len(visual_fallbacks)}/{plan.image_count()} image(s) unavailable — "
+                             f"used a solid background. Check {_hint}."),
+                    step="render.story",
+                    context={"fallback_visuals": visual_fallbacks, "total": plan.image_count()},
+                )
 
         # ── 3b. Character masters (A3) — transparent PNG per overlaid speaker, ONLY
         #        when a base video is present (overlay compositing target). Best-effort;
