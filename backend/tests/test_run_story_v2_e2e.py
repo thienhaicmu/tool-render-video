@@ -135,9 +135,12 @@ def _payload(output_dir, sub="story-e2e", **extra):
 
 
 def _wire_mocks(monkeypatch, plan_fn):
+    # A0 refactor: image gen lives in visuals_stage now → patch it there (the moved
+    # _generate_images resolves generate_visual_image in that module's globals).
+    from app.features.render.engine.stages.story import visuals_stage as vs
     monkeypatch.setattr(sp2, "generate_story_plan_v2", plan_fn)
     monkeypatch.setattr(sp2, "apply_voice_cast_v2", _mock_cast)
-    monkeypatch.setattr(sp2, "generate_visual_image", _mock_image)
+    monkeypatch.setattr(vs, "generate_visual_image", _mock_image)
     monkeypatch.setattr(sp2, "synthesize_timeline", _mock_synth)
 
 

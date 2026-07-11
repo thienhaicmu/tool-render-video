@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import app.features.render.engine.pipeline.story_pipeline_v2 as sp2
+# A0 refactor: _generate_images + its deps (update_story_plan / _emit_render_event /
+# generate_visual_image) live in visuals_stage now — unit-test it there.
+import app.features.render.engine.stages.story.visuals_stage as sp2
 from app.domain.story_plan_v2 import StoryPlan, Visual, Beat
 
 
