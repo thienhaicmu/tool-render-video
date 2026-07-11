@@ -25,9 +25,10 @@ tiên: `{BGM_DIR}/{mood}/*.mp3` (của người dùng) → `{BUNDLED_BGM_DIR}/{m
 free: `python backend/scripts/fetch_free_bgm.py` (tải CC0+CC-BY vào `assets/bgm`,
 commit vào repo để khỏi tải lại; ghi công CC-BY ở `assets/bgm/ATTRIBUTION.txt`).
 
-Story Mode nhạc nền **per-scene**: AI gán `bgm_mood` cho mỗi key-visual (schema
-super-prompt s2); pipeline dựng 1 track khớp timeline + duck dưới lời kể. Bật/tắt
-bằng env `STORY_AUTO_BGM` (mặc định `1`; đặt `0` để tắt hoàn toàn).
+Story Mode nhạc nền **per-scene/per-beat**: AI gán mood + vị trí nhạc (schema
+super-prompt `s4` — placed BGM intro/outro/under/none mỗi beat); pipeline dựng 1
+track khớp timeline + duck dưới lời kể. Bật/tắt bằng env `STORY_AUTO_BGM` (mặc
+định `1`; đặt `0` để tắt hoàn toàn). Bộ env Story Mode đầy đủ: xem §11.
 
 Cache dir cũng nhận: `XDG_CACHE_HOME`, `TORCH_HOME`, `HF_HOME`,
 `TRANSFORMERS_CACHE`, `OLLAMA_MODELS`, `TEMP`/`TMP`, `FONTCONFIG_FILE` —
@@ -191,6 +192,72 @@ Content Director (`render_format="content"`) giờ chạy trên orchestrator dù
 | Biến | Mặc định | Ý nghĩa |
 |------|----------|---------|
 | `STATIC_UI_VERSION` | `legacy` | `v2` → phục vụ `backend/static-v2/` (UI React hiện tại) |
+
+## 11. Story Mode (`render_format="story"`)
+
+> Bổ sung 2026-07-11 (grep `os.getenv("STORY_...")` toàn `backend/app`). Story Mode
+> v2 = orchestrator riêng ([story_pipeline_v2.py](../backend/app/features/render/engine/pipeline/story_pipeline_v2.py)),
+> tách hoàn toàn khỏi clips/recap/content. Mỗi tối ưu có kill-switch riêng — đặt
+> `=0`/`=1` (tuỳ chiều) để rollback về hành vi cũ.
+
+### Planning (super-plan)
+
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `STORY_AI_PROVIDER` | `openai` | Provider chạy super-plan (ghi đè bằng `ai_provider` trong payload) |
+| `STORY_SUPER_MODEL` | `gpt-4o` | Model super-plan |
+| `STORY_PLAN_REPAIR` | `1` | Chạy 1 vòng LLM-repair khi parse plan hỏng (Sacred #3 vẫn None nếu repair fail). `0` = tắt |
+| `STORY_MAX_IMAGES` | `15` | **Ceiling** số key-visual/truyện — trần chi phí ảnh (parser cap + gen enforce) |
+| `STORY_MAX_SOURCE_CHARS` | `60000` | Cap độ dài truyện nguồn đọc vào prompt |
+| `STORY_MAX_CHAPTER_CHARS_SINGLE` | `18000` | Trên ngưỡng này → tách 2 super-call nối timeline (chunk-merge) |
+
+### Ảnh (visual)
+
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `STORY_IMAGE_MODEL` | `gpt-image-1` | Model sinh key-visual (provider `gpt_image`) |
+| `STORY_IMAGE_MAX_TIER` | `medium` | Clamp tier tối đa mỗi Visual (`low`/`medium`/`high`) |
+| `STORY_MAX_PREMIUM_IMAGES` | `0` (unlimited) | Trần số ảnh **trả phí** (gpt_image); phần dư → nền đặc (fallback). Chặn spend truyện dài |
+| `STORY_REFERENCE_SHEETS` | `1` | Reference-sheet nhân vật (Q3) → image-edit giữ nhân vật nhất quán. **Chỉ** provider `gpt_image`; Free bỏ qua. `0` = tắt |
+| `STORY_REFSHEET_QUALITY` | `high` | Tier ảnh reference-sheet |
+| `STORY_ENV_REFERENCE_SHEETS` | `0` (off) | Reference-sheet **bối cảnh** (G6). Chỉ `gpt_image` + series; opt-in vì tốn thêm 1 ảnh/setting, lợi ích chưa chứng minh |
+| `STORY_LIBRARY_FIRST` | `0` (off) | Ưu tiên asset offline (`asset_library/`) khớp theo tên nhân vật TRƯỚC khi gen AI — free + nhất quán. **Chỉ có tác dụng khi kho asset đã được sản xuất** |
+| `STORY_THUMBNAIL` | `1` | Sinh thumbnail ở bước finalize. `0` = tắt |
+
+### Lồng tiếng (TTS)
+
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `STORY_TTS_ENGINE_OVERRIDE` | `""` | Ép 1 engine cho toàn Story (kill-switch). Rỗng = route theo ngôn ngữ: vi→`gemini`, en/ja→`elevenlabs`, khác→`gemini` (đều fallback về chuỗi edge/piper/xtts) |
+| `STORY_ELEVEN_MODEL` | `eleven_multilingual_v2` | Model ElevenLabs (EN/JA) |
+| `STORY_ELEVEN_VOICE_FEMALE` | `21m00Tcm4TlvDq8ikWAM` | Voice ID ElevenLabs mặc định (nữ) |
+| `STORY_ELEVEN_VOICE_MALE` | `TxGEqnHWrfWFTfGW9XjX` | Voice ID ElevenLabs mặc định (nam) |
+
+### Render / tốc độ
+
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `STORY_RENDER_WORKERS` | `2` | Số luồng render cue song song (libx264/CPU — không đụng NVENC). `1` = serial (rollback byte-identical) |
+| `STORY_IMAGE_WORKERS` | `3` | Số luồng sinh ảnh song song (I/O thuần). `1` = serial |
+| `STORY_CUE_CRF` | `15` | CRF cue trung gian (near-lossless — Q4 bỏ hình phạt double-encode, xfade là pass chất lượng duy nhất) |
+| `STORY_CUE_PRESET` | `veryfast` | Preset libx264 cho cue trung gian |
+| `STORY_SOURCE_AUDIO_KEEP_DB` | `-6` | Mức (dB) giữ audio gốc của base video khi beat dùng `source_audio` (A4) |
+
+### Nhạc nền (BGM)
+
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `STORY_AUTO_BGM` | `1` | Trộn BGM per-scene (best-effort). `0` = tắt hoàn toàn (về hành vi không nhạc) |
+| `STORY_BGM_PLACED` | `1` | s4 placed-BGM (nhạc đặt đúng chỗ intro/outro/under/none mỗi beat). `0` = về mood-runs liên tục (legacy) |
+
+### Series memory (G1 — nhiều chương)
+
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `STORY_SERIES_MEMORY` | `1` | Ghi/đọc canonical characters + rolling summary để chương sau ground trên chương trước. No-op khi `story_series_id` rỗng |
+| `STORY_SERIES_CONTEXT_CHARS` | `4000` | Cap ký tự prior-context nạp vào super-plan chương sau |
+| `STORY_SERIES_SUMMARY_CHARS` | `1500` | Cap ký tự rolling summary lưu mỗi chương |
+| `STORY_SERIES_SUMMARY_SECTION_CHARS` | `2000` | Cap ký tự mỗi section khi dựng summary |
 
 > Lưu ý: nhiều biến không có "mặc định" trong bảng nghĩa là giá trị mặc định nằm
 > sâu trong module liên quan; tra trực tiếp `os.getenv(...)` tại file đó khi cần

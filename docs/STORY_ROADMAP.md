@@ -174,16 +174,20 @@ mỗi nhân vật trong visuals (chỉ provider=gpt_image; Free bỏ qua). Serie
 qua `story_repo`; reference-sheet content-addressed cache (sinh 1 lần/nhân vật).
 Env `STORY_REFERENCE_SHEETS` (default on). 6 test mới; full pytest 2822.
 
-### ⏸ HOÃN — dọn dead-code v1 (audit riêng, frozen-API)
-Bằng chứng mồ côi thu thập 2026-07-10 (điểm khởi đầu cho audit tương lai):
-- `run_story` (v1) **KHÔNG được dispatch** — `routers/_common` chỉ gọi `run_story_v2`.
-- `/api/story/analyze` (StoryBible) **FE không dùng** (grep `frontend/src` = 0).
-- `ai/vision/qa.py` **không có caller production** (chỉ test + `StoryRenderContext.vision_qa`
-  dataclass field). Content mode dùng `provider_ai_image._verify_image` KHÁC.
-- Ứng viên xóa: `story_director.py`/`story_prompts.py`/`story_parser.py` (v1),
-  `story_plan.py` (StoryBible), `ai/vision/qa.py`, `StoryRenderContext`, endpoint
-  `/api/story/analyze`. **CHẶN:** `/analyze` là REST route công khai → Backward Compat
-  Protocol (enumerate consumer + duyệt migration). `reference-sheet` KHÔNG xóa (Q3 dùng).
+### ✅ ĐÃ LÀM (verified 2026-07-11) — dead-code v1 đã xóa sạch
+Việc "dọn dead-code v1" đã được **thực thi** (không còn HOÃN). Đối chiếu code hiện tại:
+- `story_director.py` / `story_prompts.py` / `story_parser.py` / `story_chunker.py` (v1)
+  và `ai/vision/qa.py` → **đã xóa** (chỉ còn `.pyc` mồ côi trong `__pycache__`, vô hại).
+- Endpoint `POST /api/story/analyze` + `analyze_story` / `run_story_intelligence` →
+  **đã gỡ** (grep toàn `backend/app` = 0). `run_story` v1 không còn.
+- `domain/story_plan.py` giờ **chỉ còn `StoryCharacter`** (LIVE — dùng bởi
+  `/character/reference-sheet` + Q3). Toàn bộ `StoryBible`/`StoryScene`/`Shot`/… đã bỏ.
+
+> ⚠️ Doc lỗi thời: `docs/audit-2026-07-10/v1-story-deadcode.md` mô tả `/analyze`
+> "còn mounted" và đề xuất removal chưa làm — **đã lỗi thời**, xem addendum cuối file
+> đó. Router Story hiện tại: `/plan`, `/visual/*`, `/character/reference-sheet` +
+> `/character/master`, `/narration/*`, `/voices`, `/projects*`, `/assets*` — **không**
+> có `/analyze`.
 
 ---
 
@@ -233,6 +237,6 @@ Bằng chứng mồ côi thu thập 2026-07-10 (điểm khởi đầu cho audit 
 | 1 — Nhạc nền Q1 | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | per-scene bgm_mood (prompt s2) · `build_scene_bgm_track` + duck · thư viện nhạc CC0/CC-BY đóng gói trong `assets/bgm` (bundled, git-tracked, khỏi tải lại) · env `STORY_AUTO_BGM` |
 | 2 — Ảnh C1+C2 | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | multi-provider `story_image` (gpt_image \| pollinations free) · draft/final split: Review tự sinh storyboard FREE, final theo `story_image_provider` (mặc định premium, Sacred #2) · UI toggle free/premium + cost hint · field trên RenderRequest + wire surface + TS. Full suite 2814 pass |
 | 3 — Tốc độ | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | song song hóa sinh ảnh + render cue (ThreadPoolExecutor; work trong thread, thu trên main thread → không lock, worker DB-free) · `-threads` cap + textfile per-cue chống race · env `STORY_RENDER_WORKERS`(2)/`STORY_IMAGE_WORKERS`(3), =1 rollback serial · JobStage/PartStage giữ nguyên · full pytest 2816 pass |
-| 4 — Nhất quán nhân vật (Q3) | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | auto reference-sheet điền `plan.render.refs` → gpt-image-1 image-edit giữ nhân vật nhất quán · CHỈ khi provider=gpt_image (Free bỏ qua) · env `STORY_REFERENCE_SHEETS` (default on) · series pin/reuse · reference-sheet content-addressed cache (sinh 1 lần). Full pytest 2822. **Dọn dead-code v1 = HOÃN** (audit riêng — xem dưới) |
+| 4 — Nhất quán nhân vật (Q3) | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | auto reference-sheet điền `plan.render.refs` → gpt-image-1 image-edit giữ nhân vật nhất quán · CHỈ khi provider=gpt_image (Free bỏ qua) · env `STORY_REFERENCE_SHEETS` (default on) · series pin/reuse · reference-sheet content-addressed cache (sinh 1 lần). Full pytest 2822. **Dọn dead-code v1 = ✅ ĐÃ LÀM** (verified 2026-07-11 — v1 tree xóa sạch, `/analyze` đã gỡ; xem dưới) |
 | 5 — UI/UX | **✅ ĐÃ TRIỂN KHAI (2026-07-10)** | Phase 2 đã có cost estimate + regenerate draft; Phase 5 thêm: (A) nghe thử giọng per-nhân vật (`previewNarration`), (B) Ken Burns hover preview, (C) reveal + shimmer sinh động, (D) cost guardrail. Thuần FE, `tsc -b` xanh. Cần `npm run build` để vào static-v2 |
 | 6 — Chất lượng nâng cao | **Q4 ✅ (2026-07-10)** · Q2/Q5 ⏳ | Q4: cue intermediate near-lossless (`STORY_CUE_CRF`=15/`STORY_CUE_PRESET`=veryfast) → xfade re-encode là pass chất lượng duy nhất, bỏ hình phạt double-encode; KHÔNG single-filtergraph (giữ partial-success + Phase 3 parallel). Q2 vision-QA + Q5 word-timing chưa làm |
