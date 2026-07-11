@@ -105,6 +105,13 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
   }
   const updateVisual = (id: string, up: Partial<Visual>) =>
     patch({ visuals: plan.visuals.map((v) => (v.id === id ? { ...v, ...up } : v)) })
+  // AL4 — pin a library background into render.visual_assets so the render reuses that
+  // exact file (library-first, skips AI image gen). "" clears it (back to AI/draft).
+  const updateVisualAsset = (id: string, path: string) => {
+    const va = { ...(plan.render?.visual_assets ?? {}) }
+    if (path) va[id] = path; else delete va[id]
+    patch({ render: { ...plan.render, visual_assets: va } })
+  }
   const updateBeat = (id: string, up: Partial<Beat>) =>
     patch({ timeline: plan.timeline.map((b) => (b.id === id ? { ...b, ...up } : b)) })
 
@@ -187,7 +194,7 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
       <VisualsPanel
         vi={vi} plan={plan} artStyle={artStyle} aspect={aspect} colors={colors}
         previews={previews} setPreview={setPreview}
-        onChange={updateVisual}
+        onChange={updateVisual} onVisualAsset={updateVisualAsset}
       />
       <TimelineEditor
         vi={vi} plan={plan} language={language} colors={colors} previews={previews}
