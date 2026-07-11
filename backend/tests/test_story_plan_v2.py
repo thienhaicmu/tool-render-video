@@ -65,6 +65,19 @@ def test_phase05_library_hint_fields():
     assert bad.characters[0].archetype == "" and StoryPlan().settings == []
 
 
+def test_cue_carries_beat_emotion():
+    """N4 — build_cues copies beat.emotion onto the Cue (default 'normal'); roundtrips."""
+    p = StoryPlan(seed=1, language="vi", visuals=[Visual(id="v1", prompt="x")],
+                  characters=[CharacterDef(id="han", name="H")],
+                  timeline=[Beat(id="b1", narration="a", visual_id="v1", speaker_id="han", emotion="angry"),
+                            Beat(id="b2", narration="b", visual_id="v1", speaker_id="han")])  # no emotion
+    p.render.beat_audio = {"b1": BeatAudio("a.mp3", 2.0), "b2": BeatAudio("b.mp3", 2.0)}
+    p.build_cues()
+    assert p.render.cues[0].emotion == "angry" and p.render.cues[1].emotion == "normal"
+    r = StoryPlan.from_json(p.to_json())
+    assert r.render.cues[0].emotion == "angry"
+
+
 def test_from_json_none_and_garbage():
     assert StoryPlan.from_json(None) is None
     assert StoryPlan.from_json("") is None

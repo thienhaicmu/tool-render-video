@@ -138,6 +138,9 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
     # wide PNG offline ($0). On failure it degrades: provider=="svg" -> solid fallback;
     # env-gate mode -> falls through to AI (gpt-image), never worse than before.
     _svg_mode = (provider == "svg") or (os.getenv("STORY_SVG_GEN", "0") == "1")
+    # N4 overlay: key-visual is BACKGROUND-ONLY and the speaking character is composited
+    # per-beat at cue render (emotion-aware). SVG mode + STORY_CHAR_OVERLAY only.
+    _overlay = _svg_mode and (os.getenv("STORY_CHAR_OVERLAY", "0") == "1")
 
     def _gen_one(v):
         # WORKER thread: pure image gen (network/file I/O). No DB, no plan mutation —
@@ -148,7 +151,7 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
                 try:
                     from app.features.render.engine.visual.svg_compose import compose_visual
                     from app.features.render.engine.visual.svg_raster import save_svg_png
-                    _svg = compose_visual(plan, v, img_w, img_h)
+                    _svg = compose_visual(plan, v, img_w, img_h, chars=not _overlay)
                     _p = save_svg_png(_svg, str(out), img_w, img_h, opaque_bg="#101820") if _svg else None
                 except Exception:
                     _p = None
@@ -402,5 +405,61 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
         logger.warning("story v2: character masters failed (non-fatal): %s", exc)
 
 
+_LIB_EMOTIONS = ("happy", "angry", "sad", "surprised")   # emotion variants that exist in the library
+
+
+def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: str) -> None:
+    """N4 — fill ``plan.render.masters['cid:emotion']`` with a transparent per-(speaker,
+    emotion) master for the image-overlay path. A library-picked character (character.asset)
+    uses its ``{asset}_{emotion}`` variant (else the base asset); a procedural character is
+    svg_char-generated with that emotion. Only speakers on a beat drive this. Best-effort —
+    a missing master simply means that beat renders background-only. Never raises.
+    Self-gated by STORY_CHAR_OVERLAY (default off) so a stray call is a no-op."""
+    if os.getenv("STORY_CHAR_OVERLAY", "0") != "1":
+        return
+    try:
+        used: dict[str, set] = {}
+        for b in plan.timeline:
+            sp = (getattr(b, "speaker_id", "") or "").strip()
+            if sp:
+                used.setdefault(sp, set()).add((getattr(b, "emotion", "normal") or "normal").strip().lower())
+        if not used:
+            return
+        from app.features.render.engine.visual.svg_char import build_char, emotion_expr
+        from app.features.render.engine.visual.svg_raster import save_svg_png
+        from app.features.render.engine.visual.svg_presets import preset
+        from app.db.story_asset_repo import get_by_slug
+        region = (getattr(plan, "region", "") or "")
+        genre = (getattr(plan, "genre_key", "") or "")
+        _out = Path(out_dir)
+        for cid, emos in used.items():
+            c = plan.character(cid)
+            if c is None:
+                continue
+            asset = (getattr(c, "asset", "") or "").strip()
+            for emo in emos:
+                key = f"{cid}:{emo}"
+                if plan.render.masters.get(key):
+                    continue
+                path = None
+                if asset:                                   # library-picked → emotion variant → base
+                    ve = emo if emo in _LIB_EMOTIONS else ""
+                    path = (get_by_slug(f"{asset}_{ve}", "character") if ve else None) or get_by_slug(asset, "character")
+                if not path:                                # procedural chibi with this emotion
+                    opts = preset(getattr(c, "archetype", "") or "", region, genre, getattr(c, "gender", "") or "")
+                    opts["expr"] = emotion_expr(emo)
+                    path = save_svg_png(build_char(opts), str(_out / f"master_{cid}_{emo}.png"), 1024, 1536)
+                if not path:
+                    continue
+                plan.render.masters[key] = path
+        try:
+            update_story_plan(job_id, plan.to_json())
+        except Exception:
+            pass
+    except Exception as exc:
+        logger.warning("story v2: overlay masters failed (non-fatal): %s", exc)
+
+
 __all__ = ["_worker_count", "_generate_images", "_generate_reference_sheets",
-           "_generate_env_reference_sheets", "_generate_character_masters"]
+           "_generate_env_reference_sheets", "_generate_character_masters",
+           "_generate_overlay_masters"]

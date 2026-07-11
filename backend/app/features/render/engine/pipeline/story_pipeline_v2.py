@@ -69,6 +69,7 @@ from app.features.render.engine.stages.story.visuals_stage import (
     _generate_reference_sheets,
     _generate_env_reference_sheets,
     _generate_character_masters,
+    _generate_overlay_masters,
 )
 from app.features.render.engine.stages.story.bgm_stage import (
     _delivered_transitions,
@@ -312,6 +313,12 @@ def run_story_v2(
                     step="render.story",
                     context={"fallback_visuals": visual_fallbacks, "total": plan.image_count()},
                 )
+            # N4 — per-(speaker, emotion) overlay masters. Only when STORY_CHAR_OVERLAY +
+            # SVG mode (key-visuals were composed BACKGROUND-ONLY). Best-effort.
+            _svg = image_provider == "svg" or os.getenv("STORY_SVG_GEN", "0") == "1"
+            if _svg and os.getenv("STORY_CHAR_OVERLAY", "0") == "1":
+                _generate_overlay_masters(plan, visuals_dir, job_id=job_id,
+                                          effective_channel=effective_channel)
 
         # ── 3b. Character masters (A3) — transparent PNG per overlaid speaker, ONLY
         #        when a base video is present (overlay compositing target). Best-effort;

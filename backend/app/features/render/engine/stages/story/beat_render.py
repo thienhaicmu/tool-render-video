@@ -234,12 +234,20 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         base_dur = float(getattr(ctx, "base_video_dur", 0.0) or 0.0)
         use_video = bool(base_video) and _ok_file(base_video)
 
-        # A3: overlay the speaking character's transparent master over the base video —
-        # ONLY with a base video + char_anchor set + a master available. "" → no overlay
-        # (the A2 base-video / image path is byte-identical).
+        # A3/N4: overlay the speaking character's transparent master over the base.
+        #  • base-video (A3): master over the video when char_anchor is set — unchanged.
+        #  • image overlay (N4): STORY_CHAR_OVERLAY=1 → master over the Ken-Burns background
+        #    for any speaking beat (key-visual was composed background-only); the master is
+        #    picked per EMOTION ("speaker:emotion" → base "speaker"). "" → no overlay
+        #    (base-video/image path byte-identical to A3 when the env is off).
         overlay_master = ""
-        if use_video and (getattr(cue, "char_anchor", "none") or "none") != "none":
-            _m = (getattr(plan.render, "masters", None) or {}).get(getattr(cue, "speaker_id", "") or "")
+        _sp = (getattr(cue, "speaker_id", "") or "")
+        _anchor = (getattr(cue, "char_anchor", "none") or "none")
+        _want_img = os.getenv("STORY_CHAR_OVERLAY", "0") == "1"
+        if _sp and ((use_video and _anchor != "none") or _want_img):
+            _masters = (getattr(plan.render, "masters", None) or {})
+            _emo = (getattr(cue, "emotion", "normal") or "normal").strip().lower()
+            _m = _masters.get(f"{_sp}:{_emo}") or _masters.get(_sp)
             if _ok_file(_m):
                 overlay_master = _m
 

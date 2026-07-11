@@ -188,6 +188,7 @@ class Cue:
     char_anchor: str = "none"   # ∈ CHAR_ANCHOR — overlay position ("none" = no overlay)
     char_scale: str = "medium"  # ∈ CHAR_SCALE — overlay size
     char_motion: str = "fade"   # ∈ CHAR_MOTION — overlay entrance/motion
+    emotion: str = "normal"     # N4 — carried from the beat; picks the speaker's emotion master
     source_audio: str = "mute"  # ∈ SOURCE_AUDIO — base-video audio (A4; "mute" = drop it)
 
 
@@ -388,6 +389,7 @@ class StoryPlan:
                     text_anchor=(b.text_anchor or "auto"),
                     speaker_id=(b.speaker_id or ""), char_anchor=(b.char_anchor or "none"),
                     char_scale=(b.char_scale or "medium"), char_motion=(b.char_motion or "fade"),
+                    emotion=(b.emotion or "normal"),
                     source_audio=(b.source_audio or "mute"),
                 ))
                 t = end
@@ -646,6 +648,7 @@ def _render_from(x) -> RenderState:
                     char_anchor=_norm(c.get("char_anchor"), CHAR_ANCHOR, "none"),
                     char_scale=_norm(c.get("char_scale"), CHAR_SCALE, "medium"),
                     char_motion=_norm(c.get("char_motion"), CHAR_MOTION, "fade"),
+                    emotion=(_str(c.get("emotion")).lower() or "normal"),
                     source_audio=_norm(c.get("source_audio"), SOURCE_AUDIO, "mute")))
         rs.total_sec = _float(x.get("total_sec"))
     except Exception:

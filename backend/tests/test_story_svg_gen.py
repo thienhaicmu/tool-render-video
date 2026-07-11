@@ -23,7 +23,7 @@ def _plan():
 def test_gate_on_uses_svg_not_ai(monkeypatch, tmp_path):
     _patch_io(monkeypatch)
     monkeypatch.setenv("STORY_SVG_GEN", "1")
-    monkeypatch.setattr(sc, "compose_visual", lambda plan, v, w, h: "<svg/>")
+    monkeypatch.setattr(sc, "compose_visual", lambda plan, v, w, h, chars=True: "<svg/>")
     monkeypatch.setattr(sr, "save_svg_png", lambda svg, out, w, h, opaque_bg="": str(out))
     ai = []
     monkeypatch.setattr(vs, "generate_visual_image", lambda v, *a, **k: ai.append(v.id) or "ai.png")
@@ -37,7 +37,7 @@ def test_gate_on_uses_svg_not_ai(monkeypatch, tmp_path):
 def test_gate_on_falls_back_to_ai_on_svg_failure(monkeypatch, tmp_path):
     _patch_io(monkeypatch)
     monkeypatch.setenv("STORY_SVG_GEN", "1")
-    monkeypatch.setattr(sc, "compose_visual", lambda plan, v, w, h: "<svg/>")
+    monkeypatch.setattr(sc, "compose_visual", lambda plan, v, w, h, chars=True: "<svg/>")
     monkeypatch.setattr(sr, "save_svg_png", lambda *a, **k: None)   # svg raster fails
     ai = []
     monkeypatch.setattr(vs, "generate_visual_image",
@@ -52,7 +52,7 @@ def test_provider_svg_uses_compose_without_env(monkeypatch, tmp_path):
     # Phase C: provider="svg" (no STORY_SVG_GEN) → procedural path.
     _patch_io(monkeypatch)
     monkeypatch.delenv("STORY_SVG_GEN", raising=False)
-    monkeypatch.setattr(sc, "compose_visual", lambda plan, v, w, h: "<svg/>")
+    monkeypatch.setattr(sc, "compose_visual", lambda plan, v, w, h, chars=True: "<svg/>")
     monkeypatch.setattr(sr, "save_svg_png", lambda svg, out, w, h, opaque_bg="": str(out))
     ai = []
     monkeypatch.setattr(vs, "generate_visual_image", lambda v, *a, **k: ai.append(v.id) or "ai.png")

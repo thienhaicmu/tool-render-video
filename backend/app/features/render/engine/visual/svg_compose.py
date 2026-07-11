@@ -90,15 +90,17 @@ def _char_layer(ch, plan) -> str:
     return char_inner(opts)
 
 
-def compose_visual(plan, visual, w: int = W, h: int = H) -> str:
+def compose_visual(plan, visual, w: int = W, h: int = H, chars: bool = True) -> str:
     """Return an opaque w×h SVG for a Visual: background (cover) + its characters placed
-    in L/C/R zones proportional to the target size. Aspect-aware. Never raises ("")."""
+    in L/C/R zones proportional to the target size. ``chars=False`` → BACKGROUND-ONLY (N4
+    overlay mode composites characters per-beat at cue render instead). Aspect-aware.
+    Never raises ("")."""
     try:
         w = int(w) or W
         h = int(h) or H
         setting = plan.setting(getattr(visual, "setting_id", "") or "")
         bg = _bg_layer(plan, setting, w, h)
-        cids = [c for c in (getattr(visual, "character_ids", None) or [])][:3]
+        cids = [c for c in (getattr(visual, "character_ids", None) or [])][:3] if chars else []
         chars = ""
         for (cxf, scf), cid in zip(_ZONE_FRACS.get(len(cids), _ZONE_FRACS[3]), cids):
             ch = plan.character(cid)
