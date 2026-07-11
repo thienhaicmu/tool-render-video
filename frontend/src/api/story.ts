@@ -111,6 +111,11 @@ export interface StoryPlanResponse {
   image_count: number
   beat_count: number
   estimated_total_sec: number
+  // Source-truncation transparency: true when the pasted chapter / idea exceeded
+  // the super-prompt limit and its tail was cut (FE warns the user to split it).
+  source_truncated?: boolean
+  source_chars?: number
+  source_char_limit?: number
 }
 
 export interface VisualPreviewRequest {
@@ -150,12 +155,20 @@ export interface ReferenceSheetRequest {
   name?: string
   description?: string
   art_style?: string
+  // true → cutout-ready CHARACTER MASTER (transparent PNG) for overlay/preview.
+  transparent?: boolean
 }
 
 export interface JobStoryPlanResponse {
   job_id: string
   available: boolean
   plan: StoryPlanV2 | null
+}
+
+export interface StoryVoicesResponse {
+  engine: string
+  female: string[]
+  male: string[]
 }
 
 // ── Calls ─────────────────────────────────────────────────────────────────────
@@ -176,10 +189,15 @@ export const previewVisual = (req: VisualPreviewRequest) =>
 export const previewNarration = (req: NarrationPreviewRequest) =>
   post<NarrationPreviewResponse>('/api/story/narration/preview', req)
 
-/** Generate a canonical Character Reference Sheet (optional consistency aid). */
+/** Generate a Character Reference Sheet, or (transparent=true) a cutout-ready
+ * character master. Returns the durable path and, for a master, a viewable url. */
 export const generateReferenceSheet = (req: ReferenceSheetRequest) =>
-  post<{ path: string }>('/api/story/character/reference-sheet', req)
+  post<{ path: string; url?: string }>('/api/story/character/reference-sheet', req)
 
 /** Reattach: fetch a job's persisted StoryPlan v2 (polling fallback). */
 export const fetchJobStoryPlan = (jobId: string) =>
   apiFetch<JobStoryPlanResponse>(`/api/jobs/${encodeURIComponent(jobId)}/story-plan`)
+
+/** Available voices for the language's TTS engine (per-character voice override). */
+export const getStoryVoices = (language: string) =>
+  apiFetch<StoryVoicesResponse>(`/api/story/voices?language=${encodeURIComponent(language)}`)

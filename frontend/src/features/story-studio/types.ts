@@ -14,13 +14,14 @@ export const STORY_LANGS = [
   { code: 'vi', label: 'Tiếng Việt', locale: 'vi-VN' },
   { code: 'en', label: 'English', locale: 'en-US' },
   { code: 'ja', label: '日本語', locale: 'ja-JP' },
+  { code: 'ko', label: '한국어', locale: 'ko-KR' },
 ] as const
 export type StoryLang = typeof STORY_LANGS[number]['code']
 
 // Story UI language → RenderRequest.voice_language locale (backend routes TTS:
-// vi→Gemini, en/ja→ElevenLabs via resolve_story_tts_engine).
-export const VOICE_LOCALE: Record<StoryLang, 'vi-VN' | 'en-US' | 'ja-JP'> = {
-  vi: 'vi-VN', en: 'en-US', ja: 'ja-JP',
+// vi/ko→Gemini, en/ja→ElevenLabs via resolve_story_tts_engine).
+export const VOICE_LOCALE: Record<StoryLang, 'vi-VN' | 'en-US' | 'ja-JP' | 'ko-KR'> = {
+  vi: 'vi-VN', en: 'en-US', ja: 'ja-JP', ko: 'ko-KR',
 }
 
 export const ASPECTS: Aspect[] = ['16:9', '9:16', '1:1']

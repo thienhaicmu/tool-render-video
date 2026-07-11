@@ -72,10 +72,13 @@ def generate_image_bytes(
     quality: str = "medium",
     reference_paths: "Optional[list[str]]" = None,
     negative: str = "",
+    background: str = "opaque",
 ) -> Optional[bytes]:
     """Generate one PNG via gpt-image-1. When ``reference_paths`` has usable files,
     the image-EDIT endpoint conditions generation on them (character consistency);
-    otherwise the plain generate endpoint is used. Returns bytes or None. Never
+    otherwise the plain generate endpoint is used. ``background="transparent"`` asks
+    gpt-image-1 for a PNG with an alpha channel (cutout-ready character master) — only
+    honoured on the plain generate path (no refs). Returns bytes or None. Never
     raises."""
     client = _openai_client()
     if client is None:
@@ -101,7 +104,11 @@ def generate_image_bytes(
                     except Exception:
                         pass
         else:
-            resp = client.images.generate(model=model, prompt=p, size=size, quality=q)
+            _extra = {}
+            _bg = (background or "opaque").strip().lower()
+            if _bg in ("transparent", "auto"):     # opaque → omit (byte-identical default)
+                _extra = {"background": _bg, "output_format": "png"}
+            resp = client.images.generate(model=model, prompt=p, size=size, quality=q, **_extra)
         b64 = resp.data[0].b64_json
         return base64.b64decode(b64) if b64 else None
     except Exception as exc:

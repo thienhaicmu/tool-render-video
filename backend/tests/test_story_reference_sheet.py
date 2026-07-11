@@ -106,6 +106,50 @@ def test_endpoint_502_when_generation_fails(monkeypatch):
     assert ei.value.status_code == 502
 
 
+# ── Phase 5: cutout-ready character master (transparent) ──────────────────────
+
+def test_master_writes_durable_transparent(monkeypatch):
+    cap = {}
+
+    def _gen(*a, **k):
+        cap["bg"] = k.get("background")
+        return b"\x89PNG_master"
+    monkeypatch.setattr(rs, "generate_image_bytes", _gen)
+    char = StoryCharacter(id="mst_" + uuid.uuid4().hex[:8], name="X",
+                          description="unique-" + uuid.uuid4().hex)
+    path = rs.generate_character_master(char, art_style="wuxia")
+    assert path and "master_" in path and path.endswith(".png")
+    assert cap["bg"] == "transparent"          # cutout handled at the generation call
+    from pathlib import Path
+    assert Path(path).read_bytes() == b"\x89PNG_master"
+
+
+def test_master_none_when_no_description():
+    assert rs.generate_character_master(StoryCharacter(id="x")) is None
+
+
+def test_master_cache_hit_second_call(monkeypatch):
+    calls = {"n": 0}
+
+    def _gen(*a, **k):
+        calls["n"] += 1
+        return b"\x89PNG_master"
+    monkeypatch.setattr(rs, "generate_image_bytes", _gen)
+    char = StoryCharacter(id="c", name="X", description="cache-" + uuid.uuid4().hex)
+    p1 = rs.generate_character_master(char)
+    p2 = rs.generate_character_master(char)
+    assert p1 == p2 and calls["n"] == 1        # second call served from cache (no API)
+
+
+def test_endpoint_transparent_returns_url(monkeypatch, tmp_path):
+    src = tmp_path / "m.png"
+    src.write_bytes(b"\x89PNG")                 # real file so the preview copy succeeds
+    monkeypatch.setattr(rs, "generate_character_master", lambda *a, **k: str(src))
+    out = character_reference_sheet(ReferenceSheetRequest(description="áo trắng", transparent=True))
+    assert out["path"] == str(src)
+    assert out["url"].startswith("/api/story/character/master/")
+
+
 def test_endpoint_generates_and_pins_to_character(monkeypatch):
     sid = "test-story-rs-" + uuid.uuid4().hex[:8]
     cid = sid + "-c"

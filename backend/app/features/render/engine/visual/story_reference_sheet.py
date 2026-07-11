@@ -93,6 +93,55 @@ def generate_character_reference_sheet(
         return None
 
 
+def generate_character_master(
+    character,
+    art_style: str = "",
+    width: int = 1024,
+    height: int = 1536,
+) -> Optional[str]:
+    """Generate a cutout-ready CHARACTER MASTER — a full-body character on a
+    TRANSPARENT background (gpt-image-1 ``background=transparent``) → a durable
+    PNG-with-alpha path ready to composite as an overlay, or None on no key / no
+    description / error. Never raises (Sacred Contract #3 spirit).
+
+    Unlike the reference sheet (opaque grey studio, fed to image-EDIT for scene
+    consistency), the master's transparent background means NO separate cutout step
+    is needed — Phase 5 is solved at the generation call. Content-addressed with a
+    ``master|`` namespace so ONE master per character is reused across the whole
+    video / series (Strategy A). Portrait 1024x1536 gives head-to-toe headroom."""
+    try:
+        desc = (getattr(character, "canonical_desc", "") or getattr(character, "description", "") or "").strip()
+        name = (getattr(character, "name", "") or "").strip()
+        subject = desc or name
+        if not subject:
+            return None
+        style = (art_style or "").strip() or "cinematic"
+        quality = _refsheet_quality()
+        _qtag = "" if quality == "high" else f"|{quality}"
+        _key = hashlib.sha1(
+            f"master|{subject}|{style}|{width}x{height}{_qtag}".encode("utf-8", "ignore")).hexdigest()[:12]
+        _ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        dst = _ASSETS_DIR / f"master_{_safe_cid(character)}_{_key}.png"
+        if dst.exists() and dst.stat().st_size > 0:
+            return str(dst)                     # cache hit — no API call
+        prompt = (
+            f"Full-body character illustration of {subject}. "
+            f"Entire body visible head-to-toe, standing, front-facing, centered, nothing "
+            f"cropped at the edges, {style} style. Transparent background, isolated subject "
+            f"only — no scene, no floor, no cast shadow. No text, no watermark."
+        )
+        data = generate_image_bytes(prompt, width, height, quality=quality, background="transparent")
+        if not data:
+            return None
+        dst.write_bytes(data)
+        if not (dst.exists() and dst.stat().st_size > 0):
+            return None
+        return str(dst)
+    except Exception as exc:
+        logger.info("story_ref_sheet: master generation error %s", exc)
+        return None
+
+
 def generate_environment_reference_sheet(
     setting,
     art_style: str = "",
@@ -139,4 +188,5 @@ def generate_environment_reference_sheet(
         return None
 
 
-__all__ = ["generate_character_reference_sheet", "generate_environment_reference_sheet"]
+__all__ = ["generate_character_reference_sheet", "generate_character_master",
+           "generate_environment_reference_sheet"]

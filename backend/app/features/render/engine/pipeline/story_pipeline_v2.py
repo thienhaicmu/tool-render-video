@@ -46,6 +46,7 @@ from app.db.jobs_repo import (
 from app.jobs import cancel as cancel_registry
 from app.domain.story_plan_v2 import StoryPlan, ASPECT_SIZE
 from app.features.render.ai.llm import generate_story_plan_v2
+from app.features.render.ai.llm.story_prompts_v2 import SUPER_PROMPT_VERSION
 from app.features.render.ai.llm.story_voice_cast import apply_voice_cast_v2
 from app.features.render.engine.audio.story_narration import synthesize_timeline
 from app.features.render.engine.encoder.ffmpeg_helpers import resolve_target_dimensions
@@ -86,15 +87,17 @@ def _subtitle_mode(payload) -> str:
 
 
 def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, idea,
-                           duration_sec, genre, language, art_style, aspect, subtitle_mode) -> StoryPlan:
+                           duration_sec, genre, language, art_style, aspect, subtitle_mode) -> "tuple[StoryPlan, dict]":
     """Resolve the StoryPlan v2 to render: approved override → persisted (resume) →
-    fresh super-plan call. Raises RuntimeError when no usable plan is available."""
+    fresh super-plan call. Returns ``(plan, meta)`` where ``meta`` records how the
+    plan was obtained (plan_source/provider/model) for result_json reproducibility.
+    Raises RuntimeError when no usable plan is available."""
     override = (getattr(payload, "story_plan_override", "") or "").strip()
     if override:
         plan = StoryPlan.from_json(override)
         if plan is not None and plan.schema_version == 2 and not plan.is_empty() and plan.image_count() > 0:
             logger.info("story v2: using approved story_plan_override (%d visuals)", plan.image_count())
-            return plan
+            return plan, {"plan_source": "override", "provider": "", "model": ""}
 
     if resume_mode:
         persisted = get_story_plan(job_id)
@@ -102,7 +105,7 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
             plan = StoryPlan.from_json(persisted)
             if plan is not None and plan.schema_version == 2 and not plan.is_empty() and plan.image_count() > 0:
                 logger.info("story v2: resume — using persisted plan (%d visuals)", plan.image_count())
-                return plan
+                return plan, {"plan_source": "resume", "provider": "", "model": ""}
 
     # Fresh super-plan. GPT-centric: provider from payload else STORY_AI_PROVIDER.
     provider = (getattr(payload, "ai_provider", "") or "").strip().lower()
@@ -132,7 +135,10 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
         raise RuntimeError("Story v2: super plan returned no usable StoryPlan")
     if not (plan.language or "").strip():
         plan.language = language
-    return plan
+    return plan, {
+        "plan_source": "fresh", "provider": provider,
+        "model": (getattr(payload, "llm_model", None) or ""),
+    }
 
 
 def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int,
@@ -361,20 +367,30 @@ def _mix_scene_bgm(job_id, effective_channel, plan, final_out, work_dir) -> None
     nên file giao được validate kèm nhạc (Sacred Contract #8)."""
     tmp = str(final_out) + ".bgm.mp4"
     try:
-        segments = plan.bgm_scenes()
-        if not segments:
-            return
         total = float(getattr(plan.render, "total_sec", 0.0) or 0.0)
-        from app.features.render.engine.audio.mixer import build_scene_bgm_track, mix_with_bgm
+        from app.features.render.engine.audio.mixer import (
+            build_placed_bgm_track, build_scene_bgm_track, mix_with_bgm,
+        )
         bgm_dir = Path(work_dir) / "story_bgm"
-        track = build_scene_bgm_track(segments, total, str(bgm_dir / "bgm_timeline.wav"))
+        # s4 PLACED BGM (default): music sits at the AI-chosen spot in each beat
+        # (intro/outro/under/none). STORY_BGM_PLACED=0 → legacy continuous mood-runs.
+        if os.getenv("STORY_BGM_PLACED", "1") == "1":
+            segments = plan.bgm_cues()
+            if not segments:
+                return
+            track = build_placed_bgm_track(segments, total, str(bgm_dir / "bgm_timeline.wav"))
+        else:
+            segments = plan.bgm_scenes()
+            if not segments:
+                return
+            track = build_scene_bgm_track(segments, total, str(bgm_dir / "bgm_timeline.wav"))
         if not track:
             _job_log(effective_channel, job_id,
                      "Story v2: no BGM (no music files for the planned moods — see BGM_DIR)")
             return
         mix_with_bgm(video_path=str(final_out), bgm_path=track, output_path=tmp, duck=True)
         Path(tmp).replace(final_out)
-        moods = sorted({(m or "default") for m, _s, _e in segments})
+        moods = sorted({(seg[0] or "default") for seg in segments})
         _emit_render_event(
             channel_code=effective_channel, job_id=job_id, event="story.bgm.ready",
             level="INFO", message=f"Background music mixed ({len(segments)} scene(s))",
@@ -463,7 +479,7 @@ def run_story_v2(
 
         # ── 1. Super plan (1 AI call) ───────────────────────────────────────
         _set_stage(JobStage.ANALYZING, 12, "Story Director: super plan (1 call)")
-        plan = _resolve_story_plan_v2(
+        plan, plan_meta = _resolve_story_plan_v2(
             payload, job_id=job_id, resume_mode=resume_mode, source=source, chapter=chapter,
             idea=idea, duration_sec=duration_sec, genre=genre, language=language,
             art_style=art_style, aspect=aspect, subtitle_mode=subtitle_mode,
@@ -622,6 +638,7 @@ def run_story_v2(
             output_stem=_output_stem, final_out=final_out, assembly=assembly,
             clips=clips, shots_dir=shots_dir, total_parts=total_parts,
             failed_parts=failed_parts, visual_fallbacks=visual_fallbacks,
+            plan_meta=plan_meta,
         )
 
         # ── 9. Series memory (G1) — persist canonical characters + a rolling
@@ -645,7 +662,7 @@ def run_story_v2(
 
 def _finalize_story_v2(job_id, effective_channel, payload, plan, *, output_dir, output_stem,
                        final_out, assembly, clips, shots_dir, total_parts,
-                       failed_parts, visual_fallbacks):
+                       failed_parts, visual_fallbacks, plan_meta=None):
     """QA gate + thumbnail + part repoint + terminal result_json / DONE. Raises
     RuntimeError on QA failure (Sacred Contract #8). Mirrors finalize_story for v2."""
     _exp = float(assembly.get("expected_duration") or 0.0)
@@ -712,6 +729,12 @@ def _finalize_story_v2(job_id, effective_channel, payload, plan, *, output_dir, 
         "total_sec": getattr(plan.render, "total_sec", 0.0),
         "is_partial_success": bool(failed_parts),
         "ai_director": {"enabled": True, "mode": "story_v2"},
+        # Reproducibility (Phase 3): which prompt version + provider/model produced
+        # this plan. Additive — never touches the Sacred Contract #1 keys above.
+        "story_prompt_version": SUPER_PROMPT_VERSION,
+        "story_provider": (plan_meta or {}).get("provider", ""),
+        "story_llm_model": (plan_meta or {}).get("model", ""),
+        "story_plan_source": (plan_meta or {}).get("plan_source", ""),
     }
     _terminal_status = "completed_with_errors" if failed_parts else "completed"
     upsert_job(

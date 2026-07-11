@@ -37,6 +37,7 @@ router = APIRouter(prefix="/api/story", tags=["story"])
 # (pruneable). Keyed by an opaque 32-hex token; the GET validates the token shape.
 _PREVIEW_DIR = CACHE_DIR / "story_preview"
 _VISUAL_DIR = CACHE_DIR / "story_preview_visual"
+_MASTER_DIR = CACHE_DIR / "story_master"          # transparent character-master previews
 _TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
 
 
@@ -118,18 +119,32 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     _envsheet_count = len({(v.setting_id or "").strip() for v in plan.visuals
                            if (v.setting_id or "").strip()}) if _env_on else 0
     _visual_count = plan.image_count()
+    # Source-truncation transparency: the super-prompt fits the chapter to
+    # MAX_SOURCE_CHARS (idea path to 8000) — surface when we cut so the FE can warn
+    # the user to split a very long chapter instead of silently dropping the tail.
+    from app.features.render.ai.llm.story_prompts_v2 import MAX_SOURCE_CHARS
+    _IDEA_MAX = 8000
+    _src_len = len(chapter) if source == "paste" else len(idea)
+    _src_limit = MAX_SOURCE_CHARS if source == "paste" else _IDEA_MAX
     return {
         "plan": json.loads(plan.to_json()),
         "image_count": _visual_count,
         "beat_count": plan.beat_count(),
         "estimated_total_sec": round(plan.estimated_total_sec(), 1),
         "character_count": len(plan.characters),
+        "source_truncated": bool(_src_len > _src_limit),
+        "source_chars": _src_len,
+        "source_char_limit": _src_limit,
         "cost_preflight": {
             "visual_count": _visual_count,
             "character_count": len(plan.characters),
             "reference_sheet_count": _refsheet_count,
             "environment_sheet_count": _envsheet_count,
             "premium_image_count": _visual_count + _refsheet_count + _envsheet_count,
+            # Character MASTERS are opt-in (user generates them in Review, one per
+            # character) — reported separately so the estimate isn't blind to them,
+            # but NOT folded into premium_image_count (which is the automatic render cost).
+            "character_master_count": len(plan.characters),
         },
     }
 
@@ -192,6 +207,10 @@ class ReferenceSheetRequest(BaseModel):
     name: str = ""              # used when generating ad-hoc (no series persistence)
     description: str = ""
     art_style: str = ""
+    # True → generate a cutout-ready CHARACTER MASTER (transparent PNG) for overlay /
+    # Review preview instead of the opaque conditioning reference sheet. Default False
+    # keeps the legacy behaviour (Sacred Contract #2 spirit).
+    transparent: bool = False
 
 
 @router.post("/character/reference-sheet")
@@ -202,6 +221,7 @@ def character_reference_sheet(req: ReferenceSheetRequest) -> dict:
     502 when generation failed (no key / error — Sacred Contract #3)."""
     from app.domain.story_plan import StoryCharacter
     from app.features.render.engine.visual.story_reference_sheet import (
+        generate_character_master,
         generate_character_reference_sheet,
     )
 
@@ -218,6 +238,25 @@ def character_reference_sheet(req: ReferenceSheetRequest) -> dict:
         raise HTTPException(status_code=422, detail="description or a persisted character is required")
 
     character = StoryCharacter(id=cid or name, name=name, description=desc)
+
+    # transparent=True → cutout-ready overlay master (Phase 5): generate a PNG-alpha
+    # master and expose a viewable URL so Review can show it on a checkerboard. It is
+    # an OVERLAY asset, NOT the conditioning reference sheet → it is not pinned.
+    if req.transparent:
+        path = generate_character_master(character, art_style=(req.art_style or ""))
+        if not path:
+            raise HTTPException(status_code=502, detail="character master generation failed")
+        url = ""
+        try:
+            import shutil
+            _MASTER_DIR.mkdir(parents=True, exist_ok=True)
+            token = uuid.uuid4().hex
+            shutil.copyfile(path, _MASTER_DIR / f"{token}.png")
+            url = f"/api/story/character/master/{token}"
+        except Exception as exc:
+            logger.warning("story: master preview copy failed: %s", exc)
+        return {"path": path, "url": url}
+
     path = generate_character_reference_sheet(character, art_style=(req.art_style or ""))
     if not path:
         raise HTTPException(status_code=502, detail="reference sheet generation failed")
@@ -233,6 +272,18 @@ def character_reference_sheet(req: ReferenceSheetRequest) -> dict:
             logger.warning("story: pin reference sheet failed cid=%s: %s", cid, exc)
 
     return {"path": path}
+
+
+@router.get("/character/master/{token}")
+def character_master_image(token: str):
+    """Stream a character-master preview png (transparent) by token. 404 on a
+    malformed/expired token."""
+    if not _TOKEN_RE.match(token or ""):
+        raise HTTPException(status_code=404, detail="not found")
+    p = _MASTER_DIR / f"{token}.png"
+    if not p.exists() or p.stat().st_size <= 0:
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(str(p), media_type="image/png")
 
 
 # ── P4: per-shot narration preview (cast voice + language-routed engine) ──────
@@ -302,3 +353,14 @@ def narration_audio(token: str):
     if not p.exists() or p.stat().st_size <= 0:
         raise HTTPException(status_code=404, detail="not found")
     return FileResponse(str(p), media_type="audio/mpeg")
+
+
+# ── Phase 4: voice picker — available voices for the language's TTS engine ────
+
+@router.get("/voices")
+def story_voices(language: str = "vi") -> dict:
+    """Return the available Story voices for a language's TTS engine, split by gender:
+    ``{engine, female[], male[]}``. Lets the FE offer a per-character voice override
+    (written into the plan's render.voices, preserved at render). Never raises."""
+    from app.features.render.ai.llm.story_voice_cast import list_voices
+    return list_voices(language or "vi")

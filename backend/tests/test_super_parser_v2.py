@@ -73,3 +73,25 @@ def test_no_narrated_beat_returns_none():
     d = _good()
     d["timeline"] = [{"id": "b1", "narration": "", "visual_id": "v1"}]  # empty → dropped → is_empty
     assert parse_super_plan_response(json.dumps(d)) is None
+
+
+def test_s4_beat_fields_parsed():
+    d = _good()
+    d["timeline"][0].update({
+        "bgm_cue": "intro", "bgm_intensity": "high", "source_audio": "keep",
+        "char_anchor": "left", "char_scale": "large", "char_motion": "slide",
+        "text_anchor": "bottom",
+    })
+    p = parse_super_plan_response(json.dumps(d))
+    b = p.timeline[0]
+    assert b.bgm_cue == "intro" and b.bgm_intensity == "high" and b.source_audio == "keep"
+    assert b.char_anchor == "left" and b.char_scale == "large" and b.char_motion == "slide"
+    assert b.text_anchor == "bottom"
+
+
+def test_s4_missing_fields_default():
+    # A pre-s4 (s3) response with no new fields → conservative defaults.
+    p = parse_super_plan_response(json.dumps(_good()))
+    b = p.timeline[0]
+    assert b.bgm_cue == "under" and b.bgm_intensity == "med" and b.source_audio == "mute"
+    assert b.char_anchor == "none" and b.text_anchor == "auto"

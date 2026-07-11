@@ -304,6 +304,10 @@
   border-color: var(--fail);
   background: rgba(var(--fail-rgb), 0.08);
 }
+.st-alert--warn {
+  border-color: var(--warn);
+  background: rgba(var(--warn-rgb), 0.08);
+}
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 .st-btn {

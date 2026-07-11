@@ -91,6 +91,11 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
   const patch = (p: Partial<StoryPlanV2>) => setPlan({ ...plan, ...p })
   const updateCharacter = (id: string, up: Partial<CharacterDef>) =>
     patch({ characters: plan.characters.map((c) => (c.id === id ? { ...c, ...up } : c)) })
+  // Per-character voice override → written into render.voices ([engine, voice_id]);
+  // preserved at render (apply_voice_cast_v2 keeps a user-set voice). "" voice_id
+  // clears the override back to auto-cast.
+  const updateVoice = (cid: string, engine: string, voiceId: string) =>
+    patch({ render: { ...plan.render, voices: { ...(plan.render?.voices ?? {}), [cid]: [engine, voiceId] } } })
   const updateVisual = (id: string, up: Partial<Visual>) =>
     patch({ visuals: plan.visuals.map((v) => (v.id === id ? { ...v, ...up } : v)) })
   const updateBeat = (id: string, up: Partial<Beat>) =>
@@ -170,7 +175,8 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
         </div>
       )}
 
-      <CharactersPanel vi={vi} plan={plan} artStyle={artStyle} onChange={updateCharacter} />
+      <CharactersPanel vi={vi} plan={plan} artStyle={artStyle} language={language}
+        onChange={updateCharacter} onVoiceChange={updateVoice} />
       <VisualsPanel
         vi={vi} plan={plan} artStyle={artStyle} aspect={aspect} colors={colors}
         previews={previews} setPreview={setPreview}

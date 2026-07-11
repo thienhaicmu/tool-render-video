@@ -382,6 +382,68 @@ def build_scene_bgm_track(segments, total_sec, output_path, *, pick_fn=None, fad
         return None
 
 
+def build_placed_bgm_track(placements, total_sec, output_path, *, pick_fn=None, fade_sec=0.6):
+    """Dựng 1 track nhạc nền dài ``total_sec`` với nhạc đặt tại ĐÚNG vị trí (s4 placed-BGM).
+
+    ``placements = [(mood, start_sec, end_sec, gain_db), ...]`` — mỗi đoạn: ``pick_fn(mood)``
+    chọn file → loop/trim khớp độ dài + afade in/out + volume(gain) → đặt tại ``start_sec``
+    (adelay) trên nền im lặng ``total_sec``; các đoạn amix (normalize=0). Khoảng trống giữa
+    các đoạn = im lặng → nhạc chỉ kêu ở đầu/giữa/cuối cảnh theo AI, KHÔNG liên tục.
+
+    Trả ``output_path`` khi có ÍT NHẤT 1 đoạn có nhạc thật; ``None`` khi không mood nào có
+    file hoặc dựng lỗi. Best-effort — never raises. Ghép với ``mix_with_bgm(duck=True)``."""
+    try:
+        segs = [p for p in (placements or []) if p and float(p[2]) > float(p[1])]
+        if not segs:
+            return None
+        total = max(0.1, float(total_sec or 0))
+        if pick_fn is None:
+            from app.core.config import _pick_bgm_file as pick_fn  # lazy — avoid import cycle
+
+        resolved: list[tuple] = []   # (src, start, dur, gain)
+        for mood, s, e, gain in segs:
+            src = None
+            try:
+                src = pick_fn(mood or "")
+            except Exception:
+                src = None
+            if src and Path(src).exists() and Path(src).stat().st_size > 0:
+                resolved.append((str(src), float(s), float(e) - float(s), float(gain)))
+        if not resolved:
+            return None
+
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        ffmpeg_bin = get_ffmpeg_bin()
+        # Base silence [0] + each music file stream-looped as inputs [1..N].
+        cmd = [ffmpeg_bin, "-y", "-f", "lavfi", "-t", f"{total:.3f}",
+               "-i", f"anullsrc=r={_BGM_SAMPLE_RATE}:cl=stereo"]
+        parts: list[str] = []
+        for i, (src, start, dur, gain) in enumerate(resolved, start=1):
+            cmd += ["-stream_loop", "-1", "-i", src]
+            fin = min(fade_sec, dur / 2.0)
+            fout_st = max(0.0, dur - fin)
+            delay = max(0, int(round(start * 1000)))
+            parts.append(
+                f"[{i}:a]atrim=0:{dur:.3f},afade=t=in:st=0:d={fin:.3f},"
+                f"afade=t=out:st={fout_st:.3f}:d={fin:.3f},volume={gain:.1f}dB,"
+                f"aformat=sample_rates={_BGM_SAMPLE_RATE}:channel_layouts=stereo,"
+                f"adelay={delay}|{delay}[m{i}]")
+        mix_inputs = "[0:a]" + "".join(f"[m{i}]" for i in range(1, len(resolved) + 1))
+        fc = ";".join(parts) + ";" + mix_inputs + \
+            f"amix=inputs={len(resolved) + 1}:duration=first:normalize=0[out]"
+        cmd += ["-filter_complex", fc, "-map", "[out]", "-t", f"{total:.3f}",
+                "-c:a", "pcm_s16le", "-ar", str(_BGM_SAMPLE_RATE), "-ac", "2", str(out)]
+        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", check=True, timeout=_AUDIO_FFMPEG_TIMEOUT_SEC)
+        if out.exists() and out.stat().st_size > 0:
+            return str(out)
+        return None
+    except Exception as exc:
+        logger.warning("bgm: build_placed_bgm_track failed (%s)", exc)
+        return None
+
+
 def _cleanup_dir(d: Path) -> None:
     try:
         import shutil
