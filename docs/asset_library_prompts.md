@@ -10,6 +10,10 @@ Bộ **danh mục + prompt** để tự sinh (AI) một kho asset offline cho St
 > **khoá lại** → tái dùng **miễn phí + nhất quán tuyệt đối** (cùng 1 file). Nền/đồ vật có
 > thể bổ sung từ nguồn CC0 (Openverse / The Met / Kenney / OpenGameArt — xem cuối file).
 
+> **Danh mục chi tiết (prompt copy-ready):**
+> [nhân vật](asset_library_characters.md) · [nền/khung cảnh](asset_library_backgrounds.md) ·
+> [frame/khung hình](asset_library_frames.md). Kế hoạch sản xuất: [backlog](asset_library_backlog.md).
+
 ---
 
 ## 0. Quy ước lưu (nơi chỉ định)
