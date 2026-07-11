@@ -254,6 +254,48 @@ lighting, {STYLE} style. Centered, no text, no watermark.
 | us_revolver | a western revolver |
 | us_guitar | an acoustic guitar |
 
+### 📚 ĐỒ VẬT — BỘ CHI TIẾT MỞ RỘNG (prompt tự chứa)
+
+> Add-only. Mỗi đồ vật: **ô mô tả** + **🔑 ghi chú**. **Cách dùng:** prompt hoàn chỉnh =
+> *nội dung ô* **+ TAIL** bên dưới. PNG **trong suốt, 1024×1024 (vuông) hoặc 1024×1536**,
+> **1 vật duy nhất**, không cảnh, không tay/người. Path: `object/{region}/{slug}.png`.
+
+**TAIL (đồ vật — dán vào cuối MỌI prompt bên dưới):**
+```
+a single isolated object, centered with generous transparent padding, three-quarter product view, transparent background with clean alpha edges, soft even studio lighting, no scene, no floor, no ground shadow, no hands, no people, no text, no logo, no watermark.
+```
+
+#### 🌏 Hiện đại / phổ dụng (dùng nhiều nhất cho truyện đời thường)
+- **Điện thoại thông minh** · `object/jp/phone.png` · `A modern black smartphone with a glossy screen and thin bezels,` — 🔑 điện thoại đen bóng
+- **Tách cà phê bốc khói** · `object/jp/coffee_cup.png` · `A white ceramic coffee cup on a saucer with a gentle wisp of steam,` — 🔑 tách sứ trắng + khói mảnh
+- **Cặp sách học sinh** · `object/jp/schoolbag.png` · `A brown leather Japanese student satchel (randoseru-style) with buckles,` — 🔑 cặp da nâu có khoá
+- **Laptop mở** · `object/us/laptop.png` · `A slim open silver laptop with a softly glowing blank screen,` — 🔑 laptop bạc mỏng, màn hình sáng trống
+- **Chồng sách** · `object/us/book_stack.png` · `A small neat stack of three hardcover books in muted colors,` — 🔑 3 cuốn bìa cứng màu trầm
+- **Ô/dù trong suốt** · `object/jp/umbrella.png` · `A clear transparent vinyl umbrella, half open, seen from the side,` — 🔑 ô nhựa trong nửa mở
+- **Bó hoa** · `object/eu/bouquet.png` · `A small tied bouquet of pink and white flowers with greenery,` — 🔑 bó hoa hồng-trắng + lá
+- **Ly rượu vang** · `object/eu/wine_glass.png` · `A single glass of red wine, elegant stemware, subtle reflection,` — 🔑 ly vang đỏ chân cao
+- **Vali kéo** · `object/us/suitcase.png` · `A modern hard-shell carry-on suitcase with a raised handle,` — 🔑 vali cứng có tay kéo
+- **Gấu bông** · `object/us/teddy_bear.png` · `A soft brown plush teddy bear sitting, with a small ribbon,` — 🔑 gấu bông nâu + nơ
+- **Phong thư** · `object/us/letter.png` · `A cream envelope sealed with a red wax stamp,` — 🔑 phong bì kem + xi đỏ
+- **Hộp nhẫn** · `object/us/ring_box.png` · `An open small velvet ring box with a sparkling diamond ring,` — 🔑 hộp nhung mở + nhẫn kim cương
+
+#### 🏮 Cổ trang / văn hoá theo vùng
+- **Ấm trà Trung Hoa** · `object/cn/teapot.png` · `An ornate Chinese porcelain teapot with blue floral patterns,` — 🔑 ấm sứ hoa lam
+- **Lư hương** · `object/cn/incense_burner.png` · `A bronze Chinese incense burner with thin rising smoke,` — 🔑 lư đồng + khói mảnh
+- **Ô giấy dầu Nhật (wagasa)** · `object/jp/wagasa.png` · `A traditional Japanese oil-paper umbrella (wagasa), open, red with spokes,` — 🔑 ô giấy dầu đỏ
+- **Mèo may mắn** · `object/jp/maneki_neko.png` · `A white maneki-neko lucky cat figurine with a raised paw and a gold coin,` — 🔑 mèo vẫy trắng + xu vàng
+- **Hộp cơm bento** · `object/jp/bento.png` · `A traditional Japanese bento lunch box, lacquered, closed, with a cloth tie,` — 🔑 hộp bento sơn mài + vải buộc
+- **Nón lá Việt** · `object/vi/nonla.png` · `A Vietnamese conical leaf hat (nón lá) with a silk chin strap,` — 🔑 nón lá + quai lụa
+- **Bánh chưng** · `object/vi/banh_chung.png` · `A square Vietnamese sticky-rice cake (bánh chưng) wrapped in green leaves, tied with string,` — 🔑 bánh chưng lá xanh + lạt
+- **Bình gốm celadon Hàn** · `object/ko/celadon_vase.png` · `A Korean celadon vase with a soft jade-green glaze and crane inlay,` — 🔑 bình celadon xanh ngọc + hoạ tiết hạc
+
+#### 🐉 Fantasy / kinh dị (prop kịch tính)
+- **Quả cầu phép** · `object/eu/magic_orb.png` · `A glowing crystal magic orb swirling with blue energy, on a small ornate stand,` — 🔑 cầu pha lê phát sáng xanh
+- **Rương báu** · `object/eu/treasure_chest.png` · `An old wooden treasure chest open, overflowing with gold coins and gems,` — 🔑 rương gỗ mở + vàng
+- **Thanh gươm thần** · `object/eu/holy_sword.png` · `An ornate silver longsword with a glowing blue rune blade and a gemmed hilt,` — 🔑 kiếm bạc lưỡi rune xanh
+- **Nến sọ người** · `object/us/skull_candle.png` · `A human skull with a lit dripping candle on top, eerie dark mood,` — 🔑 sọ + nến chảy (kinh dị)
+- **Đèn lồng cũ** · `object/us/old_lantern.png` · `A rusty old oil lantern with a faint warm flame inside,` — 🔑 đèn dầu gỉ + lửa mờ
+
 ---
 
 ## 5. FRAME / HOẠ TIẾT (PNG trong suốt — viền trang trí)

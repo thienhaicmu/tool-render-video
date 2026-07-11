@@ -4,6 +4,9 @@ Kế hoạch **sản xuất** kho asset offline (không phải code — code AL0
 Mục tiêu: có sẵn **nhân vật · nền · frame · đồ vật** để Story Mode dùng mặc định
 (library-first) thay vì gọi AI mỗi lần → **tiết kiệm tiền + nhất quán tuyệt đối**.
 
+> **Checklist thực thi file-level (đợt 1):** [asset_library_R1_runbook.md](asset_library_R1_runbook.md)
+> — danh sách từng file để tick + cơ chế library-first (asset nào giúp mode nào) + verify.
+
 Nguồn prompt:
 - Nhân vật → [asset_library_characters.md](asset_library_characters.md)
 - Nền → [asset_library_backgrounds.md](asset_library_backgrounds.md)

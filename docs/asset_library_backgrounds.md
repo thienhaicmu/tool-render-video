@@ -144,3 +144,161 @@ Slug `us_horror_abandoned_house` · `background/us/horror/us_horror_abandoned_ho
 > **Biến thể rẻ:** với mỗi slug, sinh 1 bản rồi đổi `{TIME/LIGHT}` (bình minh / trưa /
 > hoàng hôn / đêm) để có bộ 3-4 cảnh cùng địa điểm — nhất quán, chi phí thấp. Lưu thêm
 > hậu tố thời gian vào slug (vd `..._night`).
+
+---
+
+## 📚 BỘ CHI TIẾT MỞ RỘNG — dàn đều 6 vùng
+
+> Add-only. Mỗi nền: **ô mô tả** + **🔑 yếu tố khoá** (giữ khi sinh biến thể) + **⏱ gợi ý biến thể thời gian**.
+> **Cách dùng:** prompt hoàn chỉnh = *nội dung ô* **+ TAIL** bên dưới. Nền = **ĐẶC** (opaque),
+> **16:9 (1536×1024)**, **TUYỆT ĐỐI KHÔNG người/động vật**, tiền cảnh trống để ghép nhân vật sau.
+
+**TAIL (nền — dán vào cuối MỌI prompt bên dưới):**
+```
+layered depth, atmospheric perspective. Empty scene, absolutely no people, no characters, no animals, unobstructed foreground so a character can be composited in later. Horizontal 16:9 composition, highly detailed, cinematic color grading. No text, logo, watermark, border, frame, people.
+```
+**{STYLE} theo genre:** wuxia→`cinematic ink-wash wuxia/xianxia` · ngontinh→`soft romantic anime` · horror→`dark eerie cinematic` · fantasy→`epic fantasy matte painting` · codai→`historical realistic painting` · hiendai→`modern cinematic anime`.
+
+---
+
+### 🇨🇳 CN — mở rộng
+
+**Đình bên hồ sen — ngôn tình** · `cn_ngontinh_lakeside_pavilion` · `background/cn/ngontinh/cn_ngontinh_lakeside_pavilion.png`
+```
+Premium soft romantic anime background art, wide cinematic establishing shot of an ancient Chinese lakeside pavilion with curved red-tiled roofs, wooden railings, a stone bridge, blooming lotus on a calm lake, weeping willows, soft pink sunset light, dreamy tender atmosphere,
+```
+🔑 khoá: đình mái đỏ + cầu đá + sen + liễu rủ | ⏱ biến thể: `_dawn` sương hồng · `_night` trăng + đèn lồng
+
+**Vách núi tuyết — wuxia** · `cn_wuxia_snowy_cliff` · `background/cn/wuxia/cn_wuxia_snowy_cliff.png`
+```
+Premium cinematic ink-wash wuxia/xianxia background art, wide cinematic establishing shot of a windswept snowy mountain cliff edge, jagged frozen rocks, a lone bare pine, swirling snow, distant white peaks under a pale cold sky, harsh solitary epic atmosphere,
+```
+🔑 khoá: vách đá tuyết + tùng trơ + đỉnh trắng xa | ⏱ biến thể: `_storm` bão tuyết · `_dusk` chiều tím lạnh
+
+**Thượng Hải đêm — hiện đại** · `cn_hiendai_shanghai_night` · `background/cn/hiendai/cn_hiendai_shanghai_night.png`
+```
+Premium modern cinematic anime background art, wide cinematic establishing shot of the Shanghai Bund skyline at night, glowing neon skyscrapers, a wide river with light reflections, distant towers, a moody vibrant city glow,
+```
+🔑 khoá: skyline neon + sông phản chiếu + tháp cao | ⏱ biến thể: `_rain` mưa bokeh · `_dusk` hoàng hôn tím
+
+**Chợ đêm cổ trang — cổ đại** · `cn_codai_night_market` · `background/cn/codai/cn_codai_night_market.png`
+```
+Premium historical realistic painting background art, wide cinematic establishing shot of an ancient Chinese night street market, rows of wooden stalls with red lanterns, hanging silk banners, a stone-paved street, warm lantern glow, lively bustling-but-empty atmosphere,
+```
+🔑 khoá: sạp gỗ + đèn lồng đỏ + đường lát đá | ⏱ biến thể: `_rain` phố ướt · `_festival` thêm pháo hoa
+
+---
+
+### 🇯🇵 JP — mở rộng
+
+**Phòng ngủ đêm — hiện đại** · `jp_hiendai_bedroom_night` · `background/jp/hiendai/jp_hiendai_bedroom_night.png`
+```
+Premium modern cinematic anime background art, wide cinematic establishing shot of a cozy small Japanese bedroom at night, a low bed with soft sheets, a desk with a warm lamp, a window with city lights and a moon, plush rug, calm intimate atmosphere,
+```
+🔑 khoá: giường thấp + đèn bàn ấm + cửa sổ ánh đèn phố | ⏱ biến thể: `_day` nắng sáng · `_rain` mưa cửa sổ
+
+**Trong tàu điện — hiện đại** · `jp_hiendai_train_interior` · `background/jp/hiendai/jp_hiendai_train_interior.png`
+```
+Premium modern cinematic anime background art, wide cinematic establishing shot of the interior of a Japanese commuter train, rows of seats, overhead handrails and straps, large windows showing a blurred city passing, cool daylight, quiet everyday atmosphere,
+```
+🔑 khoá: ghế dài + tay nắm trần + cửa sổ phố mờ | ⏱ biến thể: `_night` đèn vàng + phố đêm · `_sunset` nắng cam
+
+**Sân thành cổ — samurai/cổ đại** · `jp_codai_castle_courtyard` · `background/jp/codai/jp_codai_castle_courtyard.png`
+```
+Premium historical realistic painting background art, wide cinematic establishing shot of a Japanese feudal castle courtyard, white-walled tenshu keep with dark tiled roofs behind, stone walls, raked gravel, a few pine trees, clear morning light, dignified solemn atmosphere,
+```
+🔑 khoá: thiên thủ trắng + tường đá + sỏi + tùng | ⏱ biến thể: `_sakura` hoa anh đào · `_dusk` hoàng hôn
+
+**Lễ hội matsuri đêm — hiện đại** · `jp_hiendai_festival_night` · `background/jp/hiendai/jp_hiendai_festival_night.png`
+```
+Premium modern cinematic anime background art, wide cinematic establishing shot of a Japanese summer festival street at night, rows of food stalls (yatai) with paper lanterns, hanging decorations, a distant torii, warm festive glow and soft bokeh, joyful lively-but-empty atmosphere,
+```
+🔑 khoá: sạp yatai + đèn giấy + torii xa | ⏱ biến thể: `_fireworks` pháo hoa trời · `_rain` phố ướt lấp lánh
+
+---
+
+### 🇰🇷 KO — mở rộng
+
+**Công viên sông Hàn — hiện đại** · `ko_hiendai_han_river_park` · `background/ko/hiendai/ko_hiendai_han_river_park.png`
+```
+Premium modern cinematic anime background art, wide cinematic establishing shot of a Seoul Han River park at dusk, a wide river, a long bridge with lights, city skyline behind, green lawns and a walking path, warm golden-hour glow, relaxed calm atmosphere,
+```
+🔑 khoá: sông Hàn + cầu đèn + skyline + bãi cỏ | ⏱ biến thể: `_night` đèn cầu rực · `_spring` hoa anh đào
+
+**Văn phòng Seoul — hiện đại** · `ko_hiendai_office` · `background/ko/hiendai/ko_hiendai_office.png`
+```
+Premium modern cinematic anime background art, wide cinematic establishing shot of a sleek modern Korean corporate office, glass-walled meeting rooms, rows of clean desks with monitors, a wall of windows overlooking a city, bright cool daylight, professional atmosphere,
+```
+🔑 khoá: phòng họp kính + bàn màn hình + tường kính | ⏱ biến thể: `_night` đèn trần + phố đêm · `_sunset` nắng cam
+
+**Điện rồng Joseon — cổ trang** · `ko_codai_throne_room` · `background/ko/codai/ko_codai_throne_room.png`
+```
+Premium historical realistic painting background art, wide cinematic establishing shot of a Joseon-era Korean royal throne hall interior, an ornate red-and-gold throne under a painted sun-and-moon folding screen, dancheong-patterned columns, polished wood floor, solemn majestic atmosphere,
+```
+🔑 khoá: ngai đỏ-vàng + bình phong nhật-nguyệt + cột dancheong | ⏱ biến thể: `_candle` ánh nến đêm · `_dawn` bình minh
+
+---
+
+### 🇻🇳 VI — mở rộng
+
+**Phố cổ Hà Nội — hiện đại** · `vi_hiendai_hanoi_oldquarter` · `background/vi/hiendai/vi_hiendai_hanoi_oldquarter.png`
+```
+Premium modern cinematic anime background art, wide cinematic establishing shot of a Hanoi Old Quarter street, narrow tube houses with faded yellow walls, tangled overhead wires, small shopfronts and plastic stools, string lights, warm nostalgic evening glow, cozy lively-but-empty atmosphere,
+```
+🔑 khoá: nhà ống vàng + dây điện chằng + ghế nhựa + đèn dây | ⏱ biến thể: `_rain` phố ướt · `_morning` sáng sớm phở
+
+**Đại nội Huế — cổ trang** · `vi_codai_imperial_hue` · `background/vi/codai/vi_codai_imperial_hue.png`
+```
+Premium historical realistic painting background art, wide cinematic establishing shot of the Hue Imperial City, a grand red-and-gold Vietnamese palace gate with curved tiled roofs, ornate dragon motifs, a wide stone courtyard, a flag tower behind, soft warm daylight, majestic historical atmosphere,
+```
+🔑 khoá: cổng cung đỏ-vàng + mái cong + sân đá + kỳ đài | ⏱ biến thể: `_dusk` hoàng hôn · `_mist` sương sớm
+
+**Ruộng bậc thang — hiện đại/thiên nhiên** · `vi_hiendai_rice_terrace` · `background/vi/hiendai/vi_hiendai_rice_terrace.png`
+```
+Premium modern cinematic background art, wide cinematic establishing shot of northern Vietnam rice terraces, layered green-and-gold curved paddies on a mountainside, thin water reflections, distant misty mountains and a small stilt house, soft morning light, serene majestic atmosphere,
+```
+🔑 khoá: ruộng bậc thang cong + núi sương + nhà sàn nhỏ | ⏱ biến thể: `_harvest` lúa vàng · `_sunset` chiều cam
+
+---
+
+### 🇪🇺 EU — mở rộng
+
+**Hang rồng — fantasy** · `eu_fantasy_dragon_lair` · `background/eu/fantasy/eu_fantasy_dragon_lair.png`
+```
+Premium epic fantasy matte painting background art, wide cinematic establishing shot of a vast cavern dragon lair, piles of gold coins and treasure, massive stone pillars, glowing lava cracks, hanging chains, dramatic orange-and-red light, ominous epic atmosphere,
+```
+🔑 khoá: kho vàng + cột đá + khe dung nham + xích | ⏱ biến thể: `_cold` hang băng xanh · `_ruins` thêm xương rồng
+
+**Nội thất nhà thờ lớn — cổ đại** · `eu_codai_cathedral_interior` · `background/eu/codai/eu_codai_cathedral_interior.png`
+```
+Premium historical realistic painting background art, wide cinematic establishing shot of a grand Gothic cathedral interior, towering stone columns and pointed arches, tall stained-glass windows casting colored light beams, a long aisle, candlelight, awe-inspiring sacred atmosphere,
+```
+🔑 khoá: cột Gothic + vòm nhọn + kính màu + lối đi dài | ⏱ biến thể: `_night` chỉ ánh nến · `_dawn` tia nắng vàng
+
+**Phố Paris — hiện đại** · `eu_hiendai_paris_street` · `background/eu/hiendai/eu_hiendai_paris_street.png`
+```
+Premium modern cinematic background art, wide cinematic establishing shot of a charming Parisian street, Haussmann-style cream buildings with iron balconies, a corner cafe with awnings and small tables, cobblestones, distant Eiffel Tower, soft warm afternoon light, romantic relaxed atmosphere,
+```
+🔑 khoá: nhà Haussmann kem + café góc + tháp Eiffel xa | ⏱ biến thể: `_rain` phố ướt · `_night` đèn vàng + Eiffel sáng
+
+---
+
+### 🇺🇸 US — mở rộng
+
+**Quán diner cổ điển — hiện đại** · `us_hiendai_classic_diner` · `background/us/hiendai/us_hiendai_classic_diner.png`
+```
+Premium modern cinematic anime background art, wide cinematic establishing shot of a retro American 1950s diner interior, red vinyl booths, a checkerboard floor, a chrome counter with stools, neon signage inside, a window to a night street, warm nostalgic atmosphere,
+```
+🔑 khoá: ghế da đỏ + sàn caro + quầy chrome + neon | ⏱ biến thể: `_day` nắng ban ngày · `_rain` phố mưa ngoài cửa
+
+**Quảng trường Thời đại đêm — hiện đại** · `us_hiendai_times_square_night` · `background/us/hiendai/us_hiendai_times_square_night.png`
+```
+Premium modern cinematic background art, wide cinematic establishing shot of Times Square at night, towering buildings covered in giant glowing billboards and screens, bright multicolored neon, wet reflective pavement, an electric vibrant atmosphere,
+```
+🔑 khoá: bảng quảng cáo khổng lồ + neon nhiều màu + đường phản chiếu | ⏱ biến thể: `_rain` mưa bokeh · `_snow` tuyết rơi
+
+**Rừng tối — kinh dị** · `us_horror_dark_forest` · `background/us/horror/us_horror_dark_forest.png`
+```
+Premium dark eerie cinematic background art, wide cinematic establishing shot of a dark misty American pine forest at night, tall twisted bare trees, thick ground fog, faint cold moonlight through branches, a barely-visible dirt trail, tense frightening atmosphere,
+```
+🔑 khoá: thông xoắn trơ + sương dày + trăng lạnh + lối mòn mờ | ⏱ biến thể: `_fog` sương đặc hơn · `_bloodmoon` trăng đỏ
