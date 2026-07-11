@@ -169,8 +169,22 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         have_audio = _ok_file(cue.audio_path)
         out = Path(ctx.shots_dir) / f"cue_{part_no:04d}.mp4"
 
+        # A2: optional LOCAL base video the story is composited over. When present, the
+        # cue's base layer is a SEGMENT of that video, seeked to the cue's position in
+        # the story timeline (looped by modulo when the video is shorter than the
+        # narration). No Ken Burns — the video already has motion. "" → image/color path
+        # (byte-identical to pre-A2).
+        base_video = getattr(ctx, "base_video_path", "") or ""
+        base_dur = float(getattr(ctx, "base_video_dur", 0.0) or 0.0)
+        use_video = bool(base_video) and _ok_file(base_video)
+
         cmd = [get_ffmpeg_bin(), "-y"]
-        if have_img:
+        if use_video:
+            seek = (float(cue.start_sec) % base_dur) if base_dur > 0 else max(0.0, float(cue.start_sec))
+            cmd += ["-stream_loop", "-1", "-ss", f"{seek:.3f}", "-t", f"{dur:.3f}", "-i", str(base_video)]
+            vf = (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+                  f"crop={width}:{height},setsar=1,fps={fps:.3f},format=yuv420p")
+        elif have_img:
             cmd += ["-loop", "1", "-t", f"{dur:.3f}", "-i", str(img)]
             vf = _kenburns_vf(cue.crop_from, cue.crop_to, width, height, fps, dur)
         else:
@@ -199,8 +213,8 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         if proc.returncode != 0 or not _ok_file(str(out)):
             err = (proc.stderr or "")[-400:]
             logger.warning("story cue %s ffmpeg failed rc=%s: %s", part_no, proc.returncode, err)
-            return {"clip": None, "error": f"ffmpeg rc={proc.returncode}", "fallback": not have_img}
-        return {"clip": str(out), "error": "", "fallback": not have_img}
+            return {"clip": None, "error": f"ffmpeg rc={proc.returncode}", "fallback": not (use_video or have_img)}
+        return {"clip": str(out), "error": "", "fallback": not (use_video or have_img)}
     except subprocess.TimeoutExpired:
         logger.warning("story cue %s ffmpeg timeout", part_no)
         return {"clip": None, "error": "ffmpeg timeout", "fallback": False}

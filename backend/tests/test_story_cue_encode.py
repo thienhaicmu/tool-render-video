@@ -53,3 +53,58 @@ def test_render_one_cue_uses_configurable_intermediate(monkeypatch, tmp_path):
     assert cmd[cmd.index("-preset") + 1] == "faster"
     # still a single delivered stream pair + faststart (intermediate stays mp4)
     assert "+faststart" in cmd
+
+
+# ── A2: base-video layer ──────────────────────────────────────────────────────
+
+def _capture(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = list(cmd)
+        Path(cmd[-1]).write_bytes(b"\x00" * 256)
+        return SimpleNamespace(returncode=0, stderr="")
+    monkeypatch.setattr(br.subprocess, "run", fake_run)
+    return captured
+
+
+def test_video_base_uses_segment_not_kenburns(monkeypatch, tmp_path):
+    captured = _capture(monkeypatch)
+    # The base video "exists"; the written output file also passes the real check.
+    monkeypatch.setattr(br, "_ok_file", lambda p: p == "/base.mp4" or bool(p) and Path(p).exists())
+    ctx = SimpleNamespace(width=1280, height=720, fps=30.0, shots_dir=str(tmp_path),
+                          bg_value="#101820", ffmpeg_threads=0,
+                          base_video_path="/base.mp4", base_video_dur=10.0)
+    cue = SimpleNamespace(start_sec=13.0, end_sec=15.0, crop_from=(0.0, 0.0, 1.0, 1.0),
+                          crop_to=(0.0, 0.0, 1.0, 1.0), visual_id="v1", audio_path="",
+                          hook=False, hook_text="", text_anchor="auto")
+    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={}))
+    r = br.render_one_cue(ctx, plan, 1, cue)
+    assert r["clip"] and r["fallback"] is False       # a real base was used
+
+    cmd = captured["cmd"]
+    assert "-stream_loop" in cmd and cmd[cmd.index("-stream_loop") + 1] == "-1"
+    assert "/base.mp4" in cmd
+    # start_sec 13 % base_dur 10 = 3.0 → seeked into the looped video
+    assert cmd[cmd.index("-ss") + 1] == "3.000"
+    assert "-loop" not in cmd                          # NOT the image path
+    fc = cmd[cmd.index("-filter_complex") + 1]
+    assert "force_original_aspect_ratio=increase" in fc and "crop=1280:720" in fc
+    assert "zoompan" not in fc                         # no Ken Burns on video
+
+
+def test_no_base_video_keeps_image_kenburns_path(monkeypatch, tmp_path):
+    captured = _capture(monkeypatch)
+    monkeypatch.setattr(br, "_ok_file", lambda p: p == "/img.png")
+    # ctx has NO base_video_path → image path unchanged (byte-identical to pre-A2).
+    ctx = SimpleNamespace(width=1280, height=720, fps=30.0, shots_dir=str(tmp_path),
+                          bg_value="#101820", ffmpeg_threads=0)
+    cue = SimpleNamespace(start_sec=0.0, end_sec=2.0, crop_from=(0.0, 0.0, 1.0, 1.0),
+                          crop_to=(0.0, 0.0, 1.0, 1.0), visual_id="v1", audio_path="",
+                          hook=False, hook_text="", text_anchor="auto")
+    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={"v1": "/img.png"}))
+    br.render_one_cue(ctx, plan, 1, cue)
+    cmd = captured["cmd"]
+    assert "-stream_loop" not in cmd
+    assert "-loop" in cmd and "/img.png" in cmd
+    assert "zoompan" in cmd[cmd.index("-filter_complex") + 1]
