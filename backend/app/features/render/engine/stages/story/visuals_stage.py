@@ -49,10 +49,20 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
     total = plan.image_count()
     seed = int(plan.seed or 0)
 
+    # AL3 library-first: a Visual whose image is ALREADY set to an existing file (a
+    # library background assigned in Review, carried in the plan override) is NOT
+    # regenerated — skip it, no AI call. Keeps render.visual_assets as-is.
+    def _ready(vid: str) -> bool:
+        p = plan.render.visual_assets.get(vid) or ""
+        try:
+            return bool(p) and Path(p).exists() and Path(p).stat().st_size > 0
+        except Exception:
+            return False
+    gen_visuals = [v for v in plan.visuals if not _ready(v.id)]
+
     # Hard cost cap (premium only): STORY_MAX_PREMIUM_IMAGES > 0 limits how many
     # key-visuals are gpt-image-generated; the rest fall back to a solid background.
     # 0 = unlimited (default — no behaviour change). Bounds runaway spend on a long story.
-    gen_visuals = list(plan.visuals)
     if provider == "gpt_image":
         try:
             _cap = int(os.getenv("STORY_MAX_PREMIUM_IMAGES", "0") or 0)
