@@ -67,7 +67,10 @@ Nguyên tắc: **A → B → C**. A/B miễn phí + offline. C giữ lại làm 
 - 273 asset + `asset_registry.json` (90 nhóm nhân vật, 38 nhóm nền, tags).
 - Convention path + scan/match đã chạy. **Không cần code mới.**
 
-### PHASE A — Auto library-match cho luồng ảnh mặc định  · Tier **HIGH**
+### PHASE A — Auto library-match cho luồng ảnh mặc định  · Tier **HIGH**  · ✅ DONE (2026-07-11)
+> Merged `af973f01`. `_match_library_background` (char-less → nền kho), gate `STORY_LIBRARY_FIRST`.
+> Chi tiết: [SVG_PHASE_0.5_A_PLANNER.md](SVG_PHASE_0.5_A_PLANNER.md).
+
 **Mục tiêu:** AI plan → tự tra kho cho MỌI visual (không chỉ base-video master), trước khi gọi bất kỳ generator nào.
 - `visuals_stage._generate_images`: trước khi gen 1 Visual, thử
   `match_asset('background', name=setting.name, region, genre)` cho nền +
@@ -78,7 +81,10 @@ Nguyên tắc: **A → B → C**. A/B miễn phí + offline. C giữ lại làm 
 - **Test:** match đúng region/genre; miss → path rỗng (degrade); e2e skip AI đếm được.
 - **Rủi ro:** HIGH (đụng `visuals_stage`, gần orchestrator). Không đụng state machine.
 
-### PHASE B — Procedural SVG generator trong backend  · Tier **HIGH** (mới, cô lập)
+### PHASE B — Procedural SVG generator trong backend  · Tier **HIGH** (mới, cô lập)  · ✅ DONE (2026-07-11)
+> Merged `e547ec7c`. `svg_raster/char/presets/scene/compose.py` + gate `STORY_SVG_GEN`; rasterizer `resvg-py`.
+> Chi tiết: [SVG_PHASE_B_PLANNER.md](SVG_PHASE_B_PLANNER.md).
+
 **Mục tiêu:** port builder chibi/mascot/scene (đang ở Node scratchpad) → backend Python,
 sinh SVG từ thuộc tính AI plan rồi rasterize → PNG. "Không có sẵn thì tự vẽ."
 - **Module mới** `features/render/engine/visual/svg_char.py` + `svg_scene.py` (pure, no I/O
@@ -91,7 +97,12 @@ sinh SVG từ thuộc tính AI plan rồi rasterize → PNG. "Không có sẵn t
 - **Test:** attrs → SVG hợp lệ → PNG có alpha đúng size; offline, no network.
 - **Rủi ro:** HIGH nhưng **cô lập** (module riêng, chưa thay default).
 
-### PHASE C — Provider "svg" + đổi default  · Tier **HIGH→CRITICAL** (Render Edit Protocol)
+### PHASE C — Provider "svg" + đổi default  · Tier **HIGH→CRITICAL** (Render Edit Protocol)  · ✅ DONE (2026-07-11)
+> Provider `svg` accepted (model + orchestrator validator); compose aspect-aware (16:9/9:16/1:1);
+> FE story-studio **default = svg** ($0) + toggle Chibi/Free/Premium. Backend field default GIỮ
+> `gpt_image` (Sacred #2 — replay bit-identical); gpt-image = premium opt-in, KHÔNG xóa. Full pytest 2957.
+> Chi tiết: [SVG_PHASE_C_PLANNER.md](SVG_PHASE_C_PLANNER.md).
+
 **Mục tiêu:** thêm `story_image_provider="svg"` (procedural) song song `gpt_image|pollinations`;
 đặt **svg = default**; gpt-image thành opt-in premium.
 - `story_image.generate_visual_image`: nhánh `provider=='svg'` → gọi PHASE B (A đã thử match trước).

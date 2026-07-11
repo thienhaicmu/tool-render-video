@@ -23,7 +23,7 @@ def _plan():
 def test_gate_on_uses_svg_not_ai(monkeypatch, tmp_path):
     _patch_io(monkeypatch)
     monkeypatch.setenv("STORY_SVG_GEN", "1")
-    monkeypatch.setattr(sc, "compose_visual", lambda plan, v: "<svg/>")
+    monkeypatch.setattr(sc, "compose_visual", lambda plan, v, w, h: "<svg/>")
     monkeypatch.setattr(sr, "save_svg_png", lambda svg, out, w, h, opaque_bg="": str(out))
     ai = []
     monkeypatch.setattr(vs, "generate_visual_image", lambda v, *a, **k: ai.append(v.id) or "ai.png")
@@ -37,7 +37,7 @@ def test_gate_on_uses_svg_not_ai(monkeypatch, tmp_path):
 def test_gate_on_falls_back_to_ai_on_svg_failure(monkeypatch, tmp_path):
     _patch_io(monkeypatch)
     monkeypatch.setenv("STORY_SVG_GEN", "1")
-    monkeypatch.setattr(sc, "compose_visual", lambda plan, v: "<svg/>")
+    monkeypatch.setattr(sc, "compose_visual", lambda plan, v, w, h: "<svg/>")
     monkeypatch.setattr(sr, "save_svg_png", lambda *a, **k: None)   # svg raster fails
     ai = []
     monkeypatch.setattr(vs, "generate_visual_image",
@@ -46,6 +46,20 @@ def test_gate_on_falls_back_to_ai_on_svg_failure(monkeypatch, tmp_path):
     vs._generate_images(p, tmp_path, "wuxia", 1536, 1024, job_id="j", effective_channel="c")
     assert ai == ["v1"]                               # degraded to gpt-image
     assert p.render.visual_assets["v1"] == "ai.png"
+
+
+def test_provider_svg_uses_compose_without_env(monkeypatch, tmp_path):
+    # Phase C: provider="svg" (no STORY_SVG_GEN) → procedural path.
+    _patch_io(monkeypatch)
+    monkeypatch.delenv("STORY_SVG_GEN", raising=False)
+    monkeypatch.setattr(sc, "compose_visual", lambda plan, v, w, h: "<svg/>")
+    monkeypatch.setattr(sr, "save_svg_png", lambda svg, out, w, h, opaque_bg="": str(out))
+    ai = []
+    monkeypatch.setattr(vs, "generate_visual_image", lambda v, *a, **k: ai.append(v.id) or "ai.png")
+    p = _plan()
+    vs._generate_images(p, tmp_path, "wuxia", 1536, 1024, job_id="j", effective_channel="c", provider="svg")
+    assert ai == []
+    assert p.render.visual_assets["v1"].endswith("v1.png")
 
 
 def test_gate_off_uses_ai(monkeypatch, tmp_path):

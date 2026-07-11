@@ -21,6 +21,7 @@ def test_render_request_field_default_and_coercion():
     assert RenderRequest(story_image_provider="pollinations").story_image_provider == "pollinations"
     assert RenderRequest(story_image_provider="BANANA").story_image_provider == "gpt_image"  # unknown → default
     assert RenderRequest(story_image_provider="").story_image_provider == "gpt_image"
+    assert RenderRequest(story_image_provider="svg").story_image_provider == "svg"        # Phase C: accepted
 
 
 # ── generate_visual_image dispatch ───────────────────────────────────────────

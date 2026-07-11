@@ -148,7 +148,7 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
                 try:
                     from app.features.render.engine.visual.svg_compose import compose_visual
                     from app.features.render.engine.visual.svg_raster import save_svg_png
-                    _svg = compose_visual(plan, v)
+                    _svg = compose_visual(plan, v, img_w, img_h)
                     _p = save_svg_png(_svg, str(out), img_w, img_h, opaque_bg="#101820") if _svg else None
                 except Exception:
                     _p = None

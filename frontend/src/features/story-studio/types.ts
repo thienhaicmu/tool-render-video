@@ -41,7 +41,7 @@ export const TIER = ['low', 'medium', 'high'] as const
 
 // Phase 2 — FINAL image provider. Draft/review always previews with the free
 // provider; this picks what the actual render uses.
-export type ImageProvider = 'gpt_image' | 'pollinations'
+export type ImageProvider = 'svg' | 'gpt_image' | 'pollinations'
 // Rough per-image cost for the premium provider (gpt-image-1, medium) — used only
 // for the FE cost hint on the Render button. Free provider = $0.
 export const PREMIUM_IMG_COST_USD = 0.04
@@ -82,6 +82,6 @@ export const DEFAULT_STORY_CFG: StoryConfig = {
   seriesId: '',
   chapterNo: 0,
   outputDir: '',
-  imageProvider: 'gpt_image',    // premium default (Sacred #2 parity); toggle to free
+  imageProvider: 'svg',          // Phase C: chibi SVG = default ($0, offline); toggle to free/premium
   baseVideoPath: '',
 }

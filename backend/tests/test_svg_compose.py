@@ -42,6 +42,24 @@ def test_compose_never_raises_on_bad_input():
     assert isinstance(compose_visual(_plan(), Visual(id="v1")), str)
 
 
+@pytest.mark.parametrize("w,h", [(1536, 1024), (1024, 1536), (1024, 1024)])
+def test_compose_aspect_aware(w, h, monkeypatch):
+    monkeypatch.setattr("app.db.story_asset_repo.match_asset", lambda *a, **k: None)  # scene path
+    svg = compose_visual(_plan(), Visual(id="v1", setting_id="s", character_ids=["a", "b"]), w, h)
+    assert f'width="{w}"' in svg and f'height="{h}"' in svg and f'viewBox="0 0 {w} {h}"' in svg
+
+
+@requires_resvg
+@pytest.mark.parametrize("w,h", [(1024, 1536), (1024, 1024)])
+def test_compose_non_169_rasterises(w, h, monkeypatch):
+    monkeypatch.setattr("app.db.story_asset_repo.match_asset", lambda *a, **k: None)
+    svg = compose_visual(_plan(), Visual(id="v1", setting_id="s", character_ids=["a"]), w, h)
+    png = svg_raster.render_svg(svg, w, h, opaque_bg="#101820")
+    assert png and png[:8] == b"\x89PNG\r\n\x1a\n"
+    ww, hh = struct.unpack(">II", png[16:24])
+    assert (ww, hh) == (w, h)
+
+
 @requires_resvg
 @pytest.mark.parametrize("cids", [["a"], ["a", "b"], ["a", "b", "c"]])
 def test_compose_rasterises(cids, monkeypatch):

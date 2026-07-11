@@ -221,7 +221,8 @@ Content Director (`render_format="content"`) giờ chạy trên orchestrator dù
 | `STORY_REFERENCE_SHEETS` | `1` | Reference-sheet nhân vật (Q3) → image-edit giữ nhân vật nhất quán. **Chỉ** provider `gpt_image`; Free bỏ qua. `0` = tắt |
 | `STORY_REFSHEET_QUALITY` | `high` | Tier ảnh reference-sheet |
 | `STORY_ENV_REFERENCE_SHEETS` | `0` (off) | Reference-sheet **bối cảnh** (G6). Chỉ `gpt_image` + series; opt-in vì tốn thêm 1 ảnh/setting, lợi ích chưa chứng minh |
-| `STORY_LIBRARY_FIRST` | `0` (off) | Ưu tiên asset offline (`asset_library/`) khớp theo tên nhân vật TRƯỚC khi gen AI — free + nhất quán. **Chỉ có tác dụng khi kho asset đã được sản xuất** |
+| `STORY_LIBRARY_FIRST` | `0` (off) | Ưu tiên asset offline (`asset_library/`) khớp theo tên nhân vật/scene TRƯỚC khi gen AI — free + nhất quán. Auto-match nền cho visual char-less (Phase A) |
+| `STORY_SVG_GEN` | `0` (off) | Ép **vẽ SVG procedural** (chibi, $0 offline) cho mọi visual, không cần đổi provider. Tương đương `story_image_provider="svg"` toàn cục (Phase B). Lỗi/thiếu `resvg-py` → degrade về gpt-image. FE mặc định đã gửi `svg` nên env này là override thủ công |
 | `STORY_THUMBNAIL` | `1` | Sinh thumbnail ở bước finalize. `0` = tắt |
 
 ### Lồng tiếng (TTS)

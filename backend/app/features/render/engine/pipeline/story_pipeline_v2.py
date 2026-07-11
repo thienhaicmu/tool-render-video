@@ -269,7 +269,7 @@ def run_story_v2(
         # Phase 2 — FINAL image provider from the payload (validator guarantees a valid
         # value; default "gpt_image" = the existing paid, character-consistent path).
         image_provider = (getattr(payload, "story_image_provider", "gpt_image") or "gpt_image").strip().lower()
-        if image_provider not in ("gpt_image", "pollinations"):
+        if image_provider not in ("gpt_image", "pollinations", "svg"):
             image_provider = "gpt_image"
         visual_fallbacks = []
         # A6 cost: when a base video is the visual layer, the key-visual images + reference
