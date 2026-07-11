@@ -52,6 +52,15 @@ _CHAR_SCALE_FRAC = {"small": 0.55, "medium": 0.72, "large": 0.90}
 _CHAR_SLIDE_SEC = 0.5
 _CHAR_FADE_SEC = 0.4
 
+# A4 base-video audio mix. Duck reuses the shared narration-duck params (voice wins);
+# keep mixes the original a few dB under the narration so the voice stays clear.
+_SRC_DUCK = os.getenv("NARRATION_DUCK_PARAMS",
+                      "sidechaincompress=threshold=0.06:ratio=2.5:attack=25:release=500")
+try:
+    _SRC_KEEP_DB = float(os.getenv("STORY_SOURCE_AUDIO_KEEP_DB", "-6") or -6)
+except (TypeError, ValueError):
+    _SRC_KEEP_DB = -6.0
+
 
 def _norm_color(value: str) -> str:
     v = (value or "").strip()
@@ -256,12 +265,29 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
             cmd += ["-loop", "1", "-t", f"{dur:.3f}", "-i", str(overlay_master)]
 
         af = f"aformat=sample_rates={_SAMPLE_RATE}:channel_layouts=stereo,apad"
+        # A4: base-video audio → [a]. Only with a base video that HAS audio and a non-mute
+        # source_audio; otherwise narration-only (byte-identical to A2/A3). Voice wins.
+        _src = (getattr(cue, "source_audio", "mute") or "mute")
+        if use_video and bool(getattr(ctx, "base_video_has_audio", False)) and _src in ("keep", "duck"):
+            if _src == "duck":
+                _ag = (f"[1:a]{af},asplit=2[narr][key];"
+                       f"[0:a]aformat=sample_rates={_SAMPLE_RATE}:channel_layouts=stereo[vid];"
+                       f"[vid][key]{_SRC_DUCK}[duck];"
+                       f"[duck][narr]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[a]")
+            else:  # keep — original a few dB under the narration (ambient)
+                _ag = (f"[1:a]{af}[narr];"
+                       f"[0:a]aformat=sample_rates={_SAMPLE_RATE}:channel_layouts=stereo,"
+                       f"volume={_SRC_KEEP_DB:.1f}dB[vid];"
+                       f"[vid][narr]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[a]")
+        else:
+            _ag = f"[1:a]{af}[a]"
+
         if overlay_master:
             _fg, _x, _y = _char_overlay_parts(cue, width, height, dur)
             _fc = (f"[0:v]{vf}[bg];[2:v]{_fg}[fg];"
-                   f"[bg][fg]overlay=x='{_x}':y='{_y}':format=auto[v];[1:a]{af}[a]")
+                   f"[bg][fg]overlay=x='{_x}':y='{_y}':format=auto[v];{_ag}")
         else:
-            _fc = f"[0:v]{vf}[v];[1:a]{af}[a]"
+            _fc = f"[0:v]{vf}[v];{_ag}"
         cmd += [
             "-filter_complex", _fc,
             "-map", "[v]", "-map", "[a]",

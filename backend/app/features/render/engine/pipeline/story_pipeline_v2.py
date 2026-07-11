@@ -207,7 +207,7 @@ def run_story_v2(
         # A1: optional LOCAL base video the story is composited over. "" → image-based
         # (default). A missing/invalid path degrades to image-based (Sacred #3 spirit),
         # never aborts. Consumed as the cue base layer in a later phase (A2).
-        base_video_path, base_video_dur = "", 0.0
+        base_video_path, base_video_dur, base_video_has_audio = "", 0.0, False
         _bvp = (getattr(payload, "story_base_video_path", "") or "").strip()
         if _bvp:
             try:
@@ -216,8 +216,13 @@ def run_story_v2(
                     from app.features.render.engine.pipeline.render_pipeline import _probe_video_duration
                     base_video_dur = float(_probe_video_duration(_p) or 0.0)
                     base_video_path = str(_p)
+                    try:                                 # A4: does the base video carry audio?
+                        from app.features.render.engine.audio.mixer import _has_audio_stream
+                        base_video_has_audio = bool(_has_audio_stream(base_video_path))
+                    except Exception:
+                        base_video_has_audio = False
                     _job_log(effective_channel, job_id,
-                             f"Story v2: base video ok ({base_video_dur:.1f}s) — {_p.name}")
+                             f"Story v2: base video ok ({base_video_dur:.1f}s, audio={base_video_has_audio}) — {_p.name}")
                 else:
                     _job_log(effective_channel, job_id,
                              f"Story v2: base video not found, using image-based — {_bvp}")
@@ -325,6 +330,7 @@ def run_story_v2(
             job_id=job_id, effective_channel=effective_channel, shots_dir=shots_dir,
             width=width, height=height, fps=fps, bg_value=bg_value, ffmpeg_threads=_cue_threads,
             base_video_path=base_video_path, base_video_dur=base_video_dur,   # A1 (consumed in A2)
+            base_video_has_audio=base_video_has_audio,                        # A4
         )
 
         # ── 6. Render cues (parallel; libx264/CPU → no NVENC contention) ────

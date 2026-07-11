@@ -148,6 +148,46 @@ def test_no_overlay_without_base_video(monkeypatch, tmp_path):
     assert "/m.png" not in captured["cmd"]
 
 
+# ── A4: base-video audio (source_audio mute/keep/duck) ────────────────────────
+
+def _audio_cue(source_audio="keep"):
+    return SimpleNamespace(start_sec=0.0, end_sec=2.0, crop_from=(0, 0, 1, 1), crop_to=(0, 0, 1, 1),
+                           visual_id="v1", audio_path="", hook=False, hook_text="", text_anchor="auto",
+                           speaker_id="", char_anchor="none", char_scale="medium", char_motion="fade",
+                           source_audio=source_audio)
+
+
+def _fc_for(monkeypatch, tmp_path, source_audio, has_audio=True):
+    captured = _capture(monkeypatch)
+    monkeypatch.setattr(br, "_ok_file", lambda p: p == "/base.mp4" or bool(p) and Path(p).exists())
+    ctx = _video_ctx(tmp_path, {"base_video_has_audio": has_audio})
+    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={}, masters={}))
+    br.render_one_cue(ctx, plan, 1, _audio_cue(source_audio))
+    cmd = captured["cmd"]
+    return cmd[cmd.index("-filter_complex") + 1]
+
+
+def test_source_audio_keep_mixes_original(monkeypatch, tmp_path):
+    fc = _fc_for(monkeypatch, tmp_path, "keep")
+    assert "[0:a]" in fc and "amix=inputs=2" in fc and "sidechaincompress" not in fc
+
+
+def test_source_audio_duck_sidechains_original(monkeypatch, tmp_path):
+    fc = _fc_for(monkeypatch, tmp_path, "duck")
+    assert "sidechaincompress" in fc and "asplit=2" in fc and "amix=inputs=2" in fc
+
+
+def test_source_audio_mute_is_narration_only(monkeypatch, tmp_path):
+    fc = _fc_for(monkeypatch, tmp_path, "mute")
+    assert "[0:a]" not in fc and "amix" not in fc      # narration only (byte-identical to A2/A3)
+
+
+def test_source_audio_ignored_without_base_audio(monkeypatch, tmp_path):
+    # keep requested but the base video has no audio → narration-only, no crash.
+    fc = _fc_for(monkeypatch, tmp_path, "keep", has_audio=False)
+    assert "[0:a]" not in fc and "amix" not in fc
+
+
 def test_no_base_video_keeps_image_kenburns_path(monkeypatch, tmp_path):
     captured = _capture(monkeypatch)
     monkeypatch.setattr(br, "_ok_file", lambda p: p == "/img.png")
