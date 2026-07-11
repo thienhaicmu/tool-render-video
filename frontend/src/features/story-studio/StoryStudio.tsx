@@ -59,6 +59,13 @@ export function StoryStudio() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipAutosave = useRef(false)   // set while opening/new so we don't re-save the loaded state
 
+  // SP3 — undo/redo for PLAN edits (Review). Undo/redo call setPlan directly, so they
+  // never re-record; only edits routed through recordPlan push history.
+  const hist = useRef<{ past: (StoryPlanV2 | null)[]; future: (StoryPlanV2 | null)[] }>({ past: [], future: [] })
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+  const resetHistory = () => { hist.current = { past: [], future: [] }; setCanUndo(false); setCanRedo(false) }
+
   const setKey = <K extends keyof StoryConfig>(k: K, v: StoryConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }))
   const hasPicker = typeof window !== 'undefined' && !!window.electronAPI?.pickDirectory
@@ -113,7 +120,7 @@ export function StoryStudio() {
       skipAutosave.current = true
       setCfg({ ...DEFAULT_STORY_CFG, ...(p.config as Partial<StoryConfig>) })
       setPlan((p.plan as StoryPlanV2 | null) ?? null)
-      setProjectId(p.id); setProjectName(p.name || '')
+      setProjectId(p.id); setProjectName(p.name || ''); resetHistory()
       setError(null); setNotice(null); setJobId(null); setEstTotal(0)
       setPhase(p.plan ? 'review' : 'input'); setSaveTag('saved')
     } catch (e) { fail(e) }
@@ -121,7 +128,7 @@ export function StoryStudio() {
 
   function newProject() {
     skipAutosave.current = true
-    setCfg(DEFAULT_STORY_CFG); setPlan(null); setProjectId(''); setProjectName('')
+    setCfg(DEFAULT_STORY_CFG); setPlan(null); setProjectId(''); setProjectName(''); resetHistory()
     setJobId(null); setError(null); setNotice(null); setEstTotal(0); setSaveTag('idle'); setPhase('input')
   }
 
@@ -130,6 +137,43 @@ export function StoryStudio() {
       await deleteStoryProject(id)
       if (id === projectId) newProject()
       refreshProjects()
+    } catch (e) { fail(e) }
+  }
+
+  // Route Review plan edits through here so each edit is undoable (caps at 40 steps).
+  function recordPlan(next: StoryPlanV2) {
+    hist.current.past.push(plan)
+    if (hist.current.past.length > 40) hist.current.past.shift()
+    hist.current.future = []
+    setCanUndo(true); setCanRedo(false)
+    setPlan(next)
+  }
+  function undoPlan() {
+    if (!hist.current.past.length) return
+    hist.current.future.unshift(plan)
+    const prev = hist.current.past.pop() ?? null
+    setPlan(prev)
+    setCanUndo(hist.current.past.length > 0); setCanRedo(true)
+  }
+  function redoPlan() {
+    if (!hist.current.future.length) return
+    hist.current.past.push(plan)
+    const nxt = hist.current.future.shift() ?? null
+    setPlan(nxt)
+    setCanUndo(true); setCanRedo(hist.current.future.length > 0)
+  }
+
+  // Duplicate the current session into a NEW saved project (FE-only clone).
+  async function duplicateProject() {
+    try {
+      const copyName = (projectName || (vi ? 'Truyện' : 'Story')) + (vi ? ' (bản sao)' : ' (copy)')
+      const r = await saveStoryProject({
+        name: copyName, language: cfg.language, source: cfg.source,
+        config: cfg as unknown as Record<string, unknown>,
+        plan: plan ?? null, status: plan ? 'ready' : 'draft',
+      })
+      skipAutosave.current = true
+      setProjectId(r.id); setProjectName(copyName); refreshProjects()
     } catch (e) { fail(e) }
   }
 
@@ -158,7 +202,7 @@ export function StoryStudio() {
         setError(vi ? 'AI không dựng được kế hoạch. Kiểm tra API key / thử lại.'
                     : 'AI produced no plan. Check API key / retry.')
       } else {
-        setPlan(r.plan)
+        setPlan(r.plan); resetHistory()
         setEstTotal(r.estimated_total_sec || 0)
         if (r.source_truncated) {
           const n = (r.source_chars ?? 0).toLocaleString()
@@ -214,6 +258,8 @@ export function StoryStudio() {
       {phase !== 'monitor' && (
         <ProjectBar
           vi={vi} name={projectName} saveTag={saveTag} projects={projects}
+          canUndo={canUndo && phase === 'review'} canRedo={canRedo && phase === 'review'}
+          onUndo={undoPlan} onRedo={redoPlan} onDuplicate={duplicateProject}
           onName={setProjectName} onOpen={openProject} onNew={newProject}
           onDelete={removeProject} onRefresh={refreshProjects}
         />
@@ -230,7 +276,7 @@ export function StoryStudio() {
       )}
       {phase === 'review' && plan && (
         <PlanReview
-          vi={vi} plan={plan} setPlan={setPlan} estTotal={estTotal} busy={busy}
+          vi={vi} plan={plan} setPlan={recordPlan} estTotal={estTotal} busy={busy}
           artStyle={cfg.artStyle} aspect={cfg.aspect} language={cfg.language}
           imageProvider={cfg.imageProvider} onImageProvider={(p) => setKey('imageProvider', p)}
           onRender={onRender} onBack={reset}

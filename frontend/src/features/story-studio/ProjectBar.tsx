@@ -10,11 +10,17 @@ import type { StoryProjectListItem } from '../../api/storyProjects'
 
 export type SaveTag = 'idle' | 'saving' | 'saved'
 
-export function ProjectBar({ vi, name, saveTag, projects, onName, onOpen, onNew, onDelete, onRefresh }: {
+export function ProjectBar({ vi, name, saveTag, projects, canUndo, canRedo,
+  onUndo, onRedo, onDuplicate, onName, onOpen, onNew, onDelete, onRefresh }: {
   vi: boolean
   name: string
   saveTag: SaveTag
   projects: StoryProjectListItem[]
+  canUndo: boolean
+  canRedo: boolean
+  onUndo: () => void
+  onRedo: () => void
+  onDuplicate: () => void
   onName: (v: string) => void
   onOpen: (id: string) => void
   onNew: () => void
@@ -42,6 +48,10 @@ export function ProjectBar({ vi, name, saveTag, projects, onName, onOpen, onNew,
         placeholder={vi ? 'Tên dự án…' : 'Project name…'}
         onChange={(e) => onName(e.target.value)} />
       <span className="st-project-save st-muted">{tag}</span>
+      <button type="button" className="st-icon-btn" disabled={!canUndo} onClick={onUndo}
+        title={vi ? 'Hoàn tác (sửa kế hoạch)' : 'Undo (plan edit)'}>↶</button>
+      <button type="button" className="st-icon-btn" disabled={!canRedo} onClick={onRedo}
+        title={vi ? 'Làm lại' : 'Redo'}>↷</button>
       <div className="st-project-menu" ref={ref}>
         <button type="button" className="st-btn st-btn--sm"
           onClick={() => { if (!open) onRefresh(); setOpen((o) => !o) }}>
@@ -52,6 +62,10 @@ export function ProjectBar({ vi, name, saveTag, projects, onName, onOpen, onNew,
             <button type="button" className="st-project-item st-project-new"
               onClick={() => { setOpen(false); onNew() }}>
               {vi ? '＋ Dự án mới' : '＋ New project'}
+            </button>
+            <button type="button" className="st-project-item st-project-new"
+              onClick={() => { setOpen(false); onDuplicate() }}>
+              {vi ? '⧉ Nhân bản dự án này' : '⧉ Duplicate this project'}
             </button>
             {projects.length === 0 && (
               <div className="st-project-empty st-muted">{vi ? 'Chưa có dự án đã lưu' : 'No saved projects'}</div>
