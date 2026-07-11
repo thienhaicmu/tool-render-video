@@ -69,13 +69,14 @@ def test_cue_carries_beat_emotion():
     """N4 — build_cues copies beat.emotion onto the Cue (default 'normal'); roundtrips."""
     p = StoryPlan(seed=1, language="vi", visuals=[Visual(id="v1", prompt="x")],
                   characters=[CharacterDef(id="han", name="H")],
-                  timeline=[Beat(id="b1", narration="a", visual_id="v1", speaker_id="han", emotion="angry"),
-                            Beat(id="b2", narration="b", visual_id="v1", speaker_id="han")])  # no emotion
+                  timeline=[Beat(id="b1", narration="a", visual_id="v1", speaker_id="han", emotion="angry", pose="point"),
+                            Beat(id="b2", narration="b", visual_id="v1", speaker_id="han")])  # no emotion/pose
     p.render.beat_audio = {"b1": BeatAudio("a.mp3", 2.0), "b2": BeatAudio("b.mp3", 2.0)}
     p.build_cues()
     assert p.render.cues[0].emotion == "angry" and p.render.cues[1].emotion == "normal"
+    assert p.render.cues[0].pose == "point" and p.render.cues[1].pose == "stand"
     r = StoryPlan.from_json(p.to_json())
-    assert r.render.cues[0].emotion == "angry"
+    assert r.render.cues[0].emotion == "angry" and r.render.cues[0].pose == "point"
 
 
 def test_from_json_none_and_garbage():

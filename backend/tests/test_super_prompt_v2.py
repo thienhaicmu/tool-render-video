@@ -22,6 +22,8 @@ def test_story_prompt_shape_and_params():
     assert '"archetype"' in user and '"scene_kind"' in user
     # Library-pick — "asset" slug field present in the schema
     assert '"asset"' in user
+    # N4+ per-beat pose field
+    assert '"pose"' in user
 
 
 def test_library_catalog_injection():
@@ -71,4 +73,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s6"   # s5: +asset-library hints (region/genre_key/archetype/scene_kind)
+    assert SUPER_PROMPT_VERSION == "s7"   # s5: +asset-library hints (region/genre_key/archetype/scene_kind)

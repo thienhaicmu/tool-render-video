@@ -54,6 +54,8 @@ SOURCE_AUDIO = ("mute", "duck", "keep")
 CHAR_ANCHOR = ("none", "left", "center", "right")
 CHAR_SCALE = ("small", "medium", "large")
 CHAR_MOTION = ("static", "fade", "slide", "float")
+# N4+ per-beat character POSE (matches svg_char builder poses). "stand" = neutral (default).
+POSE = ("stand", "wave", "cheer", "point", "hip")
 # Where on-screen text (hook / future subtitle) sits; "auto" → derived from char_anchor.
 TEXT_ANCHOR = ("auto", "top", "bottom", "left", "right")
 # Pool a "random" transition resolves into (deterministic via seed).
@@ -137,6 +139,7 @@ class Beat:
     pause_after: float = 0.0
     hold_sec: float = 0.0
     transition_in: str = "cut"  # ∈ TRANSITION (only used when the visual changes)
+    pose: str = "stand"         # N4+ ∈ POSE — speaker gesture for this beat (overlay mode)
     hook: bool = False
     hook_text: str = ""
     bgm_mood: str = ""          # ∈ BGM_MOODS — AI-chosen music mood for THIS beat
@@ -189,6 +192,7 @@ class Cue:
     char_scale: str = "medium"  # ∈ CHAR_SCALE — overlay size
     char_motion: str = "fade"   # ∈ CHAR_MOTION — overlay entrance/motion
     emotion: str = "normal"     # N4 — carried from the beat; picks the speaker's emotion master
+    pose: str = "stand"         # N4+ ∈ POSE — carried from the beat; picks the pose master
     source_audio: str = "mute"  # ∈ SOURCE_AUDIO — base-video audio (A4; "mute" = drop it)
 
 
@@ -389,7 +393,7 @@ class StoryPlan:
                     text_anchor=(b.text_anchor or "auto"),
                     speaker_id=(b.speaker_id or ""), char_anchor=(b.char_anchor or "none"),
                     char_scale=(b.char_scale or "medium"), char_motion=(b.char_motion or "fade"),
-                    emotion=(b.emotion or "normal"),
+                    emotion=(b.emotion or "normal"), pose=(b.pose or "stand"),
                     source_audio=(b.source_audio or "mute"),
                 ))
                 t = end
@@ -606,6 +610,7 @@ def _beat_from(x, i) -> Beat:
                 pause_after=_clampf(x.get("pause_after"), 0.0, _PAUSE_MAX, 0.0),
                 hold_sec=max(0.0, _float(x.get("hold_sec"))),
                 transition_in=_norm(x.get("transition_in"), TRANSITION, "cut"),
+                pose=_norm(x.get("pose"), POSE, "stand"),
                 hook=_bool(x.get("hook")), hook_text=_str(x.get("hook_text")),
                 bgm_mood=_norm(x.get("bgm_mood"), BGM_MOODS, ""),
                 bgm_cue=_norm(x.get("bgm_cue"), BGM_CUE, "under"),
@@ -649,6 +654,7 @@ def _render_from(x) -> RenderState:
                     char_scale=_norm(c.get("char_scale"), CHAR_SCALE, "medium"),
                     char_motion=_norm(c.get("char_motion"), CHAR_MOTION, "fade"),
                     emotion=(_str(c.get("emotion")).lower() or "normal"),
+                    pose=_norm(c.get("pose"), POSE, "stand"),
                     source_audio=_norm(c.get("source_audio"), SOURCE_AUDIO, "mute")))
         rs.total_sec = _float(x.get("total_sec"))
     except Exception:
@@ -662,6 +668,6 @@ __all__ = [
     "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE", "BGM_MOODS",
     "REGION", "GENRE_KEY",
     "BGM_CUE", "BGM_INTENSITY", "SOURCE_AUDIO", "CHAR_ANCHOR", "CHAR_SCALE",
-    "CHAR_MOTION", "TEXT_ANCHOR",
+    "CHAR_MOTION", "TEXT_ANCHOR", "POSE",
     "ASPECT_SIZE", "CPS", "CROP_RECT", "TRANSITION_SEC", "MIN_BEAT_SEC", "cps_for",
 ]

@@ -28,7 +28,7 @@ def test_overlay_masters_procedural_per_emotion(monkeypatch, tmp_path):
     monkeypatch.setattr(vs, "update_story_plan", lambda *a, **k: None)
     p = _plan()                                          # no asset → procedural svg_char masters
     vs._generate_overlay_masters(p, tmp_path, job_id="j", effective_channel="c")
-    assert set(p.render.masters.keys()) == {"han:angry", "han:sad"}
+    assert set(p.render.masters.keys()) == {"han:angry:stand", "han:sad:stand"}   # cid:emotion:pose
     for path in p.render.masters.values():
         assert path.endswith(".png")
 
@@ -43,8 +43,24 @@ def test_overlay_masters_library_variant(monkeypatch, tmp_path):
     p = _plan(asset="cn_hero_zzz")
     vs._generate_overlay_masters(p, tmp_path, job_id="j", effective_channel="c")
     # angry → the library _angry variant; sad (no variant) → the base asset
-    assert p.render.masters["han:angry"].endswith("cn_hero_zzz_angry.png")
-    assert p.render.masters["han:sad"].endswith("cn_hero_zzz.png")
+    assert p.render.masters["han:angry:stand"].endswith("cn_hero_zzz_angry.png")
+    assert p.render.masters["han:sad:stand"].endswith("cn_hero_zzz.png")
+
+
+def test_overlay_masters_pose(monkeypatch, tmp_path):
+    # N4+ per-beat POSE — key includes pose; library uses _{pose} variant when present.
+    monkeypatch.setenv("STORY_CHAR_OVERLAY", "1")
+    monkeypatch.setattr(vs, "update_story_plan", lambda *a, **k: None)
+    from app.db import story_asset_repo as R
+    for slug in ("cn_p_zzz", "cn_p_zzz_wave"):
+        f = tmp_path / f"{slug}.png"; f.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 256)
+        R.upsert_asset(path=str(f), kind="character", region="cn", genre="wuxia", slug=slug)
+    p = StoryPlan(region="cn", genre_key="wuxia",
+                  characters=[CharacterDef(id="han", name="H", archetype="swordsman", asset="cn_p_zzz")],
+                  visuals=[Visual(id="v1", prompt="x")],
+                  timeline=[Beat(id="b1", narration="a", visual_id="v1", speaker_id="han", pose="wave")])
+    vs._generate_overlay_masters(p, tmp_path, job_id="j", effective_channel="c")
+    assert p.render.masters["han:normal:wave"].endswith("cn_p_zzz_wave.png")   # pose variant chosen
 
 
 def test_compose_chars_false_is_background_only():

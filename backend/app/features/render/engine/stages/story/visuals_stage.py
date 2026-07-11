@@ -413,6 +413,7 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
 
 
 _LIB_EMOTIONS = ("happy", "angry", "sad", "surprised")   # emotion variants that exist in the library
+_LIB_POSES = ("wave", "cheer", "point", "hip")           # pose variants that exist in the library
 
 
 def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: str) -> None:
@@ -425,11 +426,13 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
     if os.getenv("STORY_CHAR_OVERLAY", "0") != "1":
         return
     try:
-        used: dict[str, set] = {}
+        used: dict[str, set] = {}                            # cid → {(emotion, pose), ...}
         for b in plan.timeline:
             sp = (getattr(b, "speaker_id", "") or "").strip()
             if sp:
-                used.setdefault(sp, set()).add((getattr(b, "emotion", "normal") or "normal").strip().lower())
+                used.setdefault(sp, set()).add((
+                    (getattr(b, "emotion", "normal") or "normal").strip().lower(),
+                    (getattr(b, "pose", "stand") or "stand").strip().lower()))
         if not used:
             return
         from app.features.render.engine.visual.svg_char import build_char, emotion_expr
@@ -439,23 +442,27 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
         region = (getattr(plan, "region", "") or "")
         genre = (getattr(plan, "genre_key", "") or "")
         _out = Path(out_dir)
-        for cid, emos in used.items():
+        for cid, pairs in used.items():
             c = plan.character(cid)
             if c is None:
                 continue
             asset = (getattr(c, "asset", "") or "").strip()
-            for emo in emos:
-                key = f"{cid}:{emo}"
+            for emo, pose in pairs:
+                key = f"{cid}:{emo}:{pose}"
                 if plan.render.masters.get(key):
                     continue
                 path = None
-                if asset:                                   # library-picked → emotion variant → base
+                if asset:                                   # library: pose variant → emotion variant → base
+                    vp = pose if pose in _LIB_POSES else ""
                     ve = emo if emo in _LIB_EMOTIONS else ""
-                    path = (get_by_slug(f"{asset}_{ve}", "character") if ve else None) or get_by_slug(asset, "character")
-                if not path:                                # procedural chibi with this emotion
+                    path = (get_by_slug(f"{asset}_{vp}", "character") if vp else None) \
+                        or (get_by_slug(f"{asset}_{ve}", "character") if ve else None) \
+                        or get_by_slug(asset, "character")
+                if not path:                                # procedural chibi with this emotion + pose
                     opts = preset(getattr(c, "archetype", "") or "", region, genre, getattr(c, "gender", "") or "")
                     opts["expr"] = emotion_expr(emo)
-                    path = save_svg_png(build_char(opts), str(_out / f"master_{cid}_{emo}.png"), 1024, 1536)
+                    opts["pose"] = pose
+                    path = save_svg_png(build_char(opts), str(_out / f"master_{cid}_{emo}_{pose}.png"), 1024, 1536)
                 if not path:
                     continue
                 plan.render.masters[key] = path

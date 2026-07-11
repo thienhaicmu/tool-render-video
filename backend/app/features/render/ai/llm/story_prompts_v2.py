@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s6"   # s6: +library-pick (character/setting "asset" slug + ASSET LIBRARY catalog); s5: asset-library hints; s4: per-beat bgm_cue/intensity, char_*, text_anchor
+SUPER_PROMPT_VERSION = "s7"   # s7: +per-beat pose; s6: library-pick (asset slug + catalog); s5: asset-library hints; s4: per-beat bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -101,6 +101,7 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
       "char_anchor": "none|left|center|right",
       "char_scale": "small|medium|large",
       "char_motion": "static|fade|slide|float",
+      "pose": "stand|wave|cheer|point|hip",
       "text_anchor": "auto|top|bottom|left|right",
       "hook": false, "hook_text": "" }
   ]
@@ -133,6 +134,8 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
         "none for a quiet beat; under otherwise. bgm_intensity = low|med|high. LABELS only, never seconds.\n"
         "10. char_anchor = where the SPEAKING character stands: none|left|center|right — set none when "
         "speaker_id is '' (narrator). char_scale = small|medium|large; char_motion = static|fade|slide|float. "
+        "pose = the speaker's gesture THIS beat: stand (neutral) | wave (greeting) | cheer (excited) | "
+        "point (accusing/indicating) | hip (defiant) — use stand unless the action clearly calls for one. "
         "source_audio = mute|duck|keep (how a base video's own audio is treated).\n"
         "11. text_anchor = where on-screen text sits: auto|top|bottom|left|right. Use auto normally; pick a "
         "side OPPOSITE char_anchor so text never covers the character.\n"

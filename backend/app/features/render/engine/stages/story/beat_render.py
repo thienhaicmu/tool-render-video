@@ -247,7 +247,9 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         if _sp and ((use_video and _anchor != "none") or _want_img):
             _masters = (getattr(plan.render, "masters", None) or {})
             _emo = (getattr(cue, "emotion", "normal") or "normal").strip().lower()
-            _m = _masters.get(f"{_sp}:{_emo}") or _masters.get(_sp)
+            _pose = (getattr(cue, "pose", "stand") or "stand").strip().lower()
+            _m = (_masters.get(f"{_sp}:{_emo}:{_pose}") or _masters.get(f"{_sp}:{_emo}")
+                  or _masters.get(_sp))
             if _ok_file(_m):
                 overlay_master = _m
 
