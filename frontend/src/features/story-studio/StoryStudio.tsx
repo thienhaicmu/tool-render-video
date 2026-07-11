@@ -12,7 +12,7 @@
  * from content-studio (each studio owns its screens; the base is shared).
  * F1 scaffolds the shell + state; F2/F3/F4 flesh out the three screens.
  */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import './StoryStudio.css'
 import type { RenderRequest } from '@/types/api'
 import { StudioScreen, StudioStepper } from '../../components/studio'
@@ -22,12 +22,17 @@ import { useUIStore } from '../../stores/uiStore'
 import { getDefaultOutputDir } from '../../api/outputDir'
 import { planStory, type StoryPlanV2 } from '../../api/story'
 import {
+  listStoryProjects, saveStoryProject, getStoryProject, deleteStoryProject,
+  type StoryProjectListItem,
+} from '../../api/storyProjects'
+import {
   DEFAULT_STORY_CFG, VOICE_LOCALE, type StoryConfig, type StoryPhase,
 } from './types'
 import { InputScreen } from './InputScreen'
 import { PlanReview } from './PlanReview'
 import { StoryMonitor } from './StoryMonitor'
 import { StoryDirectorConsole } from './StoryDirectorConsole'
+import { ProjectBar, type SaveTag } from './ProjectBar'
 
 const STEP: Record<StoryPhase, number> = { input: 1, review: 2, monitor: 3 }
 
@@ -45,6 +50,14 @@ export function StoryStudio() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  // SP2 — project persistence (save / autosave / open / delete).
+  const [projectId, setProjectId] = useState('')
+  const [projectName, setProjectName] = useState('')
+  const [projects, setProjects] = useState<StoryProjectListItem[]>([])
+  const [saveTag, setSaveTag] = useState<SaveTag>('idle')
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const skipAutosave = useRef(false)   // set while opening/new so we don't re-save the loaded state
 
   const setKey = <K extends keyof StoryConfig>(k: K, v: StoryConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }))
@@ -66,6 +79,58 @@ export function StoryStudio() {
   async function pickBaseVideo() {
     const f = await window.electronAPI?.pickVideoFile?.()
     if (f) setKey('baseVideoPath', f)
+  }
+
+  // ── SP2: project list + autosave + open/new/delete ──────────────────────────
+  const refreshProjects = () => void listStoryProjects().then((r) => setProjects(r.projects || [])).catch(() => {})
+  useEffect(() => { refreshProjects() }, [])
+
+  const hasContent = !!(cfg.chapterText.trim() || cfg.idea.trim() || plan)
+  useEffect(() => {
+    if (skipAutosave.current) { skipAutosave.current = false; return }
+    if (!hasContent || phase === 'monitor') return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    setSaveTag('saving')
+    saveTimer.current = setTimeout(() => {
+      void saveStoryProject({
+        id: projectId || undefined,
+        name: projectName || (cfg.source === 'idea' ? cfg.idea : cfg.chapterText).trim().slice(0, 40),
+        language: cfg.language, source: cfg.source,
+        config: cfg as unknown as Record<string, unknown>,
+        plan: plan ?? null, status: plan ? 'ready' : 'draft',
+      }).then((r) => {
+        if (!projectId) setProjectId(r.id)
+        setSaveTag('saved'); refreshProjects()
+      }).catch(() => setSaveTag('idle'))
+    }, 1500)
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg, plan, projectName])
+
+  async function openProject(id: string) {
+    try {
+      const p = await getStoryProject(id)
+      skipAutosave.current = true
+      setCfg({ ...DEFAULT_STORY_CFG, ...(p.config as Partial<StoryConfig>) })
+      setPlan((p.plan as StoryPlanV2 | null) ?? null)
+      setProjectId(p.id); setProjectName(p.name || '')
+      setError(null); setNotice(null); setJobId(null); setEstTotal(0)
+      setPhase(p.plan ? 'review' : 'input'); setSaveTag('saved')
+    } catch (e) { fail(e) }
+  }
+
+  function newProject() {
+    skipAutosave.current = true
+    setCfg(DEFAULT_STORY_CFG); setPlan(null); setProjectId(''); setProjectName('')
+    setJobId(null); setError(null); setNotice(null); setEstTotal(0); setSaveTag('idle'); setPhase('input')
+  }
+
+  async function removeProject(id: string) {
+    try {
+      await deleteStoryProject(id)
+      if (id === projectId) newProject()
+      refreshProjects()
+    } catch (e) { fail(e) }
   }
 
   function fail(e: unknown) { setError(e instanceof Error ? e.message : String(e)) }
@@ -146,6 +211,13 @@ export function StoryStudio() {
 
   return (
     <StoryStudioShell vi={vi} step={STEP[phase]} steps={steps}>
+      {phase !== 'monitor' && (
+        <ProjectBar
+          vi={vi} name={projectName} saveTag={saveTag} projects={projects}
+          onName={setProjectName} onOpen={openProject} onNew={newProject}
+          onDelete={removeProject} onRefresh={refreshProjects}
+        />
+      )}
       {error && <div className="st-alert st-alert--fail" role="alert">{error}</div>}
       {notice && <div className="st-alert st-alert--warn" role="status">{notice}</div>}
       {busy && phase === 'input' && <StoryDirectorConsole vi={vi} source={cfg.source} />}
