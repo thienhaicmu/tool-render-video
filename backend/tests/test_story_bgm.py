@@ -115,7 +115,7 @@ def test_super_prompt_carries_bgm_mood_vocab():
     from app.features.render.ai.llm.story_prompts_v2 import (
         build_super_story_prompt, build_super_idea_prompt, SUPER_PROMPT_VERSION, _MOOD_VOCAB,
     )
-    assert SUPER_PROMPT_VERSION == "s3"
+    assert SUPER_PROMPT_VERSION == "s4"
     assert "default" not in _MOOD_VOCAB.split("|")   # "default" is a fallback folder, not a choice
     _, user = build_super_story_prompt("once upon a time", "vi")
     assert "bgm_mood" in user
@@ -129,3 +129,50 @@ def test_super_prompt_carries_bgm_mood_vocab():
 def test_bgm_moods_constant_shape():
     assert "default" in BGM_MOODS
     assert "tense" in BGM_MOODS and "epic" in BGM_MOODS
+
+
+# ── s4: placed BGM (bgm_cue windows + intensity gain) ─────────────────────────
+
+def _cued_plan(cues):
+    """Build a 3-beat plan then override each cue's (bgm_cue, bgm_intensity)."""
+    p = _plan()
+    for c, (cue, inten) in zip(p.render.cues, cues):
+        c.bgm_cue, c.bgm_intensity = cue, inten
+    return p
+
+
+def test_bgm_cues_under_merges_same_mood():
+    # b1+b2 tense/under adjacent → merged into one window; b3 hopeful separate.
+    p = _cued_plan([("under", "med"), ("under", "med"), ("under", "high")])
+    segs = p.bgm_cues()
+    assert len(segs) == 2
+    assert segs[0][0] == "tense" and segs[0][3] == -18.0     # med gain
+    assert segs[1][0] == "hopeful" and segs[1][3] == -12.0   # high gain
+    # merged window spans b1.start .. b2.end
+    assert segs[0][1] == p.render.cues[0].start_sec and segs[0][2] == p.render.cues[1].end_sec
+
+
+def test_bgm_cue_intro_outro_windows():
+    from app.domain.story_plan_v2 import BGM_EDGE_SEC
+    p = _cued_plan([("intro", "low"), ("none", "med"), ("outro", "med")])
+    segs = p.bgm_cues()
+    # b2 none → skipped
+    assert [s[0] for s in segs] == ["tense", "hopeful"]
+    c1, c3 = p.render.cues[0], p.render.cues[2]
+    intro = segs[0]; outro = segs[1]
+    assert intro[3] == -24.0                                   # low gain
+    assert abs(intro[2] - (max(0.0, c1.start_sec) + BGM_EDGE_SEC)) < 0.01   # intro window length
+    assert abs(outro[1] - (c3.end_sec - BGM_EDGE_SEC)) < 0.01              # outro starts near end
+
+
+def test_placed_bgm_track_none_without_music(tmp_path):
+    from app.features.render.engine.audio.mixer import build_placed_bgm_track
+    # pick_fn returns None → no music resolved → None (no ffmpeg call).
+    out = build_placed_bgm_track([("tense", 0.0, 3.0, -18.0)], 5.0,
+                                 str(tmp_path / "t.wav"), pick_fn=lambda m: None)
+    assert out is None
+
+
+def test_placed_bgm_track_empty_placements(tmp_path):
+    from app.features.render.engine.audio.mixer import build_placed_bgm_track
+    assert build_placed_bgm_track([], 5.0, str(tmp_path / "t.wav")) is None

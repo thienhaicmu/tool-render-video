@@ -54,4 +54,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s3"   # s3: per-beat bgm_mood on timeline
+    assert SUPER_PROMPT_VERSION == "s4"   # s4: bgm_cue/intensity, source_audio, char_*, text_anchor

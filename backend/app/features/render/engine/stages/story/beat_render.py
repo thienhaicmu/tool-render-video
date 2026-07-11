@@ -90,12 +90,28 @@ def _kenburns_vf(crop_from, crop_to, width: int, height: int, fps: float, dur: f
     )
 
 
+# s4 text_anchor → drawtext (x, y) expressions. "auto" keeps the historical upper-third
+# placement (h*0.10, centered) so a pre-s4 cue is byte-identical. left/right sit mid-height
+# on a side so the text clears a character overlaid on the opposite side.
+def _anchor_xy(text_anchor: str) -> "tuple[str, str]":
+    a = (text_anchor or "auto").strip().lower()
+    if a == "top":
+        return "(w-text_w)/2", "h*0.08"
+    if a == "bottom":
+        return "(w-text_w)/2", "h*0.82"
+    if a == "left":
+        return "w*0.06", "(h-text_h)/2"
+    if a == "right":
+        return "w-text_w-w*0.06", "(h-text_h)/2"
+    return "(w-text_w)/2", "h*0.10"          # auto (default, backward-compat)
+
+
 def _drawtext(text: str, width: int, height: int, *, fs: int, family: str, bold: bool,
-              y: str, box_alpha: float, uniq: str = "") -> str:
+              y: str, box_alpha: float, uniq: str = "", x: str = "(w-text_w)/2") -> str:
     """Build ONE drawtext filter for ``text`` (via a textfile so Vietnamese / quotes /
-    colons never need inline escaping). Centered horizontally; ``y`` is a drawtext
-    expression. ``uniq`` (e.g. the cue's part_no) namespaces the textfile so two cues
-    with IDENTICAL text can't race on the same file when rendered in parallel.
+    colons never need inline escaping). ``x``/``y`` are drawtext expressions (from the
+    cue's text_anchor). ``uniq`` (e.g. the cue's part_no) namespaces the textfile so two
+    cues with IDENTICAL text can't race on the same file when rendered in parallel.
     Returns "" on any failure (never breaks the render)."""
     try:
         t = (text or "").strip()
@@ -113,7 +129,7 @@ def _drawtext(text: str, width: int, height: int, *, fs: int, family: str, bold:
             "fontcolor=white", f"fontsize={fs}",
             "box=1", f"boxcolor=black@{box_alpha:.2f}", f"boxborderw={max(8, int(fs * 0.35))}",
             "borderw=2", "bordercolor=black@0.9", "line_spacing=8",
-            "x=(w-text_w)/2", f"y={y}",
+            f"x={x}", f"y={y}",
         ]
         return "drawtext=" + ":".join(opts)
     except Exception as exc:
@@ -122,17 +138,18 @@ def _drawtext(text: str, width: int, height: int, *, fs: int, family: str, bold:
 
 
 def _overlay_suffix(cue, width: int, height: int, part_no: int = 0) -> str:
-    """Filtergraph suffix (leading comma) that burns the cue's hook title (upper
-    third). On-screen text is HOOK-ONLY — no full-video subtitle. "" when nothing to
-    burn. ``part_no`` namespaces the drawtext textfiles so parallel cues never share
-    a file."""
+    """Filtergraph suffix (leading comma) that burns the cue's hook title at its
+    ``text_anchor`` (s4; default auto = upper third). On-screen text is HOOK-ONLY — no
+    full-video subtitle. "" when nothing to burn. ``part_no`` namespaces the drawtext
+    textfiles so parallel cues never share a file."""
     try:
         parts: list[str] = []
         _u = f"{int(part_no):04d}_"
         if getattr(cue, "hook", False) and (getattr(cue, "hook_text", "") or "").strip():
+            _x, _y = _anchor_xy(getattr(cue, "text_anchor", "auto"))
             parts.append(_drawtext(
                 cue.hook_text, width, height, fs=max(28, int(height * 0.060)),
-                family="Anton", bold=True, y="h*0.10", box_alpha=0.55, uniq=_u + "h"))
+                family="Anton", bold=True, y=_y, x=_x, box_alpha=0.55, uniq=_u + "h"))
         parts = [p for p in parts if p]
         return ("," + ",".join(parts)) if parts else ""
     except Exception:

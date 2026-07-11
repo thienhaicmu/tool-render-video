@@ -367,20 +367,30 @@ def _mix_scene_bgm(job_id, effective_channel, plan, final_out, work_dir) -> None
     nên file giao được validate kèm nhạc (Sacred Contract #8)."""
     tmp = str(final_out) + ".bgm.mp4"
     try:
-        segments = plan.bgm_scenes()
-        if not segments:
-            return
         total = float(getattr(plan.render, "total_sec", 0.0) or 0.0)
-        from app.features.render.engine.audio.mixer import build_scene_bgm_track, mix_with_bgm
+        from app.features.render.engine.audio.mixer import (
+            build_placed_bgm_track, build_scene_bgm_track, mix_with_bgm,
+        )
         bgm_dir = Path(work_dir) / "story_bgm"
-        track = build_scene_bgm_track(segments, total, str(bgm_dir / "bgm_timeline.wav"))
+        # s4 PLACED BGM (default): music sits at the AI-chosen spot in each beat
+        # (intro/outro/under/none). STORY_BGM_PLACED=0 → legacy continuous mood-runs.
+        if os.getenv("STORY_BGM_PLACED", "1") == "1":
+            segments = plan.bgm_cues()
+            if not segments:
+                return
+            track = build_placed_bgm_track(segments, total, str(bgm_dir / "bgm_timeline.wav"))
+        else:
+            segments = plan.bgm_scenes()
+            if not segments:
+                return
+            track = build_scene_bgm_track(segments, total, str(bgm_dir / "bgm_timeline.wav"))
         if not track:
             _job_log(effective_channel, job_id,
                      "Story v2: no BGM (no music files for the planned moods — see BGM_DIR)")
             return
         mix_with_bgm(video_path=str(final_out), bgm_path=track, output_path=tmp, duck=True)
         Path(tmp).replace(final_out)
-        moods = sorted({(m or "default") for m, _s, _e in segments})
+        moods = sorted({(seg[0] or "default") for seg in segments})
         _emit_render_event(
             channel_code=effective_channel, job_id=job_id, event="story.bgm.ready",
             level="INFO", message=f"Background music mixed ({len(segments)} scene(s))",

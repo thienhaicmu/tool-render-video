@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s3"   # s3: per-beat bgm_mood on timeline
+SUPER_PROMPT_VERSION = "s4"   # s4: per-beat bgm_cue/intensity, source_audio, char_*, text_anchor
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -89,6 +89,13 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
       "motion": "zoom_in|zoom_out|pan_left|pan_right|pan_up|pan_down|static",
       "transition_in": "cut|fade|slide|zoom|flash|to_black",
       "bgm_mood": "<MOOD_VOCAB>",
+      "bgm_cue": "under|intro|outro|none",
+      "bgm_intensity": "low|med|high",
+      "source_audio": "mute|duck|keep",
+      "char_anchor": "none|left|center|right",
+      "char_scale": "small|medium|large",
+      "char_motion": "static|fade|slide|float",
+      "text_anchor": "auto|top|bottom|left|right",
       "hook": false, "hook_text": "" }
   ]
 }"""
@@ -115,7 +122,15 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
         f"7. {hook_rule}\n"
         f"8. Each timeline beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood "
         "matching THAT beat's emotional tone (a creative label only, NOT an audio file/timestamp).\n"
-        "9. DO NOT output any render/asset/path/timestamp/duration/seconds field.\n"
+        "9. bgm_cue = WHERE the music sits in the beat: under (whole beat) | intro (start only) | "
+        "outro (end only) | none (silence). Use intro on a scene's FIRST beat, outro on its LAST, "
+        "none for a quiet beat; under otherwise. bgm_intensity = low|med|high. LABELS only, never seconds.\n"
+        "10. char_anchor = where the SPEAKING character stands: none|left|center|right — set none when "
+        "speaker_id is '' (narrator). char_scale = small|medium|large; char_motion = static|fade|slide|float. "
+        "source_audio = mute|duck|keep (how a base video's own audio is treated).\n"
+        "11. text_anchor = where on-screen text sits: auto|top|bottom|left|right. Use auto normally; pick a "
+        "side OPPOSITE char_anchor so text never covers the character.\n"
+        "12. DO NOT output any render/asset/path/timestamp/duration/seconds field.\n"
         "═══ SELF-CHECK before answering ═══\n"
         "Verify every visual_id / speaker_id / character_ids exists in the arrays above; if not, fix it.\n"
         "═══ OUTPUT JSON ═══"

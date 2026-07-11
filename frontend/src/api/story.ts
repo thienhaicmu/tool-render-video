@@ -155,6 +155,8 @@ export interface ReferenceSheetRequest {
   name?: string
   description?: string
   art_style?: string
+  // true → cutout-ready CHARACTER MASTER (transparent PNG) for overlay/preview.
+  transparent?: boolean
 }
 
 export interface JobStoryPlanResponse {
@@ -187,9 +189,10 @@ export const previewVisual = (req: VisualPreviewRequest) =>
 export const previewNarration = (req: NarrationPreviewRequest) =>
   post<NarrationPreviewResponse>('/api/story/narration/preview', req)
 
-/** Generate a canonical Character Reference Sheet (optional consistency aid). */
+/** Generate a Character Reference Sheet, or (transparent=true) a cutout-ready
+ * character master. Returns the durable path and, for a master, a viewable url. */
 export const generateReferenceSheet = (req: ReferenceSheetRequest) =>
-  post<{ path: string }>('/api/story/character/reference-sheet', req)
+  post<{ path: string; url?: string }>('/api/story/character/reference-sheet', req)
 
 /** Reattach: fetch a job's persisted StoryPlan v2 (polling fallback). */
 export const fetchJobStoryPlan = (jobId: string) =>

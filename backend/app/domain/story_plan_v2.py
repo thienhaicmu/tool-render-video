@@ -38,6 +38,19 @@ SUBTITLE_MODE = ("hook_only", "full", "off")
 # Kept in sync with story_prompts_v2 (the AI vocab) and scripts/fetch_free_bgm.py.
 BGM_MOODS = ("tense", "calm", "epic", "sad", "romantic", "mysterious",
              "action", "hopeful", "dark", "default")
+# ── s4 per-beat AI vocab (all LABELS — pipeline resolves seconds/pixels) ──────
+# WHERE the music sits inside a beat's window ("under" = the whole beat, the
+# pre-s4 continuous behaviour → backward-compat default).
+BGM_CUE = ("under", "intro", "outro", "none")
+BGM_INTENSITY = ("low", "med", "high")          # → BGM gain (see bgm_cues)
+# How to treat a base video's own audio (consumed once existing-video input lands).
+SOURCE_AUDIO = ("mute", "duck", "keep")
+# Overlay placement of the speaking character (consumed once overlay compositing lands).
+CHAR_ANCHOR = ("none", "left", "center", "right")
+CHAR_SCALE = ("small", "medium", "large")
+CHAR_MOTION = ("static", "fade", "slide", "float")
+# Where on-screen text (hook / future subtitle) sits; "auto" → derived from char_anchor.
+TEXT_ANCHOR = ("auto", "top", "bottom", "left", "right")
 # Pool a "random" transition resolves into (deterministic via seed).
 _RANDOM_TRANSITIONS = ("fade", "slide", "zoom", "flash")
 
@@ -47,6 +60,10 @@ CPS = {"vi": 15.0, "en": 14.0, "ja": 8.0, "ko": 9.0}
 _CPS_DEFAULT = 14.0
 TRANSITION_SEC = 0.4
 MIN_BEAT_SEC = 1.5
+# s4 placed-BGM: how long an intro/outro sting lasts inside a beat, and the dB gain
+# per bgm_intensity (fed to mixer.build_placed_bgm_track).
+BGM_EDGE_SEC = 1.5
+_BGM_GAIN = {"low": -24.0, "med": -18.0, "high": -12.0}
 # Normalised crop rect (x, y, w, h) ∈ [0..1] on the source image, per FOCUS region.
 # w == h fraction on purpose: the source image aspect == the output aspect
 # (ASPECT_SIZE), so an equal-fraction crop stays the SAME aspect → no distortion
@@ -114,6 +131,14 @@ class Beat:
     hook: bool = False
     hook_text: str = ""
     bgm_mood: str = ""          # ∈ BGM_MOODS — AI-chosen music mood for THIS beat
+    # ── s4 per-beat AI decisions (labels; defaults reproduce pre-s4 behaviour) ──
+    bgm_cue: str = "under"      # ∈ BGM_CUE — WHERE music sits in this beat
+    bgm_intensity: str = "med"  # ∈ BGM_INTENSITY — music loudness
+    source_audio: str = "mute"  # ∈ SOURCE_AUDIO — base-video audio (consumed later)
+    char_anchor: str = "none"   # ∈ CHAR_ANCHOR — speaker overlay position (consumed later)
+    char_scale: str = "medium"  # ∈ CHAR_SCALE — speaker overlay size (consumed later)
+    char_motion: str = "fade"   # ∈ CHAR_MOTION — speaker overlay entrance (consumed later)
+    text_anchor: str = "auto"   # ∈ TEXT_ANCHOR — on-screen text placement
 
 
 # ── Render-state dataclasses (pipeline-filled) ───────────────────────────────
@@ -145,6 +170,9 @@ class Cue:
     hook_text: str = ""
     audio_path: str = ""
     bgm_mood: str = ""          # ∈ BGM_MOODS — carried from the beat for per-beat BGM
+    bgm_cue: str = "under"      # ∈ BGM_CUE — carried from the beat (placed-BGM)
+    bgm_intensity: str = "med"  # ∈ BGM_INTENSITY — carried from the beat
+    text_anchor: str = "auto"   # ∈ TEXT_ANCHOR — carried from the beat (hook placement)
 
 
 @dataclass
@@ -337,6 +365,8 @@ class StoryPlan:
                     transition=trans, transition_sec=tsec, hook=bool(b.hook), hook_text=b.hook_text,
                     audio_path=(ba.path if ba else ""),
                     bgm_mood=(b.bgm_mood or ""),
+                    bgm_cue=(b.bgm_cue or "under"), bgm_intensity=(b.bgm_intensity or "med"),
+                    text_anchor=(b.text_anchor or "auto"),
                 ))
                 t = end
                 prev_vid = b.visual_id
@@ -378,6 +408,39 @@ class StoryPlan:
         except Exception:
             return out
         return out
+
+    def bgm_cues(self) -> list[tuple]:
+        """[(mood, start_sec, end_sec, gain_db), ...] — PLACED background music from the
+        per-beat ``bgm_cue`` label (s4): ``under`` = whole cue, ``intro`` = first
+        BGM_EDGE_SEC, ``outro`` = last BGM_EDGE_SEC, ``none`` = skipped. ``bgm_intensity``
+        → gain_db. Consecutive continuous windows with the SAME mood+gain are merged so
+        an under-run plays as ONE clip (no per-beat re-fade). start clamped ≥0. Pure,
+        never raises. Fed to mixer.build_placed_bgm_track."""
+        raw: list[list] = []
+        try:
+            for c in self.render.cues:
+                kind = (getattr(c, "bgm_cue", "under") or "under")
+                if kind == "none":
+                    continue
+                s = max(0.0, float(c.start_sec))
+                e = float(c.end_sec)
+                if e <= s:
+                    continue
+                gain = _BGM_GAIN.get((getattr(c, "bgm_intensity", "med") or "med"), -18.0)
+                if kind == "intro":
+                    e = min(e, s + BGM_EDGE_SEC)
+                elif kind == "outro":
+                    s = max(s, e - BGM_EDGE_SEC)
+                if e <= s:
+                    continue
+                mood = (c.bgm_mood or "")
+                if raw and raw[-1][0] == mood and raw[-1][3] == gain and s - raw[-1][2] <= 0.05:
+                    raw[-1][2] = e                      # merge adjacent same-mood run
+                else:
+                    raw.append([mood, s, e, gain])
+        except Exception:
+            return [(m, round(s, 3), round(e, 3), g) for m, s, e, g in raw]
+        return [(m, round(s, 3), round(e, 3), g) for m, s, e, g in raw]
 
     # ── Serialisation ────────────────────────────────────────────────────
     def to_json(self) -> str:
@@ -516,7 +579,14 @@ def _beat_from(x, i) -> Beat:
                 hold_sec=max(0.0, _float(x.get("hold_sec"))),
                 transition_in=_norm(x.get("transition_in"), TRANSITION, "cut"),
                 hook=_bool(x.get("hook")), hook_text=_str(x.get("hook_text")),
-                bgm_mood=_norm(x.get("bgm_mood"), BGM_MOODS, ""))
+                bgm_mood=_norm(x.get("bgm_mood"), BGM_MOODS, ""),
+                bgm_cue=_norm(x.get("bgm_cue"), BGM_CUE, "under"),
+                bgm_intensity=_norm(x.get("bgm_intensity"), BGM_INTENSITY, "med"),
+                source_audio=_norm(x.get("source_audio"), SOURCE_AUDIO, "mute"),
+                char_anchor=_norm(x.get("char_anchor"), CHAR_ANCHOR, "none"),
+                char_scale=_norm(x.get("char_scale"), CHAR_SCALE, "medium"),
+                char_motion=_norm(x.get("char_motion"), CHAR_MOTION, "fade"),
+                text_anchor=_norm(x.get("text_anchor"), TEXT_ANCHOR, "auto"))
 def _render_from(x) -> RenderState:
     if not isinstance(x, dict): return RenderState()
     rs = RenderState()
@@ -541,7 +611,10 @@ def _render_from(x) -> RenderState:
                     transition=_norm(c.get("transition"), TRANSITION, "cut"), transition_sec=_float(c.get("transition_sec")),
                     hook=_bool(c.get("hook")), hook_text=_str(c.get("hook_text")),
                     audio_path=_str(c.get("audio_path")),
-                    bgm_mood=_norm(c.get("bgm_mood"), BGM_MOODS, "")))
+                    bgm_mood=_norm(c.get("bgm_mood"), BGM_MOODS, ""),
+                    bgm_cue=_norm(c.get("bgm_cue"), BGM_CUE, "under"),
+                    bgm_intensity=_norm(c.get("bgm_intensity"), BGM_INTENSITY, "med"),
+                    text_anchor=_norm(c.get("text_anchor"), TEXT_ANCHOR, "auto")))
         rs.total_sec = _float(x.get("total_sec"))
     except Exception:
         pass
@@ -552,5 +625,7 @@ __all__ = [
     "StoryPlan", "CharacterDef", "SettingDef", "Visual", "Beat",
     "Word", "BeatAudio", "Cue", "RenderState",
     "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE", "BGM_MOODS",
+    "BGM_CUE", "BGM_INTENSITY", "SOURCE_AUDIO", "CHAR_ANCHOR", "CHAR_SCALE",
+    "CHAR_MOTION", "TEXT_ANCHOR",
     "ASPECT_SIZE", "CPS", "CROP_RECT", "TRANSITION_SEC", "MIN_BEAT_SEC", "cps_for",
 ]

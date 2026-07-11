@@ -63,6 +63,8 @@
 }
 .st-char-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .st-char-side { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
+.st-char-master { margin-top: var(--space-1); width: 88px; border-radius: var(--radius-sm); overflow: hidden; }
+.st-char-master img { display: block; width: 100%; height: auto; }
 
 /* Key-visual grid. */
 .st-visual-grid {

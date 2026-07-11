@@ -65,6 +65,7 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, onChang
   onVoiceChange: (cid: string, engine: string, voiceId: string) => void
 }) {
   const [sheet, setSheet] = useState<'idle' | 'busy' | 'done' | 'err'>('idle')
+  const [master, setMaster] = useState<{ st: 'idle' | 'busy' | 'err'; url: string }>({ st: 'idle', url: '' })
   const [voiceState, setVoiceState] = useState<'idle' | 'busy' | 'playing' | 'err'>('idle')
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -76,6 +77,19 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, onChang
       })
       setSheet(r.path ? 'done' : 'err')
     } catch { setSheet('err') }
+  }
+
+  // Cutout-ready character master (transparent PNG) — shown on a checkerboard so the
+  // transparent areas are visible. One master/character, reusable for overlay.
+  async function makeMaster() {
+    if (master.st === 'busy') return
+    setMaster({ st: 'busy', url: '' })
+    try {
+      const r = await generateReferenceSheet({
+        name: c.name, description: c.canonical_desc, art_style: artStyle, transparent: true,
+      })
+      setMaster(r.url ? { st: 'idle', url: r.url } : { st: 'err', url: '' })
+    } catch { setMaster({ st: 'err', url: '' }) }
   }
 
   async function hearVoice() {
@@ -143,6 +157,19 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, onChang
             : sheet === 'err' ? (vi ? '⚠ Thử lại' : '⚠ Retry')
             : (vi ? 'Ảnh chuẩn' : 'Ref sheet')}
         </button>
+        <button type="button" className="st-btn st-btn--sm" disabled={master.st === 'busy'} onClick={makeMaster}
+          title={vi ? 'Ảnh nhân vật nền trong (để chèn lên video)' : 'Transparent character master (for overlay)'}>
+          {master.st === 'busy' ? (vi ? 'Đang tạo…' : 'Making…')
+            : master.st === 'err' ? (vi ? '⚠ Thử lại' : '⚠ Retry')
+            : master.url ? (vi ? '↻ Nhân vật' : '↻ Master')
+            : (vi ? '🧍 Nhân vật' : '🧍 Master')}
+        </button>
+        {master.url && (
+          <div className="st-char-master"
+            style={{ background: 'repeating-conic-gradient(#c8c8c8 0% 25%, #fff 0% 50%) 50% / 14px 14px' }}>
+            <img src={`${BASE_URL}${master.url}`} alt={c.name || c.id} />
+          </div>
+        )}
       </div>
     </div>
   )
