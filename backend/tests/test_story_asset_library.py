@@ -134,3 +134,59 @@ def test_scan_endpoint_indexes(tmp_path, monkeypatch):
     hit = [a for a in list_story_assets(kind="character")["assets"] if a["slug"] == "jp_scan_test"]
     assert hit
     repo.delete_asset(hit[0]["id"])
+
+
+# ── AL5: match_asset (auto-assign) + asset_sources.json provenance manifest ────
+
+def test_match_asset_ranks_by_name(tmp_path):
+    f1 = tmp_path / "jp_haruto.png"; f1.write_bytes(b"\x89PNG")
+    f2 = tmp_path / "jp_yuki.png"; f2.write_bytes(b"\x89PNG")
+    a = repo.upsert_asset(path=str(f1), kind="character", region="jp", slug="jp_haruto",
+                          name="Haruto", transparent=True)
+    b = repo.upsert_asset(path=str(f2), kind="character", region="jp", slug="jp_yuki",
+                          name="Yuki", transparent=True)
+    try:
+        assert repo.match_asset("character", "Haruto") == str(f1)     # exact name → that file
+        assert repo.match_asset("character", "Yuki", transparent_only=True) == str(f2)
+        assert repo.match_asset("character", "Nobody") is None        # no signal → None (no random sub)
+        # kind scoping: a background never matches a character lookup
+        assert repo.match_asset("background", "Haruto") is None
+    finally:
+        repo.delete_asset(a); repo.delete_asset(b)
+
+
+def test_match_asset_skips_missing_file(tmp_path):
+    gone = tmp_path / "ghost.png"; gone.write_bytes(b"\x89PNG")
+    a = repo.upsert_asset(path=str(gone), kind="character", slug="ghost", name="Ghost",
+                          transparent=True)
+    try:
+        gone.unlink()                                    # row exists but file is gone
+        assert repo.match_asset("character", "Ghost") is None
+    finally:
+        repo.delete_asset(a)
+
+
+def test_scan_applies_sources_manifest(tmp_path):
+    root = tmp_path / "asset_library"
+    d = root / "background" / "jp" / "hiendai"
+    d.mkdir(parents=True)
+    (d / "jp_cafe.png").write_bytes(b"\x89PNG")          # no per-file sidecar
+    cd = root / "character" / "cn" / "wuxia"
+    cd.mkdir(parents=True)
+    (cd / "cn_hero.png").write_bytes(b"\x89PNG")
+    (cd / "cn_hero.json").write_text(json.dumps({"license": "cc0"}), encoding="utf-8")
+    manifest = {"families": [
+        {"match": {"kind": "background"}, "license": "cc0-openverse", "source": "openverse"},
+    ]}
+    (root / "asset_sources.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    repo.scan_library(root)
+    try:
+        bg = [a for a in repo.list_assets(kind="background") if a["slug"] == "jp_cafe"][0]
+        assert bg["license"] == "cc0-openverse" and bg["source"] == "openverse"   # manifest default
+        hero = [a for a in repo.list_assets(kind="character") if a["slug"] == "cn_hero"][0]
+        assert hero["license"] == "cc0"                  # sidecar still wins over manifest
+    finally:
+        for a in repo.list_assets():
+            if a["slug"] in ("jp_cafe", "cn_hero"):
+                repo.delete_asset(a["id"])

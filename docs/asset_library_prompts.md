@@ -296,3 +296,42 @@ Chỉ nhận **CC0 / Public Domain / CC-BY (ghi nguồn)**:
 | OpenGameArt | lọc CC0 / CC-BY | Prop, tileset |
 
 **TRÁNH cho kho (cấm phát hành lại file rời):** Canva · Pixabay · Pexels · Unsplash · Freepik.
+
+---
+
+## 8. Dùng kho tự động — `STORY_LIBRARY_FIRST` (AL5)
+
+Mặc định **TẮT** → render không đổi (byte-identical). Bật để render **ưu tiên
+kho** trước khi gọi AI:
+
+```
+STORY_LIBRARY_FIRST=1      # opt-in
+```
+
+Khi bật, mỗi **nhân vật** cần overlay được **khớp theo tên** với 1 master trong
+kho (transparent) — trùng thì dùng luôn, **không tốn tiền AI** và **nhất quán**
+cho nhân vật lặp lại (vd truyện tái dùng "Haruto"/"Yuki"). Khớp theo thứ tự:
+tên/slug trùng khít → chuỗi con trong slug/name/tags → trùng token. Không có tín
+hiệu tên → **bỏ qua** (không thay bừa 1 nhân vật khác). **Nền** vẫn gán tay qua
+picker "🗂️ Kho" (prompt tự do không khớp tên an toàn được).
+
+> Không cần cấu hình picker: gán tay trong màn Review (nút **🗂️ Kho** ở nhân
+> vật / key-visual) luôn hoạt động **bất kể** cờ này — nó ghi thẳng
+> `render.masters` / `render.visual_assets` (AL4), render tái dùng (AL3).
+
+### Manifest xuất xứ — `asset_sources.json` (tùy chọn)
+
+Đặt tại `ASSET_LIBRARY_DIR/asset_sources.json`. Khi 1 file **không có sidecar**
+`{file}.json`, `scan_library` lấy `license`/`source` mặc định theo family khớp:
+
+```json
+{
+  "families": [
+    { "match": { "kind": "background" }, "license": "cc0-openverse", "source": "openverse" },
+    { "match": { "kind": "character", "region": "jp" }, "license": "ai-generated", "source": "gpt-image-1" }
+  ]
+}
+```
+
+Ưu tiên: **sidecar `{file}.json` > manifest > mặc định cứng** (`ai-generated`/`local`).
+`match` bỏ trống khóa nào thì khóa đó là wildcard; family khớp **đầu tiên** thắng.

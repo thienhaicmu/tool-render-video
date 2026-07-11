@@ -293,13 +293,26 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
         if not used:
             return
         from app.features.render.engine.visual.story_reference_sheet import generate_character_master
+        library_first = os.getenv("STORY_LIBRARY_FIRST", "0") == "1"
         for cid in used:
             if plan.render.masters.get(cid):
                 continue
             c = plan.character(cid)
             if c is None:
                 continue
-            path = generate_character_master(c, art_style=art_style)
+            # AL5 library-first (opt-in): reuse a matching offline library character
+            # (transparent master) by name before paying for AI gen — free + consistent
+            # for recurring named characters. Default off → byte-identical (path stays None).
+            path = None
+            if library_first:
+                try:
+                    from app.db.story_asset_repo import match_asset
+                    path = match_asset("character", getattr(c, "name", "") or "",
+                                       transparent_only=True)
+                except Exception:
+                    path = None
+            if not path:
+                path = generate_character_master(c, art_style=art_style)
             if not path:
                 continue
             plan.render.masters[cid] = path
