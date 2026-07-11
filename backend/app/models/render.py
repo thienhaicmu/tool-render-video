@@ -425,7 +425,7 @@ class RenderRequest(BaseModel):
     # the default reproduces the existing paid behavior so stored payloads replay
     # identically. The Storyboard review always previews with the FREE provider
     # (draft/final split) regardless of this final choice.
-    story_image_provider: str = "gpt_image"  # gpt_image|pollinations
+    story_image_provider: str = "gpt_image"  # gpt_image|pollinations|svg (default gpt_image — Sacred #2; FE defaults to svg)
     # Optional LOCAL base video the story is composited over (A1). "" = image-based
     # story (the default — AI key-visuals + Ken Burns, byte-identical replay). When a
     # valid local path is given, later phases use it as the base layer for the cue
@@ -563,9 +563,11 @@ class RenderRequest(BaseModel):
     @classmethod
     def _validate_story_image_provider(cls, v) -> str:
         # Coerce (never raise) — Sacred Contract #2: default/unknown → "gpt_image"
-        # (the existing paid behavior), so stored payloads replay identically.
+        # (the existing paid behavior), so stored payloads replay identically. "svg" =
+        # the offline procedural chibi path (Phase C); the FE defaults to it, the backend
+        # field default stays "gpt_image" so replay is bit-identical.
         v = str(v or "gpt_image").strip().lower()
-        return v if v in {"gpt_image", "pollinations"} else "gpt_image"
+        return v if v in {"gpt_image", "pollinations", "svg"} else "gpt_image"
 
     @field_validator("content_background_kind", mode="before")
     @classmethod

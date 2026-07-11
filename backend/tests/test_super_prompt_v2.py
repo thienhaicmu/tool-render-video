@@ -17,6 +17,25 @@ def test_story_prompt_shape_and_params():
     assert "16:9" in user
     assert "Vietnamese" in user                       # lang name
     assert "adapt THIS" in user.lower() or "adapt this" in user.lower()
+    # Phase 0.5 — asset-library hint keys present in the schema
+    assert '"region"' in user and '"genre_key"' in user
+    assert '"archetype"' in user and '"scene_kind"' in user
+    # Library-pick — "asset" slug field present in the schema
+    assert '"asset"' in user
+    # N4+ per-beat pose field
+    assert '"pose"' in user
+
+
+def test_library_catalog_injection():
+    cat = ("CHARACTERS:\n  cn_wuxia_swordsman_male_young | cn/wuxia | swordsman male young\n"
+           "BACKGROUNDS:\n  cn_wuxia_bamboo_forest | cn/wuxia | bamboo forest")
+    _, no = build_super_story_prompt("story", "vi")
+    assert "offline art you MAY reuse" not in no           # empty catalog → no block injected
+    assert "cn_wuxia_swordsman_male_young" not in no       # and no slug leaked
+    _, yes = build_super_story_prompt("story", "vi", library_catalog=cat)
+    assert "offline art you MAY reuse" in yes and "cn_wuxia_swordsman_male_young" in yes
+    _, yes2 = build_super_idea_prompt("idea", 60, "", "vi", library_catalog=cat)
+    assert "cn_wuxia_bamboo_forest" in yes2
 
 
 def test_idea_prompt_budget_and_genre():
@@ -54,4 +73,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s4"   # s4: bgm_cue/intensity, source_audio, char_*, text_anchor
+    assert SUPER_PROMPT_VERSION == "s7"   # s5: +asset-library hints (region/genre_key/archetype/scene_kind)

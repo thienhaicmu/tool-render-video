@@ -288,6 +288,299 @@ Slug `jp_hiendai_taro_shopkeeper_male` · `character/jp/hiendai/jp_hiendai_taro_
 
 ---
 
+## 📚 BỘ CHI TIẾT MỞ RỘNG — dàn đều 6 vùng (prompt giàu + thuộc tính khoá)
+
+> Add-only (không sửa entry cũ ở trên). Mỗi nhân vật gồm: **ô prompt mô tả giàu** +
+> dòng **🔑 thuộc tính khoá** (giữ cố định khi sinh lại để nhất quán) + **⛔ neg riêng** +
+> **seed** gợi ý. **Cách dùng:** prompt hoàn chỉnh = *nội dung trong ô* **+ TAIL** bên dưới
+> (dán ô, thêm TAIL). Giữ NGUYÊN prompt + seed → sinh lại gần như giống → chọn 1 bản khoá.
+
+**TAIL (nhân vật — dán vào cuối MỌI prompt bên dưới):**
+```
+Single character only, standing naturally, front-facing neutral reference pose, entire body visible from the top of the hair to the soles of the shoes, centered with generous transparent padding. Transparent background with clean alpha edges, no environment, no floor, no ground shadow, even studio lighting. No text, logo, watermark, border, frame, duplicate character.
+```
+**NEG chung (thêm cùng ⛔ neg riêng):** `text, watermark, logo, multiple people, cropped feet, cropped hair, extra fingers, extra limbs, malformed hands, blurry, background scenery`
+
+**{STYLE} theo genre:** wuxia→`cinematic ink-wash wuxia/xianxia illustration` · ngontinh→`soft romantic anime illustration` · horror→`dark eerie cinematic illustration` · fantasy→`epic fantasy concept illustration` · codai→`historical realistic painting` · hiendai→`modern cinematic illustration` (JP hiện đại→`Japanese cinematic anime illustration`).
+
+---
+
+### 🇨🇳 TRUNG — mở rộng
+
+**Lăng Sương — nữ chưởng môn phái, uy nghiêm** · `cn_wuxia_sect_leader_female` · `character/cn/wuxia/cn_wuxia_sect_leader_female.png`
+```
+Premium cinematic ink-wash wuxia/xianxia illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a female wuxia sect leader in her late 30s, tall commanding graceful build, long jet-black hair in a high coiled bun held by a silver phoenix hairpin, sharp calm almond eyes, pale flawless skin, an aura of quiet authority, wearing layered white-and-violet silk robes with wide sleeves and silver cloud embroidery, a jade pendant sash, a slim longsword strapped to the back, embroidered white boots.
+```
+🔑 tóc: đen dài búi cao + trâm phượng bạc | mắt: hạnh, sắc lạnh | da: trắng | dáng: cao, uy nghi | trang phục: lụa trắng-tím, thêu mây bạc | phụ kiện: ngọc bội, trường kiếm sau lưng | giày: hài trắng thêu | seed: 21001
+⛔ neg: `modern clothing, revealing outfit, cartoon chibi`
+
+**Diệp Vân — đệ tử tiên môn trẻ, nhiệt huyết** · `cn_xianxia_disciple_male_young` · `character/cn/wuxia/cn_xianxia_disciple_male_young.png`
+```
+Premium cinematic ink-wash wuxia/xianxia illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a young male xianxia cultivator around 18, slim agile build, black hair half-up in a topknot with a blue ribbon, bright hopeful dark eyes, clear youthful face, wearing a light blue-and-white disciple robe with a cloth belt, a wooden sword talisman at the waist, a faint spiritual glow around the hands, cloth boots.
+```
+🔑 tóc: đen nửa búi + ruy băng xanh | mắt: sáng, nhiệt huyết | dáng: mảnh, nhanh nhẹn | trang phục: đạo bào xanh-trắng | phụ kiện: kiếm gỗ bùa chú, quầng linh khí tay | giày: hài vải | seed: 21002
+⛔ neg: `old face, armor, modern clothing`
+
+**Mộ Dung Tuấn — nam phụ ngôn tình, si tình lạnh lùng** · `cn_ngontinh_second_male_lead` · `character/cn/ngontinh/cn_ngontinh_second_male_lead.png`
+```
+Premium soft romantic anime illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 27-year-old Chinese man, tall elegant slender build, soft dark-brown side-swept hair, gentle melancholic hazel eyes, fair skin, a refined wistful expression, wearing a cream turtleneck under a beige tailored coat, a thin silver watch, slim trousers, polished loafers, holding a single white flower.
+```
+🔑 tóc: nâu sẫm vuốt lệch | mắt: nâu hạt dẻ, buồn dịu | da: trắng | dáng: cao, thanh thoát | trang phục: áo len kem + măng tô be | phụ kiện: đồng hồ bạc, hoa trắng | giày: giày lười | seed: 21003
+⛔ neg: `historical robe, aggressive expression`
+
+**Cương thi — quỷ nhảy cổ trang, rùng rợn** · `cn_horror_jiangshi` · `character/cn/horror/cn_horror_jiangshi.png`
+```
+Premium dark eerie cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean creature-design style, of a Chinese hopping vampire (jiangshi), stiff upright posture with arms outstretched forward, greyish-green decayed skin, long black nails, a Qing-dynasty official's dark robe and round hat, a yellow paper talisman stuck to the forehead, hollow pale eyes, an eerie cold aura.
+```
+🔑 da: xám-xanh mục | tư thế: cứng đờ, hai tay đưa trước | trang phục: quan phục nhà Thanh đen + mũ tròn | phụ kiện: bùa giấy vàng trên trán, móng dài | mắt: trắng đục rỗng | seed: 21004
+⛔ neg: `friendly expression, bright colors, modern clothing`
+
+**Thái hậu — mẫu nghi thiên hạ, thâm sâu** · `cn_codai_empress_dowager_female` · `character/cn/codai/cn_codai_empress_dowager_female.png`
+```
+Premium historical realistic painting, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of an ancient Chinese empress dowager in her 50s, dignified upright build, elaborate coiled black-grey hair crowned with an ornate gold-and-jade headdress, sharp discerning eyes, powdered fair face, a composed powerful expression, wearing a magnificent imperial dragon-phoenix robe in deep red and gold with long embroidered sleeves, gold nail guards, embroidered court shoes.
+```
+🔑 tóc: đen-xám búi cầu kỳ + mũ vàng-ngọc | mắt: sắc, thâm | dáng: uy nghi | trang phục: long-phượng bào đỏ-vàng | phụ kiện: hộ giáp vàng | giày: hài cung đình | seed: 21005
+⛔ neg: `young face, modern clothing, casual pose`
+
+**Tô Nhiên — nữ tổng tài đô thị, tsundere** · `cn_hiendai_ceo_female_tsundere` · `character/cn/hiendai/cn_hiendai_ceo_female_tsundere.png`
+```
+Premium modern cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 29-year-old Chinese businesswoman, slim poised build, sleek shoulder-length black hair, sharp confident dark eyes with a faint proud tilt, fair skin, an assertive expression softening at the edges, wearing a fitted burgundy blazer over a white silk blouse, a slim pencil skirt, a designer watch, elegant black heels, holding a slim phone.
+```
+🔑 tóc: đen ngang vai bóng | mắt: sắc, kiêu | da: trắng | dáng: mảnh, đĩnh đạc | trang phục: blazer đỏ mận + sơ mi trắng | phụ kiện: đồng hồ hiệu, điện thoại | giày: cao gót đen | seed: 21006
+⛔ neg: `historical robe, timid posture`
+
+---
+
+### 🇯🇵 NHẬT — mở rộng (lấp thể loại còn thiếu)
+
+**Sakura — nữ chính shoujo, mơ mộng** · `jp_ngontinh_shoujo_lead_female` · `character/jp/ngontinh/jp_ngontinh_shoujo_lead_female.png`
+```
+Premium soft romantic anime illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 17-year-old Japanese schoolgirl, slim gentle build, long soft pink-tinted brown hair with a small ribbon, large sparkling honey eyes, fair rosy skin, a shy dreamy smile, wearing a pastel sailor school uniform with a pink bow, a beige cardigan, knee socks, brown loafers, holding a love letter to her chest.
+```
+🔑 tóc: nâu ánh hồng dài + ruy băng | mắt: mật ong to, long lanh | da: trắng hồng | trang phục: đồng phục sailor pastel + nơ hồng | phụ kiện: áo len be, thư tình | giày: giày lười nâu | seed: 22001
+⛔ neg: `mature adult, dark palette, armor`
+
+**Yurei — hồn ma nữ Nhật, ám ảnh** · `jp_horror_yurei_female` · `character/jp/horror/jp_horror_yurei_female.png`
+```
+Premium dark eerie cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a Japanese yurei ghost woman, slender ethereal build, extremely long straight black hair hanging over the face, deathly pale translucent skin, hollow sorrowful dark eyes, wearing a plain white burial kimono (shiroshozoku), no visible feet fading into faint mist, a cold haunting presence.
+```
+🔑 tóc: đen dài phủ mặt | da: trắng tái, mờ | mắt: đen rỗng, u sầu | trang phục: kimono trắng tang | đặc điểm: chân mờ vào sương | seed: 22002
+⛔ neg: `bright colors, happy face, shoes, modern clothing`
+
+**Kage — ninja, lặng lẽ chết chóc** · `jp_ninja_male` · `character/jp/codai/jp_ninja_male.png`
+```
+Premium historical realistic painting, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a Japanese shinobi ninja, lean muscular agile build, hidden hair under a black hood, sharp focused dark eyes visible above a face mask, wearing a fitted matte-black shinobi shozoku with wrapped forearms and shins, a short ninjato sword on the back, kunai and shuriken pouches at the belt, split-toe tabi boots.
+```
+🔑 dáng: gọn, cơ bắp, nhanh | mắt: đen sắc trên khăn che mặt | trang phục: shinobi shozoku đen mờ, quấn tay-chân | phụ kiện: ninjato sau lưng, túi kunai/shuriken | giày: tabi xẻ ngón | seed: 22003
+⛔ neg: `bright armor, exposed face, modern clothing`
+
+**Ryūzō — ông trùm yakuza, uy quyền** · `jp_hiendai_yakuza_boss_male` · `character/jp/hiendai/jp_hiendai_yakuza_boss_male.png`
+```
+Premium Japanese cinematic anime illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 50-year-old Japanese yakuza boss, broad imposing build, slicked-back greying black hair, hard scarred face with a stern gaze, wearing an expensive dark pinstripe suit open at the chest revealing partial traditional irezumi tattoos, a silk shirt, gold rings, polished black shoes, one hand in his pocket.
+```
+🔑 tóc: đen-hoa râm vuốt ngược | mặt: sẹo, lạnh | dáng: bệ vệ | trang phục: suit sọc đen, hé lộ hình xăm irezumi | phụ kiện: nhẫn vàng | giày: da đen bóng | seed: 22004
+⛔ neg: `friendly smile, casual clothing, teen`
+
+**Hina — thần tượng nhạc pop, rạng rỡ** · `jp_hiendai_idol_female` · `character/jp/hiendai/jp_hiendai_idol_female.png`
+```
+Premium Japanese cinematic anime illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 19-year-old Japanese pop idol, slim energetic build, twin-tail bright teal hair with star clips, big shining eyes, fair skin, a dazzling stage smile, wearing a frilly pastel idol stage costume with layered skirt, ribbons and a small cape, thigh-high socks, glittery ankle boots, holding a heart-shaped microphone.
+```
+🔑 tóc: teal buộc hai bên + kẹp sao | mắt: to, long lanh | trang phục: idol pastel bèo nhún + áo choàng nhỏ | phụ kiện: mic hình tim, tất cao | giày: bốt lấp lánh | seed: 22005
+⛔ neg: `dull colors, business suit, mature adult`
+
+**Kotone — pháp sư nữ isekai, điềm tĩnh** · `jp_fantasy_mage_female` · `character/jp/fantasy/jp_fantasy_mage_female.png`
+```
+Premium epic fantasy concept illustration with anime influence, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a young female mage, slender build, long silver-lavender hair, calm violet eyes, fair skin, a composed intelligent expression, wearing a deep-blue-and-gold mage robe with a short cape and rune trims, a wide-brim witch hat, holding an ornate staff topped with a glowing crystal, knee-high boots, a faint magic circle at her feet.
+```
+🔑 tóc: bạc-tím dài | mắt: tím, điềm tĩnh | trang phục: pháp bào xanh-vàng + choàng ngắn, viền rune | phụ kiện: mũ rộng vành, trượng pha lê phát sáng | giày: bốt cao | seed: 22006
+⛔ neg: `modern clothing, dull staff, elderly`
+
+---
+
+### 🇰🇷 HÀN — mở rộng
+
+**Yeon-hwa — kỹ nữ gisaeng, đài các** · `ko_codai_gisaeng_female` · `character/ko/codai/ko_codai_gisaeng_female.png`
+```
+Premium historical realistic painting, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a Joseon-era Korean gisaeng, graceful slender build, glossy black hair in an elaborate braided updo with a norigae ornament, delicate powdered face with soft red lips, refined melancholic eyes, wearing a luxurious silk hanbok with a short jade-green jeogori and a wide crimson chima skirt, a folding fan in hand, embroidered silk shoes.
+```
+🔑 tóc: đen búi tết cầu kỳ + norigae | mặt: phấn nhẹ, môi đỏ | mắt: sâu, u buồn | trang phục: hanbok lụa jeogori xanh ngọc + chima đỏ | phụ kiện: quạt xếp | giày: hài lụa thêu | seed: 23001
+⛔ neg: `modern clothing, casual pose`
+
+**Mu-yeol — tướng quân Joseon, dũng mãnh** · `ko_codai_general_male` · `character/ko/codai/ko_codai_general_male.png`
+```
+Premium historical realistic painting, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a Joseon-era Korean general, powerful broad build, topknot under a black-and-red war helmet, a stern bearded weathered face, wearing heavy traditional Korean lamellar armor (durumagi over plates) in dark red and iron, a commander's sash, holding a curved sword, armored boots.
+```
+🔑 tóc: búi dưới mũ chiến đỏ-đen | mặt: râu, khắc khổ | dáng: to, mạnh | trang phục: giáp lamellar đỏ-sắt | phụ kiện: đai chỉ huy, đao cong | giày: giày giáp | seed: 23002
+⛔ neg: `modern clothing, thin build, timid`
+
+**Gwishin — nữ quỷ tóc dài, rùng rợn** · `ko_horror_gwishin_female` · `character/ko/horror/ko_horror_gwishin_female.png`
+```
+Premium dark eerie cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a Korean gwishin ghost, thin frail build, extremely long tangled black hair covering most of a pale bluish face, hollow dark eyes and faint dark tear streaks, wearing a plain white mourning hanbok (sobok), bare pale feet, a cold sorrowful haunting aura, faint mist below.
+```
+🔑 tóc: đen rối phủ mặt | da: xanh tái | mắt: đen rỗng, vệt lệ | trang phục: hanbok tang trắng | đặc điểm: chân trần, sương mờ | seed: 23003
+⛔ neg: `bright colors, happy face, modern clothing`
+
+**Tae-yang — thần tượng K-pop nam, cuốn hút** · `ko_hiendai_kpop_idol_male` · `character/ko/hiendai/ko_hiendai_kpop_idol_male.png`
+```
+Premium Korean drama cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 22-year-old Korean male K-pop idol, slim toned build, styled two-tone (black-and-silver) hair, sharp charismatic eyes, flawless fair skin, a confident cool expression, wearing a trendy stage outfit — a cropped studded leather jacket over a mesh top, ripped black jeans, a chain belt, layered necklaces, high-top sneakers, in-ear monitor.
+```
+🔑 tóc: đen-bạc tạo kiểu | mắt: sắc, hút hồn | da: trắng mịn | trang phục: jacket da đinh tán + áo lưới | phụ kiện: dây chuyền lớp, thắt lưng xích | giày: sneaker cổ cao | seed: 23004
+⛔ neg: `business suit, historical robe, dull colors`
+
+**So-ra — nữ thám tử hiện đại, sắc sảo** · `ko_hiendai_detective_female` · `character/ko/hiendai/ko_hiendai_detective_female.png`
+```
+Premium Korean drama cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 32-year-old Korean female detective, athletic build, dark hair in a practical low ponytail, sharp observant eyes, fair skin, a serious focused expression, wearing a fitted charcoal trench coat over a dark shirt, slim trousers, a badge on the belt, a holstered pistol, ankle boots.
+```
+🔑 tóc: đen buộc thấp | mắt: sắc, quan sát | dáng: khỏe | trang phục: trench than + áo tối | phụ kiện: phù hiệu, bao súng | giày: bốt cổ ngắn | seed: 23005
+⛔ neg: `frilly dress, historical robe, timid`
+
+**Ha-rin — nữ phụ ngôn tình, kiêu kỳ** · `ko_ngontinh_second_female_lead` · `character/ko/ngontinh/ko_ngontinh_second_female_lead.png`
+```
+Premium soft romantic anime illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 25-year-old Korean woman, elegant slim build, long wavy chestnut hair, striking confident eyes with a proud tilt, fair skin, a cool refined expression, wearing a designer cream coat over a silk blouse, a pleated skirt, a luxury handbag, pearl earrings, elegant heels.
+```
+🔑 tóc: hạt dẻ dài xoăn nhẹ | mắt: sắc, kiêu | da: trắng | trang phục: măng tô kem + sơ mi lụa | phụ kiện: túi hiệu, khuyên ngọc trai | giày: cao gót | seed: 23006
+⛔ neg: `casual sloppy, historical robe`
+
+---
+
+### 🇻🇳 VIỆT — mở rộng
+
+**Vua Lê — quân vương cổ trang, uy nghi** · `vi_codai_king_male` · `character/vi/codai/vi_codai_king_male.png`
+```
+Premium historical realistic painting, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of an ancient Vietnamese king, dignified upright build, a groomed short beard, authoritative calm eyes, wearing a royal yellow áo long bào with dragon embroidery and a wide belt, a Vietnamese royal crown (mũ bình thiên) with beaded curtains, embroidered court boots, holding a jade tablet.
+```
+🔑 mặt: râu ngắn, uy nghi | trang phục: long bào vàng thêu rồng | phụ kiện: mũ bình thiên rèm châu, hốt ngọc | giày: hia thêu | seed: 24001
+⛔ neg: `modern clothing, Chinese-style robe, young beardless`
+
+**Công chúa Ngọc — cổ trang Việt, đoan trang** · `vi_codai_princess_female` · `character/vi/codai/vi_codai_princess_female.png`
+```
+Premium historical realistic painting, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of an ancient Vietnamese princess, elegant slender build, long black hair in a refined coil with gold hairpins, a gentle graceful face, wearing a layered Nhật Bình royal robe in deep red and gold with phoenix embroidery and a wide decorative collar, delicate embroidered shoes.
+```
+🔑 tóc: đen búi + trâm vàng | mặt: đoan trang | trang phục: áo Nhật Bình đỏ-vàng thêu phượng, cổ trang trí rộng | giày: hài thêu | seed: 24002
+⛔ neg: `modern clothing, Chinese hanfu, casual`
+
+**Tướng Trần — võ tướng Việt, quả cảm** · `vi_codai_general_male` · `character/vi/codai/vi_codai_general_male.png`
+```
+Premium historical realistic painting, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of an ancient Vietnamese military general, strong sturdy build, a fierce bearded face, wearing traditional Vietnamese lamellar armor in dark bronze and red with a war cloak, a conical-crest helmet, holding a long spear, armored boots.
+```
+🔑 mặt: râu, quả cảm | dáng: to khỏe | trang phục: giáp lamellar đồng-đỏ + choàng | phụ kiện: mũ trụ, trường thương | giày: giày giáp | seed: 24003
+⛔ neg: `modern clothing, Chinese armor, thin build`
+
+**Ma nữ áo trắng — kinh dị Việt, ám ảnh** · `vi_horror_maiden_ghost_female` · `character/vi/horror/vi_horror_maiden_ghost_female.png`
+```
+Premium dark eerie cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a Vietnamese female ghost, slender frail build, very long straight black hair partly hiding a pale bloodless face, hollow dark sorrowful eyes, wearing a plain long white áo dài, bare pale feet, drifting faint mist, a cold mournful haunting presence.
+```
+🔑 tóc: đen dài che mặt | da: trắng tái | mắt: đen rỗng, u sầu | trang phục: áo dài trắng dài | đặc điểm: chân trần, sương | seed: 24004
+⛔ neg: `bright colors, happy face, shoes, modern casual`
+
+**Minh — doanh nhân trẻ Việt, tự tin** · `vi_hiendai_businessman_male` · `character/vi/hiendai/vi_hiendai_businessman_male.png`
+```
+Premium modern cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 30-year-old Vietnamese businessman, fit trim build, neat short black hair, confident friendly eyes, warm tan skin, an approachable assured expression, wearing a well-fitted navy suit, a light-blue shirt with no tie, a slim watch, brown leather shoes, holding a smartphone.
+```
+🔑 tóc: đen ngắn gọn | mắt: tự tin, thân thiện | da: rám nhẹ | trang phục: suit xanh navy + sơ mi xanh nhạt | phụ kiện: đồng hồ mảnh, điện thoại | giày: da nâu | seed: 24005
+⛔ neg: `historical robe, sloppy clothing, elderly`
+
+**Hương — nữ sinh viên Việt, năng động** · `vi_hiendai_student_female` · `character/vi/hiendai/vi_hiendai_student_female.png`
+```
+Premium modern cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 20-year-old Vietnamese university student, slim build, long straight black hair, bright cheerful eyes, warm skin, a friendly relaxed smile, wearing a casual white tee under an oversized pastel cardigan, high-waist jeans, white sneakers, a canvas tote bag on one shoulder.
+```
+🔑 tóc: đen thẳng dài | mắt: sáng, vui | da: ấm | trang phục: áo phông trắng + cardigan pastel rộng | phụ kiện: túi tote vải | giày: sneaker trắng | seed: 24006
+⛔ neg: `historical robe, formal suit, mature adult`
+
+---
+
+### 🇪🇺 CHÂU ÂU — mở rộng
+
+**Công tước Ashford — romance nhiếp chính, lịch lãm** · `eu_romance_duke_male` · `character/eu/ngontinh/eu_romance_duke_male.png`
+```
+Premium soft romantic cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a Regency-era English duke around 30, tall elegant build, wavy dark-brown hair, piercing blue eyes, fair skin, a charming aloof expression, wearing a tailored deep-green tailcoat over an ivory cravat and waistcoat, fitted breeches, tall polished riding boots, a signet ring.
+```
+🔑 tóc: nâu sẫm gợn sóng | mắt: xanh dương, hút hồn | da: trắng | trang phục: tailcoat xanh lục + cravat ngà | phụ kiện: nhẫn ấn | giày: bốt cưỡi ngựa | seed: 25001
+⛔ neg: `modern clothing, armor, casual`
+
+**Roland — đạo tặc/thích khách, tinh ranh** · `eu_fantasy_rogue_thief_male` · `character/eu/fantasy/eu_fantasy_rogue_thief_male.png`
+```
+Premium epic fantasy concept illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a fantasy rogue thief, lean agile build, messy dark hair, a sly grin, sharp green eyes, light stubble, wearing a hooded dark-leather jerkin with many straps and pouches, fingerless gloves, twin daggers at the belt, a cloak, worn leather boots.
+```
+🔑 tóc: đen rối | mắt: xanh lá sắc | biểu cảm: cười gian | trang phục: da tối có mũ trùm + nhiều túi/dây | phụ kiện: găng hở ngón, song đao | giày: bốt da cũ | seed: 25002
+⛔ neg: `heavy plate armor, modern clothing, clean noble`
+
+**Ser Godfrey — thánh kỵ paladin, chính trực** · `eu_fantasy_paladin_male` · `character/eu/fantasy/eu_fantasy_paladin_male.png`
+```
+Premium epic fantasy concept illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a holy paladin, tall strong build, short golden hair, a noble resolute face, wearing gleaming silver plate armor with gold trim and a white tabard bearing a sun emblem, a long cape, a large sword and a kite shield, a faint holy glow around the armor, armored boots.
+```
+🔑 tóc: vàng ngắn | mặt: chính trực | trang phục: giáp bạc viền vàng + áo choàng trắng huy hiệu mặt trời | phụ kiện: đại kiếm, khiên, quầng thánh | giày: giày giáp | seed: 25003
+⛔ neg: `dark evil aura, modern clothing, rusty armor`
+
+**Grommash — chiến binh orc, hung tợn** · `eu_fantasy_orc_warrior_male` · `character/eu/fantasy/eu_fantasy_orc_warrior_male.png`
+```
+Premium epic fantasy concept illustration, semi-realistic anatomy, massive proportions, consistent clean creature-design style, of a hulking orc warrior, huge muscular green-skinned build, protruding lower tusks, a fierce scarred face, a black mohawk, wearing rugged spiked iron-and-leather armor over one shoulder, tribal war paint, holding a massive jagged axe, heavy boots.
+```
+🔑 da: xanh, cơ bắp | mặt: nanh dưới, sẹo, dữ | tóc: mohawk đen | trang phục: giáp sắt-da gai một vai | phụ kiện: rìu lớn, sơn chiến | giày: bốt nặng | seed: 25004
+⛔ neg: `human skin, friendly face, modern clothing`
+
+**Mortis — pháp sư hắc ám/necromancer, tà mị** · `eu_horror_necromancer_male` · `character/eu/horror/eu_horror_necromancer_male.png`
+```
+Premium dark eerie cinematic illustration, semi-realistic facial anatomy, gaunt proportions, consistent clean character-design style, of a sinister necromancer, tall thin build, long stringy black hair, sunken glowing green eyes, pale corpse-like skin, a cruel thin smile, wearing a tattered black robe with bone ornaments and a high ragged collar, skeletal hand jewelry, holding a staff crowned with a skull, a sickly green aura, worn boots.
+```
+🔑 tóc: đen bết dài | mắt: xanh lục phát sáng, hõm | da: trắng bệch | trang phục: hắc bào rách + xương trang trí | phụ kiện: trượng sọ, quầng lục bệnh hoạn | giày: bốt cũ | seed: 25005
+⛔ neg: `bright holy aura, healthy skin, modern clothing`
+
+**Ava — điệp viên hiện đại, lạnh lùng** · `eu_hiendai_spy_female` · `character/eu/hiendai/eu_hiendai_spy_female.png`
+```
+Premium modern cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 30-year-old European female spy, athletic sleek build, sleek dark hair in a low bun, sharp cool grey eyes, fair skin, a composed dangerous expression, wearing a form-fitting black tactical catsuit under a slim leather jacket, a thin utility belt, a concealed holster, low combat boots.
+```
+🔑 tóc: đen búi thấp | mắt: xám lạnh | dáng: gọn, khỏe | trang phục: catsuit đen + jacket da | phụ kiện: đai công cụ, bao súng giấu | giày: combat boot thấp | seed: 25006
+⛔ neg: `fantasy armor, historical clothing, timid`
+
+---
+
+### 🇺🇸 MỸ — mở rộng
+
+**Cmdr. Hale — phi hành gia, can trường** · `us_hiendai_astronaut_male` · `character/us/hiendai/us_hiendai_astronaut_male.png`
+```
+Premium modern cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of an American astronaut, fit build, short cropped hair visible with helmet held under one arm, a calm brave face, wearing a detailed white EVA spacesuit with blue trim, mission patches, a chest control unit and tubes, thick gloves, heavy space boots.
+```
+🔑 tóc: cắt ngắn | mặt: điềm tĩnh, can trường | trang phục: bộ đồ EVA trắng viền xanh + patch | phụ kiện: mũ cầm dưới tay, bảng điều khiển ngực | giày: bốt không gian | seed: 26001
+⛔ neg: `fantasy armor, historical clothing, casual`
+
+**Sgt. Cole — lính đặc nhiệm, kiên cường** · `us_hiendai_soldier_male` · `character/us/hiendai/us_hiendai_soldier_male.png`
+```
+Premium modern cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of an American special-forces soldier, strong build, short hair, a rugged determined face with light face paint, wearing modern multicam combat fatigues and a plate carrier vest with pouches, a helmet with a headset, tactical gloves, holding a rifle at low ready, combat boots.
+```
+🔑 tóc: ngắn | mặt: rắn rỏi, sơn ngụy trang nhẹ | trang phục: quân phục multicam + áo giáp plate carrier | phụ kiện: mũ tai nghe, súng trường, găng | giày: combat boot | seed: 26002
+⛔ neg: `fantasy armor, historical clothing, clean suit`
+
+**Zoe — hacker/tin tặc, tinh nghịch** · `us_hiendai_hacker_female` · `character/us/hiendai/us_hiendai_hacker_female.png`
+```
+Premium modern cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 24-year-old American hacker, slim build, short dyed-purple undercut hair, sharp witty eyes behind thin glasses, fair skin with a few tattoos, a smug clever smirk, wearing an oversized graphic hoodie, ripped black jeans, fingerless gloves, chunky sneakers, headphones around the neck.
+```
+🔑 tóc: tím undercut | mắt: sắc, kính mỏng | da: trắng, vài hình xăm | trang phục: hoodie rộng in hình + jeans rách | phụ kiện: găng hở ngón, tai nghe | giày: sneaker to | seed: 26003
+⛔ neg: `formal suit, historical clothing, timid`
+
+**Sentinel — siêu anh hùng, hào hùng** · `us_fantasy_superhero_male` · `character/us/fantasy/us_fantasy_superhero_male.png`
+```
+Premium modern comic cinematic illustration, semi-realistic anatomy, heroic proportions, consistent clean character-design style, of an American superhero, tall powerful muscular build, short dark hair, a strong confident jaw, wearing a sleek navy-and-silver armored suit with a chest emblem, a flowing cape, gauntlets and boots with subtle glowing lines, a bold heroic stance.
+```
+🔑 tóc: đen ngắn | dáng: cơ bắp, anh hùng | trang phục: giáp xanh navy-bạc + huy hiệu ngực | phụ kiện: áo choàng, gauntlet phát sáng nhẹ | giày: bốt giáp | seed: 26004
+⛔ neg: `historical clothing, casual clothing, dull suit`
+
+**Vincent — trùm gangster 1920s, bảnh bao** · `us_codai_gangster_1920s_male` · `character/us/codai/us_codai_gangster_1920s_male.png`
+```
+Premium 1920s noir cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 1920s American gangster, lean sharp build, slicked-back dark hair, a cold confident face with a thin moustache, wearing a pinstripe double-breasted suit with a vest and pocket watch chain, a fedora, a silk tie, spats over polished shoes, holding a cigar.
+```
+🔑 tóc: đen vuốt ngược | mặt: ria mảnh, lạnh | trang phục: suit sọc 2 hàng khuy + gile | phụ kiện: mũ fedora, dây đồng hồ, xì gà | giày: giày bóng có spats | seed: 26005
+⛔ neg: `modern clothing, fantasy armor, casual`
+
+**Grace — y tá hiện đại, tận tâm** · `us_hiendai_nurse_female` · `character/us/hiendai/us_hiendai_nurse_female.png`
+```
+Premium modern cinematic illustration, semi-realistic facial anatomy, mature proportions, consistent clean character-design style, of a 29-year-old American nurse, gentle build, brown hair tied in a neat bun, kind warm eyes, an approachable caring smile, wearing clean teal scrubs, a lanyard ID, a small watch, a stethoscope around the neck, comfortable white sneakers.
+```
+🔑 tóc: nâu búi gọn | mắt: ấm, tận tâm | trang phục: scrubs xanh teal | phụ kiện: thẻ lanyard, ống nghe, đồng hồ | giày: sneaker trắng | seed: 26006
+⛔ neg: `historical clothing, formal gown, stern face`
+
+---
+
 ## ➕ Thêm nhân vật
 Gửi: `Tên – giới tính, tuổi, vai trò, tính cách` (+ mô tả ngoại hình nếu có).
 Tôi trả về **1 khối prompt tự chứa** đúng cấu trúc trên (tự thiết kế ngoại hình nếu bạn chỉ cho tên + vai trò).

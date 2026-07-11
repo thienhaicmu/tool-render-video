@@ -281,6 +281,7 @@ def generate_story_plan_v2(
     chapter_no: int = 0,
     seed: int = 0,
     prior_context: str = "",
+    library_catalog: str = "",
     api_key: str = "",
     model: Optional[str] = None,
     resolve_key: Optional[Callable[[str], str]] = None,
@@ -316,7 +317,7 @@ def generate_story_plan_v2(
                 duration_sec=duration_sec, genre=genre, language=language, art_style=art_style,
                 aspect_ratio=aspect_ratio, subtitle_mode=subtitle_mode, ceiling=ceiling,
                 series_id=series_id, chapter_no=chapter_no, seed=seed,
-                prior_context=prior_context, provider_label=_p,
+                prior_context=prior_context, library_catalog=library_catalog, provider_label=_p,
             )
         except Exception as exc:
             logger.warning("llm: generate_story_plan_v2 provider=%s raised %s", _p, exc)

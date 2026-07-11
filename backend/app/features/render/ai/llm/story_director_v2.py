@@ -113,7 +113,7 @@ def _merge_plans(a: StoryPlan, b: StoryPlan) -> StoryPlan:
 
 
 def _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio, subtitle_mode,
-                       ceiling, threshold, prior_context="") -> Optional[StoryPlan]:
+                       ceiling, threshold, prior_context="", library_catalog="") -> Optional[StoryPlan]:
     """Split an over-long chapter at a paragraph boundary into 2 halves, super-plan each
     under a PER-HALF slice of the visual budget, merge. Bounded to 2 calls. None if
     neither half planned."""
@@ -131,7 +131,7 @@ def _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio, subt
     plans = []
     for part in parts:
         sysm, user = build_super_story_prompt(part, language, art_style, aspect_ratio,
-                                              subtitle_mode, per_half, prior_context)
+                                              subtitle_mode, per_half, prior_context, library_catalog)
         p = _call_and_parse(call_fn, sysm, user, per_half)
         if p is not None:
             plans.append(p)
@@ -160,6 +160,7 @@ def run_super_plan(
     chapter_no: int = 0,
     seed: int = 0,
     prior_context: str = "",
+    library_catalog: str = "",
     provider_label: str = "",
 ) -> Optional[StoryPlan]:
     """Turn a source (chapter text OR idea) into a StoryPlan v2. ``prior_context`` (G1)
@@ -173,7 +174,7 @@ def run_super_plan(
             if not idea:
                 return None
             sysm, user = build_super_idea_prompt(idea, duration_sec, genre, language, art_style,
-                                                 aspect_ratio, subtitle_mode, ceiling, prior_context)
+                                                 aspect_ratio, subtitle_mode, ceiling, prior_context, library_catalog)
             logger.info("story_director_v2[%s]: super=%s IDEA len=%d dur=%ds ceiling=%d",
                         _p, SUPER_PROMPT_VERSION, len(idea), duration_sec, ceiling)
             plan = _call_and_parse(call_fn, sysm, user, ceiling)
@@ -187,10 +188,10 @@ def run_super_plan(
                         _p, SUPER_PROMPT_VERSION, len(chapter), ceiling)
             if len(chapter) > int(threshold * 1.2):
                 plan = _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio,
-                                          subtitle_mode, ceiling, threshold, prior_context)
+                                          subtitle_mode, ceiling, threshold, prior_context, library_catalog)
             else:
                 sysm, user = build_super_story_prompt(chapter, language, art_style, aspect_ratio,
-                                                      subtitle_mode, ceiling, prior_context)
+                                                      subtitle_mode, ceiling, prior_context, library_catalog)
                 plan = _call_and_parse(call_fn, sysm, user, ceiling)
             _seed_src = chapter
         if plan is None:

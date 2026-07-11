@@ -112,3 +112,35 @@ step is independently revertible if done as separate commits.
 Sound to remove — the tree is provably single-threaded through `/analyze` and the FE
 doesn't use it. But it's a frozen-API removal + a large delete, so it wants its own
 approved change (steps 1→6 as separate commits), not folded into a feature phase.
+
+---
+
+## ADDENDUM (2026-07-11) — removal EXECUTED; this file is now historical
+
+> Append-only per the CLAUDE.md audit rule (body above left untouched as the
+> point-in-time record). Verified against current code on 2026-07-11.
+
+The phased removal proposed above (steps 1→6) has been **carried out**. Current
+state of the tree this file inventoried:
+
+| Item (from the DEAD inventory / gate) | Status now |
+|---|---|
+| `POST /api/story/analyze` + `StoryAnalyzeRequest` + `_persist_bible` | **removed** — grep `backend/app` for `/analyze` / `analyze_chapter` = 0 |
+| `analyze_story`, `generate_story_plan`, `run_story_intelligence`, `run_story_planning` | **removed** — grep = 0 |
+| `story_director.py`, `story_chunker.py`, `story_prompts.py`, `story_parser.py` (v1) | **deleted** (only stale `.pyc` linger in `__pycache__`) |
+| `ai/vision/qa.py` | **deleted** |
+| `story_plan.py` v1 classes (`StoryBible`/`StoryPlan`/`StoryScene`/`Shot`/`StoryEnvironment`) | **removed** — file now holds **only `StoryCharacter`** (the LIVE class) |
+| `generate_shot_image`, `decide_shot_asset`, `apply_voice_cast` (v1), `StoryRenderContext` | **removed** |
+
+**LIVE items listed under "MUST PRESERVE" were preserved:** `StoryCharacter`,
+`generate_visual_image`, `story_reference_sheet`, `safe_filename`/`stable_seed`,
+`clamp_tier`, `apply_voice_cast_v2`/`cast_voices`, `story_repo` + story tables. The
+`/character/reference-sheet` endpoint is still mounted (Q3 uses it).
+
+**Note the BLOCKER resolution:** `/api/story/analyze` was a frozen public REST route,
+so its removal required (and evidently received) explicit approval — it is no longer
+in the router. Any doc still describing `/analyze` as mounted is stale; trust the code.
+
+**Leftover housekeeping (cosmetic, not tracked):** the orphan
+`__pycache__/story_{director,prompts,parser,chunker}.pyc` files have no source and are
+not git-tracked — they clear on the next clean build. No action required.

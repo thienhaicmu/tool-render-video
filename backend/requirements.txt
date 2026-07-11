@@ -16,6 +16,11 @@ edge-tts==7.2.8
 deep-translator==1.11.4
 prometheus-client>=0.19,<1.0
 
+# Procedural SVG art rasterizer (Story Mode SVG image provider — Phase B). Pure Rust
+# resvg core via a prebuilt wheel (no native build). Lazy-imported + degrades to None
+# when absent, so a base install without it still renders via the AI/solid-bg path.
+resvg-py==0.3.3
+
 # System status bar (Clip Studio) — CPU/RAM + GPU dots via /api/system/resources.
 # Declared here so a BASE install powers the monitor. Previously psutil arrived
 # only transitively (via requirements-ai's `trainer`), so CPU/RAM went dark on a

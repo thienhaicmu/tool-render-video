@@ -33,6 +33,11 @@ TRANSITION = ("cut", "fade", "slide", "zoom", "flash", "to_black")
 TIER = ("low", "medium", "high")
 GENDER = ("male", "female", "")
 SUBTITLE_MODE = ("hook_only", "full", "off")
+# Offline asset-library scope hints (Phase 0.5). Story-level region + genre map to the
+# asset_library/{kind}/{region}/{genre}/ folders so the pipeline can match a stock asset
+# instead of calling AI image gen. All optional — "" = no hint (AI decides / no match).
+REGION = ("cn", "jp", "ko", "vi", "eu", "us", "")
+GENRE_KEY = ("wuxia", "ngontinh", "horror", "fantasy", "codai", "hiendai", "")
 # Background-music moods the AI may tag a Visual with. Each maps to a folder under
 # BGM_DIR/{mood}/ (see core.config._pick_bgm_file); "" / unknown → "default" folder.
 # Kept in sync with story_prompts_v2 (the AI vocab) and scripts/fetch_free_bgm.py.
@@ -49,6 +54,8 @@ SOURCE_AUDIO = ("mute", "duck", "keep")
 CHAR_ANCHOR = ("none", "left", "center", "right")
 CHAR_SCALE = ("small", "medium", "large")
 CHAR_MOTION = ("static", "fade", "slide", "float")
+# N4+ per-beat character POSE (matches svg_char builder poses). "stand" = neutral (default).
+POSE = ("stand", "wave", "cheer", "point", "hip")
 # Where on-screen text (hook / future subtitle) sits; "auto" → derived from char_anchor.
 TEXT_ANCHOR = ("auto", "top", "bottom", "left", "right")
 # Pool a "random" transition resolves into (deterministic via seed).
@@ -96,6 +103,8 @@ class CharacterDef:
     gender: str = ""          # ∈ GENDER
     voice_gender: str = ""    # ∈ GENDER
     voice_style: str = ""
+    archetype: str = ""       # Phase 0.5: library role token (English, e.g. "swordsman"); "" = none
+    asset: str = ""           # Library-pick: AI-chosen library character slug (exact); "" = none
 
 
 @dataclass
@@ -103,6 +112,8 @@ class SettingDef:
     id: str = ""
     name: str = ""
     canonical_desc: str = ""
+    scene_kind: str = ""      # Phase 0.5: library scene token (English, e.g. "cafe"); "" = none
+    asset: str = ""           # Library-pick: AI-chosen library background slug (exact); "" = none
 
 
 @dataclass
@@ -128,6 +139,7 @@ class Beat:
     pause_after: float = 0.0
     hold_sec: float = 0.0
     transition_in: str = "cut"  # ∈ TRANSITION (only used when the visual changes)
+    pose: str = "stand"         # N4+ ∈ POSE — speaker gesture for this beat (overlay mode)
     hook: bool = False
     hook_text: str = ""
     bgm_mood: str = ""          # ∈ BGM_MOODS — AI-chosen music mood for THIS beat
@@ -179,6 +191,8 @@ class Cue:
     char_anchor: str = "none"   # ∈ CHAR_ANCHOR — overlay position ("none" = no overlay)
     char_scale: str = "medium"  # ∈ CHAR_SCALE — overlay size
     char_motion: str = "fade"   # ∈ CHAR_MOTION — overlay entrance/motion
+    emotion: str = "normal"     # N4 — carried from the beat; picks the speaker's emotion master
+    pose: str = "stand"         # N4+ ∈ POSE — carried from the beat; picks the pose master
     source_audio: str = "mute"  # ∈ SOURCE_AUDIO — base-video audio (A4; "mute" = drop it)
 
 
@@ -206,6 +220,8 @@ class StoryPlan:
     reading_pace: str = "normal"
     topic: str = ""
     tone: str = ""
+    region: str = ""          # Phase 0.5: ∈ REGION — asset-library market scope ("" = none)
+    genre_key: str = ""       # Phase 0.5: ∈ GENRE_KEY — asset-library genre scope ("" = none)
     characters: list[CharacterDef] = field(default_factory=list)
     settings: list[SettingDef] = field(default_factory=list)
     visuals: list[Visual] = field(default_factory=list)
@@ -377,6 +393,7 @@ class StoryPlan:
                     text_anchor=(b.text_anchor or "auto"),
                     speaker_id=(b.speaker_id or ""), char_anchor=(b.char_anchor or "none"),
                     char_scale=(b.char_scale or "medium"), char_motion=(b.char_motion or "fade"),
+                    emotion=(b.emotion or "normal"), pose=(b.pose or "stand"),
                     source_audio=(b.source_audio or "mute"),
                 ))
                 t = end
@@ -477,6 +494,8 @@ class StoryPlan:
             aspect_ratio=(_str(d.get("aspect_ratio")) or "16:9"),
             reading_pace=(_str(d.get("reading_pace")) or "normal"),
             topic=_str(d.get("topic")), tone=_str(d.get("tone")),
+            region=_norm(d.get("region"), REGION, ""),
+            genre_key=_norm(d.get("genre_key"), GENRE_KEY, ""),
             characters=[_character_from(x) for x in _list(d.get("characters"))],
             settings=[_setting_from(x) for x in _list(d.get("settings"))],
             visuals=[_visual_from(x) for x in _list(d.get("visuals"))],
@@ -569,11 +588,13 @@ def _character_from(x) -> CharacterDef:
     name = _str(x.get("name")); cid = _str(x.get("id")) or name
     return CharacterDef(id=cid, name=(name or cid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")),
                         age=_str(x.get("age")), gender=_norm(x.get("gender"), GENDER, ""),
-                        voice_gender=_norm(x.get("voice_gender"), GENDER, ""), voice_style=_str(x.get("voice_style")))
+                        voice_gender=_norm(x.get("voice_gender"), GENDER, ""), voice_style=_str(x.get("voice_style")),
+                        archetype=_str(x.get("archetype")), asset=_str(x.get("asset")))
 def _setting_from(x) -> SettingDef:
     if not isinstance(x, dict): return SettingDef()
     name = _str(x.get("name")); sid = _str(x.get("id")) or name
-    return SettingDef(id=sid, name=(name or sid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")))
+    return SettingDef(id=sid, name=(name or sid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")),
+                      scene_kind=_str(x.get("scene_kind")), asset=_str(x.get("asset")))
 def _visual_from(x) -> Visual:
     if not isinstance(x, dict): return Visual()
     return Visual(id=_str(x.get("id")), setting_id=_str(x.get("setting_id")),
@@ -589,6 +610,7 @@ def _beat_from(x, i) -> Beat:
                 pause_after=_clampf(x.get("pause_after"), 0.0, _PAUSE_MAX, 0.0),
                 hold_sec=max(0.0, _float(x.get("hold_sec"))),
                 transition_in=_norm(x.get("transition_in"), TRANSITION, "cut"),
+                pose=_norm(x.get("pose"), POSE, "stand"),
                 hook=_bool(x.get("hook")), hook_text=_str(x.get("hook_text")),
                 bgm_mood=_norm(x.get("bgm_mood"), BGM_MOODS, ""),
                 bgm_cue=_norm(x.get("bgm_cue"), BGM_CUE, "under"),
@@ -631,6 +653,8 @@ def _render_from(x) -> RenderState:
                     char_anchor=_norm(c.get("char_anchor"), CHAR_ANCHOR, "none"),
                     char_scale=_norm(c.get("char_scale"), CHAR_SCALE, "medium"),
                     char_motion=_norm(c.get("char_motion"), CHAR_MOTION, "fade"),
+                    emotion=(_str(c.get("emotion")).lower() or "normal"),
+                    pose=_norm(c.get("pose"), POSE, "stand"),
                     source_audio=_norm(c.get("source_audio"), SOURCE_AUDIO, "mute")))
         rs.total_sec = _float(x.get("total_sec"))
     except Exception:
@@ -642,7 +666,8 @@ __all__ = [
     "StoryPlan", "CharacterDef", "SettingDef", "Visual", "Beat",
     "Word", "BeatAudio", "Cue", "RenderState",
     "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE", "BGM_MOODS",
+    "REGION", "GENRE_KEY",
     "BGM_CUE", "BGM_INTENSITY", "SOURCE_AUDIO", "CHAR_ANCHOR", "CHAR_SCALE",
-    "CHAR_MOTION", "TEXT_ANCHOR",
+    "CHAR_MOTION", "TEXT_ANCHOR", "POSE",
     "ASPECT_SIZE", "CPS", "CROP_RECT", "TRANSITION_SEC", "MIN_BEAT_SEC", "cps_for",
 ]

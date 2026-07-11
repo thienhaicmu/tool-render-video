@@ -95,3 +95,35 @@ def test_s4_missing_fields_default():
     b = p.timeline[0]
     assert b.bgm_cue == "under" and b.bgm_intensity == "med" and b.source_audio == "mute"
     assert b.char_anchor == "none" and b.text_anchor == "auto"
+
+
+def test_s5_library_hint_fields_parsed():
+    # Phase 0.5 — asset-library hints parse; bad region drops to "".
+    d = _good()
+    d.update({"region": "cn", "genre_key": "wuxia"})
+    d["characters"][0]["archetype"] = "swordsman"
+    d["settings"][0]["scene_kind"] = "throne_room"
+    p = parse_super_plan_response(json.dumps(d))
+    assert p.region == "cn" and p.genre_key == "wuxia"
+    assert p.characters[0].archetype == "swordsman"
+    assert p.settings[0].scene_kind == "throne_room"
+    d["region"] = "atlantis"
+    assert parse_super_plan_response(json.dumps(d)).region == ""
+
+
+def test_s5_missing_library_hints_default():
+    p = parse_super_plan_response(json.dumps(_good()))
+    assert p.region == "" and p.genre_key == ""
+    assert p.characters[0].archetype == "" and p.settings[0].scene_kind == ""
+
+
+def test_s6_library_pick_asset_parsed():
+    # Library-pick — AI-chosen asset slugs parse onto CharacterDef/SettingDef.
+    d = _good()
+    d["characters"][0]["asset"] = "cn_wuxia_swordsman_male_young"
+    d["settings"][0]["asset"] = "cn_wuxia_imperial_hall"
+    p = parse_super_plan_response(json.dumps(d))
+    assert p.characters[0].asset == "cn_wuxia_swordsman_male_young"
+    assert p.settings[0].asset == "cn_wuxia_imperial_hall"
+    # absent → "" (default)
+    assert parse_super_plan_response(json.dumps(_good())).characters[0].asset == ""

@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s4"   # s4: per-beat bgm_cue/intensity, source_audio, char_*, text_anchor
+SUPER_PROMPT_VERSION = "s7"   # s7: +per-beat pose; s6: library-pick (asset slug + catalog); s5: asset-library hints; s4: per-beat bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -67,13 +67,19 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
   "tone": "<detected/created tone>",
   "language": "<LANG code>",
   "art_style": "<overall art style, e.g. cinematic ink-wash wuxia>",
+  "region": "cn|jp|ko|vi|eu|us|",
+  "genre_key": "wuxia|ngontinh|horror|fantasy|codai|hiendai|",
   "characters": [
     { "id": "<short slug, e.g. han_phong>", "name": "<display name>",
       "canonical_desc": "<CANONICAL look: age, hair, attire, weapon, aura — reused every image>",
+      "archetype": "<lowercase English role token, e.g. swordsman|emperor|office_worker|princess|witch|child|ghost — or '' if unsure>",
+      "asset": "<a CHARACTERS slug from the ASSET LIBRARY that best fits this character, or '' if none fits / no library given>",
       "age": "", "gender": "male|female|", "voice_gender": "male|female", "voice_style": "calm|fierce|young|…" }
   ],
   "settings": [
-    { "id": "<slug>", "name": "<place>", "canonical_desc": "<canonical look of the place>" }
+    { "id": "<slug>", "name": "<place>", "canonical_desc": "<canonical look of the place>",
+      "scene_kind": "<lowercase English scene token, e.g. cafe|forest|throne_room|bedroom|garden|street — or '' if unsure>",
+      "asset": "<a BACKGROUNDS slug from the ASSET LIBRARY that best fits this place, or '' if none fits / no library given>" }
   ],
   "visuals": [
     { "id": "v1", "setting_id": "<a settings id>",
@@ -95,6 +101,7 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
       "char_anchor": "none|left|center|right",
       "char_scale": "small|medium|large",
       "char_motion": "static|fade|slide|float",
+      "pose": "stand|wave|cheer|point|hip",
       "text_anchor": "auto|top|bottom|left|right",
       "hook": false, "hook_text": "" }
   ]
@@ -127,13 +134,35 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
         "none for a quiet beat; under otherwise. bgm_intensity = low|med|high. LABELS only, never seconds.\n"
         "10. char_anchor = where the SPEAKING character stands: none|left|center|right — set none when "
         "speaker_id is '' (narrator). char_scale = small|medium|large; char_motion = static|fade|slide|float. "
+        "pose = the speaker's gesture THIS beat: stand (neutral) | wave (greeting) | cheer (excited) | "
+        "point (accusing/indicating) | hip (defiant) — use stand unless the action clearly calls for one. "
         "source_audio = mute|duck|keep (how a base video's own audio is treated).\n"
         "11. text_anchor = where on-screen text sits: auto|top|bottom|left|right. Use auto normally; pick a "
         "side OPPOSITE char_anchor so text never covers the character.\n"
-        "12. DO NOT output any render/asset/path/timestamp/duration/seconds field.\n"
+        "12. region/genre_key/archetype/scene_kind are OPTIONAL asset-library hints: lowercase English "
+        "tokens only; leave \"\" when unsure (never invent). They do NOT change the story.\n"
+        "13. \"asset\" (character/setting) = an exact SLUG copied from the ASSET LIBRARY section when one "
+        "fits, else \"\". Never a path; never a slug that is not listed. Absent library → \"\".\n"
+        "14. DO NOT output any render/path/timestamp/duration/seconds field.\n"
         "═══ SELF-CHECK before answering ═══\n"
         "Verify every visual_id / speaker_id / character_ids exists in the arrays above; if not, fix it.\n"
         "═══ OUTPUT JSON ═══"
+    )
+
+
+def _library_block(library_catalog: str) -> str:
+    """Optional ASSET LIBRARY catalog (library-pick): reproduced VERBATIM (concatenated,
+    never str.format'd) so arbitrary characters are safe. "" when there is no catalog —
+    the prompt is then byte-identical to the no-library version (Sacred #2 rollback)."""
+    cat = (library_catalog or "").strip()
+    if not cat:
+        return ""
+    return (
+        "\n═══ ASSET LIBRARY (offline art you MAY reuse) ═══\n"
+        + cat
+        + "\nFor each character/setting, if a library asset above FITS it, set its "
+        "\"asset\" to that exact slug (copy verbatim). If none fits, set \"asset\":\"\" "
+        "(fresh art will be drawn). Only ever use a slug that appears above.\n"
     )
 
 
@@ -154,9 +183,11 @@ def _series_memory_block(prior_context: str) -> str:
 
 def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str = "",
                              aspect_ratio: str = "16:9", subtitle_mode: str = "hook_only",
-                             ceiling: int = 15, prior_context: str = "") -> "tuple[str, str]":
+                             ceiling: int = 15, prior_context: str = "",
+                             library_catalog: str = "") -> "tuple[str, str]":
     """Mode A — (system, user) to ADAPT an existing story into a StoryPlan v2.
-    ``prior_context`` (G1) grounds a later chapter on earlier ones when non-empty."""
+    ``prior_context`` (G1) grounds a later chapter on earlier ones when non-empty.
+    ``library_catalog`` (library-pick) lets the AI choose ``asset`` slugs when non-empty."""
     lang_name = _lang_name(language)
     method = (
         "═══ METHOD (follow this order) ═══\n"
@@ -170,6 +201,7 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
         f"NARRATION LANGUAGE: {lang_name}\n{style_line}"
         + method
         + _series_memory_block(prior_context)
+        + _library_block(library_catalog)
         + "\n═══ SOURCE STORY (adapt THIS) ═══\n" + _fit(chapter) + "\n\n"
         + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode)
@@ -180,9 +212,10 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
 def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
                             language: str = "vi", art_style: str = "", aspect_ratio: str = "16:9",
                             subtitle_mode: str = "hook_only", ceiling: int = 15,
-                            prior_context: str = "") -> "tuple[str, str]":
+                            prior_context: str = "", library_catalog: str = "") -> "tuple[str, str]":
     """Mode B — (system, user) to CREATE a story from an idea then storyboard it (same schema).
-    ``prior_context`` (G1) grounds a later chapter on earlier ones when non-empty."""
+    ``prior_context`` (G1) grounds a later chapter on earlier ones when non-empty.
+    ``library_catalog`` (library-pick) lets the AI choose ``asset`` slugs when non-empty."""
     lang_name = _lang_name(language)
     cps = _CPS.get((language or "").strip().lower()[:2], 14.0)
     budget = int(max(0, duration_sec) * cps) if duration_sec and duration_sec > 0 else 0
@@ -203,6 +236,7 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
         f"NARRATION LANGUAGE: {lang_name}\n{genre_line}{dur_line}{style_line}"
         + method
         + _series_memory_block(prior_context)
+        + _library_block(library_catalog)
         + "\n═══ STORY IDEA (create FROM this) ═══\n" + _fit(idea, 8000) + "\n\n"
         + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode)

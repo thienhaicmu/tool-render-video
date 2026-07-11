@@ -155,6 +155,11 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
         <div className="st-actions">
           {/* Phase 2 — pick what the FINAL render uses (draft above is always free). */}
           <div className="st-provider" role="group" aria-label={vi ? 'Chất lượng ảnh' : 'Image quality'}>
+            <button type="button" className={`st-provider-opt${imageProvider === 'svg' ? ' is-on' : ''}`}
+              disabled={busy} onClick={() => onImageProvider('svg')}
+              title={vi ? 'Ảnh chibi vẽ trong máy — $0, offline, không cần AI' : 'Chibi art rendered locally — $0, offline, no AI'}>
+              {vi ? 'Chibi' : 'Chibi'} · $0
+            </button>
             <button type="button" className={`st-provider-opt${imageProvider === 'pollinations' ? ' is-on' : ''}`}
               disabled={busy} onClick={() => onImageProvider('pollinations')}
               title={vi ? 'Ảnh miễn phí (Flux) — $0' : 'Free images (Flux) — $0'}>

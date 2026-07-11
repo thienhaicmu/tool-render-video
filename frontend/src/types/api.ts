@@ -235,7 +235,7 @@ export interface RenderRequest {
   // Phase 2 — image provider for the FINAL render: 'gpt_image' (default, paid,
   // character-consistent) | 'pollinations' (free Flux). Review always previews
   // with the free provider (draft/final split).
-  story_image_provider?: 'gpt_image' | 'pollinations'
+  story_image_provider?: 'svg' | 'gpt_image' | 'pollinations'
   // A1 — optional LOCAL base video the story is composited over. '' = image-based
   // story (default). A valid path makes it the cue base layer (consumed in a later phase).
   story_base_video_path?: string
