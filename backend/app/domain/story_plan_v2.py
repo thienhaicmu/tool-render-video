@@ -33,6 +33,11 @@ TRANSITION = ("cut", "fade", "slide", "zoom", "flash", "to_black")
 TIER = ("low", "medium", "high")
 GENDER = ("male", "female", "")
 SUBTITLE_MODE = ("hook_only", "full", "off")
+# Offline asset-library scope hints (Phase 0.5). Story-level region + genre map to the
+# asset_library/{kind}/{region}/{genre}/ folders so the pipeline can match a stock asset
+# instead of calling AI image gen. All optional — "" = no hint (AI decides / no match).
+REGION = ("cn", "jp", "ko", "vi", "eu", "us", "")
+GENRE_KEY = ("wuxia", "ngontinh", "horror", "fantasy", "codai", "hiendai", "")
 # Background-music moods the AI may tag a Visual with. Each maps to a folder under
 # BGM_DIR/{mood}/ (see core.config._pick_bgm_file); "" / unknown → "default" folder.
 # Kept in sync with story_prompts_v2 (the AI vocab) and scripts/fetch_free_bgm.py.
@@ -96,6 +101,7 @@ class CharacterDef:
     gender: str = ""          # ∈ GENDER
     voice_gender: str = ""    # ∈ GENDER
     voice_style: str = ""
+    archetype: str = ""       # Phase 0.5: library role token (English, e.g. "swordsman"); "" = none
 
 
 @dataclass
@@ -103,6 +109,7 @@ class SettingDef:
     id: str = ""
     name: str = ""
     canonical_desc: str = ""
+    scene_kind: str = ""      # Phase 0.5: library scene token (English, e.g. "cafe"); "" = none
 
 
 @dataclass
@@ -206,6 +213,8 @@ class StoryPlan:
     reading_pace: str = "normal"
     topic: str = ""
     tone: str = ""
+    region: str = ""          # Phase 0.5: ∈ REGION — asset-library market scope ("" = none)
+    genre_key: str = ""       # Phase 0.5: ∈ GENRE_KEY — asset-library genre scope ("" = none)
     characters: list[CharacterDef] = field(default_factory=list)
     settings: list[SettingDef] = field(default_factory=list)
     visuals: list[Visual] = field(default_factory=list)
@@ -477,6 +486,8 @@ class StoryPlan:
             aspect_ratio=(_str(d.get("aspect_ratio")) or "16:9"),
             reading_pace=(_str(d.get("reading_pace")) or "normal"),
             topic=_str(d.get("topic")), tone=_str(d.get("tone")),
+            region=_norm(d.get("region"), REGION, ""),
+            genre_key=_norm(d.get("genre_key"), GENRE_KEY, ""),
             characters=[_character_from(x) for x in _list(d.get("characters"))],
             settings=[_setting_from(x) for x in _list(d.get("settings"))],
             visuals=[_visual_from(x) for x in _list(d.get("visuals"))],
@@ -569,11 +580,13 @@ def _character_from(x) -> CharacterDef:
     name = _str(x.get("name")); cid = _str(x.get("id")) or name
     return CharacterDef(id=cid, name=(name or cid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")),
                         age=_str(x.get("age")), gender=_norm(x.get("gender"), GENDER, ""),
-                        voice_gender=_norm(x.get("voice_gender"), GENDER, ""), voice_style=_str(x.get("voice_style")))
+                        voice_gender=_norm(x.get("voice_gender"), GENDER, ""), voice_style=_str(x.get("voice_style")),
+                        archetype=_str(x.get("archetype")))
 def _setting_from(x) -> SettingDef:
     if not isinstance(x, dict): return SettingDef()
     name = _str(x.get("name")); sid = _str(x.get("id")) or name
-    return SettingDef(id=sid, name=(name or sid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")))
+    return SettingDef(id=sid, name=(name or sid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")),
+                      scene_kind=_str(x.get("scene_kind")))
 def _visual_from(x) -> Visual:
     if not isinstance(x, dict): return Visual()
     return Visual(id=_str(x.get("id")), setting_id=_str(x.get("setting_id")),
@@ -642,6 +655,7 @@ __all__ = [
     "StoryPlan", "CharacterDef", "SettingDef", "Visual", "Beat",
     "Word", "BeatAudio", "Cue", "RenderState",
     "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE", "BGM_MOODS",
+    "REGION", "GENRE_KEY",
     "BGM_CUE", "BGM_INTENSITY", "SOURCE_AUDIO", "CHAR_ANCHOR", "CHAR_SCALE",
     "CHAR_MOTION", "TEXT_ANCHOR",
     "ASPECT_SIZE", "CPS", "CROP_RECT", "TRANSITION_SEC", "MIN_BEAT_SEC", "cps_for",

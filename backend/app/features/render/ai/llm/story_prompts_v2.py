@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s4"   # s4: per-beat bgm_cue/intensity, source_audio, char_*, text_anchor
+SUPER_PROMPT_VERSION = "s5"   # s5: +asset-library hints (region/genre_key/archetype/scene_kind); s4: per-beat bgm_cue/intensity, source_audio, char_*, text_anchor
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -67,13 +67,17 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
   "tone": "<detected/created tone>",
   "language": "<LANG code>",
   "art_style": "<overall art style, e.g. cinematic ink-wash wuxia>",
+  "region": "cn|jp|ko|vi|eu|us|",
+  "genre_key": "wuxia|ngontinh|horror|fantasy|codai|hiendai|",
   "characters": [
     { "id": "<short slug, e.g. han_phong>", "name": "<display name>",
       "canonical_desc": "<CANONICAL look: age, hair, attire, weapon, aura — reused every image>",
+      "archetype": "<lowercase English role token, e.g. swordsman|emperor|office_worker|princess|witch|child|ghost — or '' if unsure>",
       "age": "", "gender": "male|female|", "voice_gender": "male|female", "voice_style": "calm|fierce|young|…" }
   ],
   "settings": [
-    { "id": "<slug>", "name": "<place>", "canonical_desc": "<canonical look of the place>" }
+    { "id": "<slug>", "name": "<place>", "canonical_desc": "<canonical look of the place>",
+      "scene_kind": "<lowercase English scene token, e.g. cafe|forest|throne_room|bedroom|garden|street — or '' if unsure>" }
   ],
   "visuals": [
     { "id": "v1", "setting_id": "<a settings id>",
@@ -130,7 +134,9 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
         "source_audio = mute|duck|keep (how a base video's own audio is treated).\n"
         "11. text_anchor = where on-screen text sits: auto|top|bottom|left|right. Use auto normally; pick a "
         "side OPPOSITE char_anchor so text never covers the character.\n"
-        "12. DO NOT output any render/asset/path/timestamp/duration/seconds field.\n"
+        "12. region/genre_key/archetype/scene_kind are OPTIONAL asset-library hints: lowercase English "
+        "tokens only; leave \"\" when unsure (never invent). They do NOT change the story.\n"
+        "13. DO NOT output any render/asset/path/timestamp/duration/seconds field.\n"
         "═══ SELF-CHECK before answering ═══\n"
         "Verify every visual_id / speaker_id / character_ids exists in the arrays above; if not, fix it.\n"
         "═══ OUTPUT JSON ═══"

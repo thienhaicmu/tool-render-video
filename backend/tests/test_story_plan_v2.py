@@ -40,6 +40,31 @@ def test_roundtrip_stable():
     assert j1 == j2                       # deterministic round-trip (tuple↔list stable)
 
 
+def test_phase05_library_hint_fields():
+    """region/genre_key/archetype/scene_kind: roundtrip, enum-norm, old-blob defaults,
+    and NO effect on the deterministic cue sheet (Phase 0.5 — Sacred #2 spirit)."""
+    p = _plan()
+    p.region = "cn"; p.genre_key = "wuxia"
+    p.characters[0].archetype = "swordsman"
+    p.settings[0].scene_kind = "throne_room"
+    p.render.beat_audio = {"b1": BeatAudio("a1.mp3", 3.0), "b2": BeatAudio("a2.mp3", 2.0),
+                           "b3": BeatAudio("a3.mp3", 2.5)}
+    p.build_cues()
+    r = StoryPlan.from_json(p.to_json())
+    assert r.region == "cn" and r.genre_key == "wuxia"
+    assert r.characters[0].archetype == "swordsman"
+    assert r.settings[0].scene_kind == "throne_room"
+    # cue sheet identical with vs without the hints (hints never touch render state)
+    p2 = _plan()
+    p2.render.beat_audio = dict(p.render.beat_audio); p2.build_cues()
+    assert [(c.beat_id, c.start_sec, c.end_sec) for c in r.render.cues] == \
+           [(c.beat_id, c.start_sec, c.end_sec) for c in p2.render.cues]
+    # bad region value drops to "" ; old blob (no keys) defaults to ""
+    bad = StoryPlan.from_json('{"schema_version":2,"region":"mars","characters":[{"id":"x","name":"X"}]}')
+    assert bad.region == "" and bad.genre_key == ""
+    assert bad.characters[0].archetype == "" and StoryPlan().settings == []
+
+
 def test_from_json_none_and_garbage():
     assert StoryPlan.from_json(None) is None
     assert StoryPlan.from_json("") is None

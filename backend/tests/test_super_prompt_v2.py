@@ -17,6 +17,9 @@ def test_story_prompt_shape_and_params():
     assert "16:9" in user
     assert "Vietnamese" in user                       # lang name
     assert "adapt THIS" in user.lower() or "adapt this" in user.lower()
+    # Phase 0.5 — asset-library hint keys present in the schema
+    assert '"region"' in user and '"genre_key"' in user
+    assert '"archetype"' in user and '"scene_kind"' in user
 
 
 def test_idea_prompt_budget_and_genre():
@@ -54,4 +57,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s4"   # s4: bgm_cue/intensity, source_audio, char_*, text_anchor
+    assert SUPER_PROMPT_VERSION == "s5"   # s5: +asset-library hints (region/genre_key/archetype/scene_kind)

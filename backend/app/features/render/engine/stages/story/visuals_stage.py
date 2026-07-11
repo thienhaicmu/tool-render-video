@@ -35,6 +35,30 @@ def _worker_count(env_name: str, default: int, n_items: int) -> int:
     return max(1, min(w, max(1, int(n_items or 1))))
 
 
+def _match_library_background(plan, visual):
+    """Phase A — offline library-first: match a stock BACKGROUND for a CHARACTER-LESS
+    Visual (establishing shot) before paying for AI. Returns an on-disk path or None.
+    Never raises.
+
+    Only for a Visual with NO character_ids: the image-based cue render does not overlay
+    character masters, so a plain library background would drop the characters — those
+    keep AI gen. Scoped by plan.region/genre_key; matched by the setting's scene_kind
+    (Phase 0.5 hint) else its name."""
+    try:
+        if getattr(visual, "character_ids", None):
+            return None
+        s = plan.setting(getattr(visual, "setting_id", "") or "")
+        name = ((getattr(s, "scene_kind", "") or getattr(s, "name", "")) if s else "").strip()
+        if not name:
+            return None
+        from app.db.story_asset_repo import match_asset
+        return match_asset("background", name=name,
+                           region=(getattr(plan, "region", "") or ""),
+                           genre=(getattr(plan, "genre_key", "") or ""))
+    except Exception:
+        return None
+
+
 def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int,
                      *, job_id: str, effective_channel: str, provider: str = "gpt_image") -> list:
     """Generate one image per Visual → plan.render.visual_assets[vid]. Returns the
@@ -59,6 +83,33 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
         except Exception:
             return False
     gen_visuals = [v for v in plan.visuals if not _ready(v.id)]
+
+    # Phase A — offline library-first: auto-match a stock BACKGROUND for character-less
+    # Visuals before paying for AI. Gated by STORY_LIBRARY_FIRST (off by default →
+    # byte-identical). A matched visual is filled + dropped from gen_visuals (skip AI).
+    if os.getenv("STORY_LIBRARY_FIRST", "0") == "1":
+        _matched: list = []
+        for v in list(gen_visuals):
+            p = _match_library_background(plan, v)
+            if p:
+                plan.render.visual_assets[v.id] = p
+                _matched.append(v.id)
+        if _matched:
+            gen_visuals = [v for v in gen_visuals if v.id not in _matched]
+            try:
+                update_story_plan(job_id, plan.to_json())
+            except Exception:
+                pass
+            for vid in _matched:
+                try:
+                    _emit_render_event(
+                        channel_code=effective_channel, job_id=job_id,
+                        event="story.visual.matched", level="INFO",
+                        message=f"Key-visual {vid} matched from library (no AI)",
+                        step="render.story",
+                        context={"visual_id": vid, "done": len(plan.render.visual_assets), "total": total})
+                except Exception:
+                    pass
 
     # Hard cost cap (premium only): STORY_MAX_PREMIUM_IMAGES > 0 limits how many
     # key-visuals are gpt-image-generated; the rest fall back to a solid background.
