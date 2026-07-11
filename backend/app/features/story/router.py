@@ -402,8 +402,15 @@ def save_story_project(req: StoryProjectSaveRequest) -> dict:
 
 @router.get("/projects")
 def list_story_projects() -> dict:
-    """List recent Story projects (newest first, without the heavy config/plan blobs)."""
+    """List recent LIVE Story projects (newest first, without the heavy config/plan blobs)."""
     return {"projects": story_project_repo.list_projects()}
+
+
+@router.get("/projects/trash")
+def list_trashed_story_projects() -> dict:
+    """List soft-deleted (trashed) Story projects. Defined BEFORE /projects/{id} so
+    'trash' is never captured as a project id."""
+    return {"projects": story_project_repo.list_trashed_projects()}
 
 
 @router.get("/projects/{project_id}")
@@ -427,6 +434,74 @@ def get_story_project(project_id: str) -> dict:
 
 @router.delete("/projects/{project_id}")
 def delete_story_project(project_id: str) -> dict:
-    """Delete a Story project. Idempotent — always reports success."""
+    """SOFT-delete a Story project (move to trash). Idempotent — always reports success.
+    Restore via /projects/{id}/restore; hard-remove via /projects/{id}/purge."""
     story_project_repo.delete_project(project_id)
     return {"deleted": True, "id": project_id}
+
+
+@router.post("/projects/{project_id}/restore")
+def restore_story_project(project_id: str) -> dict:
+    """Restore a trashed Story project (clear deleted_at)."""
+    story_project_repo.restore_project(project_id)
+    return {"restored": True, "id": project_id}
+
+
+@router.delete("/projects/{project_id}/purge")
+def purge_story_project(project_id: str) -> dict:
+    """HARD-delete a Story project + all its versions (empty-trash). Irreversible."""
+    story_project_repo.purge_project(project_id)
+    return {"purged": True, "id": project_id}
+
+
+# ── SP3+: project version history (snapshot / list / restore) ─────────────────
+
+class SaveVersionRequest(BaseModel):
+    label: str = ""
+
+
+@router.post("/projects/{project_id}/versions")
+def snapshot_story_project_version(project_id: str, req: SaveVersionRequest) -> dict:
+    """Snapshot the project's CURRENT stored plan+config as a version. 404 when the
+    project doesn't exist. Returns ``{version_id}``."""
+    row = story_project_repo.get_project(project_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="project not found")
+    vid = story_project_repo.save_version(
+        project_id, label=(req.label or ""),
+        plan_json=(row.get("plan_json") or ""), config_json=(row.get("config_json") or ""),
+    )
+    if not vid:
+        raise HTTPException(status_code=500, detail="failed to snapshot version")
+    return {"version_id": vid}
+
+
+@router.get("/projects/{project_id}/versions")
+def list_story_project_versions(project_id: str) -> dict:
+    """List a project's version snapshots (newest first, without the heavy blobs)."""
+    return {"versions": story_project_repo.list_versions(project_id)}
+
+
+@router.post("/projects/{project_id}/restore-version/{version_id}")
+def restore_story_project_version(project_id: str, version_id: str) -> dict:
+    """Restore a version's plan+config back INTO the project (overwrites current) and
+    return the restored ``{config, plan}`` for the FE to reload. 404 on a missing version."""
+    ver = story_project_repo.get_version(version_id)
+    if ver is None or (ver.get("project_id") or "") != project_id:
+        raise HTTPException(status_code=404, detail="version not found")
+    proj = story_project_repo.get_project(project_id) or {}
+    story_project_repo.upsert_project(
+        project_id, name=(proj.get("name") or ""), language=(proj.get("language") or ""),
+        source=(proj.get("source") or ""),
+        config_json=(ver.get("config_json") or ""), plan_json=(ver.get("plan_json") or ""),
+        status=(proj.get("status") or "draft"),
+    )
+    try:
+        config = json.loads(ver.get("config_json") or "") if ver.get("config_json") else {}
+    except Exception:
+        config = {}
+    try:
+        plan = json.loads(ver.get("plan_json") or "") if ver.get("plan_json") else None
+    except Exception:
+        plan = None
+    return {"restored": True, "config": config, "plan": plan}

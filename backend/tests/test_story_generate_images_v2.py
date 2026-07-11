@@ -68,6 +68,47 @@ def test_fallback_skips_persist(monkeypatch, tmp_path):
     assert len(persisted) == 1  # only the successful visual persisted
 
 
+# ── Cost cap: STORY_MAX_PREMIUM_IMAGES ────────────────────────────────────────
+
+def test_premium_image_cap_limits_gen(monkeypatch, tmp_path):
+    from app.domain.story_plan_v2 import StoryPlan, Visual, Beat
+    monkeypatch.setenv("STORY_MAX_PREMIUM_IMAGES", "1")
+    monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
+    monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
+    calls = {"n": 0}
+
+    def fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
+        calls["n"] += 1
+        Path(out_path).write_bytes(b'\x89PNG')
+        return out_path
+    monkeypatch.setattr(sp2, 'generate_visual_image', fake_img)
+    p = StoryPlan(visuals=[Visual(id=f'v{i}', prompt='x') for i in range(1, 4)],
+                  timeline=[Beat(id='b1', narration='a', visual_id='v1')])
+    fb = sp2._generate_images(p, tmp_path, '', 1024, 1024,
+                              job_id='j', effective_channel='c', provider='gpt_image')
+    assert calls["n"] == 1                     # cap=1 → only one premium image generated
+    assert set(fb) == {'v2', 'v3'}             # the rest fall back to a solid background
+
+
+def test_premium_cap_off_by_default(monkeypatch, tmp_path):
+    from app.domain.story_plan_v2 import StoryPlan, Visual, Beat
+    monkeypatch.delenv("STORY_MAX_PREMIUM_IMAGES", raising=False)
+    monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
+    monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
+    calls = {"n": 0}
+
+    def fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
+        calls["n"] += 1
+        Path(out_path).write_bytes(b'\x89PNG')
+        return out_path
+    monkeypatch.setattr(sp2, 'generate_visual_image', fake_img)
+    p = StoryPlan(visuals=[Visual(id=f'v{i}', prompt='x') for i in range(1, 4)],
+                  timeline=[Beat(id='b1', narration='a', visual_id='v1')])
+    fb = sp2._generate_images(p, tmp_path, '', 1024, 1024,
+                              job_id='j', effective_channel='c', provider='gpt_image')
+    assert calls["n"] == 3 and fb == []        # default 0 = unlimited (all generated)
+
+
 # ── A3: character masters for overlaid speakers ───────────────────────────────
 
 def test_generate_character_masters_only_overlaid_speakers(monkeypatch):

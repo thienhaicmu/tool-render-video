@@ -23,7 +23,9 @@ import { getDefaultOutputDir } from '../../api/outputDir'
 import { planStory, type StoryPlanV2 } from '../../api/story'
 import {
   listStoryProjects, saveStoryProject, getStoryProject, deleteStoryProject,
-  type StoryProjectListItem,
+  listTrashedStoryProjects, restoreStoryProject, purgeStoryProject,
+  snapshotStoryProjectVersion, listStoryProjectVersions, restoreStoryProjectVersion,
+  type StoryProjectListItem, type StoryProjectVersion,
 } from '../../api/storyProjects'
 import {
   DEFAULT_STORY_CFG, VOICE_LOCALE, type StoryConfig, type StoryPhase,
@@ -55,6 +57,8 @@ export function StoryStudio() {
   const [projectId, setProjectId] = useState('')
   const [projectName, setProjectName] = useState('')
   const [projects, setProjects] = useState<StoryProjectListItem[]>([])
+  const [trashed, setTrashed] = useState<StoryProjectListItem[]>([])
+  const [versions, setVersions] = useState<StoryProjectVersion[]>([])
   const [saveTag, setSaveTag] = useState<SaveTag>('idle')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipAutosave = useRef(false)   // set while opening/new so we don't re-save the loaded state
@@ -177,6 +181,35 @@ export function StoryStudio() {
     } catch (e) { fail(e) }
   }
 
+  // ── SP3+: version history + trash management ────────────────────────────────
+  const loadVersions = () => {
+    if (!projectId) { setVersions([]); return }
+    void listStoryProjectVersions(projectId).then((r) => setVersions(r.versions || [])).catch(() => {})
+  }
+  const loadTrash = () => void listTrashedStoryProjects().then((r) => setTrashed(r.projects || [])).catch(() => {})
+
+  async function snapshotVersion() {
+    if (!projectId) return
+    try { await snapshotStoryProjectVersion(projectId, new Date().toLocaleString()); loadVersions() }
+    catch (e) { fail(e) }
+  }
+  async function restoreVersion(versionId: string) {
+    if (!projectId) return
+    try {
+      const r = await restoreStoryProjectVersion(projectId, versionId)
+      skipAutosave.current = true
+      setCfg({ ...DEFAULT_STORY_CFG, ...(r.config as Partial<StoryConfig>) })
+      setPlan((r.plan as StoryPlanV2 | null) ?? null); resetHistory()
+      setPhase(r.plan ? 'review' : 'input'); setSaveTag('saved'); refreshProjects()
+    } catch (e) { fail(e) }
+  }
+  async function restoreTrashed(id: string) {
+    try { await restoreStoryProject(id); refreshProjects(); loadTrash() } catch (e) { fail(e) }
+  }
+  async function purgeTrashed(id: string) {
+    try { await purgeStoryProject(id); loadTrash() } catch (e) { fail(e) }
+  }
+
   function fail(e: unknown) { setError(e instanceof Error ? e.message : String(e)) }
 
   const inputReady = cfg.source === 'paste' ? !!cfg.chapterText.trim() : !!cfg.idea.trim()
@@ -258,10 +291,14 @@ export function StoryStudio() {
       {phase !== 'monitor' && (
         <ProjectBar
           vi={vi} name={projectName} saveTag={saveTag} projects={projects}
+          hasProject={!!projectId} versions={versions} trashed={trashed}
           canUndo={canUndo && phase === 'review'} canRedo={canRedo && phase === 'review'}
           onUndo={undoPlan} onRedo={redoPlan} onDuplicate={duplicateProject}
+          onSnapshot={snapshotVersion} onRestoreVersion={restoreVersion}
+          onRestoreTrashed={restoreTrashed} onPurgeTrashed={purgeTrashed}
           onName={setProjectName} onOpen={openProject} onNew={newProject}
-          onDelete={removeProject} onRefresh={refreshProjects}
+          onDelete={removeProject}
+          onRefresh={() => { refreshProjects(); loadVersions(); loadTrash() }}
         />
       )}
       {error && <div className="st-alert st-alert--fail" role="alert">{error}</div>}

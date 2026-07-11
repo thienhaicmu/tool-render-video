@@ -148,6 +148,33 @@ def test_no_overlay_without_base_video(monkeypatch, tmp_path):
     assert "/m.png" not in captured["cmd"]
 
 
+# ── Composition-QA: overlay pushes the hook to the top ────────────────────────
+
+def test_overlay_forces_hook_to_top(monkeypatch, tmp_path):
+    captured = _capture(monkeypatch)
+    monkeypatch.setattr(br, "_ok_file", lambda p: p in ("/base.mp4", "/m.png") or bool(p) and Path(p).exists())
+    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={}, masters={"han": "/m.png"}))
+    cue = _overlay_cue(anchor="right")
+    cue.hook = True; cue.hook_text = "Hook"; cue.text_anchor = "bottom"   # would collide
+    br.render_one_cue(_video_ctx(tmp_path), plan, 1, cue)
+    fc = captured["cmd"][captured["cmd"].index("-filter_complex") + 1]
+    assert "y=h*0.08" in fc and "y=h*0.82" not in fc     # hook pushed to top, not bottom
+    assert "overlay=x=" in fc
+
+
+def test_no_overlay_hook_keeps_its_anchor(monkeypatch, tmp_path):
+    captured = _capture(monkeypatch)
+    monkeypatch.setattr(br, "_ok_file", lambda p: p == "/img.png" or bool(p) and Path(p).exists())
+    ctx = SimpleNamespace(width=720, height=1280, fps=30.0, shots_dir=str(tmp_path),
+                          bg_value="#101820", ffmpeg_threads=0)
+    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={"v1": "/img.png"}, masters={}))
+    cue = _overlay_cue(anchor="none")
+    cue.hook = True; cue.hook_text = "Hook"; cue.text_anchor = "bottom"
+    br.render_one_cue(ctx, plan, 1, cue)
+    fc = captured["cmd"][captured["cmd"].index("-filter_complex") + 1]
+    assert "y=h*0.82" in fc                               # bottom respected (no overlay)
+
+
 # ── A4: base-video audio (source_audio mute/keep/duck) ────────────────────────
 
 def _audio_cue(source_audio="keep"):

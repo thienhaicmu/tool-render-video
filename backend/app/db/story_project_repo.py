@@ -71,18 +71,35 @@ _FULL_KEYS = ("id", "name", "language", "source", "config_json", "plan_json", "s
 
 
 def list_projects(limit: int = 100) -> list[dict]:
-    """Return recent projects (newest first), WITHOUT the heavy config/plan blobs.
-    Empty list on error. Never raises."""
+    """Return recent LIVE projects (newest first), WITHOUT the heavy config/plan blobs.
+    Soft-deleted (trashed) projects are excluded. Empty list on error. Never raises."""
     try:
         _lim = max(1, min(500, int(limit)))
         with db_conn() as conn:
             rows = conn.execute(
-                f"SELECT {_LIST_COLS} FROM story_projects ORDER BY updated_at DESC LIMIT ?",
+                f"SELECT {_LIST_COLS} FROM story_projects "
+                "WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?",
                 (_lim,),
             ).fetchall()
             return [_row(r, _LIST_KEYS) for r in rows]
     except Exception as exc:
         logger.warning("list_projects failed: %s", exc)
+        return []
+
+
+def list_trashed_projects(limit: int = 100) -> list[dict]:
+    """Return soft-deleted projects (newest-deleted first). Empty on error. Never raises."""
+    try:
+        _lim = max(1, min(500, int(limit)))
+        with db_conn() as conn:
+            rows = conn.execute(
+                f"SELECT {_LIST_COLS} FROM story_projects "
+                "WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT ?",
+                (_lim,),
+            ).fetchall()
+            return [_row(r, _LIST_KEYS) for r in rows]
+    except Exception as exc:
+        logger.warning("list_trashed_projects failed: %s", exc)
         return []
 
 
@@ -101,12 +118,100 @@ def get_project(project_id: str) -> Optional[dict]:
 
 
 def delete_project(project_id: str) -> bool:
-    """Delete a project. Returns True on success. Never raises."""
+    """SOFT-delete a project (move to trash: set deleted_at). Restorable via
+    restore_project; hard-removed via purge_project. Returns True. Never raises."""
     try:
         with db_conn() as conn:
-            conn.execute("DELETE FROM story_projects WHERE id = ?", (project_id,))
+            conn.execute(
+                "UPDATE story_projects SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') "
+                "WHERE id = ?",
+                (project_id,),
+            )
             conn.commit()
         return True
     except Exception as exc:
         logger.warning("delete_project failed id=%s: %s", project_id, exc)
         return False
+
+
+def restore_project(project_id: str) -> bool:
+    """Restore a soft-deleted project (clear deleted_at). Returns True. Never raises."""
+    try:
+        with db_conn() as conn:
+            conn.execute("UPDATE story_projects SET deleted_at = NULL WHERE id = ?", (project_id,))
+            conn.commit()
+        return True
+    except Exception as exc:
+        logger.warning("restore_project failed id=%s: %s", project_id, exc)
+        return False
+
+
+def purge_project(project_id: str) -> bool:
+    """HARD-delete a project and all its versions (empty-trash). Returns True. Never raises."""
+    try:
+        with db_conn() as conn:
+            conn.execute("DELETE FROM story_project_versions WHERE project_id = ?", (project_id,))
+            conn.execute("DELETE FROM story_projects WHERE id = ?", (project_id,))
+            conn.commit()
+        return True
+    except Exception as exc:
+        logger.warning("purge_project failed id=%s: %s", project_id, exc)
+        return False
+
+
+# ── story_project_versions (version history) ─────────────────────────────────
+
+_VERSION_LIST_KEYS = ("id", "project_id", "label", "created_at")
+_VERSION_FULL_KEYS = ("id", "project_id", "label", "plan_json", "config_json", "created_at")
+
+
+def save_version(project_id: str, *, label: str = "", plan_json: str = "", config_json: str = "") -> str:
+    """Snapshot a project's current plan+config as a version. Returns the new version id
+    ("" on error / empty project_id). Never raises."""
+    import uuid as _uuid
+    if not (project_id or "").strip():
+        return ""
+    vid = _uuid.uuid4().hex
+    try:
+        with db_conn() as conn:
+            conn.execute(
+                "INSERT INTO story_project_versions (id, project_id, label, plan_json, config_json) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (vid, project_id, label, plan_json, config_json),
+            )
+            conn.commit()
+        return vid
+    except Exception as exc:
+        logger.warning("save_version failed project=%s: %s", project_id, exc)
+        return ""
+
+
+def list_versions(project_id: str, limit: int = 50) -> list[dict]:
+    """Return a project's versions (newest first), WITHOUT the heavy blobs. Never raises."""
+    try:
+        _lim = max(1, min(200, int(limit)))
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, project_id, label, created_at FROM story_project_versions "
+                "WHERE project_id = ? ORDER BY created_at DESC LIMIT ?",
+                (project_id, _lim),
+            ).fetchall()
+            return [_row(r, _VERSION_LIST_KEYS) for r in rows]
+    except Exception as exc:
+        logger.warning("list_versions failed project=%s: %s", project_id, exc)
+        return []
+
+
+def get_version(version_id: str) -> Optional[dict]:
+    """Return one version (incl. plan_json/config_json), or None. Never raises."""
+    try:
+        with db_conn() as conn:
+            row = conn.execute(
+                "SELECT id, project_id, label, plan_json, config_json, created_at "
+                "FROM story_project_versions WHERE id = ?",
+                (version_id,),
+            ).fetchone()
+            return _row(row, _VERSION_FULL_KEYS) if row is not None else None
+    except Exception as exc:
+        logger.warning("get_version failed id=%s: %s", version_id, exc)
+        return None

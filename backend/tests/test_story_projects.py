@@ -10,10 +10,17 @@ from app.db.connection import init_db, db_conn
 from app.db import story_project_repo as repo
 from app.features.story.router import (
     StoryProjectSaveRequest,
+    SaveVersionRequest,
     save_story_project,
     list_story_projects,
+    list_trashed_story_projects,
     get_story_project,
     delete_story_project,
+    restore_story_project,
+    purge_story_project,
+    snapshot_story_project_version,
+    list_story_project_versions,
+    restore_story_project_version,
 )
 
 
@@ -47,7 +54,9 @@ def test_repo_crud_roundtrip():
         mine = [p for p in lst if p["id"] == pid]
         assert mine and "config_json" not in mine[0] and "plan_json" not in mine[0]
     finally:
-        assert repo.delete_project(pid)
+        assert repo.delete_project(pid)              # soft delete → still gettable
+        assert repo.get_project(pid) is not None
+        assert repo.purge_project(pid)               # hard delete → gone
         assert repo.get_project(pid) is None
 
 
@@ -74,7 +83,7 @@ def test_endpoints_save_get_list_delete():
         assert get_story_project(pid)["name"] == "E2E-2"
         assert any(p["id"] == pid for p in list_story_projects()["projects"])
     finally:
-        delete_story_project(pid)
+        purge_story_project(pid)
     with pytest.raises(HTTPException):
         get_story_project(pid)
 
@@ -83,3 +92,70 @@ def test_get_missing_project_404():
     with pytest.raises(HTTPException) as ei:
         get_story_project("does-not-exist-" + uuid.uuid4().hex)
     assert ei.value.status_code == 404
+
+
+# ── SP3+: trash / restore / purge ─────────────────────────────────────────────
+
+def test_soft_delete_moves_to_trash_then_restore():
+    pid = save_story_project(StoryProjectSaveRequest(name="Trash me", config={"x": 1}))["id"]
+    try:
+        # soft delete → out of live list, in trash, but still gettable
+        delete_story_project(pid)
+        assert not any(p["id"] == pid for p in list_story_projects()["projects"])
+        assert any(p["id"] == pid for p in list_trashed_story_projects()["projects"])
+        assert get_story_project(pid)["name"] == "Trash me"
+        # restore → back in live list, out of trash
+        restore_story_project(pid)
+        assert any(p["id"] == pid for p in list_story_projects()["projects"])
+        assert not any(p["id"] == pid for p in list_trashed_story_projects()["projects"])
+    finally:
+        purge_story_project(pid)
+
+
+def test_purge_hard_deletes():
+    pid = save_story_project(StoryProjectSaveRequest(name="Purge me"))["id"]
+    delete_story_project(pid)
+    purge_story_project(pid)
+    assert repo.get_project(pid) is None
+    assert not any(p["id"] == pid for p in list_trashed_story_projects()["projects"])
+
+
+# ── SP3+: version history ─────────────────────────────────────────────────────
+
+def test_version_snapshot_list_restore():
+    pid = save_story_project(StoryProjectSaveRequest(
+        name="Versioned", config={"genre": "wuxia"},
+        plan={"topic": "V1", "timeline": [{"id": "b1"}]}, status="ready"))["id"]
+    try:
+        v1 = snapshot_story_project_version(pid, SaveVersionRequest(label="first"))["version_id"]
+        assert v1
+        # mutate the project to a new plan
+        save_story_project(StoryProjectSaveRequest(id=pid, name="Versioned",
+                                                   plan={"topic": "V2"}, status="ready"))
+        assert get_story_project(pid)["plan"]["topic"] == "V2"
+        # the version list has the snapshot
+        vers = list_story_project_versions(pid)["versions"]
+        assert any(v["id"] == v1 and v["label"] == "first" for v in vers)
+        assert all("plan_json" not in v for v in vers)      # list is light
+        # restore V1 → project plan reverts, response carries config+plan
+        out = restore_story_project_version(pid, v1)
+        assert out["plan"]["topic"] == "V1" and out["config"]["genre"] == "wuxia"
+        assert get_story_project(pid)["plan"]["topic"] == "V1"
+    finally:
+        purge_story_project(pid)
+
+
+def test_snapshot_missing_project_404():
+    with pytest.raises(HTTPException) as ei:
+        snapshot_story_project_version("nope-" + uuid.uuid4().hex, SaveVersionRequest())
+    assert ei.value.status_code == 404
+
+
+def test_restore_missing_version_404():
+    pid = save_story_project(StoryProjectSaveRequest(name="X"))["id"]
+    try:
+        with pytest.raises(HTTPException) as ei:
+            restore_story_project_version(pid, "no-such-version")
+        assert ei.value.status_code == 404
+    finally:
+        purge_story_project(pid)

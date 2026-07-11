@@ -49,6 +49,29 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
     total = plan.image_count()
     seed = int(plan.seed or 0)
 
+    # Hard cost cap (premium only): STORY_MAX_PREMIUM_IMAGES > 0 limits how many
+    # key-visuals are gpt-image-generated; the rest fall back to a solid background.
+    # 0 = unlimited (default — no behaviour change). Bounds runaway spend on a long story.
+    gen_visuals = list(plan.visuals)
+    if provider == "gpt_image":
+        try:
+            _cap = int(os.getenv("STORY_MAX_PREMIUM_IMAGES", "0") or 0)
+        except (TypeError, ValueError):
+            _cap = 0
+        if _cap > 0 and len(gen_visuals) > _cap:
+            _capped = [v.id for v in gen_visuals[_cap:]]
+            gen_visuals = gen_visuals[:_cap]
+            fallbacks.extend(_capped)
+            try:
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.visual.capped", level="WARNING",
+                    message=(f"Premium image cap reached ({_cap}) — {len(_capped)} visual(s) "
+                             f"use a solid background."),
+                    step="render.story", context={"cap": _cap, "capped": _capped})
+            except Exception:
+                pass
+
     def _gen_one(v):
         # WORKER thread: pure image gen (network/file I/O). No DB, no plan mutation —
         # only reads plan.render.refs. Returns (visual_id, path|None). Never raises.
@@ -85,14 +108,14 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
         else:
             fallbacks.append(vid)
 
-    workers = _worker_count("STORY_IMAGE_WORKERS", 3, total)
+    workers = _worker_count("STORY_IMAGE_WORKERS", 3, len(gen_visuals))
     if workers <= 1:
-        for v in plan.visuals:
+        for v in gen_visuals:
             vid, p = _gen_one(v)
             _collect(vid, p)
     else:
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            futs = {ex.submit(_gen_one, v): v.id for v in plan.visuals}
+            futs = {ex.submit(_gen_one, v): v.id for v in gen_visuals}
             for f in as_completed(futs):
                 try:
                     vid, p = f.result()
