@@ -26,7 +26,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.core.config import CACHE_DIR
-from app.db import story_repo
+from app.db import story_repo, story_project_repo
 from app.features.render.ai.llm import generate_story_plan_v2
 
 logger = logging.getLogger("app.story.api")
@@ -211,6 +211,9 @@ class ReferenceSheetRequest(BaseModel):
     # Review preview instead of the opaque conditioning reference sheet. Default False
     # keeps the legacy behaviour (Sacred Contract #2 spirit).
     transparent: bool = False
+    # A5 approval/lock: 0 = canonical master; >0 busts the cache so "regenerate" yields
+    # a different look for the user to pick from. Only used with transparent=True.
+    variant: int = 0
 
 
 @router.post("/character/reference-sheet")
@@ -243,7 +246,8 @@ def character_reference_sheet(req: ReferenceSheetRequest) -> dict:
     # master and expose a viewable URL so Review can show it on a checkerboard. It is
     # an OVERLAY asset, NOT the conditioning reference sheet → it is not pinned.
     if req.transparent:
-        path = generate_character_master(character, art_style=(req.art_style or ""))
+        path = generate_character_master(character, art_style=(req.art_style or ""),
+                                         variant=int(req.variant or 0))
         if not path:
             raise HTTPException(status_code=502, detail="character master generation failed")
         url = ""
@@ -364,3 +368,65 @@ def story_voices(language: str = "vi") -> dict:
     (written into the plan's render.voices, preserved at render). Never raises."""
     from app.features.render.ai.llm.story_voice_cast import list_voices
     return list_voices(language or "vi")
+
+
+# ── SP1: Story project persistence (save / list / open / delete) ──────────────
+
+class StoryProjectSaveRequest(BaseModel):
+    id: str = ""                       # "" → create a new project
+    name: str = ""
+    language: str = ""
+    source: str = ""                   # paste | idea
+    config: dict = Field(default_factory=dict)   # the FE StoryConfig
+    plan: Optional[dict] = None         # the edited StoryPlan v2 (None → not planned yet)
+    status: str = "draft"              # draft | ready
+
+
+@router.post("/projects")
+def save_story_project(req: StoryProjectSaveRequest) -> dict:
+    """Create (id="") or update a Story project (config + edited plan). Powers the FE
+    autosave + manual Save. Returns ``{id}``. Never persists render state — this is a
+    pre-render authoring store only."""
+    pid = (req.id or "").strip() or uuid.uuid4().hex
+    ok = story_project_repo.upsert_project(
+        pid, name=(req.name or ""), language=(req.language or ""),
+        source=(req.source or ""),
+        config_json=json.dumps(req.config or {}, ensure_ascii=False),
+        plan_json=(json.dumps(req.plan, ensure_ascii=False) if req.plan else ""),
+        status=(req.status or "draft"),
+    )
+    if not ok:
+        raise HTTPException(status_code=500, detail="failed to save project")
+    return {"id": pid}
+
+
+@router.get("/projects")
+def list_story_projects() -> dict:
+    """List recent Story projects (newest first, without the heavy config/plan blobs)."""
+    return {"projects": story_project_repo.list_projects()}
+
+
+@router.get("/projects/{project_id}")
+def get_story_project(project_id: str) -> dict:
+    """Return one project with ``config`` + ``plan`` parsed back to objects. 404 missing."""
+    row = story_project_repo.get_project(project_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="project not found")
+    try:
+        row["config"] = json.loads(row.get("config_json") or "") if row.get("config_json") else {}
+    except Exception:
+        row["config"] = {}
+    try:
+        row["plan"] = json.loads(row.get("plan_json") or "") if row.get("plan_json") else None
+    except Exception:
+        row["plan"] = None
+    row.pop("config_json", None)
+    row.pop("plan_json", None)
+    return row
+
+
+@router.delete("/projects/{project_id}")
+def delete_story_project(project_id: str) -> dict:
+    """Delete a Story project. Idempotent — always reports success."""
+    story_project_repo.delete_project(project_id)
+    return {"deleted": True, "id": project_id}

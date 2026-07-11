@@ -12,7 +12,7 @@
  * from content-studio (each studio owns its screens; the base is shared).
  * F1 scaffolds the shell + state; F2/F3/F4 flesh out the three screens.
  */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import './StoryStudio.css'
 import type { RenderRequest } from '@/types/api'
 import { StudioScreen, StudioStepper } from '../../components/studio'
@@ -22,12 +22,17 @@ import { useUIStore } from '../../stores/uiStore'
 import { getDefaultOutputDir } from '../../api/outputDir'
 import { planStory, type StoryPlanV2 } from '../../api/story'
 import {
+  listStoryProjects, saveStoryProject, getStoryProject, deleteStoryProject,
+  type StoryProjectListItem,
+} from '../../api/storyProjects'
+import {
   DEFAULT_STORY_CFG, VOICE_LOCALE, type StoryConfig, type StoryPhase,
 } from './types'
 import { InputScreen } from './InputScreen'
 import { PlanReview } from './PlanReview'
 import { StoryMonitor } from './StoryMonitor'
 import { StoryDirectorConsole } from './StoryDirectorConsole'
+import { ProjectBar, type SaveTag } from './ProjectBar'
 
 const STEP: Record<StoryPhase, number> = { input: 1, review: 2, monitor: 3 }
 
@@ -46,9 +51,25 @@ export function StoryStudio() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  // SP2 — project persistence (save / autosave / open / delete).
+  const [projectId, setProjectId] = useState('')
+  const [projectName, setProjectName] = useState('')
+  const [projects, setProjects] = useState<StoryProjectListItem[]>([])
+  const [saveTag, setSaveTag] = useState<SaveTag>('idle')
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const skipAutosave = useRef(false)   // set while opening/new so we don't re-save the loaded state
+
+  // SP3 — undo/redo for PLAN edits (Review). Undo/redo call setPlan directly, so they
+  // never re-record; only edits routed through recordPlan push history.
+  const hist = useRef<{ past: (StoryPlanV2 | null)[]; future: (StoryPlanV2 | null)[] }>({ past: [], future: [] })
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+  const resetHistory = () => { hist.current = { past: [], future: [] }; setCanUndo(false); setCanRedo(false) }
+
   const setKey = <K extends keyof StoryConfig>(k: K, v: StoryConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }))
   const hasPicker = typeof window !== 'undefined' && !!window.electronAPI?.pickDirectory
+  const hasVideoPicker = typeof window !== 'undefined' && !!window.electronAPI?.pickVideoFile
 
   // Prefill the save folder from the saved default (never clobber a user choice).
   useEffect(() => {
@@ -60,6 +81,100 @@ export function StoryStudio() {
   async function pickOutputDir() {
     const dir = await window.electronAPI?.pickDirectory?.()
     if (dir) setKey('outputDir', dir)
+  }
+
+  async function pickBaseVideo() {
+    const f = await window.electronAPI?.pickVideoFile?.()
+    if (f) setKey('baseVideoPath', f)
+  }
+
+  // ── SP2: project list + autosave + open/new/delete ──────────────────────────
+  const refreshProjects = () => void listStoryProjects().then((r) => setProjects(r.projects || [])).catch(() => {})
+  useEffect(() => { refreshProjects() }, [])
+
+  const hasContent = !!(cfg.chapterText.trim() || cfg.idea.trim() || plan)
+  useEffect(() => {
+    if (skipAutosave.current) { skipAutosave.current = false; return }
+    if (!hasContent || phase === 'monitor') return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    setSaveTag('saving')
+    saveTimer.current = setTimeout(() => {
+      void saveStoryProject({
+        id: projectId || undefined,
+        name: projectName || (cfg.source === 'idea' ? cfg.idea : cfg.chapterText).trim().slice(0, 40),
+        language: cfg.language, source: cfg.source,
+        config: cfg as unknown as Record<string, unknown>,
+        plan: plan ?? null, status: plan ? 'ready' : 'draft',
+      }).then((r) => {
+        if (!projectId) setProjectId(r.id)
+        setSaveTag('saved'); refreshProjects()
+      }).catch(() => setSaveTag('idle'))
+    }, 1500)
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg, plan, projectName])
+
+  async function openProject(id: string) {
+    try {
+      const p = await getStoryProject(id)
+      skipAutosave.current = true
+      setCfg({ ...DEFAULT_STORY_CFG, ...(p.config as Partial<StoryConfig>) })
+      setPlan((p.plan as StoryPlanV2 | null) ?? null)
+      setProjectId(p.id); setProjectName(p.name || ''); resetHistory()
+      setError(null); setNotice(null); setJobId(null); setEstTotal(0)
+      setPhase(p.plan ? 'review' : 'input'); setSaveTag('saved')
+    } catch (e) { fail(e) }
+  }
+
+  function newProject() {
+    skipAutosave.current = true
+    setCfg(DEFAULT_STORY_CFG); setPlan(null); setProjectId(''); setProjectName(''); resetHistory()
+    setJobId(null); setError(null); setNotice(null); setEstTotal(0); setSaveTag('idle'); setPhase('input')
+  }
+
+  async function removeProject(id: string) {
+    try {
+      await deleteStoryProject(id)
+      if (id === projectId) newProject()
+      refreshProjects()
+    } catch (e) { fail(e) }
+  }
+
+  // Route Review plan edits through here so each edit is undoable (caps at 40 steps).
+  function recordPlan(next: StoryPlanV2) {
+    hist.current.past.push(plan)
+    if (hist.current.past.length > 40) hist.current.past.shift()
+    hist.current.future = []
+    setCanUndo(true); setCanRedo(false)
+    setPlan(next)
+  }
+  function undoPlan() {
+    if (!hist.current.past.length) return
+    hist.current.future.unshift(plan)
+    const prev = hist.current.past.pop() ?? null
+    setPlan(prev)
+    setCanUndo(hist.current.past.length > 0); setCanRedo(true)
+  }
+  function redoPlan() {
+    if (!hist.current.future.length) return
+    hist.current.past.push(plan)
+    const nxt = hist.current.future.shift() ?? null
+    setPlan(nxt)
+    setCanUndo(true); setCanRedo(hist.current.future.length > 0)
+  }
+
+  // Duplicate the current session into a NEW saved project (FE-only clone).
+  async function duplicateProject() {
+    try {
+      const copyName = (projectName || (vi ? 'Truyện' : 'Story')) + (vi ? ' (bản sao)' : ' (copy)')
+      const r = await saveStoryProject({
+        name: copyName, language: cfg.language, source: cfg.source,
+        config: cfg as unknown as Record<string, unknown>,
+        plan: plan ?? null, status: plan ? 'ready' : 'draft',
+      })
+      skipAutosave.current = true
+      setProjectId(r.id); setProjectName(copyName); refreshProjects()
+    } catch (e) { fail(e) }
   }
 
   function fail(e: unknown) { setError(e instanceof Error ? e.message : String(e)) }
@@ -87,7 +202,7 @@ export function StoryStudio() {
         setError(vi ? 'AI không dựng được kế hoạch. Kiểm tra API key / thử lại.'
                     : 'AI produced no plan. Check API key / retry.')
       } else {
-        setPlan(r.plan)
+        setPlan(r.plan); resetHistory()
         setEstTotal(r.estimated_total_sec || 0)
         if (r.source_truncated) {
           const n = (r.source_chars ?? 0).toLocaleString()
@@ -114,6 +229,7 @@ export function StoryStudio() {
       story_chapter_no: cfg.chapterNo,
       story_plan_override: JSON.stringify(p),
       story_image_provider: cfg.imageProvider,
+      story_base_video_path: cfg.baseVideoPath,
       voice_language: VOICE_LOCALE[cfg.language],
       aspect_ratio: cfg.aspect,
       add_subtitle: cfg.subtitles,
@@ -139,6 +255,15 @@ export function StoryStudio() {
 
   return (
     <StoryStudioShell vi={vi} step={STEP[phase]} steps={steps}>
+      {phase !== 'monitor' && (
+        <ProjectBar
+          vi={vi} name={projectName} saveTag={saveTag} projects={projects}
+          canUndo={canUndo && phase === 'review'} canRedo={canRedo && phase === 'review'}
+          onUndo={undoPlan} onRedo={redoPlan} onDuplicate={duplicateProject}
+          onName={setProjectName} onOpen={openProject} onNew={newProject}
+          onDelete={removeProject} onRefresh={refreshProjects}
+        />
+      )}
       {error && <div className="st-alert st-alert--fail" role="alert">{error}</div>}
       {notice && <div className="st-alert st-alert--warn" role="status">{notice}</div>}
       {busy && phase === 'input' && <StoryDirectorConsole vi={vi} source={cfg.source} />}
@@ -146,11 +271,12 @@ export function StoryStudio() {
         <InputScreen
           vi={vi} cfg={cfg} setKey={setKey} busy={busy} ready={inputReady}
           hasPicker={hasPicker} pickOutputDir={pickOutputDir} onGenerate={onGenerate}
+          hasVideoPicker={hasVideoPicker} pickBaseVideo={pickBaseVideo}
         />
       )}
       {phase === 'review' && plan && (
         <PlanReview
-          vi={vi} plan={plan} setPlan={setPlan} estTotal={estTotal} busy={busy}
+          vi={vi} plan={plan} setPlan={recordPlan} estTotal={estTotal} busy={busy}
           artStyle={cfg.artStyle} aspect={cfg.aspect} language={cfg.language}
           imageProvider={cfg.imageProvider} onImageProvider={(p) => setKey('imageProvider', p)}
           onRender={onRender} onBack={reset}

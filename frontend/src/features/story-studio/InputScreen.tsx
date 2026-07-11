@@ -37,7 +37,8 @@ const SAMPLE_IDEA: Record<'vi' | 'other', string> = {
     'step by step to avenge the sect that wronged him.',
 }
 
-export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutputDir, onGenerate }: {
+export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutputDir, onGenerate,
+  hasVideoPicker, pickBaseVideo }: {
   vi: boolean
   cfg: StoryConfig
   setKey: <K extends keyof StoryConfig>(k: K, v: StoryConfig[K]) => void
@@ -46,6 +47,8 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
   hasPicker: boolean
   pickOutputDir: () => void
   onGenerate: () => void
+  hasVideoPicker: boolean
+  pickBaseVideo: () => void
 }) {
   const mins = Math.round(cfg.durationSec / 60)
   const chapterChars = cfg.chapterText.trim().length
@@ -168,6 +171,25 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
               onChange={(e) => setKey('outputDir', e.target.value)} />
             {hasPicker && (
               <button type="button" className="st-btn" onClick={pickOutputDir}>
+                {vi ? 'Chọn…' : 'Browse…'}
+              </button>
+            )}
+          </div>
+        </StudioField>
+        <StudioField label={vi ? '🎬 Video nền (tùy chọn)' : '🎬 Base video (optional)'}
+          hint={vi ? 'Để trống = video từ ảnh AI. Chọn video để chèn nhân vật lên nền có sẵn.'
+                   : 'Empty = AI-image story. Pick a video to composite the story over it.'}>
+          <div className="st-row">
+            <input className="st-input" value={cfg.baseVideoPath}
+              placeholder={vi ? 'Chọn video nền…' : 'Choose a base video…'}
+              onChange={(e) => setKey('baseVideoPath', e.target.value)} />
+            {cfg.baseVideoPath && (
+              <button type="button" className="st-btn" onClick={() => setKey('baseVideoPath', '')}>
+                {vi ? 'Xoá' : 'Clear'}
+              </button>
+            )}
+            {hasVideoPicker && (
+              <button type="button" className="st-btn" onClick={pickBaseVideo}>
                 {vi ? 'Chọn…' : 'Browse…'}
               </button>
             )}

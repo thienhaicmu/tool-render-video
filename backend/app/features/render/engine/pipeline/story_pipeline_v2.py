@@ -26,8 +26,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
-import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from types import SimpleNamespace
@@ -46,12 +44,9 @@ from app.db.jobs_repo import (
 from app.jobs import cancel as cancel_registry
 from app.domain.story_plan_v2 import StoryPlan, ASPECT_SIZE
 from app.features.render.ai.llm import generate_story_plan_v2
-from app.features.render.ai.llm.story_prompts_v2 import SUPER_PROMPT_VERSION
 from app.features.render.ai.llm.story_voice_cast import apply_voice_cast_v2
 from app.features.render.engine.audio.story_narration import synthesize_timeline
 from app.features.render.engine.encoder.ffmpeg_helpers import resolve_target_dimensions
-from app.features.render.engine.visual.story_image import generate_visual_image
-from app.features.render.engine.pipeline.qa_pipeline import _validate_render_output
 from app.features.render.engine.pipeline.pipeline_setup import (
     prepare_output_dir,
     setup_render_pipeline,
@@ -66,18 +61,22 @@ from app.features.render.engine.pipeline.render_events import (
 from app.features.render.engine.stages.story.context import safe_filename
 from app.features.render.engine.stages.story.assembly_stage import assemble_shots
 from app.features.render.engine.stages.story.beat_render import render_one_cue
+# A0 refactor: visual-asset generation, BGM mix + finalize live in sibling stage
+# modules (behaviour unchanged). Imported here so run_story_v2's call sites are intact.
+from app.features.render.engine.stages.story.visuals_stage import (
+    _worker_count,
+    _generate_images,
+    _generate_reference_sheets,
+    _generate_env_reference_sheets,
+    _generate_character_masters,
+)
+from app.features.render.engine.stages.story.bgm_stage import (
+    _delivered_transitions,
+    _mix_scene_bgm,
+)
+from app.features.render.engine.stages.story.finalize_stage import _finalize_story_v2
 
 logger = logging.getLogger("app.render.story")
-
-
-def _worker_count(env_name: str, default: int, n_items: int) -> int:
-    """Bounded worker count for a parallel phase: env override, capped at the item
-    count, floored at 1. ``=1`` restores the serial path (byte-identical rollback)."""
-    try:
-        w = int(os.getenv(env_name, str(default)) or default)
-    except (TypeError, ValueError):
-        w = default
-    return max(1, min(w, max(1, int(n_items or 1))))
 
 
 def _subtitle_mode(payload) -> str:
@@ -139,272 +138,6 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
         "plan_source": "fresh", "provider": provider,
         "model": (getattr(payload, "llm_model", None) or ""),
     }
-
-
-def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int,
-                     *, job_id: str, effective_channel: str, provider: str = "gpt_image") -> list:
-    """Generate one image per Visual → plan.render.visual_assets[vid]. Returns the
-    list of visual_ids that FELL BACK (no image). Never raises per-visual.
-
-    Images land in a PERSISTENT dir (``out_dir`` under CACHE_DIR, not the temp
-    shots dir) so they survive the finalize cleanup and the live-monitor thumbnail
-    endpoint can serve them during AND after the render. The plan is persisted +
-    a ``story.visual.ready`` event emitted after EACH image so the FE reveals the
-    visuals one by one (best-effort — a persist/emit hiccup never fails a visual)."""
-    fallbacks: list = []
-    total = plan.image_count()
-    seed = int(plan.seed or 0)
-
-    def _gen_one(v):
-        # WORKER thread: pure image gen (network/file I/O). No DB, no plan mutation —
-        # only reads plan.render.refs. Returns (visual_id, path|None). Never raises.
-        try:
-            out = out_dir / f"{v.id}.png"
-            _rids = list(getattr(v, "character_ids", []) or [])
-            _sid = (getattr(v, "setting_id", "") or "").strip()
-            if _sid:
-                _rids.append(_sid)                       # G6: environment ref too
-            refs = {rid: plan.render.refs[rid] for rid in _rids if rid in plan.render.refs}
-            return v.id, generate_visual_image(v, refs, art_style, img_w, img_h, str(out),
-                                               seed=seed, provider=provider)
-        except Exception:
-            return v.id, None
-
-    def _collect(vid, p):
-        # MAIN thread only: mutate plan + persist + emit (serial → no lock needed).
-        if p:
-            plan.render.visual_assets[vid] = p
-            try:
-                update_story_plan(job_id, plan.to_json())
-            except Exception:
-                pass
-            try:
-                _emit_render_event(
-                    channel_code=effective_channel, job_id=job_id,
-                    event="story.visual.ready", level="INFO",
-                    message=f"Key-visual {vid} ready ({len(plan.render.visual_assets)}/{total})",
-                    step="render.story",
-                    context={"visual_id": vid, "done": len(plan.render.visual_assets), "total": total},
-                )
-            except Exception:
-                pass
-        else:
-            fallbacks.append(vid)
-
-    workers = _worker_count("STORY_IMAGE_WORKERS", 3, total)
-    if workers <= 1:
-        for v in plan.visuals:
-            vid, p = _gen_one(v)
-            _collect(vid, p)
-    else:
-        with ThreadPoolExecutor(max_workers=workers) as ex:
-            futs = {ex.submit(_gen_one, v): v.id for v in plan.visuals}
-            for f in as_completed(futs):
-                try:
-                    vid, p = f.result()
-                except Exception:
-                    vid, p = futs[f], None
-                _collect(vid, p)
-    return fallbacks
-
-
-def _generate_reference_sheets(plan, art_style: str, *, job_id: str,
-                               effective_channel: str, provider: str) -> None:
-    """Fill ``plan.render.refs[char_id]`` with a canonical reference-sheet path for
-    every character present in the visuals, so gpt-image-1's image-edit keeps that
-    character consistent across shots (Q3).
-
-    ONLY for provider='gpt_image' (Pollinations is a URL API — it can't condition on a
-    reference image, so free renders skip this and pay nothing extra). Env-gated by
-    STORY_REFERENCE_SHEETS (default on). A series-pinned sheet is reused; a freshly
-    generated one is pinned for later chapters. Best-effort — never raises."""
-    if provider != "gpt_image" or os.getenv("STORY_REFERENCE_SHEETS", "1") != "1":
-        return
-    try:
-        used: list[str] = []
-        seen: set[str] = set()
-        for v in plan.visuals:
-            for cid in (getattr(v, "character_ids", None) or []):
-                if cid and cid not in seen:
-                    seen.add(cid); used.append(cid)
-        if not used:
-            return
-        from app.features.render.engine.visual.story_reference_sheet import (
-            generate_character_reference_sheet,
-        )
-        series_id = (getattr(plan, "series_id", "") or "").strip()
-        for cid in used:
-            if plan.render.refs.get(cid):
-                continue
-            c = plan.character(cid)
-            if c is None:
-                continue
-            path = None
-            if series_id:                      # reuse a sheet pinned by an earlier chapter
-                try:
-                    from app.db import story_repo
-                    row = story_repo.get_character(cid)
-                    rp = (row.get("reference_image_path") or "").strip() if row else ""
-                    if rp and Path(rp).exists() and Path(rp).stat().st_size > 0:
-                        path = rp
-                except Exception:
-                    path = None
-            if not path:
-                path = generate_character_reference_sheet(c, art_style=art_style)
-                if path and series_id:         # pin for later chapters
-                    try:
-                        from app.db import story_repo
-                        story_repo.upsert_character(
-                            cid, series_id=series_id, name=c.name,
-                            canonical_desc=c.canonical_desc, reference_image_path=path)
-                    except Exception:
-                        pass
-            if not path:
-                continue
-            plan.render.refs[cid] = path
-            try:
-                update_story_plan(job_id, plan.to_json())
-            except Exception:
-                pass
-            try:
-                _emit_render_event(
-                    channel_code=effective_channel, job_id=job_id,
-                    event="story.refsheet.ready", level="INFO",
-                    message=f"Reference sheet ready for {c.name or cid}",
-                    step="render.story", context={"character_id": cid, "refs": len(plan.render.refs)},
-                )
-            except Exception:
-                pass
-    except Exception as exc:
-        logger.warning("story v2: reference sheets failed (non-fatal): %s", exc)
-
-
-def _generate_env_reference_sheets(plan, art_style: str, *, job_id: str,
-                                   effective_channel: str, provider: str) -> None:
-    """Fill ``plan.render.refs[setting_id]`` with a canonical ENVIRONMENT reference
-    sheet for each setting used by the visuals, so gpt-image-1's image-edit keeps the
-    LOCATION consistent across shots + chapters (G6).
-
-    ONLY for provider='gpt_image' AND a series (series_id set) — a one-off chapter
-    can't reuse the sheet across chapters, so it pays nothing. OPT-IN via
-    STORY_ENV_REFERENCE_SHEETS (default OFF): it adds a gpt-image-1 generation per
-    setting AND an extra input image to every visual's image-edit, and its quality
-    benefit is unproven — enable it only for a consistency-critical series. A
-    series-pinned sheet is reused; a freshly generated one is pinned. Never raises."""
-    series_id = (getattr(plan, "series_id", "") or "").strip()
-    if (provider != "gpt_image" or not series_id
-            or os.getenv("STORY_ENV_REFERENCE_SHEETS", "0") != "1"):
-        return
-    try:
-        used: list[str] = []
-        seen: set[str] = set()
-        for v in plan.visuals:
-            sid = (getattr(v, "setting_id", "") or "").strip()
-            if sid and sid not in seen:
-                seen.add(sid); used.append(sid)
-        if not used:
-            return
-        from app.features.render.engine.visual.story_reference_sheet import (
-            generate_environment_reference_sheet,
-        )
-        from app.db import story_repo
-        for sid in used:
-            if plan.render.refs.get(sid):
-                continue
-            s = plan.setting(sid)
-            if s is None:
-                continue
-            path = None
-            try:                                   # reuse a sheet pinned by an earlier chapter
-                row = story_repo.get_environment(sid)
-                rp = (row.get("reference_image_path") or "").strip() if row else ""
-                if rp and Path(rp).exists() and Path(rp).stat().st_size > 0:
-                    path = rp
-            except Exception:
-                path = None
-            if not path:
-                path = generate_environment_reference_sheet(s, art_style=art_style)
-                if path:                           # pin for later chapters
-                    try:
-                        story_repo.upsert_environment(
-                            sid, series_id=series_id, name=s.name,
-                            canonical_desc=s.canonical_desc, reference_image_path=path)
-                    except Exception:
-                        pass
-            if not path:
-                continue
-            plan.render.refs[sid] = path
-            try:
-                update_story_plan(job_id, plan.to_json())
-            except Exception:
-                pass
-            try:
-                _emit_render_event(
-                    channel_code=effective_channel, job_id=job_id,
-                    event="story.envref.ready", level="INFO",
-                    message=f"Environment reference ready for {s.name or sid}",
-                    step="render.story", context={"setting_id": sid, "refs": len(plan.render.refs)})
-            except Exception:
-                pass
-    except Exception as exc:
-        logger.warning("story v2: env reference sheets failed (non-fatal): %s", exc)
-
-
-def _delivered_transitions(cues: list, delivered_idx: list) -> list:
-    """len-1 transition list aligned to the DELIVERED clips (skips failed cues): use
-    the NEXT delivered cue's transition. Pure, never raises."""
-    trans: list = []
-    for i in range(len(delivered_idx) - 1):
-        nxt = cues[delivered_idx[i + 1] - 1]
-        trans.append(getattr(nxt, "transition", "") or "fade")
-    return trans
-
-
-def _mix_scene_bgm(job_id, effective_channel, plan, final_out, work_dir) -> None:
-    """Dựng track nhạc nền per-scene (mood do AI plan) + duck dưới lời kể, ghi đè
-    ``final_out`` tại chỗ. Best-effort — thiếu file nhạc / bất kỳ lỗi nào → giao video
-    KHÔNG nhạc, không bao giờ fail render (Sacred Contract #3 spirit). Chạy TRƯỚC QA
-    nên file giao được validate kèm nhạc (Sacred Contract #8)."""
-    tmp = str(final_out) + ".bgm.mp4"
-    try:
-        total = float(getattr(plan.render, "total_sec", 0.0) or 0.0)
-        from app.features.render.engine.audio.mixer import (
-            build_placed_bgm_track, build_scene_bgm_track, mix_with_bgm,
-        )
-        bgm_dir = Path(work_dir) / "story_bgm"
-        # s4 PLACED BGM (default): music sits at the AI-chosen spot in each beat
-        # (intro/outro/under/none). STORY_BGM_PLACED=0 → legacy continuous mood-runs.
-        if os.getenv("STORY_BGM_PLACED", "1") == "1":
-            segments = plan.bgm_cues()
-            if not segments:
-                return
-            track = build_placed_bgm_track(segments, total, str(bgm_dir / "bgm_timeline.wav"))
-        else:
-            segments = plan.bgm_scenes()
-            if not segments:
-                return
-            track = build_scene_bgm_track(segments, total, str(bgm_dir / "bgm_timeline.wav"))
-        if not track:
-            _job_log(effective_channel, job_id,
-                     "Story v2: no BGM (no music files for the planned moods — see BGM_DIR)")
-            return
-        mix_with_bgm(video_path=str(final_out), bgm_path=track, output_path=tmp, duck=True)
-        Path(tmp).replace(final_out)
-        moods = sorted({(seg[0] or "default") for seg in segments})
-        _emit_render_event(
-            channel_code=effective_channel, job_id=job_id, event="story.bgm.ready",
-            level="INFO", message=f"Background music mixed ({len(segments)} scene(s))",
-            step="render.story", context={"scenes": len(segments), "moods": moods},
-        )
-        _job_log(effective_channel, job_id,
-                 f"Story v2: BGM mixed ({len(segments)} scene(s), moods={moods})")
-    except Exception as exc:
-        logger.warning("story v2: BGM mix failed (non-fatal): %s", exc)
-        try:
-            if Path(tmp).exists():
-                Path(tmp).unlink()
-        except Exception:
-            pass
 
 
 def run_story_v2(
@@ -471,6 +204,31 @@ def run_story_v2(
         genre = (getattr(payload, "story_genre", "") or "")
         bg_value = (getattr(payload, "content_background_value", "") or "#101820")
 
+        # A1: optional LOCAL base video the story is composited over. "" → image-based
+        # (default). A missing/invalid path degrades to image-based (Sacred #3 spirit),
+        # never aborts. Consumed as the cue base layer in a later phase (A2).
+        base_video_path, base_video_dur, base_video_has_audio = "", 0.0, False
+        _bvp = (getattr(payload, "story_base_video_path", "") or "").strip()
+        if _bvp:
+            try:
+                _p = Path(_bvp).expanduser()
+                if _p.exists() and _p.is_file():
+                    from app.features.render.engine.pipeline.render_pipeline import _probe_video_duration
+                    base_video_dur = float(_probe_video_duration(_p) or 0.0)
+                    base_video_path = str(_p)
+                    try:                                 # A4: does the base video carry audio?
+                        from app.features.render.engine.audio.mixer import _has_audio_stream
+                        base_video_has_audio = bool(_has_audio_stream(base_video_path))
+                    except Exception:
+                        base_video_has_audio = False
+                    _job_log(effective_channel, job_id,
+                             f"Story v2: base video ok ({base_video_dur:.1f}s, audio={base_video_has_audio}) — {_p.name}")
+                else:
+                    _job_log(effective_channel, job_id,
+                             f"Story v2: base video not found, using image-based — {_bvp}")
+            except Exception as _bv_exc:
+                logger.warning("story v2: base video probe failed (non-fatal): %s", _bv_exc)
+
         if source == "idea":
             if not idea:
                 raise RuntimeError("Story v2: source=idea but story_idea is empty")
@@ -513,28 +271,44 @@ def run_story_v2(
         image_provider = (getattr(payload, "story_image_provider", "gpt_image") or "gpt_image").strip().lower()
         if image_provider not in ("gpt_image", "pollinations"):
             image_provider = "gpt_image"
-        # Q3 — character reference sheets (gpt_image only) → fill plan.render.refs so
-        # image-edit keeps characters consistent. Best-effort; runs before image gen.
-        _generate_reference_sheets(plan, art_style, job_id=job_id,
-                                   effective_channel=effective_channel, provider=image_provider)
-        # G6 — environment reference sheets (gpt_image + series only) → keep locations
-        # consistent across shots + chapters. Best-effort; runs before image gen.
-        _generate_env_reference_sheets(plan, art_style, job_id=job_id,
+        visual_fallbacks = []
+        # A6 cost: when a base video is the visual layer, the key-visual images + reference
+        # sheets would be generated but NEVER used (render_one_cue draws from the video) —
+        # skip them entirely to save the gpt-image spend. Character masters (the overlay
+        # asset) are still generated in 3b below.
+        if base_video_path:
+            _job_log(effective_channel, job_id,
+                     "Story v2: base video present — skipping key-visual image gen (unused)")
+        else:
+            # Q3 — character reference sheets (gpt_image only) → fill plan.render.refs so
+            # image-edit keeps characters consistent. Best-effort; runs before image gen.
+            _generate_reference_sheets(plan, art_style, job_id=job_id,
                                        effective_channel=effective_channel, provider=image_provider)
-        visual_fallbacks = _generate_images(
-            plan, visuals_dir, art_style, img_w, img_h,
-            job_id=job_id, effective_channel=effective_channel, provider=image_provider,
-        )
-        if visual_fallbacks:
-            _hint = "OPENAI_API_KEY / prompts" if image_provider == "gpt_image" else "network / prompts"
-            _emit_render_event(
-                channel_code=effective_channel, job_id=job_id,
-                event="story.visual.fallback", level="WARNING",
-                message=(f"{len(visual_fallbacks)}/{plan.image_count()} image(s) unavailable — "
-                         f"used a solid background. Check {_hint}."),
-                step="render.story",
-                context={"fallback_visuals": visual_fallbacks, "total": plan.image_count()},
+            # G6 — environment reference sheets (gpt_image + series only) → keep locations
+            # consistent across shots + chapters. Best-effort; runs before image gen.
+            _generate_env_reference_sheets(plan, art_style, job_id=job_id,
+                                           effective_channel=effective_channel, provider=image_provider)
+            visual_fallbacks = _generate_images(
+                plan, visuals_dir, art_style, img_w, img_h,
+                job_id=job_id, effective_channel=effective_channel, provider=image_provider,
             )
+            if visual_fallbacks:
+                _hint = "OPENAI_API_KEY / prompts" if image_provider == "gpt_image" else "network / prompts"
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.visual.fallback", level="WARNING",
+                    message=(f"{len(visual_fallbacks)}/{plan.image_count()} image(s) unavailable — "
+                             f"used a solid background. Check {_hint}."),
+                    step="render.story",
+                    context={"fallback_visuals": visual_fallbacks, "total": plan.image_count()},
+                )
+
+        # ── 3b. Character masters (A3) — transparent PNG per overlaid speaker, ONLY
+        #        when a base video is present (overlay compositing target). Best-effort;
+        #        a no-op when no beat sets char_anchor. Fills plan.render.masters.
+        if base_video_path:
+            _generate_character_masters(plan, art_style, job_id=job_id,
+                                        effective_channel=effective_channel)
 
         # ── 4. Narration (per voice-run TTS → beat_audio) ───────────────────
         _set_stage(JobStage.SEGMENT_BUILDING, 45, "Narration timeline")
@@ -564,6 +338,8 @@ def run_story_v2(
         ctx = SimpleNamespace(
             job_id=job_id, effective_channel=effective_channel, shots_dir=shots_dir,
             width=width, height=height, fps=fps, bg_value=bg_value, ffmpeg_threads=_cue_threads,
+            base_video_path=base_video_path, base_video_dur=base_video_dur,   # A1 (consumed in A2)
+            base_video_has_audio=base_video_has_audio,                        # A4
         )
 
         # ── 6. Render cues (parallel; libx264/CPU → no NVENC contention) ────
@@ -658,101 +434,6 @@ def run_story_v2(
             close_thread_conn()
         except Exception:
             pass
-
-
-def _finalize_story_v2(job_id, effective_channel, payload, plan, *, output_dir, output_stem,
-                       final_out, assembly, clips, shots_dir, total_parts,
-                       failed_parts, visual_fallbacks, plan_meta=None):
-    """QA gate + thumbnail + part repoint + terminal result_json / DONE. Raises
-    RuntimeError on QA failure (Sacred Contract #8). Mirrors finalize_story for v2."""
-    _exp = float(assembly.get("expected_duration") or 0.0)
-    _qa = _validate_render_output(
-        final_out, expected_duration=(_exp if _exp > 0 else None), expect_audio=True,
-    )
-    if not _qa["ok"]:
-        raise RuntimeError(f"Story v2: output failed QA: {_qa.get('error')}")
-    _final_dur = float(_qa["metadata"].get("duration") or 0.0)
-
-    _thumb_path = ""
-    if os.getenv("STORY_THUMBNAIL", "1") == "1":
-        try:
-            from app.services.bin_paths import get_ffmpeg_bin
-            _thumb = output_dir / f"{final_out.stem}.thumb.jpg"
-            _tss = max(0.5, _final_dur / 3.0)
-            subprocess.run(
-                [get_ffmpeg_bin(), "-y", "-ss", f"{_tss:.2f}", "-i", str(final_out),
-                 "-frames:v", "1", "-q:v", "3", str(_thumb)],
-                capture_output=True, timeout=60,
-            )
-            if _thumb.exists() and _thumb.stat().st_size > 0:
-                _thumb_path = str(_thumb)
-        except Exception as _th_exc:
-            logger.warning("story v2: thumbnail failed (non-fatal): %s", _th_exc)
-
-    try:
-        from app.db.jobs_repo import update_part_output_path
-        for i in range(1, total_parts + 1):
-            update_part_output_path(job_id, i, str(final_out))
-    except Exception as exc:
-        logger.warning("story v2: part repoint failed (non-fatal): %s", exc)
-    try:
-        shutil.rmtree(shots_dir, ignore_errors=True)
-    except Exception:
-        pass
-
-    _topic = (getattr(plan, "topic", "") or output_stem)
-    _entry = {
-        "part_no": 1, "path": str(final_out), "output_file": str(final_out),
-        "output_path": str(final_out), "title": _topic,
-        "clip_name": output_stem, "ai_title": (getattr(plan, "topic", "") or ""),
-        "start_sec": 0.0, "end_sec": _final_dur, "duration": _final_dur,
-        "viral_score": 100.0,
-        # Sacred Contract #1 keys — present on EVERY output.
-        "output_rank_score": 100.0, "is_best_output": True, "is_best_clip": True,
-    }
-    _result = {
-        "outputs": [_entry],
-        "render_format": "story",
-        "story_topic": getattr(plan, "topic", ""),
-        "story_series_id": getattr(plan, "series_id", ""),
-        "story_chapter_no": getattr(plan, "chapter_no", 0),
-        "output_ranking": [dict(_entry, output_rank=1)],
-        "best_clip": _entry,
-        "successful_outputs_count": 1,
-        "failed_outputs_count": len(failed_parts),
-        "failed_parts": [int(f["part_no"]) for f in failed_parts],
-        "thumbnail_path": _thumb_path,
-        "visual_fallback_visuals": visual_fallbacks,
-        "selected_segments_count": total_parts,
-        "image_count": plan.image_count(),
-        "beat_count": plan.beat_count(),
-        "total_sec": getattr(plan.render, "total_sec", 0.0),
-        "is_partial_success": bool(failed_parts),
-        "ai_director": {"enabled": True, "mode": "story_v2"},
-        # Reproducibility (Phase 3): which prompt version + provider/model produced
-        # this plan. Additive — never touches the Sacred Contract #1 keys above.
-        "story_prompt_version": SUPER_PROMPT_VERSION,
-        "story_provider": (plan_meta or {}).get("provider", ""),
-        "story_llm_model": (plan_meta or {}).get("model", ""),
-        "story_plan_source": (plan_meta or {}).get("plan_source", ""),
-    }
-    _terminal_status = "completed_with_errors" if failed_parts else "completed"
-    upsert_job(
-        job_id, "render", effective_channel, _terminal_status, payload.model_dump(), _result,
-        stage=JobStage.DONE, progress_percent=100,
-        message=(
-            f"Story complete: {len(clips)}/{total_parts} cue(s), {_final_dur:.0f}s"
-            + (f" ({len(failed_parts)} failed)" if failed_parts else "")
-        ),
-    )
-    _emit_render_event(
-        channel_code=effective_channel, job_id=job_id, event="render.complete",
-        level="INFO", message="Story render complete", step="render.complete",
-        context={"duration_sec": _final_dur, "cues": total_parts,
-                 "rendered": len(clips), "failed": len(failed_parts)},
-    )
-    _job_log(effective_channel, job_id,
-             f"Story v2 DONE: {len(clips)}/{total_parts} cue(s) ({_final_dur:.0f}s)")
 
 
 __all__ = ["run_story_v2"]

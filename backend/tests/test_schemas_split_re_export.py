@@ -133,8 +133,10 @@ def test_render_request_field_count_unchanged():
     # Sacred #2 verified: "" source = the paste path = unchanged behaviour.
     # 2026-07-10 Story Mode v2 Phase 2: +1 story_image_provider → 175. Sacred #2
     # verified: default "gpt_image" reproduces the existing paid behaviour.
-    assert field_count == 175, (
-        f"RenderRequest now has {field_count} fields (expected 175). "
+    # 2026-07-11 Story A1: +1 story_base_video_path → 176. Sacred #2 verified:
+    # default "" = image-based story (no base video), stored payloads replay identically.
+    assert field_count == 176, (
+        f"RenderRequest now has {field_count} fields (expected 176). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

@@ -98,6 +98,7 @@ def generate_character_master(
     art_style: str = "",
     width: int = 1024,
     height: int = 1536,
+    variant: int = 0,
 ) -> Optional[str]:
     """Generate a cutout-ready CHARACTER MASTER — a full-body character on a
     TRANSPARENT background (gpt-image-1 ``background=transparent``) → a durable
@@ -108,7 +109,11 @@ def generate_character_master(
     consistency), the master's transparent background means NO separate cutout step
     is needed — Phase 5 is solved at the generation call. Content-addressed with a
     ``master|`` namespace so ONE master per character is reused across the whole
-    video / series (Strategy A). Portrait 1024x1536 gives head-to-toe headroom."""
+    video / series (Strategy A). Portrait 1024x1536 gives head-to-toe headroom.
+
+    ``variant`` (A5 approval/lock): 0 = the canonical master (existing cache key,
+    byte-identical). >0 busts the cache so a Review "regenerate" yields a DIFFERENT
+    look (gpt-image-1 is stochastic), letting the user pick/lock one they like."""
     try:
         desc = (getattr(character, "canonical_desc", "") or getattr(character, "description", "") or "").strip()
         name = (getattr(character, "name", "") or "").strip()
@@ -118,8 +123,9 @@ def generate_character_master(
         style = (art_style or "").strip() or "cinematic"
         quality = _refsheet_quality()
         _qtag = "" if quality == "high" else f"|{quality}"
+        _vtag = "" if int(variant or 0) <= 0 else f"|v{int(variant)}"
         _key = hashlib.sha1(
-            f"master|{subject}|{style}|{width}x{height}{_qtag}".encode("utf-8", "ignore")).hexdigest()[:12]
+            f"master|{subject}|{style}|{width}x{height}{_qtag}{_vtag}".encode("utf-8", "ignore")).hexdigest()[:12]
         _ASSETS_DIR.mkdir(parents=True, exist_ok=True)
         dst = _ASSETS_DIR / f"master_{_safe_cid(character)}_{_key}.png"
         if dst.exists() and dst.stat().st_size > 0:

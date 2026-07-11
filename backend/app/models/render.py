@@ -426,6 +426,12 @@ class RenderRequest(BaseModel):
     # identically. The Storyboard review always previews with the FREE provider
     # (draft/final split) regardless of this final choice.
     story_image_provider: str = "gpt_image"  # gpt_image|pollinations
+    # Optional LOCAL base video the story is composited over (A1). "" = image-based
+    # story (the default — AI key-visuals + Ken Burns, byte-identical replay). When a
+    # valid local path is given, later phases use it as the base layer for the cue
+    # render + character overlay. Sacred Contract #2: default inert; an invalid/missing
+    # path degrades to the image-based path (Sacred #3 spirit), never aborts.
+    story_base_video_path: str = ""
 
     target_duration: int = 90
     output_count: int = 1

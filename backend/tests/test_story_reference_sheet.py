@@ -141,6 +141,34 @@ def test_master_cache_hit_second_call(monkeypatch):
     assert p1 == p2 and calls["n"] == 1        # second call served from cache (no API)
 
 
+def test_master_variant_busts_cache(monkeypatch):
+    calls = {"n": 0}
+
+    def _gen(*a, **k):
+        calls["n"] += 1
+        return b"\x89PNG_master"
+    monkeypatch.setattr(rs, "generate_image_bytes", _gen)
+    char = StoryCharacter(id="v", name="X", description="variant-" + uuid.uuid4().hex)
+    p0 = rs.generate_character_master(char)               # variant 0 (canonical)
+    p1 = rs.generate_character_master(char, variant=1)    # A5: a different look
+    assert p0 and p1 and p0 != p1 and calls["n"] == 2     # variant busts the cache
+    rs.generate_character_master(char)                    # variant 0 again → cache hit
+    assert calls["n"] == 2
+
+
+def test_endpoint_transparent_passes_variant(monkeypatch, tmp_path):
+    src = tmp_path / "m.png"
+    src.write_bytes(b"\x89PNG")
+    cap = {}
+
+    def _fake(character, art_style="", variant=0):
+        cap["variant"] = variant
+        return str(src)
+    monkeypatch.setattr(rs, "generate_character_master", _fake)
+    character_reference_sheet(ReferenceSheetRequest(description="áo trắng", transparent=True, variant=3))
+    assert cap["variant"] == 3
+
+
 def test_endpoint_transparent_returns_url(monkeypatch, tmp_path):
     src = tmp_path / "m.png"
     src.write_bytes(b"\x89PNG")                 # real file so the preview copy succeeds
