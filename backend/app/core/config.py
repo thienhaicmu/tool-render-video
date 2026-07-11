@@ -54,8 +54,12 @@ BGM_DIR     = APP_DATA_DIR / "bgm"
 # làm fallback khi BGM_DIR của người dùng chưa có nhạc cho mood đó. Ghi công CC-BY
 # ở assets/bgm/ATTRIBUTION.txt.
 BUNDLED_BGM_DIR = PROJECT_ROOT / "assets" / "bgm"
+# Kho asset offline của NGƯỜI DÙNG cho Story Mode (nhân vật/nền/đồ vật/frame).
+# Cấu trúc: {ASSET_LIBRARY_DIR}/{kind}/{region}/{genre}/{slug}.png — index bởi
+# db/story_asset_repo.scan_library(). Xem docs/asset_library_prompts.md.
+ASSET_LIBRARY_DIR = Path(os.getenv("ASSET_LIBRARY_DIR", str(APP_DATA_DIR / "asset_library")))
 
-for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, COOKIES_DIR, CACHE_DIR, BGM_DIR, DATABASE_PATH.parent]:
+for p in [APP_DATA_DIR, REPORTS_DIR, CHANNELS_DIR, TEMP_DIR, LOGS_DIR, COOKIES_DIR, CACHE_DIR, BGM_DIR, ASSET_LIBRARY_DIR, DATABASE_PATH.parent]:
     p.mkdir(parents=True, exist_ok=True)
 
 

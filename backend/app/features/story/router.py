@@ -26,7 +26,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.core.config import CACHE_DIR
-from app.db import story_repo, story_project_repo
+from app.db import story_repo, story_project_repo, story_asset_repo
 from app.features.render.ai.llm import generate_story_plan_v2
 
 logger = logging.getLogger("app.story.api")
@@ -505,3 +505,46 @@ def restore_story_project_version(project_id: str, version_id: str) -> dict:
     except Exception:
         plan = None
     return {"restored": True, "config": config, "plan": plan}
+
+
+# ── AL2: offline asset library (list / get / thumb / scan / delete) ───────────
+
+@router.get("/assets")
+def list_story_assets(kind: str = "", region: str = "", genre: str = "", q: str = "") -> dict:
+    """List indexed library assets, filtered by kind/region/genre + free-text q."""
+    return {"assets": story_asset_repo.list_assets(kind=kind, region=region, genre=genre, q=q)}
+
+
+@router.post("/assets/scan")
+def scan_story_assets() -> dict:
+    """(Re)index the asset library folder → story_assets. Returns {indexed, pruned, root}."""
+    return story_asset_repo.scan_library()
+
+
+@router.get("/assets/{asset_id}")
+def get_story_asset(asset_id: str) -> dict:
+    """Return one asset's metadata. 404 when missing."""
+    row = story_asset_repo.get_asset(asset_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    return row
+
+
+@router.get("/assets/{asset_id}/image")
+def get_story_asset_image(asset_id: str):
+    """Stream the asset's image file. 404 when the asset / file is missing."""
+    row = story_asset_repo.get_asset(asset_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    p = Path(row.get("path") or "")
+    if not p.exists() or p.stat().st_size <= 0:
+        raise HTTPException(status_code=404, detail="asset file not found")
+    _media = "image/webp" if p.suffix.lower() == ".webp" else "image/png"
+    return FileResponse(str(p), media_type=_media)
+
+
+@router.delete("/assets/{asset_id}")
+def delete_story_asset(asset_id: str) -> dict:
+    """Remove an asset's DB row (does NOT delete the file on disk). Idempotent."""
+    story_asset_repo.delete_asset(asset_id)
+    return {"deleted": True, "id": asset_id}

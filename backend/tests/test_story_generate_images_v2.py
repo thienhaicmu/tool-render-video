@@ -141,3 +141,70 @@ def test_generate_character_masters_noop_without_overlay(monkeypatch):
                   timeline=[Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='none')])
     sp2._generate_character_masters(p, '', job_id='j', effective_channel='c')
     assert p.render.masters == {} and called['n'] == 0   # no overlay beat → no gen
+
+
+# ── AL3: library-first (skip a pre-assigned visual) ───────────────────────────
+
+def test_library_first_skips_preassigned_visual(monkeypatch, tmp_path):
+    from app.domain.story_plan_v2 import StoryPlan, Visual, Beat
+    monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
+    monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
+    calls = {"n": 0}
+
+    def fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
+        calls["n"] += 1
+        Path(out_path).write_bytes(b'\x89PNG')
+        return out_path
+    monkeypatch.setattr(sp2, 'generate_visual_image', fake_img)
+    lib = tmp_path / 'lib_bg.png'
+    lib.write_bytes(b'\x89PNG')                       # a library background already on disk
+    p = StoryPlan(visuals=[Visual(id='v1', prompt='x'), Visual(id='v2', prompt='y')],
+                  timeline=[Beat(id='b1', narration='a', visual_id='v1')])
+    p.render.visual_assets['v1'] = str(lib)           # v1 assigned from the library
+    fb = sp2._generate_images(p, tmp_path, '', 1024, 1024,
+                              job_id='j', effective_channel='c', provider='gpt_image')
+    assert calls["n"] == 1                            # only v2 generated (v1 came from library)
+    assert p.render.visual_assets['v1'] == str(lib)   # library asset untouched
+    assert 'v2' in p.render.visual_assets and fb == []
+
+
+# ── AL5: STORY_LIBRARY_FIRST auto-matches a character master (opt-in) ──────────
+
+def test_library_first_auto_matches_character_master(monkeypatch):
+    from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
+    import app.features.render.engine.visual.story_reference_sheet as rs
+    import app.db.story_asset_repo as ar
+    monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
+    monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
+    gen = {'n': 0}
+    monkeypatch.setattr(rs, 'generate_character_master',
+                        lambda c, art_style='': gen.__setitem__('n', gen['n'] + 1) or '/ai/gen.png')
+    monkeypatch.setattr(ar, 'match_asset',
+                        lambda kind, name='', region='', genre='', transparent_only=False:
+                        '/lib/han.png' if (kind == 'character' and name == 'Han') else None)
+    monkeypatch.setenv('STORY_LIBRARY_FIRST', '1')
+
+    p = StoryPlan(characters=[CharacterDef(id='han', name='Han')],
+                  visuals=[Visual(id='v1', prompt='x')],
+                  timeline=[Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='left')])
+    sp2._generate_character_masters(p, '', job_id='j', effective_channel='c')
+    assert p.render.masters == {'han': '/lib/han.png'}   # library match used
+    assert gen['n'] == 0                                 # AI gen never called
+
+
+def test_library_first_off_generates_master(monkeypatch):
+    from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
+    import app.features.render.engine.visual.story_reference_sheet as rs
+    import app.db.story_asset_repo as ar
+    monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
+    monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
+    monkeypatch.setattr(rs, 'generate_character_master', lambda c, art_style='': '/ai/gen.png')
+    monkeypatch.setattr(ar, 'match_asset',
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError('must not consult library when off')))
+    monkeypatch.delenv('STORY_LIBRARY_FIRST', raising=False)   # default off
+
+    p = StoryPlan(characters=[CharacterDef(id='han', name='Han')],
+                  visuals=[Visual(id='v1', prompt='x')],
+                  timeline=[Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='left')])
+    sp2._generate_character_masters(p, '', job_id='j', effective_channel='c')
+    assert p.render.masters == {'han': '/ai/gen.png'}   # byte-identical: AI gen path

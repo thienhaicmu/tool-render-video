@@ -8,6 +8,7 @@ import { StudioCard, StudioField } from '../../../components/studio'
 import { BASE_URL } from '../../../api/client'
 import type { StoryPlanV2, CharacterDef, StoryVoicesResponse } from '../../../api/story'
 import { generateReferenceSheet, getStoryVoices, previewNarration } from '../../../api/story'
+import { AssetPicker } from './AssetPicker'
 
 // Short spoken sample when a character has no line yet in the timeline.
 const SAMPLE: Record<string, string> = {
@@ -71,6 +72,7 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
   const [sheet, setSheet] = useState<'idle' | 'busy' | 'done' | 'err'>('idle')
   const [master, setMaster] = useState<{ st: 'idle' | 'busy' | 'err'; url: string }>({ st: 'idle', url: '' })
   const [variant, setVariant] = useState(0)
+  const [picker, setPicker] = useState(false)
   const [voiceState, setVoiceState] = useState<'idle' | 'busy' | 'playing' | 'err'>('idle')
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -178,6 +180,19 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
             : master.url ? (vi ? '↻ Đổi mẫu' : '↻ Regenerate')
             : (vi ? '🧍 Nhân vật' : '🧍 Master')}
         </button>
+        <button type="button" className="st-btn st-btn--sm" onClick={() => setPicker(true)}
+          title={vi ? 'Chọn nhân vật có sẵn từ kho (miễn phí, không gọi AI)'
+                    : 'Pick an existing character from the library (free, no AI call)'}>
+          {vi ? '🗂️ Kho' : '🗂️ Library'}
+        </button>
+        {picker && (
+          <AssetPicker vi={vi} kind="character"
+            onClose={() => setPicker(false)}
+            onPick={(a) => {
+              setMaster({ st: 'idle', url: `/api/story/assets/${a.id}/image` })
+              onMasterChange(c.id, a.path)          // lock the library asset into the plan
+            }} />
+        )}
         {(master.url || locked) && (
           <span className="st-tag st-tag--dim">
             {locked ? (vi ? '✓ Đã khoá' : '✓ Locked') : (vi ? 'chưa khoá' : 'unlocked')}

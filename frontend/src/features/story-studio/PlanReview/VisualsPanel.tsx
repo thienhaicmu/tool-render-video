@@ -8,9 +8,11 @@ import { useState } from 'react'
 import { StudioCard, StudioField } from '../../../components/studio'
 import type { StoryPlanV2, Visual } from '../../../api/story'
 import { previewVisual } from '../../../api/story'
+import { storyAssetImageUrl } from '../../../api/storyAssets'
 import { TIER, type Aspect } from '../types'
+import { AssetPicker } from './AssetPicker'
 
-export function VisualsPanel({ vi, plan, artStyle, aspect, colors, previews, setPreview, onChange }: {
+export function VisualsPanel({ vi, plan, artStyle, aspect, colors, previews, setPreview, onChange, onVisualAsset }: {
   vi: boolean
   plan: StoryPlanV2
   artStyle: string
@@ -19,6 +21,7 @@ export function VisualsPanel({ vi, plan, artStyle, aspect, colors, previews, set
   previews: Record<string, string>
   setPreview: (visualId: string, url: string) => void
   onChange: (id: string, up: Partial<Visual>) => void
+  onVisualAsset: (visualId: string, path: string) => void
 }) {
   if (!plan.visuals.length) return null
   return (
@@ -26,14 +29,15 @@ export function VisualsPanel({ vi, plan, artStyle, aspect, colors, previews, set
       <div className="st-visual-grid">
         {plan.visuals.map((v) => (
           <VisualCard key={v.id} vi={vi} v={v} plan={plan} artStyle={artStyle} aspect={aspect}
-            color={colors[v.id]} preview={previews[v.id]} setPreview={setPreview} onChange={onChange} />
+            color={colors[v.id]} preview={previews[v.id]} setPreview={setPreview}
+            onChange={onChange} onVisualAsset={onVisualAsset} />
         ))}
       </div>
     </StudioCard>
   )
 }
 
-function VisualCard({ vi, v, plan, artStyle, aspect, color, preview, setPreview, onChange }: {
+function VisualCard({ vi, v, plan, artStyle, aspect, color, preview, setPreview, onChange, onVisualAsset }: {
   vi: boolean
   v: Visual
   plan: StoryPlanV2
@@ -43,9 +47,11 @@ function VisualCard({ vi, v, plan, artStyle, aspect, color, preview, setPreview,
   preview?: string
   setPreview: (visualId: string, url: string) => void
   onChange: (id: string, up: Partial<Visual>) => void
+  onVisualAsset: (visualId: string, path: string) => void
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(false)
+  const [picker, setPicker] = useState(false)
 
   async function doPreview() {
     if (busy || !v.prompt.trim()) return
@@ -102,8 +108,21 @@ function VisualCard({ vi, v, plan, artStyle, aspect, color, preview, setPreview,
               : preview ? (vi ? 'Tạo lại' : 'Regenerate')
               : (vi ? 'Xem thử' : 'Preview')}
           </button>
+          <button type="button" className="st-btn st-btn--sm" onClick={() => setPicker(true)}
+            title={vi ? 'Chọn nền có sẵn từ kho (miễn phí, không gọi AI)'
+                      : 'Pick an existing background from the library (free, no AI call)'}>
+            {vi ? '🗂️ Kho' : '🗂️ Library'}
+          </button>
         </div>
       </div>
+      {picker && (
+        <AssetPicker vi={vi} kind="background"
+          onClose={() => setPicker(false)}
+          onPick={(a) => {
+            setPreview(v.id, storyAssetImageUrl(a.id))
+            onVisualAsset(v.id, a.path)         // library-first: render reuses this, skips AI
+          }} />
+      )}
     </div>
   )
 }
