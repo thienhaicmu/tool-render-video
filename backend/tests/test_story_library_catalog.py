@@ -54,3 +54,39 @@ def test_build_catalog_groups_variants(tmp_path):
 def test_build_catalog_empty_when_no_assets(monkeypatch):
     monkeypatch.setattr(R, "list_assets", lambda **k: [])
     assert R.build_library_catalog() == ""
+
+
+def test_catalog_uses_authored_description(monkeypatch, tmp_path):
+    # A sidecar/authored description is shown verbatim in the catalog (beats slug tokens).
+    monkeypatch.setattr(R, "list_assets", lambda kind="", **k: (
+        [{"slug": "cn_wuxia_swordsman_male_young", "region": "cn", "genre": "wuxia", "style": "",
+          "description": "young hero in a white robe with a jade jian"}] if kind == "character" else []))
+    cat = R.build_library_catalog()
+    assert "young hero in a white robe with a jade jian" in cat
+
+
+def test_catalog_derives_readable_desc(monkeypatch):
+    # No authored desc → region/genre expanded to readable words + role tokens.
+    monkeypatch.setattr(R, "list_assets", lambda kind="", **k: (
+        [{"slug": "cn_wuxia_swordsman_male_young", "region": "cn", "genre": "wuxia", "style": "",
+          "description": ""}] if kind == "character" else []))
+    cat = R.build_library_catalog()
+    assert "Chinese wuxia swordsman male young" in cat
+
+
+def test_scan_reads_sidecar_desc(tmp_path):
+    # end-to-end: a {file}.json sidecar with "desc" lands in the DB + catalog.
+    import json
+    d = tmp_path / "character" / "cn" / "wuxia"
+    d.mkdir(parents=True)
+    (d / "cn_wuxia_hero_x.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 256)
+    (d / "cn_wuxia_hero_x.png.json").write_text(json.dumps({"desc": "a lone masked ronin"}), encoding="utf-8")
+    R.scan_library(root=tmp_path)
+    assert "a lone masked ronin" in R.build_library_catalog(region="cn", genre="wuxia")
+
+
+def test_migration_0025_adds_description_column():
+    from app.db.connection import db_conn
+    with db_conn() as c:
+        cols = {row[1] for row in c.execute("PRAGMA table_info(story_assets)").fetchall()}
+    assert "description" in cols                          # additive migration applied

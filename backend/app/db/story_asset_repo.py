@@ -27,9 +27,9 @@ logger = logging.getLogger("app.db.story_asset")
 _KINDS = ("character", "background", "object", "frame")
 _IMG_EXTS = {".png", ".webp", ".jpg", ".jpeg"}
 
-_FULL_COLS = ("id, kind, region, genre, slug, name, tags, style, path, "
+_FULL_COLS = ("id, kind, region, genre, slug, name, tags, style, description, path, "
               "transparent, license, source, created_at, updated_at")
-_FULL_KEYS = ("id", "kind", "region", "genre", "slug", "name", "tags", "style", "path",
+_FULL_KEYS = ("id", "kind", "region", "genre", "slug", "name", "tags", "style", "description", "path",
               "transparent", "license", "source", "created_at", "updated_at")
 
 
@@ -53,6 +53,7 @@ def upsert_asset(
     name: str = "",
     tags: str = "",
     style: str = "",
+    description: str = "",
     transparent: bool = False,
     license: str = "",
     source: str = "",
@@ -68,18 +69,18 @@ def upsert_asset(
             conn.execute(
                 """
                 INSERT INTO story_assets
-                    (id, kind, region, genre, slug, name, tags, style, path,
+                    (id, kind, region, genre, slug, name, tags, style, description, path,
                      transparent, license, source, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
                 ON CONFLICT(id) DO UPDATE SET
                     kind=excluded.kind, region=excluded.region, genre=excluded.genre,
                     slug=excluded.slug, name=excluded.name, tags=excluded.tags,
-                    style=excluded.style, path=excluded.path,
+                    style=excluded.style, description=excluded.description, path=excluded.path,
                     transparent=excluded.transparent, license=excluded.license,
                     source=excluded.source,
                     updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
                 """,
-                (aid, kind, region, genre, slug, name, tags, style, path,
+                (aid, kind, region, genre, slug, name, tags, style, description, path,
                  1 if transparent else 0, license, source),
             )
             conn.commit()
@@ -175,6 +176,11 @@ def match_asset(kind: str, name: str = "", region: str = "", genre: str = "",
 # the render resolves the right variant per beat.
 _VARIANT_SUFFIXES = ("happy", "angry", "sad", "surprised", "wave", "cheer", "point", "hip",
                      "day", "night")
+# Readable expansions for the derived catalog description (when no sidecar desc).
+_REGION_NAME = {"cn": "Chinese", "jp": "Japanese", "ko": "Korean", "vi": "Vietnamese",
+                "eu": "European", "us": "American"}
+_GENRE_NAME = {"wuxia": "wuxia", "ngontinh": "romance", "horror": "horror",
+               "fantasy": "fantasy", "codai": "historical", "hiendai": "modern"}
 
 
 def _split_variant(slug: str) -> "tuple[str, str]":
@@ -223,7 +229,11 @@ def build_library_catalog(region: str = "", genre: str = "", cap: int = 300) -> 
                 if not base:
                     continue
                 e = fam.setdefault(base, {"region": a.get("region", ""), "genre": a.get("genre", ""),
-                                          "style": a.get("style", ""), "emotions": set(), "poses": set(), "tod": set()})
+                                          "style": a.get("style", ""), "description": "",
+                                          "emotions": set(), "poses": set(), "tod": set()})
+                d = (a.get("description", "") or "").strip()
+                if d and (not var or not e["description"]):   # base variant's desc is authoritative
+                    e["description"] = d
                 if var in ("happy", "angry", "sad", "surprised"):
                     e["emotions"].add(var)
                 elif var in ("wave", "cheer", "point", "hip"):
@@ -236,6 +246,14 @@ def build_library_catalog(region: str = "", genre: str = "", cap: int = 300) -> 
             toks = [t for t in base.split("_")
                     if t and t not in (meta.get("region"), meta.get("genre"), meta.get("style"))]
             return " ".join(toks)
+
+        def _desc(base: str, meta: dict) -> str:
+            # authored sidecar description wins; else a readable derived phrase
+            if meta.get("description"):
+                return meta["description"]
+            rn = _REGION_NAME.get(meta.get("region", ""), "")
+            gn = _GENRE_NAME.get(meta.get("genre", ""), (meta.get("genre", "") or ""))
+            return " ".join(x for x in (rn, gn, _tokens(base, meta)) if x)
 
         def _scope(meta: dict) -> str:
             return "/".join([x for x in (meta.get("region"), meta.get("genre"), meta.get("style")) if x])
@@ -252,14 +270,14 @@ def build_library_catalog(region: str = "", genre: str = "", cap: int = 300) -> 
                 if m["poses"]:
                     extra.append("poses:" + ",".join(sorted(m["poses"])))
                 suffix = (" | " + " ".join(extra)) if extra else ""
-                lines.append(f"  {base} | {_scope(m)} | {_tokens(base, m)}{suffix}")
+                lines.append(f"  {base} | {_scope(m)} | {_desc(base, m)}{suffix}")
         bgs = _families("background")
         if bgs:
             lines.append("BACKGROUNDS (wide 16:9 scenes; pick the closest, else asset=\"\"):")
             for base in sorted(bgs)[:cap]:
                 m = bgs[base]
                 tod = (" | " + ",".join(sorted(m["tod"]))) if m["tod"] else ""
-                lines.append(f"  {base} | {_scope(m)} | {_tokens(base, m)}{tod}")
+                lines.append(f"  {base} | {_scope(m)} | {_desc(base, m)}{tod}")
         return "\n".join(lines)
     except Exception as exc:
         logger.warning("build_library_catalog failed: %s", exc)
@@ -394,6 +412,7 @@ def scan_library(root: "str | Path | None" = None, *, prune_missing: bool = True
                     name=side.get("name", meta["slug"].replace("_", " ")),
                     tags=side.get("tags", ""),
                     style=side.get("style", meta["style"]),
+                    description=side.get("desc", side.get("description", "")),
                     transparent=bool(side.get("transparent", meta["kind"] in ("character", "object", "frame"))),
                     license=side.get("license", man.get("license", "ai-generated")),
                     source=side.get("source", man.get("source", "local")),
