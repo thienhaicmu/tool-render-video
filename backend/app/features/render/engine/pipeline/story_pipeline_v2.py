@@ -203,6 +203,26 @@ def run_story_v2(
         genre = (getattr(payload, "story_genre", "") or "")
         bg_value = (getattr(payload, "content_background_value", "") or "#101820")
 
+        # A1: optional LOCAL base video the story is composited over. "" → image-based
+        # (default). A missing/invalid path degrades to image-based (Sacred #3 spirit),
+        # never aborts. Consumed as the cue base layer in a later phase (A2).
+        base_video_path, base_video_dur = "", 0.0
+        _bvp = (getattr(payload, "story_base_video_path", "") or "").strip()
+        if _bvp:
+            try:
+                _p = Path(_bvp).expanduser()
+                if _p.exists() and _p.is_file():
+                    from app.features.render.engine.pipeline.render_pipeline import _probe_video_duration
+                    base_video_dur = float(_probe_video_duration(_p) or 0.0)
+                    base_video_path = str(_p)
+                    _job_log(effective_channel, job_id,
+                             f"Story v2: base video ok ({base_video_dur:.1f}s) — {_p.name}")
+                else:
+                    _job_log(effective_channel, job_id,
+                             f"Story v2: base video not found, using image-based — {_bvp}")
+            except Exception as _bv_exc:
+                logger.warning("story v2: base video probe failed (non-fatal): %s", _bv_exc)
+
         if source == "idea":
             if not idea:
                 raise RuntimeError("Story v2: source=idea but story_idea is empty")
@@ -296,6 +316,7 @@ def run_story_v2(
         ctx = SimpleNamespace(
             job_id=job_id, effective_channel=effective_channel, shots_dir=shots_dir,
             width=width, height=height, fps=fps, bg_value=bg_value, ffmpeg_threads=_cue_threads,
+            base_video_path=base_video_path, base_video_dur=base_video_dur,   # A1 (consumed in A2)
         )
 
         # ── 6. Render cues (parallel; libx264/CPU → no NVENC contention) ────

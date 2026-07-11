@@ -54,6 +54,8 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
         "story_source", "story_idea", "story_duration_sec", "story_genre",
         # Phase 2: final image provider (gpt_image paid | pollinations free).
         "story_image_provider",
+        # A1: optional local base video the story is composited over ("" = image-based).
+        "story_base_video_path",
     }),
     "lifecycle": frozenset({
         "resume_job_id", "resume_from_last", "render_profile", "render_preset",

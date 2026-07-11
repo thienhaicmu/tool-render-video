@@ -49,6 +49,7 @@ export function StoryStudio() {
   const setKey = <K extends keyof StoryConfig>(k: K, v: StoryConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }))
   const hasPicker = typeof window !== 'undefined' && !!window.electronAPI?.pickDirectory
+  const hasVideoPicker = typeof window !== 'undefined' && !!window.electronAPI?.pickVideoFile
 
   // Prefill the save folder from the saved default (never clobber a user choice).
   useEffect(() => {
@@ -60,6 +61,11 @@ export function StoryStudio() {
   async function pickOutputDir() {
     const dir = await window.electronAPI?.pickDirectory?.()
     if (dir) setKey('outputDir', dir)
+  }
+
+  async function pickBaseVideo() {
+    const f = await window.electronAPI?.pickVideoFile?.()
+    if (f) setKey('baseVideoPath', f)
   }
 
   function fail(e: unknown) { setError(e instanceof Error ? e.message : String(e)) }
@@ -114,6 +120,7 @@ export function StoryStudio() {
       story_chapter_no: cfg.chapterNo,
       story_plan_override: JSON.stringify(p),
       story_image_provider: cfg.imageProvider,
+      story_base_video_path: cfg.baseVideoPath,
       voice_language: VOICE_LOCALE[cfg.language],
       aspect_ratio: cfg.aspect,
       add_subtitle: cfg.subtitles,
@@ -146,6 +153,7 @@ export function StoryStudio() {
         <InputScreen
           vi={vi} cfg={cfg} setKey={setKey} busy={busy} ready={inputReady}
           hasPicker={hasPicker} pickOutputDir={pickOutputDir} onGenerate={onGenerate}
+          hasVideoPicker={hasVideoPicker} pickBaseVideo={pickBaseVideo}
         />
       )}
       {phase === 'review' && plan && (

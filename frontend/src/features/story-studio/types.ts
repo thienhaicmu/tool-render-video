@@ -66,6 +66,7 @@ export interface StoryConfig {
   chapterNo: number
   outputDir: string
   imageProvider: ImageProvider   // FINAL render provider (draft always previews free)
+  baseVideoPath: string          // A1 — optional local base video ('' = image-based)
 }
 
 export const DEFAULT_STORY_CFG: StoryConfig = {
@@ -82,4 +83,5 @@ export const DEFAULT_STORY_CFG: StoryConfig = {
   chapterNo: 0,
   outputDir: '',
   imageProvider: 'gpt_image',    // premium default (Sacred #2 parity); toggle to free
+  baseVideoPath: '',
 }
