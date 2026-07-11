@@ -122,11 +122,21 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
     # G1: ground a later series chapter on earlier ones (no-op when series_id empty).
     from app.features.render.engine.pipeline.story_series_memory import build_prior_context
     prior_context = build_prior_context(_sid, before_chapter=(_cno or None))
+    # Library-pick: inject the asset-library catalog so the AI plan can CHOOSE assets by
+    # slug (gated STORY_LIBRARY_PICK, default off → catalog "" → prompt byte-identical).
+    library_catalog = ""
+    if os.getenv("STORY_LIBRARY_PICK", "0") == "1":
+        try:
+            from app.db import story_asset_repo
+            library_catalog = story_asset_repo.build_library_catalog()
+        except Exception:
+            library_catalog = ""
     plan = generate_story_plan_v2(
         provider=provider, source=source, chapter=chapter, idea=idea,
         duration_sec=duration_sec, genre=genre, language=language, art_style=art_style,
         aspect_ratio=aspect, subtitle_mode=subtitle_mode,
         series_id=_sid, chapter_no=_cno, prior_context=prior_context,
+        library_catalog=library_catalog,
         api_key=api_key, model=(getattr(payload, "llm_model", None) or None),
         resolve_key=resolve_key,
     )

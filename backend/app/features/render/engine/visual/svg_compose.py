@@ -32,19 +32,34 @@ _ZONE_FRACS = {
 }
 
 
+def _embed(path: str, *, x: float = 0, y: float = 0, w: int = 0, h: int = 0, cover: bool = False) -> str:
+    """<image> tag embedding a library PNG/webp as a base64 data URI. "" on any failure."""
+    try:
+        p = Path(path)
+        if not (p.exists() and p.stat().st_size > 0):
+            return ""
+        b64 = base64.b64encode(p.read_bytes()).decode("ascii")
+        mime = "image/webp" if p.suffix.lower() == ".webp" else "image/png"
+        par = ' preserveAspectRatio="xMidYMid slice"' if cover else ""
+        return f'<image href="data:{mime};base64,{b64}" x="{x}" y="{y}" width="{w}" height="{h}"{par}/>'
+    except Exception:
+        return ""
+
+
 def _bg_layer(plan, setting, w: int, h: int) -> str:
-    """Background covering the w×h canvas: a matched library asset (embedded, slice-cover)
-    else a procedural scene scaled to cover. Never raises."""
+    """Background covering the w×h canvas. Precedence (library-pick): the AI-chosen
+    ``setting.asset`` slug → a fuzzy scene_kind match → a procedural scene. Never raises."""
     scene_kind = (getattr(setting, "scene_kind", "") or (getattr(setting, "name", "") if setting else "") or "")
     region = getattr(plan, "region", "") or ""
     genre = getattr(plan, "genre_key", "") or ""
     try:
-        from app.db.story_asset_repo import match_asset
-        p = match_asset("background", name=scene_kind, region=region, genre=genre)
-        if p and Path(p).exists() and Path(p).stat().st_size > 0:
-            b64 = base64.b64encode(Path(p).read_bytes()).decode("ascii")
-            mime = "image/webp" if Path(p).suffix.lower() == ".webp" else "image/png"
-            return f'<image href="data:{mime};base64,{b64}" x="0" y="0" width="{w}" height="{h}" preserveAspectRatio="xMidYMid slice"/>'
+        from app.db.story_asset_repo import get_by_slug, match_asset
+        asset = (getattr(setting, "asset", "") or "").strip()
+        p = (get_by_slug(asset, "background") if asset else None) or \
+            match_asset("background", name=scene_kind, region=region, genre=genre)
+        img = _embed(p, w=w, h=h, cover=True) if p else ""
+        if img:
+            return img
     except Exception:
         pass
     # procedural scene (authored at 1536×1024) scaled to COVER w×h
@@ -52,6 +67,27 @@ def _bg_layer(plan, setting, w: int, h: int) -> str:
     tx = (w - _SCENE_W * sc) / 2.0
     ty = (h - _SCENE_H * sc) / 2.0
     return f'<g transform="translate({tx:.1f},{ty:.1f}) scale({sc:.4f})">{scene_inner(scene_kind, region, genre, "")}</g>'
+
+
+def _char_layer(ch, plan) -> str:
+    """Character CONTENT on the 1024×1536 frame. Precedence (library-pick): the AI-chosen
+    ``character.asset`` slug (embedded library PNG) → a procedural chibi from the preset.
+    Never raises."""
+    try:
+        asset = (getattr(ch, "asset", "") or "").strip()
+        if asset:
+            from app.db.story_asset_repo import get_by_slug
+            p = get_by_slug(asset, "character")
+            img = _embed(p, w=_CHAR_W, h=_CHAR_H) if p else ""
+            if img:
+                return img
+    except Exception:
+        pass
+    opts = preset(getattr(ch, "archetype", "") or "",
+                  getattr(plan, "region", "") or "",
+                  getattr(plan, "genre_key", "") or "",
+                  getattr(ch, "gender", "") or "")
+    return char_inner(opts)
 
 
 def compose_visual(plan, visual, w: int = W, h: int = H) -> str:
@@ -66,11 +102,7 @@ def compose_visual(plan, visual, w: int = W, h: int = H) -> str:
         chars = ""
         for (cxf, scf), cid in zip(_ZONE_FRACS.get(len(cids), _ZONE_FRACS[3]), cids):
             ch = plan.character(cid)
-            opts = preset(getattr(ch, "archetype", "") or "",
-                          getattr(plan, "region", "") or "",
-                          getattr(plan, "genre_key", "") or "",
-                          getattr(ch, "gender", "") or "")
-            inner = char_inner(opts)
+            inner = _char_layer(ch, plan)      # library-pick asset → else procedural chibi
             if not inner:
                 continue
             sc = (scf * h) / _CHAR_H            # scale so char height ≈ scf·h

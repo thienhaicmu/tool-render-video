@@ -115,3 +115,15 @@ def test_s5_missing_library_hints_default():
     p = parse_super_plan_response(json.dumps(_good()))
     assert p.region == "" and p.genre_key == ""
     assert p.characters[0].archetype == "" and p.settings[0].scene_kind == ""
+
+
+def test_s6_library_pick_asset_parsed():
+    # Library-pick — AI-chosen asset slugs parse onto CharacterDef/SettingDef.
+    d = _good()
+    d["characters"][0]["asset"] = "cn_wuxia_swordsman_male_young"
+    d["settings"][0]["asset"] = "cn_wuxia_imperial_hall"
+    p = parse_super_plan_response(json.dumps(d))
+    assert p.characters[0].asset == "cn_wuxia_swordsman_male_young"
+    assert p.settings[0].asset == "cn_wuxia_imperial_hall"
+    # absent → "" (default)
+    assert parse_super_plan_response(json.dumps(_good())).characters[0].asset == ""

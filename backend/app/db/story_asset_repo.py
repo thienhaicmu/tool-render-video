@@ -170,6 +170,102 @@ def match_asset(kind: str, name: str = "", region: str = "", genre: str = "",
         return None
 
 
+# Variant suffixes appended to a base slug (emotion/pose for characters, tod for
+# backgrounds) — stripped when grouping the catalog, so the AI picks a BASE asset and
+# the render resolves the right variant per beat.
+_VARIANT_SUFFIXES = ("happy", "angry", "sad", "surprised", "wave", "cheer", "point", "hip",
+                     "day", "night")
+
+
+def _split_variant(slug: str) -> "tuple[str, str]":
+    """(base_slug, variant) — variant is "" when the slug has no known suffix."""
+    for s in _VARIANT_SUFFIXES:
+        if slug.endswith("_" + s):
+            return slug[: -(len(s) + 1)], s
+    return slug, ""
+
+
+def get_by_slug(slug: str, kind: str = "") -> Optional[str]:
+    """Exact-slug → on-disk PATH of a library asset the AI plan chose (library-pick).
+    Optionally scoped by ``kind`` (character|background|…). Returns the first candidate
+    whose file still exists, else None. Never raises."""
+    s = (slug or "").strip()
+    if not s:
+        return None
+    try:
+        where, args = ["slug = ?"], [s]
+        if (kind or "").strip():
+            where.append("kind = ?"); args.append(kind)
+        with db_conn() as conn:
+            rows = conn.execute(
+                f"SELECT path FROM story_assets WHERE {' AND '.join(where)}", tuple(args),
+            ).fetchall()
+        for r in rows:
+            p = r[0] if isinstance(r, tuple) else r["path"]
+            if _exists(p):
+                return p
+        return None
+    except Exception as exc:
+        logger.warning("get_by_slug failed slug=%s: %s", slug, exc)
+        return None
+
+
+def build_library_catalog(region: str = "", genre: str = "", cap: int = 300) -> str:
+    """Compact, described inventory of the library for the super-prompt so the AI can
+    CHOOSE assets by slug (library-pick). Groups base + variants (one line per base slug):
+    ``base_slug | region/genre | role-or-scene tokens | [emotions/poses | day,night]``.
+    Empty string when the library is empty (→ prompt stays byte-identical). Never raises."""
+    try:
+        def _families(kind: str) -> dict:
+            fam: dict = {}
+            for a in list_assets(kind=kind, region=region, genre=genre, limit=1000):
+                base, var = _split_variant(a.get("slug", ""))
+                if not base:
+                    continue
+                e = fam.setdefault(base, {"region": a.get("region", ""), "genre": a.get("genre", ""),
+                                          "style": a.get("style", ""), "emotions": set(), "poses": set(), "tod": set()})
+                if var in ("happy", "angry", "sad", "surprised"):
+                    e["emotions"].add(var)
+                elif var in ("wave", "cheer", "point", "hip"):
+                    e["poses"].add(var)
+                elif var in ("day", "night"):
+                    e["tod"].add(var)
+            return fam
+
+        def _tokens(base: str, meta: dict) -> str:
+            toks = [t for t in base.split("_")
+                    if t and t not in (meta.get("region"), meta.get("genre"), meta.get("style"))]
+            return " ".join(toks)
+
+        def _scope(meta: dict) -> str:
+            return "/".join([x for x in (meta.get("region"), meta.get("genre"), meta.get("style")) if x])
+
+        lines: list[str] = []
+        chars = _families("character")
+        if chars:
+            lines.append("CHARACTERS (transparent full-body; pick the closest, else asset=\"\"):")
+            for base in sorted(chars)[:cap]:
+                m = chars[base]
+                extra = []
+                if m["emotions"]:
+                    extra.append("emotions:" + ",".join(sorted(m["emotions"])))
+                if m["poses"]:
+                    extra.append("poses:" + ",".join(sorted(m["poses"])))
+                suffix = (" | " + " ".join(extra)) if extra else ""
+                lines.append(f"  {base} | {_scope(m)} | {_tokens(base, m)}{suffix}")
+        bgs = _families("background")
+        if bgs:
+            lines.append("BACKGROUNDS (wide 16:9 scenes; pick the closest, else asset=\"\"):")
+            for base in sorted(bgs)[:cap]:
+                m = bgs[base]
+                tod = (" | " + ",".join(sorted(m["tod"]))) if m["tod"] else ""
+                lines.append(f"  {base} | {_scope(m)} | {_tokens(base, m)}{tod}")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning("build_library_catalog failed: %s", exc)
+        return ""
+
+
 def get_asset(asset_id: str) -> Optional[dict]:
     """Return one asset dict, or None. Never raises."""
     try:

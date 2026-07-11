@@ -102,6 +102,7 @@ class CharacterDef:
     voice_gender: str = ""    # ∈ GENDER
     voice_style: str = ""
     archetype: str = ""       # Phase 0.5: library role token (English, e.g. "swordsman"); "" = none
+    asset: str = ""           # Library-pick: AI-chosen library character slug (exact); "" = none
 
 
 @dataclass
@@ -110,6 +111,7 @@ class SettingDef:
     name: str = ""
     canonical_desc: str = ""
     scene_kind: str = ""      # Phase 0.5: library scene token (English, e.g. "cafe"); "" = none
+    asset: str = ""           # Library-pick: AI-chosen library background slug (exact); "" = none
 
 
 @dataclass
@@ -581,12 +583,12 @@ def _character_from(x) -> CharacterDef:
     return CharacterDef(id=cid, name=(name or cid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")),
                         age=_str(x.get("age")), gender=_norm(x.get("gender"), GENDER, ""),
                         voice_gender=_norm(x.get("voice_gender"), GENDER, ""), voice_style=_str(x.get("voice_style")),
-                        archetype=_str(x.get("archetype")))
+                        archetype=_str(x.get("archetype")), asset=_str(x.get("asset")))
 def _setting_from(x) -> SettingDef:
     if not isinstance(x, dict): return SettingDef()
     name = _str(x.get("name")); sid = _str(x.get("id")) or name
     return SettingDef(id=sid, name=(name or sid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")),
-                      scene_kind=_str(x.get("scene_kind")))
+                      scene_kind=_str(x.get("scene_kind")), asset=_str(x.get("asset")))
 def _visual_from(x) -> Visual:
     if not isinstance(x, dict): return Visual()
     return Visual(id=_str(x.get("id")), setting_id=_str(x.get("setting_id")),
