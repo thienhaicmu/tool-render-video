@@ -36,22 +36,29 @@ def _worker_count(env_name: str, default: int, n_items: int) -> int:
 
 
 def _match_library_background(plan, visual):
-    """Phase A — offline library-first: match a stock BACKGROUND for a CHARACTER-LESS
+    """Phase A — offline library-first: resolve a stock BACKGROUND for a CHARACTER-LESS
     Visual (establishing shot) before paying for AI. Returns an on-disk path or None.
     Never raises.
 
-    Only for a Visual with NO character_ids: the image-based cue render does not overlay
-    character masters, so a plain library background would drop the characters — those
-    keep AI gen. Scoped by plan.region/genre_key; matched by the setting's scene_kind
-    (Phase 0.5 hint) else its name."""
+    Same precedence as svg_compose._bg_layer (single policy): the AI-chosen
+    ``setting.asset`` slug (exact, library-pick) → a fuzzy ``scene_kind``/name match. Only
+    for a Visual with NO character_ids — the image cue render does not overlay characters,
+    so a plain library background would drop them; those keep AI gen. This is the gated
+    (STORY_LIBRARY_FIRST) early-exit for the PAID gpt-image flow; the SVG path resolves the
+    same precedence inline in svg_compose (unconditional, since library ≥ procedural)."""
     try:
         if getattr(visual, "character_ids", None):
             return None
         s = plan.setting(getattr(visual, "setting_id", "") or "")
+        from app.db.story_asset_repo import get_by_slug, match_asset
+        asset = ((getattr(s, "asset", "") or "").strip()) if s else ""
+        if asset:                                        # AI-chosen library-pick (exact) wins
+            p = get_by_slug(asset, "background")
+            if p:
+                return p
         name = ((getattr(s, "scene_kind", "") or getattr(s, "name", "")) if s else "").strip()
         if not name:
             return None
-        from app.db.story_asset_repo import match_asset
         return match_asset("background", name=name,
                            region=(getattr(plan, "region", "") or ""),
                            genre=(getattr(plan, "genre_key", "") or ""))
@@ -133,10 +140,10 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
             except Exception:
                 pass
 
-    # Phase B — procedural SVG image path. Active when provider=="svg" (default in a later
-    # phase) OR env STORY_SVG_GEN=1 (opt-in trial). Composes background + characters into a
-    # wide PNG offline ($0). On failure it degrades: provider=="svg" -> solid fallback;
-    # env-gate mode -> falls through to AI (gpt-image), never worse than before.
+    # Phase B/C — procedural SVG image path. Active when provider=="svg" (the FE default
+    # since Phase C) OR env STORY_SVG_GEN=1 (global override). Composes background +
+    # characters into a wide PNG offline ($0). On failure it degrades: provider=="svg" ->
+    # solid fallback; env-gate mode -> falls through to AI (gpt-image), never worse than before.
     _svg_mode = (provider == "svg") or (os.getenv("STORY_SVG_GEN", "0") == "1")
     # N4 overlay: key-visual is BACKGROUND-ONLY and the speaking character is composited
     # per-beat at cue render (emotion-aware). SVG mode + STORY_CHAR_OVERLAY only.

@@ -48,6 +48,20 @@ def test_match_falls_back_to_setting_name(monkeypatch):
     assert got["name"] == "Nowhere"                               # no scene_kind → setting name
 
 
+def test_match_honors_ai_chosen_setting_asset(monkeypatch):
+    # T2 debt — Phase A now honors the AI's library-pick (setting.asset) BEFORE fuzzy match,
+    # same precedence as svg_compose (single policy).
+    monkeypatch.setattr("app.db.story_asset_repo.get_by_slug",
+                        lambda slug, kind="": "/lib/pick.png" if slug == "cn_bg_x" else None)
+    fuzzy = []
+    monkeypatch.setattr("app.db.story_asset_repo.match_asset",
+                        lambda *a, **k: fuzzy.append(1) or "/fuzzy.png")
+    p = StoryPlan(region="cn", genre_key="wuxia",
+                  settings=[SettingDef(id="s", name="X", scene_kind="throne_room", asset="cn_bg_x")])
+    assert vs._match_library_background(p, Visual(id="v1", setting_id="s", character_ids=[])) == "/lib/pick.png"
+    assert fuzzy == []                                            # fuzzy not consulted when asset resolves
+
+
 def test_match_none_when_no_setting_or_name(monkeypatch):
     monkeypatch.setattr("app.db.story_asset_repo.match_asset", lambda *a, **k: "should_not_be_used")
     p = _plan()
