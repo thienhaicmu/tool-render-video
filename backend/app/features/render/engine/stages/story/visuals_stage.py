@@ -133,11 +133,30 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
             except Exception:
                 pass
 
+    # Phase B — procedural SVG image path. Active when provider=="svg" (default in a later
+    # phase) OR env STORY_SVG_GEN=1 (opt-in trial). Composes background + characters into a
+    # wide PNG offline ($0). On failure it degrades: provider=="svg" -> solid fallback;
+    # env-gate mode -> falls through to AI (gpt-image), never worse than before.
+    _svg_mode = (provider == "svg") or (os.getenv("STORY_SVG_GEN", "0") == "1")
+
     def _gen_one(v):
         # WORKER thread: pure image gen (network/file I/O). No DB, no plan mutation —
         # only reads plan.render.refs. Returns (visual_id, path|None). Never raises.
         try:
             out = out_dir / f"{v.id}.png"
+            if _svg_mode:
+                try:
+                    from app.features.render.engine.visual.svg_compose import compose_visual
+                    from app.features.render.engine.visual.svg_raster import save_svg_png
+                    _svg = compose_visual(plan, v)
+                    _p = save_svg_png(_svg, str(out), img_w, img_h, opaque_bg="#101820") if _svg else None
+                except Exception:
+                    _p = None
+                if _p:
+                    return v.id, _p
+                if provider == "svg":
+                    return v.id, None                    # strict svg -> solid fallback (no AI)
+                # env-gate trial: fall through to AI below
             _rids = list(getattr(v, "character_ids", []) or [])
             _sid = (getattr(v, "setting_id", "") or "").strip()
             if _sid:
