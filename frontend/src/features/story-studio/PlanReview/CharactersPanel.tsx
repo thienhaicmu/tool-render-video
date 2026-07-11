@@ -17,13 +17,14 @@ const SAMPLE: Record<string, string> = {
   ko: '안녕하세요, 이것이 이 캐릭터의 목소리입니다.',
 }
 
-export function CharactersPanel({ vi, plan, artStyle, language, onChange, onVoiceChange }: {
+export function CharactersPanel({ vi, plan, artStyle, language, onChange, onVoiceChange, onMasterChange }: {
   vi: boolean
   plan: StoryPlanV2
   artStyle: string
   language: string
   onChange: (id: string, up: Partial<CharacterDef>) => void
   onVoiceChange: (cid: string, engine: string, voiceId: string) => void
+  onMasterChange: (cid: string, path: string) => void
 }) {
   // Available voices for this language's TTS engine (per-character override picker).
   const [avail, setAvail] = useState<StoryVoicesResponse | null>(null)
@@ -46,14 +47,15 @@ export function CharactersPanel({ vi, plan, artStyle, language, onChange, onVoic
         {plan.characters.map((c) => (
           <CharacterRow key={c.id} vi={vi} c={c} artStyle={artStyle} language={lang}
             sample={sampleFor(c.id)} voice={plan.render?.voices?.[c.id]} avail={avail}
-            onChange={onChange} onVoiceChange={onVoiceChange} />
+            locked={!!plan.render?.masters?.[c.id]}
+            onChange={onChange} onVoiceChange={onVoiceChange} onMasterChange={onMasterChange} />
         ))}
       </div>
     </StudioCard>
   )
 }
 
-function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, onChange, onVoiceChange }: {
+function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked, onChange, onVoiceChange, onMasterChange }: {
   vi: boolean
   c: CharacterDef
   artStyle: string
@@ -61,11 +63,14 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, onChang
   sample: string
   voice?: [string, string]
   avail: StoryVoicesResponse | null
+  locked: boolean
   onChange: (id: string, up: Partial<CharacterDef>) => void
   onVoiceChange: (cid: string, engine: string, voiceId: string) => void
+  onMasterChange: (cid: string, path: string) => void
 }) {
   const [sheet, setSheet] = useState<'idle' | 'busy' | 'done' | 'err'>('idle')
   const [master, setMaster] = useState<{ st: 'idle' | 'busy' | 'err'; url: string }>({ st: 'idle', url: '' })
+  const [variant, setVariant] = useState(0)
   const [voiceState, setVoiceState] = useState<'idle' | 'busy' | 'playing' | 'err'>('idle')
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -80,15 +85,22 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, onChang
   }
 
   // Cutout-ready character master (transparent PNG) — shown on a checkerboard so the
-  // transparent areas are visible. One master/character, reusable for overlay.
-  async function makeMaster() {
+  // transparent areas are visible. Regenerate bumps `variant` for a different look; the
+  // shown master's PATH is locked into the plan (render reuses it, skips regen).
+  async function makeMaster(regen = false) {
     if (master.st === 'busy') return
+    const v = regen ? variant + 1 : variant
+    setVariant(v)
     setMaster({ st: 'busy', url: '' })
     try {
       const r = await generateReferenceSheet({
-        name: c.name, description: c.canonical_desc, art_style: artStyle, transparent: true,
+        name: c.name, description: c.canonical_desc, art_style: artStyle,
+        transparent: true, variant: v,
       })
-      setMaster(r.url ? { st: 'idle', url: r.url } : { st: 'err', url: '' })
+      if (r.url && r.path) {
+        setMaster({ st: 'idle', url: r.url })
+        onMasterChange(c.id, r.path)              // lock this master into the plan
+      } else setMaster({ st: 'err', url: '' })
     } catch { setMaster({ st: 'err', url: '' }) }
   }
 
@@ -157,13 +169,20 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, onChang
             : sheet === 'err' ? (vi ? '⚠ Thử lại' : '⚠ Retry')
             : (vi ? 'Ảnh chuẩn' : 'Ref sheet')}
         </button>
-        <button type="button" className="st-btn st-btn--sm" disabled={master.st === 'busy'} onClick={makeMaster}
-          title={vi ? 'Ảnh nhân vật nền trong (để chèn lên video)' : 'Transparent character master (for overlay)'}>
+        <button type="button" className="st-btn st-btn--sm" disabled={master.st === 'busy'}
+          onClick={() => void makeMaster(!!master.url)}
+          title={vi ? 'Ảnh nhân vật nền trong — chèn lên video (bấm lại để đổi mẫu)'
+                    : 'Transparent character master — overlaid on video (click again for a new look)'}>
           {master.st === 'busy' ? (vi ? 'Đang tạo…' : 'Making…')
             : master.st === 'err' ? (vi ? '⚠ Thử lại' : '⚠ Retry')
-            : master.url ? (vi ? '↻ Nhân vật' : '↻ Master')
+            : master.url ? (vi ? '↻ Đổi mẫu' : '↻ Regenerate')
             : (vi ? '🧍 Nhân vật' : '🧍 Master')}
         </button>
+        {(master.url || locked) && (
+          <span className="st-tag st-tag--dim">
+            {locked ? (vi ? '✓ Đã khoá' : '✓ Locked') : (vi ? 'chưa khoá' : 'unlocked')}
+          </span>
+        )}
         {master.url && (
           <div className="st-char-master"
             style={{ background: 'repeating-conic-gradient(#c8c8c8 0% 25%, #fff 0% 50%) 50% / 14px 14px' }}>

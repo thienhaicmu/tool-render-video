@@ -66,6 +66,7 @@ export interface RenderState {
   visual_assets: Record<string, string>
   voices: Record<string, [string, string]>
   refs: Record<string, string>
+  masters?: Record<string, string>   // A5 — char_id → locked transparent master path
   cues: Cue[]
   total_sec: number
 }
@@ -157,6 +158,8 @@ export interface ReferenceSheetRequest {
   art_style?: string
   // true → cutout-ready CHARACTER MASTER (transparent PNG) for overlay/preview.
   transparent?: boolean
+  // A5 — 0 = canonical master; >0 regenerates a different look to pick from.
+  variant?: number
 }
 
 export interface JobStoryPlanResponse {

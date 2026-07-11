@@ -211,6 +211,9 @@ class ReferenceSheetRequest(BaseModel):
     # Review preview instead of the opaque conditioning reference sheet. Default False
     # keeps the legacy behaviour (Sacred Contract #2 spirit).
     transparent: bool = False
+    # A5 approval/lock: 0 = canonical master; >0 busts the cache so "regenerate" yields
+    # a different look for the user to pick from. Only used with transparent=True.
+    variant: int = 0
 
 
 @router.post("/character/reference-sheet")
@@ -243,7 +246,8 @@ def character_reference_sheet(req: ReferenceSheetRequest) -> dict:
     # master and expose a viewable URL so Review can show it on a checkerboard. It is
     # an OVERLAY asset, NOT the conditioning reference sheet → it is not pinned.
     if req.transparent:
-        path = generate_character_master(character, art_style=(req.art_style or ""))
+        path = generate_character_master(character, art_style=(req.art_style or ""),
+                                         variant=int(req.variant or 0))
         if not path:
             raise HTTPException(status_code=502, detail="character master generation failed")
         url = ""

@@ -96,6 +96,13 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
   // clears the override back to auto-cast.
   const updateVoice = (cid: string, engine: string, voiceId: string) =>
     patch({ render: { ...plan.render, voices: { ...(plan.render?.voices ?? {}), [cid]: [engine, voiceId] } } })
+  // A5 — lock a chosen character master into the plan so the render reuses that exact
+  // image (skips render-time regeneration). "" clears the lock (back to auto).
+  const updateMaster = (cid: string, path: string) => {
+    const masters = { ...(plan.render?.masters ?? {}) }
+    if (path) masters[cid] = path; else delete masters[cid]
+    patch({ render: { ...plan.render, masters } })
+  }
   const updateVisual = (id: string, up: Partial<Visual>) =>
     patch({ visuals: plan.visuals.map((v) => (v.id === id ? { ...v, ...up } : v)) })
   const updateBeat = (id: string, up: Partial<Beat>) =>
@@ -176,7 +183,7 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
       )}
 
       <CharactersPanel vi={vi} plan={plan} artStyle={artStyle} language={language}
-        onChange={updateCharacter} onVoiceChange={updateVoice} />
+        onChange={updateCharacter} onVoiceChange={updateVoice} onMasterChange={updateMaster} />
       <VisualsPanel
         vi={vi} plan={plan} artStyle={artStyle} aspect={aspect} colors={colors}
         previews={previews} setPreview={setPreview}
