@@ -69,23 +69,35 @@ def _bg_layer(plan, setting, w: int, h: int) -> str:
     return f'<g transform="translate({tx:.1f},{ty:.1f}) scale({sc:.4f})">{scene_inner(scene_kind, region, genre, "")}</g>'
 
 
+def _char_query(ch) -> str:
+    """Free-text used to fuzzy-match a library character when the AI gave no explicit
+    ``asset`` slug: archetype (controlled vocab → maps onto slug tokens) + name + gender.
+    "" (no signal) → caller skips the fuzzy match so a random character is never
+    substituted."""
+    parts = [getattr(ch, "archetype", "") or "", getattr(ch, "name", "") or "",
+             getattr(ch, "gender", "") or ""]
+    return " ".join(p for p in parts if p).strip()
+
+
 def _char_layer(ch, plan) -> str:
-    """Character CONTENT on the 1024×1536 frame. Precedence (library-pick): the AI-chosen
-    ``character.asset`` slug (embedded library PNG) → a procedural chibi from the preset.
-    Never raises."""
+    """Character CONTENT on the 1024×1536 frame. Precedence (library-pick, symmetry with
+    _bg_layer): the AI-chosen ``character.asset`` slug (embedded library PNG) → a fuzzy
+    archetype/name library match → a procedural chibi from the preset. Never raises."""
+    region = getattr(plan, "region", "") or ""
+    genre = getattr(plan, "genre_key", "") or ""
     try:
+        from app.db.story_asset_repo import get_by_slug, match_asset
         asset = (getattr(ch, "asset", "") or "").strip()
-        if asset:
-            from app.db.story_asset_repo import get_by_slug
-            p = get_by_slug(asset, "character")
-            img = _embed(p, w=_CHAR_W, h=_CHAR_H) if p else ""
-            if img:
-                return img
+        q = _char_query(ch)
+        p = (get_by_slug(asset, "character") if asset else None) or \
+            (match_asset("character", name=q, region=region, genre=genre,
+                         transparent_only=True) if q else None)
+        img = _embed(p, w=_CHAR_W, h=_CHAR_H) if p else ""
+        if img:
+            return img
     except Exception:
         pass
-    opts = preset(getattr(ch, "archetype", "") or "",
-                  getattr(plan, "region", "") or "",
-                  getattr(plan, "genre_key", "") or "",
+    opts = preset(getattr(ch, "archetype", "") or "", region, genre,
                   getattr(ch, "gender", "") or "")
     return char_inner(opts)
 

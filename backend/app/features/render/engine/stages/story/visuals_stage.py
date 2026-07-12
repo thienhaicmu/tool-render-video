@@ -438,7 +438,8 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
         from app.features.render.engine.visual.svg_char import build_char, emotion_expr
         from app.features.render.engine.visual.svg_raster import save_svg_png
         from app.features.render.engine.visual.svg_presets import preset
-        from app.db.story_asset_repo import get_by_slug
+        from app.features.render.engine.visual.svg_compose import _char_query
+        from app.db.story_asset_repo import get_by_slug, best_asset, _split_variant
         region = (getattr(plan, "region", "") or "")
         genre = (getattr(plan, "genre_key", "") or "")
         _out = Path(out_dir)
@@ -447,6 +448,13 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
             if c is None:
                 continue
             asset = (getattr(c, "asset", "") or "").strip()
+            if not asset:                                   # F4: no AI slug → fuzzy-match a library
+                q = _char_query(c)                          # base, so its emotion/pose variants still apply
+                if q:
+                    m = best_asset("character", name=q, region=region, genre=genre,
+                                   transparent_only=True)
+                    if m:
+                        asset = _split_variant(m.get("slug", ""))[0]
             for emo, pose in pairs:
                 key = f"{cid}:{emo}:{pose}"
                 if plan.render.masters.get(key):

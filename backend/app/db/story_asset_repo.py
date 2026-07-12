@@ -128,47 +128,67 @@ def _exists(path: str) -> bool:
         return False
 
 
-def match_asset(kind: str, name: str = "", region: str = "", genre: str = "",
-                *, transparent_only: bool = False) -> Optional[str]:
-    """Best-effort deterministic library lookup for AL5 auto-assign
-    (STORY_LIBRARY_FIRST). Returns the on-disk PATH of the best matching asset, or
-    None. Scoped by kind (+ region/genre when given) and ranked by ``name`` similarity
-    against slug/name/tags. Only returns an asset whose file still exists on disk.
+def best_asset(kind: str, name: str = "", region: str = "", genre: str = "",
+               *, transparent_only: bool = False) -> Optional[dict]:
+    """Best-matching library asset ROW (dict) for a fuzzy ``name`` lookup, or None.
+    Shared core of :func:`match_asset` (which returns the path). Scoped by kind and,
+    when a ``name`` signal exists, PROGRESSIVELY WIDENED (region+genre → region →
+    unscoped) so a slightly-off region/genre no longer drops every candidate. A blank
+    ``name`` stays strictly in the requested scope (never cross-region substitutes).
     Never raises.
 
-    Match ranking (highest first): exact slug/name → substring in slug/name/tags →
-    token overlap. A blank ``name`` returns the first candidate in scope (region/genre
-    already narrow it). Score 0 (no name signal at all) → None, so a random character is
-    never silently substituted."""
+    Ranking (highest first): exact slug/name → whole-query substring in
+    slug/name/tags/DESCRIPTION → graded token overlap (more shared tokens wins). Score
+    0 (no name signal at all) → None, so a random asset is never silently substituted."""
     key = (name or "").strip().lower()
-    try:
-        cands = [a for a in list_assets(kind=kind, region=region, genre=genre, limit=500)
-                 if _exists(a.get("path", ""))]
+
+    def _cands(rg: str, gn: str) -> list:
+        cs = [a for a in list_assets(kind=kind, region=rg, genre=gn, limit=500)
+              if _exists(a.get("path", ""))]
         if transparent_only:
-            cands = [a for a in cands if a.get("transparent")]
+            cs = [a for a in cs if a.get("transparent")]
+        return cs
+
+    try:
+        if key:                                           # widen only when we can rank
+            cands = (_cands(region, genre)
+                     or (_cands(region, "") if genre else [])
+                     or (_cands("", "") if (region or genre) else []))
+        else:
+            cands = _cands(region, genre)
         if not cands:
             return None
         if not key:
-            return cands[0]["path"]                       # scope-only pick
+            return cands[0]                               # scope-only pick
 
         def _score(a: dict) -> int:
             nm = str(a.get("name", "")).lower()
             sg = str(a.get("slug", "")).lower()
-            if key == nm or key == sg:
-                return 3
-            hay = f"{sg} {nm} {str(a.get('tags', '')).lower()}"
-            if key in hay:
-                return 2
-            toks = set(key.split())
-            if toks and toks & set(hay.replace("_", " ").replace(",", " ").split()):
-                return 1
-            return 0
+            if key == nm or key == sg:                    # exact slug/name
+                return 1000
+            hay = (f"{sg} {nm} {str(a.get('tags', '')).lower()} "
+                   f"{str(a.get('description', '')).lower()}")   # + rich description (F2)
+            if key in hay:                                # whole query is a substring
+                return 500
+            # graded token overlap: rank by count of shared meaningful (>2-char) tokens
+            toks = {t for t in key.replace("_", " ").replace(",", " ").split() if len(t) > 2}
+            haytoks = set(hay.replace("_", " ").replace(",", " ").replace("/", " ").split())
+            return len(toks & haytoks) if toks else 0     # 0 → None (no substitution)
 
         best = max(cands, key=_score)
-        return best["path"] if _score(best) > 0 else None
+        return best if _score(best) > 0 else None
     except Exception as exc:
-        logger.warning("match_asset failed kind=%s name=%s: %s", kind, name, exc)
+        logger.warning("best_asset failed kind=%s name=%s: %s", kind, name, exc)
         return None
+
+
+def match_asset(kind: str, name: str = "", region: str = "", genre: str = "",
+                *, transparent_only: bool = False) -> Optional[str]:
+    """Best-effort deterministic library lookup — returns the on-disk PATH of the best
+    matching asset (see :func:`best_asset` for ranking + widening), or None. Only
+    returns an asset whose file still exists on disk. Never raises."""
+    a = best_asset(kind, name, region, genre, transparent_only=transparent_only)
+    return a["path"] if a else None
 
 
 # Variant suffixes appended to a base slug (emotion/pose for characters, tod for
