@@ -22,8 +22,14 @@ def test_story_prompt_shape_and_params():
     assert '"archetype"' in user and '"scene_kind"' in user
     # Library-pick — "asset" slug field present in the schema
     assert '"asset"' in user
-    # N4+ per-beat pose field
+    # N4+ per-beat pose + emotion fields (s8)
     assert '"pose"' in user
+    assert '"emotion"' in user
+    # s8 — code-derived TOKEN VOCAB teaches archetype/scene_kind/emotion/pose tokens
+    assert "TOKEN VOCAB" in user
+    assert "swordsman" in user and "emperor" in user and "demon" in user   # archetype vocab
+    assert "temple" in user and "rooftop" in user                          # scene vocab
+    assert "normal, happy, angry, sad, surprised" in user                  # emotion vocab
 
 
 def test_library_catalog_injection():
@@ -73,4 +79,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s7"   # s5: +asset-library hints (region/genre_key/archetype/scene_kind)
+    assert SUPER_PROMPT_VERSION == "s8"   # s8: +per-beat emotion + code-derived archetype/scene vocab

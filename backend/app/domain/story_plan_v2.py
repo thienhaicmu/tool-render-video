@@ -56,6 +56,9 @@ CHAR_SCALE = ("small", "medium", "large")
 CHAR_MOTION = ("static", "fade", "slide", "float")
 # N4+ per-beat character POSE (matches svg_char builder poses). "stand" = neutral (default).
 POSE = ("stand", "wave", "cheer", "point", "hip")
+# N4 per-beat character EMOTION (matches svg_char emotion_expr + the library variants).
+# "normal" = neutral (default). The AI sets this per beat (s8); drives the emotion overlay.
+EMOTION = ("normal", "happy", "angry", "sad", "surprised")
 # Where on-screen text (hook / future subtitle) sits; "auto" → derived from char_anchor.
 TEXT_ANCHOR = ("auto", "top", "bottom", "left", "right")
 # Pool a "random" transition resolves into (deterministic via seed).
@@ -605,7 +608,7 @@ def _beat_from(x, i) -> Beat:
     return Beat(id=(_str(x.get("id")) or f"b{i}"), narration=_str(x.get("narration")),
                 speaker_id=_str(x.get("speaker_id")), visual_id=_str(x.get("visual_id")),
                 focus=_norm(x.get("focus"), FOCUS, "center"), motion=_norm(x.get("motion"), MOTION, "zoom_in"),
-                emotion=(_str(x.get("emotion")).lower() or "normal"),
+                emotion=_norm(x.get("emotion"), EMOTION, "normal"),
                 reading_speed=_clampf(x.get("reading_speed"), _READING_SPEED_MIN, _READING_SPEED_MAX, _READING_SPEED_DEFAULT),
                 pause_after=_clampf(x.get("pause_after"), 0.0, _PAUSE_MAX, 0.0),
                 hold_sec=max(0.0, _float(x.get("hold_sec"))),
@@ -653,7 +656,7 @@ def _render_from(x) -> RenderState:
                     char_anchor=_norm(c.get("char_anchor"), CHAR_ANCHOR, "none"),
                     char_scale=_norm(c.get("char_scale"), CHAR_SCALE, "medium"),
                     char_motion=_norm(c.get("char_motion"), CHAR_MOTION, "fade"),
-                    emotion=(_str(c.get("emotion")).lower() or "normal"),
+                    emotion=_norm(c.get("emotion"), EMOTION, "normal"),
                     pose=_norm(c.get("pose"), POSE, "stand"),
                     source_audio=_norm(c.get("source_audio"), SOURCE_AUDIO, "mute")))
         rs.total_sec = _float(x.get("total_sec"))
@@ -668,6 +671,6 @@ __all__ = [
     "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE", "BGM_MOODS",
     "REGION", "GENRE_KEY",
     "BGM_CUE", "BGM_INTENSITY", "SOURCE_AUDIO", "CHAR_ANCHOR", "CHAR_SCALE",
-    "CHAR_MOTION", "TEXT_ANCHOR", "POSE",
+    "CHAR_MOTION", "TEXT_ANCHOR", "POSE", "EMOTION",
     "ASPECT_SIZE", "CPS", "CROP_RECT", "TRANSITION_SEC", "MIN_BEAT_SEC", "cps_for",
 ]
