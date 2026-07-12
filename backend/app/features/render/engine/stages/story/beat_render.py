@@ -243,13 +243,19 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         overlay_master = ""
         _sp = (getattr(cue, "speaker_id", "") or "")
         _anchor = (getattr(cue, "char_anchor", "none") or "none")
-        _want_img = os.getenv("STORY_CHAR_OVERLAY", "0") == "1"
-        if _sp and ((use_video and _anchor != "none") or _want_img):
+        _base_ov = bool(use_video) and _anchor != "none"          # A3 base-video overlay
+        _want_img = os.getenv("STORY_CHAR_OVERLAY", "1") != "0"   # N4 image overlay (default ON, opt out =0)
+        if _sp and (_base_ov or _want_img):
             _masters = (getattr(plan.render, "masters", None) or {})
             _emo = (getattr(cue, "emotion", "normal") or "normal").strip().lower()
             _pose = (getattr(cue, "pose", "stand") or "stand").strip().lower()
-            _m = (_masters.get(f"{_sp}:{_emo}:{_pose}") or _masters.get(f"{_sp}:{_emo}")
-                  or _masters.get(_sp))
+            # emotion/pose master first (both A3 + N4). The plain-cid master is used ONLY on
+            # the A3 base-video path — the N4 image overlay requires an emotion/pose master
+            # (which exists only in SVG overlay mode), so a non-SVG render with a stray
+            # plain-cid master is never overlaid when the default is on.
+            _m = _masters.get(f"{_sp}:{_emo}:{_pose}") or _masters.get(f"{_sp}:{_emo}")
+            if not _m and _base_ov:
+                _m = _masters.get(_sp)
             if _ok_file(_m):
                 overlay_master = _m
 

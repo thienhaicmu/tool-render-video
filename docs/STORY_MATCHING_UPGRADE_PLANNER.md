@@ -236,6 +236,8 @@ P2 turns the library-pick signal on. P3 makes it visible/overridable. P4 is the 
 - ✅ P2 flip + genre-group scope (`f1538f9d`).
 - ✅ P1 prompt emotion + code-derived vocab, s8 + domain EMOTION (`01a0380f`).
 - ✅ P3 UI emotion/pose editors + AI-pick chips + matching summary (`929b66b2`, static-v2 rebuilt).
-- ⏳ P4 overlay-default for svg (CRITICAL) — separate Render-Edit-Protocol commit; needs a
-  real render before/after (changes default svg output: bg-only key-visual + per-beat
-  speaker overlay = only the speaker shows per beat).
+- ✅ P4 overlay-default for svg (`feat/story-overlay-default`) — STORY_CHAR_OVERLAY default
+  ON at all 4 gate sites; beat_render N4 image overlay restricted to emotion/pose masters
+  (safe for non-svg); both-axes emotion+pose → procedural (library has no combined variant).
+  Verified by a real ffmpeg render (default env): bg-only key-visual + per-beat overlay
+  angry+point → sad(tear)+hip. Full pytest 3022→3024. **All P1-P4 done.**
