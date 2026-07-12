@@ -50,6 +50,18 @@ def test_every_archetype_rasterises(arch, tmp_path):
 
 
 @requires_resvg
+@pytest.mark.parametrize("arch", ["monk", "assassin", "merchant", "archer", "ranger",
+                                  "orc", "demon", "angel", "fairy", "pirate", "bard",
+                                  "doctor", "police", "firefighter", "farmer", "detective",
+                                  "maid", "robot", "monk_warrior"])
+def test_new_archetypes_rasterise(arch, tmp_path):
+    # each new archetype (incl. its new prop: halo / horns / antenna / bow / hood…) must
+    # build valid, rasterisable chibi art.
+    png = svg_raster.render_svg(build_char(preset(arch, "eu", "fantasy", "male")), 1024, 1536)
+    assert png and png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+@requires_resvg
 @pytest.mark.parametrize("expr", ["smile", "open", "angry", "sad", "stern"])
 @pytest.mark.parametrize("pose", ["stand", "wave", "cheer", "point", "hip"])
 def test_emotions_and_poses_render(expr, pose, tmp_path):

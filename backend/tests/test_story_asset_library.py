@@ -155,6 +155,40 @@ def test_match_asset_ranks_by_name(tmp_path):
         repo.delete_asset(a); repo.delete_asset(b)
 
 
+def test_match_asset_scores_on_description(tmp_path):
+    # F2 — the rich `description` field feeds ranking (a slug with no token overlap but a
+    # descriptive phrase still matches). best_asset returns the row.
+    f = tmp_path / "cn_wx_001.png"; f.write_bytes(b"\x89PNG")
+    a = repo.upsert_asset(path=str(f), kind="character", region="cn", genre="wuxia",
+                          slug="cn_wx_001", name="", transparent=True,
+                          description="Chinese wuxia zephyrblade paladin young")  # unique token
+    try:
+        # "zephyrblade" appears ONLY in the description, not the slug/name.
+        assert repo.match_asset("character", "zephyrblade", region="cn", genre="wuxia") == str(f)
+        row = repo.best_asset("character", "young zephyrblade", region="cn", genre="wuxia")
+        assert row is not None and row["slug"] == "cn_wx_001"
+        # a token that matches nothing → None (no substitution)
+        assert repo.match_asset("character", "qwzzxvorp", region="cn", genre="wuxia") is None
+    finally:
+        repo.delete_asset(a)
+
+
+def test_match_asset_widens_scope(tmp_path):
+    # F3 — a slightly-off region/genre no longer drops the only candidate: matching widens
+    # region+genre → region → unscoped WHEN a name signal exists.
+    f = tmp_path / "cn_hero_widen.png"; f.write_bytes(b"\x89PNG")
+    a = repo.upsert_asset(path=str(f), kind="character", region="cn", genre="wuxia",
+                          slug="cn_hero_widen", name="Widenhero", transparent=True)
+    try:
+        # asked for genre=xianxia (no candidate there) → widens to region cn → unscoped.
+        assert repo.match_asset("character", "Widenhero", region="cn", genre="xianxia") == str(f)
+        assert repo.match_asset("character", "Widenhero", region="zz", genre="zz") == str(f)
+        # but a BLANK name stays strictly in scope (never cross-region substitutes).
+        assert repo.match_asset("character", "", region="zz", genre="zz") is None
+    finally:
+        repo.delete_asset(a)
+
+
 def test_match_asset_skips_missing_file(tmp_path):
     gone = tmp_path / "ghost.png"; gone.write_bytes(b"\x89PNG")
     a = repo.upsert_asset(path=str(gone), kind="character", slug="ghost", name="Ghost",
