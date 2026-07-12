@@ -173,6 +173,26 @@ def test_match_asset_scores_on_description(tmp_path):
         repo.delete_asset(a)
 
 
+def test_catalog_genre_group_scope(tmp_path):
+    # P2 — build_library_catalog(genres=(...)) scopes to a GROUP of genre_keys; assets
+    # outside the group are excluded, inside are included. genres=None → back-compat (all).
+    made = []
+    for slug, genre in (("cn_wuxia_hero_x", "wuxia"), ("cn_codai_emp_x", "codai"),
+                        ("us_hiendai_cop_x", "hiendai")):
+        f = tmp_path / f"{slug}.png"; f.write_bytes(b"\x89PNG")
+        made.append(repo.upsert_asset(path=str(f), kind="character", region=slug[:2],
+                                      genre=genre, slug=slug, name=slug, transparent=True))
+    try:
+        grp = repo.build_library_catalog(genres=("wuxia", "codai"))
+        assert "cn_wuxia_hero_x" in grp and "cn_codai_emp_x" in grp   # both in group
+        assert "us_hiendai_cop_x" not in grp                         # outside group excluded
+        allc = repo.build_library_catalog()                          # None → all genres
+        assert "us_hiendai_cop_x" in allc
+    finally:
+        for a in made:
+            repo.delete_asset(a)
+
+
 def test_match_asset_widens_scope(tmp_path):
     # F3 — a slightly-off region/genre no longer drops the only candidate: matching widens
     # region+genre → region → unscoped WHEN a name signal exists.

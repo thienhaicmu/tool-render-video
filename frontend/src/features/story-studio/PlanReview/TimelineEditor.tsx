@@ -8,7 +8,7 @@
  */
 import { StudioCard } from '../../../components/studio'
 import type { StoryPlanV2, Beat } from '../../../api/story'
-import { FOCUS, MOTION, TRANSITION, type StoryLang } from '../types'
+import { FOCUS, MOTION, TRANSITION, EMOTION, POSE, type StoryLang } from '../types'
 import { beatEstSec } from './helpers'
 
 export function TimelineEditor({ vi, plan, language, colors, previews, onChangeBeat, onMove, onDelete, onAdd }: {
@@ -60,6 +60,17 @@ export function TimelineEditor({ vi, plan, language, colors, previews, onChangeB
                 <Sel label={vi ? 'Chuyển cảnh' : 'Transition'} value={b.transition_in}
                   onChange={(v) => onChangeBeat(b.id, { transition_in: v })}
                   opts={TRANSITION.map((t) => ({ value: t, label: t }))} />
+                {/* Per-beat speaker expression + gesture — only relevant when a character speaks. */}
+                {b.speaker_id && (
+                  <>
+                    <Sel label={vi ? 'Cảm xúc' : 'Emotion'} value={b.emotion || 'normal'}
+                      onChange={(v) => onChangeBeat(b.id, { emotion: v })}
+                      opts={EMOTION.map((e) => ({ value: e, label: e }))} />
+                    <Sel label={vi ? 'Tư thế' : 'Pose'} value={b.pose || 'stand'}
+                      onChange={(v) => onChangeBeat(b.id, { pose: v })}
+                      opts={POSE.map((p) => ({ value: p, label: p }))} />
+                  </>
+                )}
                 <label className="st-tl-hook">
                   <input type="checkbox" checked={b.hook}
                     onChange={(e) => onChangeBeat(b.id, { hook: e.target.checked })} />

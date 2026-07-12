@@ -19,12 +19,16 @@ export interface CharacterDef {
   gender?: string
   voice_gender?: string
   voice_style?: string
+  archetype?: string   // library role token (procedural/fuzzy match)
+  asset?: string       // library-pick: AI-chosen library character slug ('' = none)
 }
 
 export interface SettingDef {
   id: string
   name: string
   canonical_desc: string
+  scene_kind?: string  // library scene token (procedural/fuzzy match)
+  asset?: string       // library-pick: AI-chosen library background slug ('' = none)
 }
 
 export interface Visual {
@@ -44,6 +48,7 @@ export interface Beat {
   focus: string
   motion: string
   emotion: string
+  pose?: string        // N4+ per-beat speaker gesture (overlay mode)
   reading_speed: number
   pause_after: number
   hold_sec: number

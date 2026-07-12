@@ -52,6 +52,7 @@ function VisualCard({ vi, v, plan, artStyle, aspect, color, preview, setPreview,
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(false)
   const [picker, setPicker] = useState(false)
+  const settingAsset = (plan.settings.find((s) => s.id === v.setting_id)?.asset || '').trim()
 
   async function doPreview() {
     if (busy || !v.prompt.trim()) return
@@ -88,6 +89,11 @@ function VisualCard({ vi, v, plan, artStyle, aspect, color, preview, setPreview,
           <input className="st-input" value={v.negative_prompt}
             onChange={(e) => onChange(v.id, { negative_prompt: e.target.value })} />
         </StudioField>
+        {settingAsset && (
+          <span className="st-tag st-tag--dim" title={vi ? 'Nền AI khớp sẵn từ kho' : 'AI matched this background from the library'}>
+            📚 {settingAsset}
+          </span>
+        )}
         {plan.characters.length > 0 && (
           <div className="st-chip-row">
             {plan.characters.map((c) => (

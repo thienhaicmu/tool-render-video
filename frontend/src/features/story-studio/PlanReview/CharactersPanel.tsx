@@ -148,6 +148,11 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
         {(c.gender || c.voice_gender) && (
           <span className="st-tag st-tag--dim">{c.voice_gender || c.gender}</span>
         )}
+        {(c.asset || '').trim() && (
+          <span className="st-tag st-tag--dim" title={vi ? 'Nhân vật AI khớp sẵn từ kho' : 'AI matched this from the library'}>
+            📚 {c.asset}
+          </span>
+        )}
         {avail && (avail.female.length > 0 || avail.male.length > 0) && (
           <select className="st-select st-select--sm" value={voice?.[1] || ''}
             title={vi ? 'Chọn giọng (mặc định: tự động)' : 'Pick voice (default: auto)'}

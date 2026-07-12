@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s7"   # s7: +per-beat pose; s6: library-pick (asset slug + catalog); s5: asset-library hints; s4: per-beat bgm_cue/char_*
+SUPER_PROMPT_VERSION = "s8"   # s8: +per-beat emotion + code-derived archetype/scene vocab; s7: +pose; s6: library-pick; s5: asset-library hints; s4: bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -101,6 +101,7 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
       "char_anchor": "none|left|center|right",
       "char_scale": "small|medium|large",
       "char_motion": "static|fade|slide|float",
+      "emotion": "normal|happy|angry|sad|surprised",
       "pose": "stand|wave|cheer|point|hip",
       "text_anchor": "auto|top|bottom|left|right",
       "hook": false, "hook_text": "" }
@@ -134,9 +135,10 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
         "none for a quiet beat; under otherwise. bgm_intensity = low|med|high. LABELS only, never seconds.\n"
         "10. char_anchor = where the SPEAKING character stands: none|left|center|right — set none when "
         "speaker_id is '' (narrator). char_scale = small|medium|large; char_motion = static|fade|slide|float. "
-        "pose = the speaker's gesture THIS beat: stand (neutral) | wave (greeting) | cheer (excited) | "
-        "point (accusing/indicating) | hip (defiant) — use stand unless the action clearly calls for one. "
-        "source_audio = mute|duck|keep (how a base video's own audio is treated).\n"
+        "emotion = the SPEAKER's feeling THIS beat: normal|happy|angry|sad|surprised — match the beat's tone "
+        "(use normal when neutral). pose = the speaker's gesture THIS beat: stand (neutral) | wave (greeting) | "
+        "cheer (excited) | point (accusing/indicating) | hip (defiant) — use stand unless the action clearly "
+        "calls for one. source_audio = mute|duck|keep (how a base video's own audio is treated).\n"
         "11. text_anchor = where on-screen text sits: auto|top|bottom|left|right. Use auto normally; pick a "
         "side OPPOSITE char_anchor so text never covers the character.\n"
         "12. region/genre_key/archetype/scene_kind are OPTIONAL asset-library hints: lowercase English "
@@ -164,6 +166,31 @@ def _library_block(library_catalog: str) -> str:
         "\"asset\" to that exact slug (copy verbatim). If none fits, set \"asset\":\"\" "
         "(fresh art will be drawn). Only ever use a slug that appears above.\n"
     )
+
+
+def _vocab_block() -> str:
+    """Controlled token vocab for the OPTIONAL hint fields (archetype / scene_kind /
+    emotion / pose), DERIVED FROM CODE (svg_presets._ARCH + svg_scene._SCENES) so it never
+    drifts as new archetypes/scenes are added. Teaching the vocab aligns the AI's free
+    tokens with the library + procedural presets → stronger matching even without the
+    library catalog. Lazy-imported + defensive: "" on any failure (prompt stays valid)."""
+    try:
+        from app.features.render.engine.visual.svg_presets import _ARCH
+        from app.features.render.engine.visual.svg_scene import _SCENES
+        archetypes = ", ".join(sorted(_ARCH))
+        seen: dict = {}                                   # one representative alias per scene fn
+        for alias, fn in _SCENES.items():
+            seen.setdefault(fn, alias)
+        scenes = ", ".join(sorted(seen.values()))
+        return (
+            "\n═══ TOKEN VOCAB (for the OPTIONAL hint fields — pick the CLOSEST, else \"\") ═══\n"
+            f"archetype ∈ {{ {archetypes} }}\n"
+            f"scene_kind ∈ {{ {scenes} }}\n"
+            "emotion ∈ { normal, happy, angry, sad, surprised }  (per beat — the speaker's feeling)\n"
+            "pose ∈ { stand, wave, cheer, point, hip }           (per beat — the speaker's gesture)\n"
+        )
+    except Exception:
+        return ""
 
 
 def _series_memory_block(prior_context: str) -> str:
@@ -202,6 +229,7 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
         + method
         + _series_memory_block(prior_context)
         + _library_block(library_catalog)
+        + _vocab_block()
         + "\n═══ SOURCE STORY (adapt THIS) ═══\n" + _fit(chapter) + "\n\n"
         + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode)
@@ -237,6 +265,7 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
         + method
         + _series_memory_block(prior_context)
         + _library_block(library_catalog)
+        + _vocab_block()
         + "\n═══ STORY IDEA (create FROM this) ═══\n" + _fit(idea, 8000) + "\n\n"
         + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode)
