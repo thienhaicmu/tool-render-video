@@ -215,10 +215,25 @@ P2 turns the library-pick signal on. P3 makes it visible/overridable. P4 is the 
 
 ---
 
-## 7. Open questions for review
+## 7. Open questions — DECIDED (2026-07-11)
 
-1. **P2 gate:** provider-driven (2.1a, recommended) vs env-default flip (2.1b)?
-2. **Catalog scope:** always full (capped) vs scope by the FE-picked genre/region?
-3. **P4:** default overlay ON for svg, or keep opt-in with an FE toggle?
-4. **Vocab surface:** full 56-archetype list in the prompt (bigger prompt) vs a curated
-   top-N + "or any close role" (smaller, slightly weaker)?
+1. **P2 gate → (b) env-default flip.** `STORY_LIBRARY_PICK` default `0 → 1` (unconditional;
+   gpt-image plans also get the catalog and may emit picks it ignores — acceptable; set
+   `=0` to opt out). ✅ done in `feat/story-library-pick-default`.
+2. **Catalog scope → scope by the FE-picked genre.** Implemented as a genre GROUP, not a
+   single exact key: the library genre folders (wuxia/codai/hiendai/fantasy/horror/
+   ngontinh) are art-style buckets and one story spans several (a wuxia tale has codai
+   emperors/scholars), so an exact filter would hide valid picks. FE genre → a small set
+   of related genre_keys (e.g. kiem-hiep → {wuxia, codai}). **Region stays broad** — the
+   FE has no region picker (only language); noted, not scoped, to avoid over-narrowing.
+3. **P4 → default overlay ON for svg.** `STORY_CHAR_OVERLAY` effectively on for the svg
+   path (opt-out `=0`). CRITICAL — `beat_render.py`; own commit under the Render Edit
+   Protocol (full pytest baseline before/after).
+4. **Vocab → list all 56 archetypes** in the prompt (derived from `svg_presets._ARCH`),
+   plus the canonical scene_kind set (from `svg_scene._SCENES`).
+
+### Execution status
+- P2 flip + genre-group scope: IN PROGRESS (this branch).
+- P1 prompt (emotion + full vocab, s8) + domain EMOTION: next.
+- P3 UI (emotion/pose editors + AI-pick visibility): after P1/P2.
+- P4 overlay-default (CRITICAL): separate Render-Edit-Protocol commit.
