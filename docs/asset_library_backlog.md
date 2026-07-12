@@ -1,5 +1,15 @@
 # Story Asset Library — BACKLOG khâu tạo hình
 
+> ⚠️ **SUPERSEDED (2026-07-11) — đọc trước.** Kế hoạch "sản xuất thủ công qua
+> gpt-image + catalog prompt" bên dưới (B1–B5, C1–C7, đợt 3) **đã bị thay** bằng
+> **generator procedural tái lập được**: [`backend/scripts/gen_svg_library.py`](../backend/scripts/gen_svg_library.py).
+> Generator dùng chính `svg_char`/`svg_scene`/`svg_presets` mà render dùng → sinh
+> nhân vật (56 archetype × vùng/thể loại × cảm xúc/tư thế) + nền + frame **offline,
+> $0, additive, tự re-scan**. Kho hiện **511 asset** (`data/asset_library/`, gitignored
+> nhưng tái tạo từ code). Chạy: `cd backend && python scripts/gen_svg_library.py`.
+> Nội dung bên dưới giữ lại làm **hồ sơ lịch sử** (prompt catalog vẫn hữu ích nếu muốn
+> bổ sung asset gpt-image cao cấp cho từng truyện). Xem [[project-svg-asset-system]].
+
 Kế hoạch **sản xuất** kho asset offline (không phải code — code AL0-AL5 đã xong).
 Mục tiêu: có sẵn **nhân vật · nền · frame · đồ vật** để Story Mode dùng mặc định
 (library-first) thay vì gọi AI mỗi lần → **tiết kiệm tiền + nhất quán tuyệt đối**.

@@ -114,6 +114,148 @@ def _castle(**k):
             + _floor(820, "#231e30", "#151022"))
 
 
+def _temple(**k):
+    return (_grad("tm", "#f0d8b0", "#c99a6a")
+            + '<path d="M120 200 L768 70 L1416 200 Z" fill="#a6301f"/>'
+            + '<path d="M300 200 L768 110 L1236 200 Z" fill="#8a2418"/>'
+            + '<rect x="120" y="200" width="1296" height="26" fill="#6a1f16"/>'
+            + "".join(f'<rect x="{x-26}" y="380" width="52" height="380" fill="#b23a2a"/>' for x in (320, 560, 976, 1216))
+            + '<rect x="628" y="430" width="280" height="330" fill="#7a1f16"/>' + _floor(760, "#c9a878", "#a6835a"))
+
+
+def _shrine(**k):
+    return (_grad("sh", "#f4c9b0", "#d98a7a")
+            + '<g fill="#c62b2b"><rect x="356" y="200" width="42" height="560"/><rect x="1138" y="200" width="42" height="560"/>'
+            '<rect x="300" y="196" width="936" height="46"/><rect x="322" y="292" width="892" height="30"/></g>'
+            + "".join(f'<ellipse cx="{x}" cy="430" rx="30" ry="40" fill="#e8443a"/><rect x="{x-4}" y="322" width="8" height="70" fill="#3a2418"/>'
+                      for x in (520, 1016)) + _floor(760, "#b9846a", "#96634a"))
+
+
+def _inn(**k):
+    return (_grad("in", "#6a4a34", "#3f2c20")
+            + "".join(f'<ellipse cx="{x}" cy="250" rx="40" ry="52" fill="#e8443a"/><rect x="{x-4}" y="120" width="8" height="80" fill="#2a1a12"/>'
+                      for x in (300, 620, 916, 1236))
+            + '<rect x="120" y="600" width="360" height="120" rx="10" fill="#8a5a3a"/><rect x="1056" y="600" width="360" height="120" rx="10" fill="#8a5a3a"/>'
+            + _floor(740, "#7a5238", "#553726"))
+
+
+def _market(**k):
+    inner = _grad("mk", "#f4dcb0", "#d9b884")
+    for i, x in enumerate((120, 460, 800, 1140)):
+        c = ("#c0392b", "#2e7d6b", "#2e5aa8", "#c98a2a")[i % 4]
+        inner += (f'<path d="M{x} 320 L{x+280} 320 L{x+240} 400 L{x+40} 400 Z" fill="{c}"/>'
+                  f'<rect x="{x+30}" y="400" width="220" height="300" fill="#8a6a44"/>')
+    return inner + _floor(700, "#c9a878", "#a6835a")
+
+
+def _library(**k):
+    inner = _grad("lb", "#e8d8bc", "#c4a878")
+    for x in (100, 420, 740, 1060):
+        inner += f'<rect x="{x}" y="140" width="300" height="620" fill="#6a4a30"/>'
+        inner += "".join(f'<rect x="{x+16}" y="{y}" width="268" height="26" fill="#{c}"/>'
+                          for y, c in zip(range(170, 760, 40), ("a03a2a", "2e5aa8", "2e7d4a", "c98a2a", "7a3a6a") * 4))
+    return inner + _floor(780, "#a6835a", "#7a5c3a")
+
+
+def _battlefield(genre="", **k):
+    top = "#5a3a3a" if genre in ("horror",) else "#8a7a6a"
+    inner = _grad("bt", top, "#3a2e28")
+    for x, h in ((240, 300), (620, 380), (1000, 260), (1300, 340)):
+        inner += f'<rect x="{x-8}" y="{760-h}" width="16" height="{h}" fill="#3a2a1a"/><path d="M{x} {760-h} L{x+120} {760-h+30} L{x} {760-h+70} Z" fill="#a6301f"/>'
+    inner += "".join(f'<ellipse cx="{c}" cy="640" rx="120" ry="46" fill="#2a1e18" opacity="0.5"/>' for c in (400, 900, 1300))
+    return inner + _floor(760, "#4a3a2a", "#2a2018")
+
+
+def _cave(**k):
+    inner = _grad("cv", "#2a2a34", "#0e0e16")
+    inner += '<path d="M0 0 L1536 0 L1536 260 Q1180 120 768 200 Q356 120 0 260 Z" fill="#141420"/>'
+    inner += "".join(f'<path d="M{x} 0 L{x+40} 200 L{x-40} 200 Z" fill="#1a1a26"/>' for x in range(160, 1500, 260))
+    return inner + _floor(800, "#20202c", "#101018")
+
+
+def _beach(**k):
+    return (_grad("bc", "#8fd6ea", "#cfeaf4")
+            + '<circle cx="1220" cy="220" r="90" fill="#fff2c8" opacity="0.9"/>'
+            + '<rect y="520" width="1536" height="200" fill="#3a9ad6"/><rect y="510" width="1536" height="14" fill="#bfe6f4"/>'
+            + _floor(720, "#f0dca8", "#d9bd84"))
+
+
+def _snow(**k):
+    return (_grad("sn", "#cfe0ee", "#eef4fa")
+            + '<path d="M0 700 Q384 560 768 680 Q1152 560 1536 700 L1536 1024 L0 1024 Z" fill="#f4f8fc"/>'
+            + "".join(f'<path d="M{x} 700 L{x+70} 480 L{x+140} 700 Z" fill="#3a5c46"/><path d="M{x+18} 620 L{x+70} 470 L{x+122} 620 Z" fill="#4a7c5a"/>'
+                      for x in (180, 620, 1080)) + _floor(720, "#e6eef6", "#cdd8e2"))
+
+
+def _desert(**k):
+    return (_grad("ds", "#f4d9a0", "#e8b878")
+            + '<circle cx="400" cy="240" r="100" fill="#fff0c0" opacity="0.85"/>'
+            + '<path d="M0 640 Q400 560 820 640 Q1180 700 1536 620 L1536 1024 L0 1024 Z" fill="#e0b06a"/>'
+            + '<path d="M0 780 Q500 700 1080 790 Q1300 820 1536 760 L1536 1024 L0 1024 Z" fill="#cd9a54"/>')
+
+
+def _rooftop(**k):
+    inner = _grad("rt", "#1a2246", "#3a2a52")
+    inner += '<circle cx="1250" cy="200" r="70" fill="#f3ead0" opacity="0.9"/>'
+    inner += "".join(f'<rect x="{x}" y="{y}" width="{w}" height="{760-y}" fill="#0e1428"/>' + "".join(
+        f'<rect x="{x+8+dx}" y="{y+12+dy}" width="14" height="18" fill="#f2c94a" opacity="0.7"/>'
+        for dx in range(0, w - 20, 34) for dy in range(0, 760 - y - 30, 46))
+        for x, y, w in ((0, 420, 200), (300, 300, 150), (620, 480, 170), (900, 360, 190), (1240, 440, 160)))
+    return inner + '<rect y="760" width="1536" height="20" fill="#2a2a3a"/>' + _floor(800, "#20202e", "#12121c")
+
+
+def _office(**k):
+    inner = _grad("of", "#dfe8ef", "#b8c6d2")
+    inner += '<rect x="60" y="100" width="1416" height="440" fill="#aecfe0" opacity="0.7"/>'
+    inner += "".join(f'<rect x="{x}" y="100" width="10" height="440" fill="#8aa0b0"/>' for x in range(200, 1476, 260))
+    inner += '<rect x="120" y="620" width="480" height="120" rx="8" fill="#5a6a78"/><rect x="940" y="620" width="480" height="120" rx="8" fill="#5a6a78"/>'
+    return inner + _floor(740, "#c4ccd2", "#9aa4ac")
+
+
+def _hospital(**k):
+    inner = _grad("hp", "#eef4f2", "#cfe0da")
+    inner += '<rect x="1060" y="120" width="400" height="320" fill="#c4e0ea"/>'
+    inner += '<rect x="120" y="540" width="520" height="200" rx="16" fill="#e8eef0"/><rect x="120" y="540" width="520" height="60" rx="16" fill="#8fbfd0"/>'
+    inner += '<rect x="760" y="160" width="16" height="580" fill="#b0bcc2"/><path d="M776 200 L960 200 L960 520 L776 520" fill="none" stroke="#cdd8dc" stroke-width="10"/>'
+    return inner + _floor(760, "#d9e2e0", "#b6c4c0")
+
+
+def _graveyard(**k):
+    inner = _grad("gv", "#2a2e40", "#0e1018")
+    inner += '<circle cx="1200" cy="200" r="80" fill="#c8ccd8" opacity="0.7"/>'
+    inner += '<path d="M240 760 Q300 400 260 200 Q360 380 420 300 Q400 560 460 760 Z" fill="#0a0c12"/>'
+    inner += "".join(f'<rect x="{x-40}" y="{600-h}" width="80" height="{h}" rx="30" fill="#3a3e4a"/>'
+                     for x, h in ((560, 180), (760, 140), (980, 200), (1200, 150)))
+    return inner + _floor(680, "#1a1e2a", "#0c0e16")
+
+
+def _ruins(genre="", **k):
+    top = "#4a4258" if genre in ("horror",) else "#bfd0d6"
+    inner = _grad("ru", top, "#6a5a5a")
+    for x, h in ((180, 500), (420, 360), (1020, 420), (1320, 300)):
+        inner += f'<rect x="{x-34}" y="{760-h}" width="68" height="{h}" fill="#9a8f86"/><rect x="{x-44}" y="{760-h-20}" width="88" height="24" fill="#8a7f76"/>'
+    inner += '<rect x="140" y="360" width="360" height="24" fill="#8a7f76"/>'
+    return inner + _floor(760, "#7a7068", "#524a44")
+
+
+def _water(**k):
+    return (_grad("wt", "#bfe6ea", "#7fc6d6")
+            + '<path d="M700 120 L740 120 L760 560 L680 560 Z" fill="#eaf6fa"/>'
+            + '<ellipse cx="720" cy="600" rx="180" ry="40" fill="#dff2f6"/>'
+            + '<rect y="640" width="1536" height="384" fill="#5aaec6"/><rect y="632" width="1536" height="12" fill="#cdeef4"/>'
+            + "".join(f'<ellipse cx="{x}" cy="{y}" rx="60" ry="10" fill="#eaf6fa" opacity="0.5"/>'
+                      for x, y in ((300, 720), (900, 800), (1250, 700))))
+
+
+def _courtyard(**k):
+    inner = _grad("cy", "#f0e0bc", "#d9c090")
+    inner += '<rect x="60" y="180" width="1416" height="220" fill="#b23a2a"/><rect x="60" y="180" width="1416" height="30" fill="#e8c53a"/>'
+    inner += "".join(f'<rect x="{x-20}" y="400" width="40" height="300" fill="#8a2418"/>' for x in range(200, 1400, 240))
+    inner += '<rect y="700" width="1536" height="324" fill="#c9b088"/>'
+    inner += "".join(f'<rect x="{x}" y="700" width="6" height="324" fill="#a68f66"/>' for x in range(0, 1536, 160))
+    return inner
+
+
 _SCENES = {
     "cafe": _cafe, "coffee_shop": _cafe, "classroom": _classroom, "school": _classroom,
     "forest": _forest, "bamboo_forest": _forest, "woods": _forest, "mountain": _mountain,
@@ -122,6 +264,16 @@ _SCENES = {
     "kitchen": _kitchen, "garden": _garden, "yard": _garden, "park": _garden,
     "street": _street, "city": _street, "alley": _street, "castle_hall": _castle,
     "castle": _castle, "hall": _castle,
+    # added scene templates (Task: richer backgrounds)
+    "temple": _temple, "pagoda": _temple, "shrine": _shrine, "torii": _shrine,
+    "inn": _inn, "tavern": _inn, "market": _market, "bazaar": _market,
+    "library": _library, "study": _library, "battlefield": _battlefield, "war": _battlefield,
+    "cave": _cave, "dungeon": _cave, "beach": _beach, "ocean": _beach, "seaside": _beach,
+    "snow": _snow, "snowfield": _snow, "winter": _snow, "desert": _desert, "dunes": _desert,
+    "rooftop": _rooftop, "skyline": _rooftop, "office": _office, "hospital": _hospital,
+    "clinic": _hospital, "graveyard": _graveyard, "cemetery": _graveyard, "ruins": _ruins,
+    "waterfall": _water, "lake": _water, "river": _water, "courtyard": _courtyard,
+    "palace_courtyard": _courtyard,
 }
 
 # genre → fallback palette (top, bottom, floor, floor2)

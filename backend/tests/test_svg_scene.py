@@ -18,6 +18,23 @@ def test_known_scene_kinds_non_empty(kind):
     assert s and s.strip().startswith("<")
 
 
+@pytest.mark.parametrize("kind", ["temple", "shrine", "inn", "market", "library",
+                                  "battlefield", "cave", "beach", "snow", "desert",
+                                  "rooftop", "office", "hospital", "graveyard", "ruins",
+                                  "waterfall", "courtyard"])
+def test_new_scene_kinds_non_empty(kind):
+    s = scene_inner(kind, "cn", "wuxia", "")
+    assert s and s.strip().startswith("<")
+
+
+@requires_resvg
+@pytest.mark.parametrize("kind", ["temple", "rooftop", "graveyard", "beach", "ruins"])
+def test_new_scenes_rasterise(kind):
+    png = svg_raster.render_svg(build_scene(kind, "us", "hiendai", "night"), 1536, 1024,
+                                opaque_bg="#101820")
+    assert png and png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
 def test_unknown_kind_falls_back_to_genre_gradient():
     s = scene_inner("nonexistent_place", "", "horror", "")
     assert s and "linearGradient" in s          # always a background

@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # backend/ on pa
 from app.core.config import ASSET_LIBRARY_DIR                    # noqa: E402
 from app.features.render.engine.visual.svg_char import build_char, emotion_expr  # noqa: E402
 from app.features.render.engine.visual.svg_presets import preset  # noqa: E402
+from app.features.render.engine.visual.svg_scene import build_scene  # noqa: E402
 from app.features.render.engine.visual import svg_raster          # noqa: E402
 
 FORCE = "--force" in sys.argv
@@ -87,15 +88,15 @@ def _desc(archetype: str, region: str, genre: str, gender: str) -> str:
     return " ".join(x for x in (rn, gn, at, gender) if x).strip()
 
 
-def _save(svg: str, rel: str, desc: str, transparent: bool = True) -> bool:
-    """Raster ``svg`` → ROOT/rel (skip if exists unless --force). Writes a .json sidecar
-    with desc + transparent. Returns True if a NEW file was written."""
+def _save(svg: str, rel: str, desc: str, transparent: bool = True,
+          w: int = 1024, h: int = 1536) -> bool:
+    """Raster ``svg`` → ROOT/rel at w×h (skip if exists unless --force). Writes a .json
+    sidecar with desc + transparent. Returns True if a NEW file was written."""
     out = ROOT / rel
     if out.exists() and not FORCE:
         return False
     out.parent.mkdir(parents=True, exist_ok=True)
-    png = svg_raster.render_svg(svg, 1024, 1536, opaque_bg=None) if transparent else \
-        svg_raster.render_svg(svg, 1024, 1536, opaque_bg="#101820")
+    png = svg_raster.render_svg(svg, w, h, opaque_bg=None if transparent else "#101820")
     if not png:
         print("  ! raster failed:", rel)
         return False
@@ -126,6 +127,49 @@ def gen_characters() -> int:
                         if _save(build_char(o), f"character/{region}/{genre}/{slug}_{pose}.png",
                                  f"{desc} ({pose} pose)"):
                             n += 1
+    return n
+
+
+# ── scenes / backgrounds (opaque wide 16:9 via svg_scene) ────────────────────────
+# scene_kind -> [(region, genre), ...] homes; each gets day + (if outdoor) a _night variant.
+SCENE_HOMES: dict = {
+    "temple":      [("cn", "wuxia"), ("cn", "codai"), ("vi", "codai")],
+    "shrine":      [("jp", "codai")],
+    "inn":         [("cn", "wuxia")],
+    "market":      [("cn", "codai"), ("vi", "codai"), ("eu", "fantasy")],
+    "library":     [("cn", "codai"), ("eu", "hiendai")],
+    "battlefield": [("cn", "wuxia"), ("eu", "fantasy")],
+    "cave":        [("eu", "fantasy"), ("cn", "xianxia")],
+    "beach":       [("us", "hiendai"), ("jp", "hiendai")],
+    "snow":        [("cn", "wuxia"), ("ko", "codai")],
+    "desert":      [("us", "codai"), ("eu", "fantasy")],
+    "rooftop":     [("us", "hiendai"), ("ko", "hiendai")],
+    "office":      [("us", "hiendai"), ("jp", "hiendai")],
+    "hospital":    [("us", "hiendai")],
+    "graveyard":   [("eu", "horror"), ("us", "horror")],
+    "ruins":       [("eu", "fantasy"), ("cn", "xianxia")],
+    "waterfall":   [("cn", "xianxia"), ("vi", "fantasy")],
+    "courtyard":   [("cn", "codai"), ("ko", "codai")],
+}
+# exterior kinds that get a night variant too (interiors/dark kinds stay day-only)
+NIGHT_OK = {"temple", "shrine", "market", "battlefield", "beach", "snow", "desert",
+            "rooftop", "graveyard", "ruins", "waterfall", "courtyard"}
+
+
+def gen_scenes() -> int:
+    n = 0
+    for kind, homes in SCENE_HOMES.items():
+        for region, genre in homes:
+            tods = ["", "night"] if kind in NIGHT_OK else [""]
+            for tod in tods:
+                slug = f"{region}_{genre}_{kind}" + (f"_{tod}" if tod else "")
+                rn, gn = _REGION_NAME.get(region, ""), _GENRE_NAME.get(genre, genre)
+                desc = " ".join(x for x in (rn, gn, kind.replace("_", " "),
+                                            ("at night" if tod == "night" else "")) if x)
+                if _save(build_scene(kind, region, genre, tod),
+                         f"background/{region}/{genre}/{slug}.png", desc,
+                         transparent=False, w=1536, h=1024):
+                    n += 1
     return n
 
 
@@ -202,8 +246,9 @@ def main() -> None:
         sys.exit(1)
     print("ASSET_LIBRARY_DIR:", ROOT, "(force)" if FORCE else "(additive)")
     c = gen_characters()
+    s = gen_scenes()
     f = gen_frames()
-    print(f"generated: {c} character files, {f} frame files")
+    print(f"generated: {c} character files, {s} scene files, {f} frame files")
     from app.db.connection import init_db
     from app.db import story_asset_repo as repo
     init_db()
