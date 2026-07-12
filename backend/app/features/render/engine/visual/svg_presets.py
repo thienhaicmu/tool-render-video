@@ -15,6 +15,29 @@ _SWORD = ('<rect x="726" y="720" width="10" height="360" rx="5" fill="#c9ccd2"/>
           '<rect x="714" y="720" width="34" height="26" rx="6" fill="#7a5a3a"/>')
 _STAFF = ('<rect x="272" y="700" width="14" height="440" rx="7" fill="#8a6a44"/>'
           '<circle cx="279" cy="690" r="30" fill="#8fd6ea"/>')
+# extra props (raw SVG, chibi coords: head centre≈512,410 top≈152; drawn over everything)
+_HALO = '<ellipse cx="512" cy="118" rx="132" ry="34" fill="none" stroke="#f5e18a" stroke-width="14" opacity="0.95"/>'
+_HORNS = ('<path d="M366 214 Q330 120 300 150 Q356 156 366 232 Z" fill="#6a3226"/>'
+          '<path d="M658 214 Q694 120 724 150 Q668 156 658 232 Z" fill="#6a3226"/>')
+_TUSKS = ('<path d="M470 604 L462 648 L486 616 Z" fill="#f4efe4"/>'
+          '<path d="M554 604 L562 648 L538 616 Z" fill="#f4efe4"/>')
+_BOW = ('<path d="M268 640 Q210 860 268 1080" fill="none" stroke="#7a5a3a" stroke-width="12"/>'
+        '<line x1="268" y1="640" x2="268" y2="1080" stroke="#e8e2d0" stroke-width="3"/>')
+_HOOD = lambda c="#2a2630": (f'<path d="M248 440 Q236 150 512 140 Q788 150 776 440 L742 440 '
+                             f'Q744 260 660 250 Q690 362 512 362 Q334 362 364 250 Q280 260 282 440 Z" fill="{c}"/>')
+_ANTENNA = '<rect x="506" y="88" width="12" height="62" fill="#9aa0a6"/><circle cx="512" cy="82" r="16" fill="#e0403a"/>'
+_FEDORA = ('<ellipse cx="512" cy="252" rx="224" ry="34" fill="#3a2c22"/>'
+           '<path d="M398 250 Q408 150 512 148 Q616 150 626 250 Z" fill="#4a3628"/>'
+           '<rect x="398" y="230" width="228" height="22" fill="#241a14"/>')
+_TRICORN = ('<path d="M300 236 Q512 120 724 236 Q724 274 512 274 Q300 274 300 236 Z" fill="#241a14"/>'
+            '<circle cx="512" cy="168" r="18" fill="#e8c53a"/>')
+_BEADS = ('<g fill="#7a4a2a">'
+          '<circle cx="392" cy="726" r="9"/><circle cx="428" cy="756" r="9"/><circle cx="470" cy="776" r="9"/>'
+          '<circle cx="512" cy="784" r="9"/><circle cx="554" cy="776" r="9"/><circle cx="596" cy="756" r="9"/>'
+          '<circle cx="632" cy="726" r="9"/></g>')
+_EYEPATCH = '<ellipse cx="594" cy="492" rx="42" ry="36" fill="#141414"/><path d="M552 470 L648 460" stroke="#141414" stroke-width="8"/>'
+_LUTE = ('<ellipse cx="286" cy="900" rx="66" ry="86" fill="#a0703a"/><circle cx="286" cy="900" r="20" fill="#3a2418"/>'
+         '<rect x="278" y="640" width="16" height="220" rx="6" fill="#5a3a1e"/>')
 
 # region → default skin tone (archetype can override, e.g. ghost/vampire pale)
 _REGION_SKIN = {"cn": "#f0d0ae", "jp": "#f6cda6", "ko": "#f6cda6", "vi": "#e6b58a",
@@ -64,10 +87,33 @@ _ARCH: dict = {
  "cowboy": {"skin": "#e6b58a", "hair": "#3a2c22", "top": "#c9b48a", "buttons": "#8a6a44", "bottom": {"kind": "shorts", "color": "#3a5a7a"}, "shoes": "#4a3320", "expr": "stern", "hat": "straw", "collar": None},
  "astronaut": {"hair": "#241d18", "top": "#eef1f4", "buttons": "#3a6ea5", "bottom": {"kind": "shorts", "color": "#e2e6ea"}, "shoes": "#9aa0a6", "collar": None},
  "soldier": {"skin": "#e6b58a", "hair": "#2a2622", "top": "#5a6a4a", "buttons": "#3a4432", "bottom": {"kind": "shorts", "color": "#4a5a3a"}, "shoes": "#2a2a20", "expr": "stern", "collar": None},
+ # extra archetypes (Task: more diverse forms) — cổ trang / spiritual
+ "monk": {"skin": "#e8c9a2", "hair": "#e6c6a2", "hair_style": "short", "top": "#c8772a", "bottom": {"kind": "robe", "color": "#c8772a"}, "sash": "#8a3a1a", "shoes": "#6a4a2a", "expr": "smile", "props": _BEADS, "collar": None},
+ "assassin": {"hair": "#141216", "top": "#1c1c22", "bottom": {"kind": "robe", "color": "#1c1c22"}, "sash": "#3a1520", "shoes": "#0c0c10", "expr": "stern", "props": _HOOD() + _SWORD, "collar": None},
+ "merchant": {"hair": "#241d18", "hair_style": "topknot", "top": "#7a5a2a", "buttons": "#c9a24a", "bottom": {"kind": "robe", "color": "#8a6a34"}, "sash": "#c9a24a", "shoes": "#4a3320", "props": _BEARD("#241d18"), "collar": None},
+ "monk_warrior": {"hair": "#e6c6a2", "top": "#b8601f", "bottom": {"kind": "robe", "color": "#b8601f"}, "sash": "#5a2a12", "shoes": "#6a4a2a", "expr": "stern", "props": _BEADS + _STAFF, "collar": None},
+ # fantasy / mythic
+ "archer": {"hair": "#5a3a1e", "hair_style": "pony", "top": "#4a6a3a", "buttons": "#7a5a3a", "bottom": {"kind": "shorts", "color": "#3a4a2a"}, "shoes": "#4a3320", "props": _BOW, "collar": None},
+ "ranger": {"hair": "#3a2c22", "top": "#3f5a3a", "buttons": "#6a5236", "bottom": {"kind": "shorts", "color": "#4a4030"}, "shoes": "#3a2a1a", "expr": "stern", "props": _BOW, "collar": None},
+ "orc": {"skin": "#7fae6a", "hair": "#2a2018", "top": "#6a4a2a", "buttons": "#3a2a1a", "bottom": {"kind": "shorts", "color": "#4a3a24"}, "shoes": "#2a2018", "expr": "angry", "props": _TUSKS, "collar": None},
+ "demon": {"skin": "#c05a4a", "hair": "#241014", "hair_style": "spiky", "eye": "#e8c53a", "top": "#2a1218", "bottom": {"kind": "robe", "color": "#3a1620"}, "sash": "#7a1420", "shoes": "#1a0c10", "expr": "angry", "props": _HORNS, "collar": None},
+ "angel": {"skin": "#f6dcc0", "hair": "#f2e6b8", "hair_style": "long", "top": "#f4f2ec", "bottom": {"kind": "gown", "color": "#f4f2ec"}, "sash": "#e8d48a", "shoes": "#d8cf9a", "props": _HALO, "collar": None},
+ "fairy": {"skin": "#f6dcc0", "hair": "#e58aa0", "hair_style": "twin", "top": "#b25a9a", "bottom": {"kind": "dress", "color": "#d47ab0"}, "sash": "#f2c94c", "shoes": "#a04a7a", "props": _HALO, "collar": None},
+ "pirate": {"skin": "#e6b58a", "hair": "#241d18", "top": "#7a2a2a", "buttons": "#c9a24a", "bottom": {"kind": "shorts", "color": "#3a2a24"}, "shoes": "#3a2418", "expr": "stern", "props": _TRICORN + _EYEPATCH, "collar": None},
+ "bard": {"hair": "#7a4a2a", "hair_style": "curly", "top": "#8a3a7a", "buttons": "#e8c53a", "bottom": {"kind": "shorts", "color": "#3a4a7a"}, "shoes": "#5a3a2a", "props": _LUTE, "collar": None},
+ # modern professions
+ "doctor": {"hair": "#2a2622", "top": "#f4f6f8", "buttons": "#b0c4d4", "bottom": {"kind": "shorts", "color": "#2a3546"}, "shoes": "#e8e8ea", "collar": "#dfe8f0"},
+ "police": {"hair": "#241d18", "top": "#2a3550", "buttons": "#c9c24a", "bottom": {"kind": "shorts", "color": "#20283a"}, "shoes": "#141620", "expr": "stern", "collar": "#1a2030"},
+ "firefighter": {"skin": "#e6b58a", "hair": "#2a2622", "top": "#c0392b", "buttons": "#e8c53a", "bottom": {"kind": "shorts", "color": "#8a2a20"}, "shoes": "#241010", "expr": "stern", "collar": None},
+ "farmer": {"skin": "#e0b088", "hair": "#3a2c22", "top": "#7a8f5a", "bottom": {"kind": "shorts", "color": "#6a5a3a"}, "shoes": "#4a3320", "hat": "straw", "collar": None},
+ "detective": {"hair": "#241d18", "top": "#3a4250", "buttons": "#2a323e", "bottom": {"kind": "shorts", "color": "#2a303a"}, "shoes": "#241a14", "expr": "stern", "props": _FEDORA, "collar": None},
+ "maid": {"hair": "#3a2c22", "hair_style": "bob", "top": "#2a2a30", "apron": "#f4f4f6", "collar": "#fff", "bottom": {"kind": "dress", "color": "#2a2a30"}, "shoes": "#1a1a1e"},
+ "robot": {"skin": "#c4c9d0", "hair": "#8a9098", "hair_style": "short", "eye": "#4fd8e6", "top": "#6a7078", "buttons": "#3a6ea5", "bottom": {"kind": "shorts", "color": "#5a606a"}, "shoes": "#3a3e46", "props": _ANTENNA, "collar": None},
 }
 
 # gender defaults for gender-neutral archetypes (hairstyle + dress bottom for female)
-_FEMALE_STYLE = {"student", "office_worker", "teacher", "nurse", "businessman", "ceo", "idol", "child"}
+_FEMALE_STYLE = {"student", "office_worker", "teacher", "nurse", "businessman", "ceo", "idol", "child",
+                 "doctor", "police", "detective", "archer", "ranger", "bard", "merchant", "farmer", "robot"}
 
 
 def preset(archetype: str, region: str = "", genre: str = "", gender: str = "") -> dict:
