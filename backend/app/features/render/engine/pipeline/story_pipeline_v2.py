@@ -337,10 +337,11 @@ def run_story_v2(
                     step="render.story",
                     context={"fallback_visuals": visual_fallbacks, "total": plan.image_count()},
                 )
-            # N4 — per-(speaker, emotion) overlay masters. Only when STORY_CHAR_OVERLAY +
-            # SVG mode (key-visuals were composed BACKGROUND-ONLY). Best-effort.
+            # N4 — per-(speaker, emotion, pose) overlay masters. SVG mode + overlay on
+            # (default ON, opt out STORY_CHAR_OVERLAY=0). Key-visuals were composed
+            # BACKGROUND-ONLY, so these masters are what the cue render overlays. Best-effort.
             _svg = image_provider == "svg" or os.getenv("STORY_SVG_GEN", "0") == "1"
-            if _svg and os.getenv("STORY_CHAR_OVERLAY", "0") == "1":
+            if _svg and os.getenv("STORY_CHAR_OVERLAY", "1") != "0":
                 _generate_overlay_masters(plan, visuals_dir, job_id=job_id,
                                           effective_channel=effective_channel)
 

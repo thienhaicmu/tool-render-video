@@ -146,8 +146,10 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
     # solid fallback; env-gate mode -> falls through to AI (gpt-image), never worse than before.
     _svg_mode = (provider == "svg") or (os.getenv("STORY_SVG_GEN", "0") == "1")
     # N4 overlay: key-visual is BACKGROUND-ONLY and the speaking character is composited
-    # per-beat at cue render (emotion-aware). SVG mode + STORY_CHAR_OVERLAY only.
-    _overlay = _svg_mode and (os.getenv("STORY_CHAR_OVERLAY", "0") == "1")
+    # per-beat at cue render (emotion + pose aware). DEFAULT ON for the SVG path (P4) — the
+    # per-beat emotion/pose the AI now emits (s8) only shows via the overlay. Opt out with
+    # STORY_CHAR_OVERLAY=0 (→ characters baked static into the key-visual as before).
+    _overlay = _svg_mode and (os.getenv("STORY_CHAR_OVERLAY", "1") != "0")
 
     def _gen_one(v):
         # WORKER thread: pure image gen (network/file I/O). No DB, no plan mutation —
@@ -422,8 +424,9 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
     uses its ``{asset}_{emotion}`` variant (else the base asset); a procedural character is
     svg_char-generated with that emotion. Only speakers on a beat drive this. Best-effort —
     a missing master simply means that beat renders background-only. Never raises.
-    Self-gated by STORY_CHAR_OVERLAY (default off) so a stray call is a no-op."""
-    if os.getenv("STORY_CHAR_OVERLAY", "0") != "1":
+    Self-gated by STORY_CHAR_OVERLAY (default ON — opt out with =0) so a stray call
+    only no-ops when explicitly disabled."""
+    if os.getenv("STORY_CHAR_OVERLAY", "1") == "0":
         return
     try:
         used: dict[str, set] = {}                            # cid → {(emotion, pose), ...}
@@ -460,12 +463,18 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
                 if plan.render.masters.get(key):
                     continue
                 path = None
-                if asset:                                   # library: pose variant → emotion variant → base
+                if asset:
                     vp = pose if pose in _LIB_POSES else ""
                     ve = emo if emo in _LIB_EMOTIONS else ""
-                    path = (get_by_slug(f"{asset}_{vp}", "character") if vp else None) \
-                        or (get_by_slug(f"{asset}_{ve}", "character") if ve else None) \
-                        or get_by_slug(asset, "character")
+                    # The library has SEPARATE emotion and pose variants (never combined). When
+                    # BOTH are requested, a single-axis library variant would silently DROP the
+                    # other axis (e.g. the _point pose variant has a neutral face) — so fall
+                    # through to procedural, which combines emotion + pose. Otherwise use the
+                    # single-axis variant (emotion preferred), else the base asset.
+                    if not (vp and ve):
+                        path = (get_by_slug(f"{asset}_{ve}", "character") if ve else None) \
+                            or (get_by_slug(f"{asset}_{vp}", "character") if vp else None) \
+                            or get_by_slug(asset, "character")
                 if not path:                                # procedural chibi with this emotion + pose
                     opts = preset(getattr(c, "archetype", "") or "", region, genre, getattr(c, "gender", "") or "")
                     opts["expr"] = emotion_expr(emo)
