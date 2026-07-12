@@ -86,6 +86,27 @@ def _subtitle_mode(payload) -> str:
     return "hook_only" if bool(getattr(payload, "add_subtitle", True)) else "off"
 
 
+# FE story-genre → library genre_key GROUP (P2 catalog scope). The library genre folders
+# are art-style buckets and one story spans several (a wuxia tale has codai emperors /
+# scholars), so scope to a GROUP not a single key — shrinks the prompt without hiding
+# valid picks. Unknown / "" → () → full catalog. Region is NOT scoped (no FE region field).
+_GENRE_GROUP = {
+    "kiem-hiep": ("wuxia", "codai"), "wuxia": ("wuxia", "codai"),
+    "tien-hiep": ("wuxia", "fantasy", "codai"), "xianxia": ("wuxia", "fantasy", "codai"),
+    "huyen-huyen": ("fantasy", "wuxia"), "fantasy": ("fantasy", "wuxia"),
+    "ngon-tinh": ("ngontinh", "hiendai"), "ngontinh": ("ngontinh", "hiendai"),
+    "do-thi": ("hiendai",), "hiendai": ("hiendai",),
+    "khoa-huyen": ("fantasy", "hiendai"),
+    "kinh-di": ("horror",), "horror": ("horror",),
+    "codai": ("codai", "wuxia"),
+}
+
+
+def _genre_group(genre: str) -> tuple:
+    """FE story-genre → a tuple of library genre_keys to scope the catalog. () = full."""
+    return _GENRE_GROUP.get((genre or "").strip().lower(), ())
+
+
 def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, idea,
                            duration_sec, genre, language, art_style, aspect, subtitle_mode) -> "tuple[StoryPlan, dict]":
     """Resolve the StoryPlan v2 to render: approved override → persisted (resume) →
@@ -124,12 +145,15 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
     from app.features.render.engine.pipeline.story_series_memory import build_prior_context
     prior_context = build_prior_context(_sid, before_chapter=(_cno or None))
     # Library-pick: inject the asset-library catalog so the AI plan can CHOOSE assets by
-    # slug (gated STORY_LIBRARY_PICK, default off → catalog "" → prompt byte-identical).
+    # slug. Default ON (STORY_LIBRARY_PICK=1) now that the library is large (569 assets)
+    # + fuzzy matching is strong — this is the strongest matching signal. Set
+    # STORY_LIBRARY_PICK=0 to opt out (e.g. shrink the prompt for a pure gpt-image run,
+    # which ignores the picks). An empty library → catalog "" → prompt byte-identical.
     library_catalog = ""
-    if os.getenv("STORY_LIBRARY_PICK", "0") == "1":
+    if os.getenv("STORY_LIBRARY_PICK", "1") == "1":
         try:
             from app.db import story_asset_repo
-            library_catalog = story_asset_repo.build_library_catalog()
+            library_catalog = story_asset_repo.build_library_catalog(genres=_genre_group(genre))
         except Exception:
             library_catalog = ""
     plan = generate_story_plan_v2(

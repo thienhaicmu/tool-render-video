@@ -236,15 +236,25 @@ def get_by_slug(slug: str, kind: str = "") -> Optional[str]:
         return None
 
 
-def build_library_catalog(region: str = "", genre: str = "", cap: int = 300) -> str:
+def build_library_catalog(region: str = "", genre: str = "", cap: int = 300,
+                          genres: "tuple | list | None" = None) -> str:
     """Compact, described inventory of the library for the super-prompt so the AI can
     CHOOSE assets by slug (library-pick). Groups base + variants (one line per base slug):
     ``base_slug | region/genre | role-or-scene tokens | [emotions/poses | day,night]``.
+
+    ``genres`` (optional) scopes the catalog to a GROUP of genre_keys (e.g. a wuxia story
+    → {wuxia, codai}); it takes precedence over the single ``genre``. A story's characters
+    span several art-style buckets, so a group avoids hiding valid picks while still
+    shrinking the prompt. None → the single ``genre`` (""=all) → back-compat.
     Empty string when the library is empty (→ prompt stays byte-identical). Never raises."""
+    scope = [g for g in (genres if genres else [genre])]        # [""] = all genres
     try:
         def _families(kind: str) -> dict:
             fam: dict = {}
-            for a in list_assets(kind=kind, region=region, genre=genre, limit=1000):
+            rows: list = []
+            for g in scope:                                     # gather across the genre group
+                rows += list_assets(kind=kind, region=region, genre=g, limit=1000)
+            for a in rows:
                 base, var = _split_variant(a.get("slug", ""))
                 if not base:
                     continue
