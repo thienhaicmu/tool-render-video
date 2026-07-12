@@ -82,6 +82,10 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
   }, [])
 
   const premiumCost = (plan.visuals.length * PREMIUM_IMG_COST_USD).toFixed(2)
+  // Library-pick matching visibility (D3): how many characters/settings the AI resolved
+  // to a library asset slug (the rest fall back to fuzzy match → procedural art).
+  const libChars = plan.characters.filter((c) => (c.asset || '').trim()).length
+  const libSettings = plan.settings.filter((s) => (s.asset || '').trim()).length
   const colors = visualColorMap(plan.visuals)
   const liveTotal = plan.timeline.reduce(
     (s, b) => s + beatEstSec(b, language) + Math.max(0, b.pause_after || 0), 0)
@@ -134,7 +138,7 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
     const fresh: Beat = {
       id: newBeatId(t), narration: '', speaker_id: ref?.speaker_id || '',
       visual_id: ref?.visual_id || plan.visuals[0]?.id || '',
-      focus: 'center', motion: 'zoom_in', emotion: 'normal',
+      focus: 'center', motion: 'zoom_in', emotion: 'normal', pose: 'stand',
       reading_speed: 1, pause_after: 0, hold_sec: 0,
       transition_in: 'cut', hook: false, hook_text: '',
     }
@@ -150,6 +154,13 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
           <div className="st-muted">
             {plan.characters.length} {vi ? 'nhân vật' : 'characters'} · {plan.visuals.length} {vi ? 'hình' : 'visuals'} ·{' '}
             {plan.timeline.length} {vi ? 'phân đoạn' : 'beats'} · ~{mm}m {ss}s
+            {(libChars > 0 || libSettings > 0) && (
+              <span className="st-tag st-tag--dim" style={{ marginLeft: 8 }}
+                title={vi ? 'Số nhân vật/cảnh AI khớp sẵn từ kho (còn lại vẽ tự động)'
+                          : 'Characters/scenes the AI matched from the library (rest are procedural)'}>
+                📚 {vi ? 'kho' : 'lib'} {libChars}/{plan.characters.length} · {libSettings}/{plan.settings.length}
+              </span>
+            )}
           </div>
         </div>
         <div className="st-actions">

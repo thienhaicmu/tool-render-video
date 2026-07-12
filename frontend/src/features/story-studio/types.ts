@@ -38,6 +38,9 @@ export const FOCUS = ['wide', 'left', 'center', 'right', 'top', 'bottom', 'close
 export const MOTION = ['zoom_in', 'zoom_out', 'pan_left', 'pan_right', 'pan_up', 'pan_down', 'static'] as const
 export const TRANSITION = ['cut', 'fade', 'slide', 'zoom', 'flash', 'to_black'] as const
 export const TIER = ['low', 'medium', 'high'] as const
+// N4 per-beat speaker expression + gesture (drive the emotion/pose overlay).
+export const EMOTION = ['normal', 'happy', 'angry', 'sad', 'surprised'] as const
+export const POSE = ['stand', 'wave', 'cheer', 'point', 'hip'] as const
 
 // Phase 2 — FINAL image provider. Draft/review always previews with the free
 // provider; this picks what the actual render uses.
