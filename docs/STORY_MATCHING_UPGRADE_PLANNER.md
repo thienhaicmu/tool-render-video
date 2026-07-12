@@ -232,8 +232,10 @@ P2 turns the library-pick signal on. P3 makes it visible/overridable. P4 is the 
 4. **Vocab → list all 56 archetypes** in the prompt (derived from `svg_presets._ARCH`),
    plus the canonical scene_kind set (from `svg_scene._SCENES`).
 
-### Execution status
-- P2 flip + genre-group scope: IN PROGRESS (this branch).
-- P1 prompt (emotion + full vocab, s8) + domain EMOTION: next.
-- P3 UI (emotion/pose editors + AI-pick visibility): after P1/P2.
-- P4 overlay-default (CRITICAL): separate Render-Edit-Protocol commit.
+### Execution status (branch `feat/story-library-pick-default`)
+- ✅ P2 flip + genre-group scope (`f1538f9d`).
+- ✅ P1 prompt emotion + code-derived vocab, s8 + domain EMOTION (`01a0380f`).
+- ✅ P3 UI emotion/pose editors + AI-pick chips + matching summary (`929b66b2`, static-v2 rebuilt).
+- ⏳ P4 overlay-default for svg (CRITICAL) — separate Render-Edit-Protocol commit; needs a
+  real render before/after (changes default svg output: bg-only key-visual + per-beat
+  speaker overlay = only the speaker shows per beat).
