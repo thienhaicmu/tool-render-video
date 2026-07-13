@@ -48,23 +48,27 @@ def _sample_text(name: str) -> tuple[str, str]:
     return text, lang
 
 
-def _one_arm(*, provider, model, chapter, language, use_schema, api_key) -> dict:
-    """Generate a plan with json_schema forced on/off, score it structurally."""
+def _one_arm(*, provider, model, language, use_schema, api_key,
+             source="paste", chapter="", idea="", duration_sec=0) -> dict:
+    """Generate a plan (paste OR idea+duration) with json_schema forced on/off, score it
+    structurally. In idea mode the requested duration is threaded into the report so the
+    duration-fit + length metrics are populated (Phase 0 measurement)."""
     os.environ["OPENAI_STORY_JSON_SCHEMA"] = "1" if use_schema else "0"
     llm_cache_clear()   # force a fresh call (cache is namespaced by prompt+schema ver)
     t0 = time.perf_counter()
     plan = generate_story_plan_v2(
-        provider=provider, source="paste", chapter=chapter, language=language,
-        api_key=api_key, model=model,
+        provider=provider, source=source, chapter=(chapter or None), idea=(idea or None),
+        duration_sec=int(duration_sec or 0), language=language, api_key=api_key, model=model,
     )
     dt = round(time.perf_counter() - t0, 2)
-    report = story_structural_report(plan)
+    report = story_structural_report(plan, requested_duration_sec=float(duration_sec or 0))
     return {
         "arm": "schema_on" if use_schema else "schema_off",
         "usable": plan is not None,
         "latency_sec": dt,
         "structural": report,
-        "config": config_vector(OPENAI_STORY_JSON_SCHEMA=("1" if use_schema else "0")),
+        "config": config_vector(OPENAI_STORY_JSON_SCHEMA=("1" if use_schema else "0"),
+                                source=source, duration_sec=int(duration_sec or 0)),
     }
 
 
@@ -75,12 +79,42 @@ def main() -> int:
     ap.add_argument("--model", default=os.getenv("STORY_SUPER_MODEL", "gpt-4o"))
     ap.add_argument("--runs", type=int, default=1)
     ap.add_argument("--store", default="ai_eval/measurements/story_schema.jsonl")
+    # Phase 0 — idea+duration measurement (the "cụt ngủn" axis). When --idea is given the
+    # runner ignores the paste samples and measures one idea at a target length instead.
+    ap.add_argument("--idea", default="", help="idea text → run idea mode (needs --duration) instead of paste samples")
+    ap.add_argument("--duration", type=int, default=0, help="idea-mode target length in seconds")
+    ap.add_argument("--language", default="vi", help="idea-mode narration language")
     args = ap.parse_args()
 
     api_key = (os.getenv("OPENAI_API_KEY", "") or "").strip()
     if not api_key and args.provider == "openai":
         print("!! OPENAI_API_KEY not set — cannot run", flush=True)
         return 2
+
+    # ── Idea mode (Phase 0): measure length delivery vs a target duration ──────
+    if args.idea:
+        store = Path(args.store)
+        store.parent.mkdir(parents=True, exist_ok=True)
+        rows = 0
+        with store.open("a", encoding="utf-8") as fh:
+            print(f"\n=== IDEA (lang={args.language}, target={args.duration}s) === {args.idea[:60]!r}", flush=True)
+            for run in range(1, args.runs + 1):
+                for use_schema in (True, False):
+                    arm = _one_arm(provider=args.provider, model=args.model, language=args.language,
+                                   use_schema=use_schema, api_key=api_key,
+                                   source="idea", idea=args.idea, duration_sec=args.duration)
+                    d = arm["structural"].get("duration", {})
+                    n = arm["structural"].get("narration", {})
+                    print(f"  run{run} {arm['arm']:10s} usable={arm['usable']} "
+                          f"{summarize_story_structural(arm['structural'])} "
+                          f"est={d.get('estimated_sec')}s ratio={d.get('ratio')} "
+                          f"chars/beat={n.get('mean_narration_chars')} ({arm['latency_sec']}s)",
+                          flush=True)
+                    fh.write(json.dumps({"sample": "idea", "language": args.language, "run": run,
+                                         "duration_sec": args.duration, **arm}, ensure_ascii=False) + "\n")
+                    rows += 1
+        print(f"\nwrote {rows} row(s) → {store}", flush=True)
+        return 0
 
     if args.sample:
         stems = [args.sample]

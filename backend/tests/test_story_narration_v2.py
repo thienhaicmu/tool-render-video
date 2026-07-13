@@ -65,3 +65,33 @@ def test_never_raises(monkeypatch, tmp_path):
     p = _plan()
     sn.synthesize_timeline(p, job_id="job", audio_dir=str(tmp_path))   # must not raise
     assert p.render.beat_audio["b1"].path == ""
+
+
+def test_on_progress_streams_to_total(monkeypatch, tmp_path):
+    # P0: on_progress fires per beat and ends at (total, total) — the monitor moves
+    # during narration instead of freezing. Holds for both parallel + serial paths.
+    for workers in ("4", "1"):
+        monkeypatch.setenv("STORY_TTS_WORKERS", workers)
+        _mock(monkeypatch, [])
+        p = _plan()                                   # 3 beats (2 spoken + 1 silent hold)
+        seen = []
+        sn.synthesize_timeline(p, job_id="job", audio_dir=str(tmp_path),
+                               on_progress=lambda done, total: seen.append((done, total)))
+        assert seen, f"no progress emitted (workers={workers})"
+        assert all(t == 3 for _, t in seen)           # total is stable
+        assert seen[-1][0] == 3                        # ends fully done
+        assert [d for d, _ in seen] == sorted(d for d, _ in seen)  # monotonic
+        # every beat still filled regardless of completion order
+        assert set(p.render.beat_audio) == {"b1", "b2", "b3"}
+
+
+def test_parallel_matches_serial_output(monkeypatch, tmp_path):
+    # Parallel (workers=4) and serial (workers=1) produce identical beat_audio.
+    def run(workers):
+        monkeypatch.setenv("STORY_TTS_WORKERS", workers)
+        _mock(monkeypatch, [])
+        p = _plan()
+        sn.synthesize_timeline(p, job_id="job", audio_dir=str(tmp_path))
+        return {k: (v.path.endswith(f"beat_{k}.mp3") if v.path else "", round(v.dur, 2))
+                for k, v in p.render.beat_audio.items()}
+    assert run("4") == run("1")

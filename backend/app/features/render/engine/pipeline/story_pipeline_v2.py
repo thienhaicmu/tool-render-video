@@ -279,6 +279,12 @@ def run_story_v2(
             art_style=art_style, aspect=aspect, subtitle_mode=subtitle_mode,
             has_base_video=bool(base_video_path), base_video_dur=base_video_dur,
         )
+        # Phase 3 (lean contract): the AI emits only the creative per-beat fields; derive
+        # the mechanical style labels (motion / transition / bgm placement / speaking-
+        # character overlay anchor) deterministically HERE — before overlay-master gen and
+        # cue build both read them. Fill-only, so a plan that DID carry them (P2 / legacy /
+        # approved override) is unchanged. Never raises.
+        plan.derive_beat_styling()
         update_story_plan(job_id, plan.to_json())
 
         # P3: soft semantic lint (non-mutating) — surface weak-plan signals in the
@@ -382,10 +388,17 @@ def run_story_v2(
             _generate_overlay_masters(plan, visuals_dir, job_id=job_id,
                                       effective_channel=effective_channel)
 
-        # ── 4. Narration (per voice-run TTS → beat_audio) ───────────────────
+        # ── 4. Narration (per-beat TTS, bounded parallel → beat_audio) ──────
+        # P0: stream per-beat progress (45→54) so the monitor moves during narration
+        # instead of freezing at "Narration timeline" for the whole TTS pass.
         _set_stage(JobStage.SEGMENT_BUILDING, 45, "Narration timeline")
+
+        def _narr_progress(done: int, total: int) -> None:
+            pct = 45 + int(9 * done / max(1, total))
+            _set_stage(JobStage.SEGMENT_BUILDING, pct, f"Narration {done}/{total} beats")
+
         synthesize_timeline(plan, job_id=job_id, audio_dir=audio_dir, subtitle_mode=subtitle_mode,
-                            effective_channel=effective_channel)
+                            effective_channel=effective_channel, on_progress=_narr_progress)
 
         # ── 5. CUE SHEET (deterministic) ────────────────────────────────────
         plan.build_cues(subtitle_mode)

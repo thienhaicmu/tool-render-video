@@ -379,6 +379,58 @@ class StoryPlan:
             pass
         return self
 
+    def derive_beat_styling(self) -> "StoryPlan":
+        """Phase 3 (lean contract): the AI no longer emits the MECHANICAL per-beat style
+        labels — derive them here so the render keeps its variety and the speaking-
+        character overlay still appears. FILL-ONLY: a beat that already carries a
+        NON-DEFAULT value (a P2 / legacy plan where the AI DID set it) is left untouched,
+        so this is backward-safe. Pure, deterministic (seed), idempotent, never raises.
+
+        Must run BEFORE overlay-master gen + build_cues (both read these fields)."""
+        try:
+            # char_anchor — CORRECTNESS: a speaking beat with anchor 'none' composites NO
+            # character overlay. Give each character a STABLE screen position by first
+            # appearance (center → left → right → …); narrator beats stay 'none'.
+            _POS = ("center", "left", "right")
+            order: list[str] = []
+            for c in self.characters:
+                if c.id and c.id not in order:
+                    order.append(c.id)
+            char_pos = {cid: _POS[i % len(_POS)] for i, cid in enumerate(order)}
+            _MOT = ("zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up", "pan_down")
+            seed = int(self.seed or 0)
+            n = len(self.timeline)
+            for i, b in enumerate(self.timeline):
+                prev_vid = self.timeline[i - 1].visual_id if i > 0 else None
+                next_vid = self.timeline[i + 1].visual_id if i < n - 1 else None
+                scene_first = (b.visual_id != prev_vid)
+                scene_last = (b.visual_id != next_vid)
+                if (b.char_anchor or "none") == "none" and (b.speaker_id or ""):
+                    b.char_anchor = char_pos.get(b.speaker_id, "center")
+                if (b.motion or "zoom_in") == "zoom_in":            # variety (else all zoom_in)
+                    b.motion = _MOT[(i + seed) % len(_MOT)]
+                if (b.transition_in or "cut") == "cut":             # fade on a scene change
+                    b.transition_in = "fade" if scene_first else "cut"
+                if (b.bgm_cue or "under") == "under":               # rule-8 intro/outro placement
+                    if scene_first and not scene_last:
+                        b.bgm_cue = "intro"
+                    elif scene_last and not scene_first:
+                        b.bgm_cue = "outro"
+                    else:
+                        b.bgm_cue = "under"
+                if (b.bgm_intensity or "med") == "med":             # from mood/emotion
+                    mood = (b.bgm_mood or "").lower()
+                    emo = (b.emotion or "normal").lower()
+                    if mood in ("action", "epic", "tense") or emo in ("angry", "surprised"):
+                        b.bgm_intensity = "high"
+                    elif mood in ("sad", "calm") or emo == "sad":
+                        b.bgm_intensity = "low"
+                    else:
+                        b.bgm_intensity = "med"
+            return self
+        except Exception:
+            return self
+
     # ── CUE SHEET (INV10-14) — deterministic resolve after images + TTS ──
     def build_cues(self, subtitle_mode: str = "hook_only") -> "StoryPlan":
         """Resolve the absolute cue sheet from (contract + render.beat_audio.dur +

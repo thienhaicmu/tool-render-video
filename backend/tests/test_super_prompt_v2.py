@@ -82,4 +82,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s17"  # s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A)
+    assert SUPER_PROMPT_VERSION == "s19"  # s19: Phase-3 lean contract; s18: rule-5 fix + OUTPUT FRAME + idea default-sec; s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A)

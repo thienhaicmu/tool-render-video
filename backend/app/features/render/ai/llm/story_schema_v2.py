@@ -21,6 +21,24 @@ in ``required`` and ``additionalProperties: false`` on every object.
 """
 from __future__ import annotations
 
+import os as _os
+
+# Phase 3 — LEAN CONTRACT. When on (default), the strict schema asks the model for only
+# the CREATIVE per-beat fields; the mechanical style labels (motion / transition_in /
+# bgm_cue / bgm_intensity / source_audio / char_anchor / char_scale / char_motion /
+# text_anchor) are DERIVED deterministically by StoryPlan.derive_beat_styling — cutting
+# ~half the required per-beat tokens (the OpenAI strict-mode truncation driver) and
+# letting the model spend decode budget on narration. STORY_LEAN_CONTRACT=0 restores the
+# full 19-field beat (the pre-Phase-3 contract, bit-identical).
+_LEAN_BEAT_DROP = (
+    "motion", "transition_in", "bgm_cue", "bgm_intensity", "source_audio",
+    "char_anchor", "char_scale", "char_motion", "text_anchor",
+)
+
+
+def _lean_contract() -> bool:
+    return _os.getenv("STORY_LEAN_CONTRACT", "1") != "0"
+
 
 def _enum(values) -> dict:
     return {"type": "string", "enum": [str(v) for v in values]}
@@ -91,6 +109,8 @@ def build_story_plan_schema() -> dict:
         "hook": {"type": "boolean"},
         "hook_text": {"type": "string"},
     })
+    if _lean_contract():
+        beat = _obj({k: v for k, v in beat["properties"].items() if k not in _LEAN_BEAT_DROP})
     return _obj({
         "topic": {"type": "string"},
         "tone": {"type": "string"},
