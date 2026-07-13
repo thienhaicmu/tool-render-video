@@ -49,8 +49,17 @@ def _gender_for(plan, speaker_id: str) -> str:
 
 
 def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "hook_only",
-                        effective_channel: str = "", on_progress=None) -> None:
+                        effective_channel: str = "", on_progress=None,
+                        voice_mode: str = "dialogue") -> None:
     """Synthesize every beat's narration → ``plan.render.beat_audio``. Never raises.
+
+    P2 — a beat may carry several dialogue lines (``Beat.effective_lines()``). ONE
+    ``beat_audio`` is still produced per beat (TTS stays "per beat"):
+      • ``voice_mode='narrator'`` (or a beat with a single speaker) → ONE TTS call
+        joining the line texts (best prosody, fewest calls). Legacy single-line beats
+        take this path unchanged.
+      • ``voice_mode='dialogue'`` with 2+ distinct speakers → per-line synth in each
+        speaker's cast voice, concatenated back-to-back.
 
     ``generate_narration_audio`` already falls back through its own engine chain
     (elevenlabs/gemini → edge → offline piper), so an EMPTY result here means EVERY
@@ -78,7 +87,7 @@ def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "h
         # Silent-hold beats (no text) resolve instantly; only text beats hit TTS.
         spoken = []
         for beat in beats:
-            if (beat.narration or "").strip():
+            if beat.effective_lines():
                 spoken.append(beat)
             else:                                          # silent hold beat (intentional)
                 plan.render.beat_audio[beat.id] = BeatAudio("", max(0.0, float(beat.hold_sec or 0.0)), [])
@@ -93,28 +102,66 @@ def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "h
                     pass
         _emit(done)
 
-        def _synth_one(beat) -> "tuple[str, BeatAudio, bool]":
-            """Synthesize ONE beat → (beat_id, BeatAudio, produced_no_audio). Runs in a
-            worker thread — no shared mutable state, no DB, own output file."""
-            text = (beat.narration or "").strip()
-            engine, voice_id = _voice_for(plan, beat.speaker_id)
-            gender = _gender_for(plan, beat.speaker_id)
-            rate = _reading_speed_to_rate(beat.reading_speed)
-            out = d / f"beat_{beat.id}.mp3"
+        def _synth_line(text, speaker_id, emotion, rate, out) -> "tuple[str, float]":
+            """One TTS call for one line → (path|"", dur). Worker-thread safe (own file)."""
+            text = (text or "").strip()
+            if not text:
+                return "", 0.0
+            eng, vid = _voice_for(plan, speaker_id)
             try:
                 path = generate_narration_audio(
-                    text=text, language=locale, gender=gender, rate=rate,
-                    job_id=f"{job_id}-{beat.id}", voice_id=(voice_id or None),
-                    output_path=str(out), content_type="vlog", tts_engine=engine,
-                    emotion=(beat.emotion or ""),
+                    text=text, language=locale, gender=_gender_for(plan, speaker_id), rate=rate,
+                    job_id=f"{job_id}-{out.stem}", voice_id=(vid or None),
+                    output_path=str(out), content_type="vlog", tts_engine=eng,
+                    emotion=(emotion or ""),
                 )
             except Exception as exc:
-                logger.warning("story_narration: beat %s TTS failed %s", beat.id, exc)
+                logger.warning("story_narration: line TTS failed (%s) %s", out.stem, exc)
                 path = None
             if not path or not Path(path).exists() or Path(path).stat().st_size <= 0:
+                return "", 0.0
+            return str(path), float(probe_audio_duration(str(path)) or 0.0)
+
+        def _synth_beat(beat) -> "tuple[str, BeatAudio, bool]":
+            """Synthesize ONE beat's lines → (beat_id, BeatAudio, produced_no_audio).
+            narrator mode / single speaker = one joined call; dialogue = per-line voices
+            concatenated. Worker-thread safe — no shared state, own output files."""
+            lines = beat.effective_lines()
+            rate = _reading_speed_to_rate(beat.reading_speed)
+            distinct = {(ln.speaker_id or "") for ln in lines}
+            # One-voice path: narrator mode, or every line is already the same speaker.
+            if voice_mode == "narrator" or len(distinct) <= 1:
+                spk = "" if voice_mode == "narrator" else (lines[0].speaker_id if lines else "")
+                text = " ".join((ln.text or "").strip() for ln in lines)
+                emo = (lines[0].emotion if lines else "") or ""
+                path, dur = _synth_line(text, spk, emo, rate, d / f"beat_{beat.id}.mp3")
+                if not path:
+                    return beat.id, BeatAudio("", 0.0, []), True
+                return beat.id, BeatAudio(path, dur, []), False
+            # Dialogue path: per-line voice, laid back-to-back and concatenated.
+            segs: list[tuple[str, float]] = []
+            for i, ln in enumerate(lines):
+                p, dur = _synth_line(ln.text, ln.speaker_id, ln.emotion, rate,
+                                     d / f"beat_{beat.id}_L{i:02d}.mp3")
+                if p and dur > 0:
+                    segs.append((p, dur))
+            if not segs:
                 return beat.id, BeatAudio("", 0.0, []), True
-            dur = probe_audio_duration(str(path))
-            return beat.id, BeatAudio(str(path), float(dur or 0.0), []), False
+            if len(segs) == 1:
+                return beat.id, BeatAudio(segs[0][0], segs[0][1], []), False
+            offsets, t = [], 0.0
+            for p, dur in segs:
+                offsets.append((t, Path(p))); t += dur
+            out = d / f"beat_{beat.id}.mp3"
+            try:
+                from app.features.render.engine.audio.timed_narration import _concat_with_pads
+                ok = _concat_with_pads(offsets, t, out)
+            except Exception as exc:
+                logger.warning("story_narration: beat %s concat failed %s", beat.id, exc)
+                ok = False
+            if ok and out.exists() and out.stat().st_size > 0:
+                return beat.id, BeatAudio(str(out), float(probe_audio_duration(str(out)) or t), []), False
+            return beat.id, BeatAudio(segs[0][0], segs[0][1], []), False   # fallback: first line
 
         try:
             workers = max(1, int(os.getenv("STORY_TTS_WORKERS", "4") or 4))
@@ -123,7 +170,7 @@ def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "h
 
         if workers <= 1 or len(spoken) <= 1:               # serial path (rollback / trivial)
             for beat in spoken:
-                bid, ba, no_audio = _synth_one(beat)
+                bid, ba, no_audio = _synth_beat(beat)
                 plan.render.beat_audio[bid] = ba
                 if no_audio:
                     silent_spoken.append(bid)
@@ -131,7 +178,7 @@ def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "h
                 _emit(done)
         else:                                              # bounded parallel synth
             with ThreadPoolExecutor(max_workers=workers) as ex:
-                futs = {ex.submit(_synth_one, b): b.id for b in spoken}
+                futs = {ex.submit(_synth_beat, b): b.id for b in spoken}
                 for f in as_completed(futs):
                     try:
                         bid, ba, no_audio = f.result()

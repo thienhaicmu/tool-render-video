@@ -397,8 +397,10 @@ def run_story_v2(
             pct = 45 + int(9 * done / max(1, total))
             _set_stage(JobStage.SEGMENT_BUILDING, pct, f"Narration {done}/{total} beats")
 
+        _voice_mode = (getattr(payload, "story_voice_mode", "dialogue") or "dialogue")
         synthesize_timeline(plan, job_id=job_id, audio_dir=audio_dir, subtitle_mode=subtitle_mode,
-                            effective_channel=effective_channel, on_progress=_narr_progress)
+                            effective_channel=effective_channel, on_progress=_narr_progress,
+                            voice_mode=_voice_mode)
 
         # ── 5. CUE SHEET (deterministic) ────────────────────────────────────
         plan.build_cues(subtitle_mode)

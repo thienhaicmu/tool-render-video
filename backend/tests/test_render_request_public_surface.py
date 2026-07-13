@@ -161,9 +161,11 @@ def test_public_field_count_pinned():
     # Story SVG-only (2026-07-13): story_image_provider DEMOTED to BE-only — Story Mode
     # is SVG-only so there is no provider choice on the wire; the field is retained
     # (coerced to "svg") to deserialise legacy payloads. FE 96→95, BE-only 80→81, total 176.
-    assert len(FE_FACING_FIELDS) == 95, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    # Story P2 (2026-07-13): +1 story_voice_mode, FE-facing (Story Studio's voice-mode
+    # toggle: dialogue|narrator). FE 95→96, BE-only 81, total 176→177.
+    assert len(FE_FACING_FIELDS) == 96, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
     assert len(BE_ONLY_FIELDS)   == 81, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
-    assert len(RenderRequest.model_fields) == 176, (
+    assert len(RenderRequest.model_fields) == 177, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
     )

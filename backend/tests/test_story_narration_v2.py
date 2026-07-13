@@ -85,6 +85,42 @@ def test_on_progress_streams_to_total(monkeypatch, tmp_path):
         assert set(p.render.beat_audio) == {"b1", "b2", "b3"}
 
 
+def _multiline_plan():
+    from app.domain.story_plan_v2 import Line
+    p = StoryPlan(language="vi",
+                  characters=[CharacterDef(id="han", voice_gender="male"),
+                              CharacterDef(id="lan", voice_gender="female")],
+                  timeline=[Beat(id="b1", visual_id="v1", lines=[
+                      Line("", "Ngày xưa"), Line("han", "Ta là Hàn", "angry"),
+                      Line("lan", "Còn ta Lan", "sad")])])
+    p.render.voices = {"": ["gemini", "vi-N"], "han": ["gemini", "vi-H"], "lan": ["gemini", "vi-L"]}
+    return p
+
+
+def test_dialogue_mode_synthesizes_each_line_voice(monkeypatch, tmp_path):
+    # P2 — dialogue beat with 3 distinct speakers → one TTS call per line in THAT
+    # speaker's voice, concatenated into one beat_audio.
+    cap = []
+    _mock(monkeypatch, cap)
+    import app.features.render.engine.audio.timed_narration as tn
+    monkeypatch.setattr(tn, "_concat_with_pads",
+                        lambda offs, total, out: (Path(out).write_bytes(b"ID3joined") or True))
+    p = _multiline_plan()
+    sn.synthesize_timeline(p, job_id="job", audio_dir=str(tmp_path), voice_mode="dialogue")
+    assert sorted(c["voice_id"] for c in cap) == ["vi-H", "vi-L", "vi-N"]   # per-line voices
+    assert p.render.beat_audio["b1"].path.endswith("beat_b1.mp3")          # concatenated beat clip
+
+
+def test_narrator_mode_joins_lines_into_one_call(monkeypatch, tmp_path):
+    # P2 — narrator mode: ONE call, narrator voice, all line texts joined (kể chuyện).
+    cap = []
+    _mock(monkeypatch, cap)
+    p = _multiline_plan()
+    sn.synthesize_timeline(p, job_id="job", audio_dir=str(tmp_path), voice_mode="narrator")
+    assert len(cap) == 1 and cap[0]["voice_id"] == "vi-N"
+    assert "Hàn" in cap[0]["text"] and "Lan" in cap[0]["text"]
+
+
 def test_parallel_matches_serial_output(monkeypatch, tmp_path):
     # Parallel (workers=4) and serial (workers=1) produce identical beat_audio.
     def run(workers):
