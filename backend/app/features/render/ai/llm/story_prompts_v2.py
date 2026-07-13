@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s11"  # s11: SVG-only cleanup (P-A) — drop dead image-gen fields the AI no longer emits: visual.prompt + visual.tier + character.voice_style (SVG composes from setting/archetype/asset; dataclass fields kept for old-plan compat). s10: idea-mode length enforcement + quantified reuse; s9: drop dead negative_prompt (F-12); s8: +per-beat emotion + vocab; s7: +pose; s6: library-pick; s5: asset-library hints; s4: bgm_cue/char_*
+SUPER_PROMPT_VERSION = "s13"  # s13: language-aware per-beat narration budget for even TTS pacing (P-C). s12: 1-shot REUSE EXAMPLE + computed visual-count target for idea mode (P-B). s11: SVG-only cleanup — drop visual.prompt/tier + voice_style (P-A). s10: idea-mode length enforcement + quantified reuse; s9: drop dead negative_prompt (F-12); s8: +per-beat emotion + vocab; s7: +pose; s6: library-pick; s5: asset-library hints; s4: bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -39,6 +39,15 @@ _CPS = {"vi": 15.0, "en": 14.0, "ja": 8.0, "ko": 9.0}
 
 def _lang_name(code: str) -> str:
     return _LANG_NAMES.get((code or "").strip(), code or "the target language")
+
+
+def _beat_char_hint(language: str) -> str:
+    """Language-aware per-beat narration budget (P-C). A beat is one TTS clip; ~3-8s
+    of speech is a comfortable, evenly-paced chunk. Derived from the language CPS
+    (VI 15 / EN 14 / JA 8 / KO 9 chars-per-second) so the range fits each language."""
+    cps = _CPS.get((language or "").strip().lower()[:2], 14.0)
+    lo, hi = int(cps * 3), int(cps * 8)
+    return f" (~{lo}-{hi} characters, ~1-2 short sentences)"
 
 
 def _fit(text: str, n: int = MAX_SOURCE_CHARS) -> str:
@@ -107,7 +116,7 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
 }"""
 
 
-def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str:
+def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_char_hint: str = "") -> str:
     if subtitle_mode == "off":
         hook_rule = "Every beat: hook=false, hook_text=\"\" (no on-screen text at all)."
     else:
@@ -125,8 +134,9 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
         "4. ONE visual per SETTING/moment — group beats in the same place onto ONE visual. The render "
         "draws each picture procedurally from the visual's setting + present characters (there is NO "
         "image prompt — do not write scene descriptions).\n"
-        f"5. narration in {lang_name}; each beat = ONE contiguous idea (~1-3 sentences); the beats "
-        "in order narrate the whole story faithfully (preserve names/facts, never invent).\n"
+        f"5. narration in {lang_name}; each beat = ONE contiguous idea{beat_char_hint} — keep beats "
+        "EVENLY sized (no one-word beats, no paragraph-long beats); the beats in order narrate the "
+        "whole story faithfully (preserve names/facts, never invent).\n"
         f"6. {hook_rule}\n"
         f"7. Each timeline beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood "
         "matching THAT beat's emotional tone (a creative label only, NOT an audio file/timestamp).\n"
@@ -146,9 +156,25 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
         "12. \"asset\" (character/setting) = an exact SLUG copied from the ASSET LIBRARY section when one "
         "fits, else \"\". Never a path; never a slug that is not listed. Absent library → \"\".\n"
         "13. DO NOT output any render/path/timestamp/duration/seconds field, nor an image prompt.\n"
-        "═══ SELF-CHECK before answering ═══\n"
+        + _reuse_example()
+        + "═══ SELF-CHECK before answering ═══\n"
         "Verify every visual_id / speaker_id / character_ids exists in the arrays above; if not, fix it.\n"
         "═══ OUTPUT JSON ═══"
+    )
+
+
+def _reuse_example() -> str:
+    """1-shot ILLUSTRATIVE example (P-B) — the JSON Schema enforces STRUCTURE, this
+    enforces BEHAVIOUR the schema can't: reuse a FEW visuals across MANY beats, and
+    place 1-2 hooks at turning points. Structure only (no copyable story content) so
+    it teaches the pattern without anchoring the model to a specific tale."""
+    return (
+        "═══ REUSE EXAMPLE (pattern only — write YOUR OWN story) ═══\n"
+        "A good plan reuses a SMALL image set across MANY beats and hooks the turning points:\n"
+        "  visuals : [ v1, v2 ]                    ← only 2 images\n"
+        "  timeline: b1→v1 (hook: opening), b2→v1, b3→v1, b4→v2, b5→v2 (hook: climax)\n"
+        "  ⇒ 5 beats used just 2 images. Do the SAME at scale: a long timeline of many "
+        "beats over a SMALL set of reused visuals — never one image per beat.\n"
     )
 
 
@@ -232,7 +258,7 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
         + _vocab_block()
         + "\n═══ SOURCE STORY (adapt THIS) ═══\n" + _fit(chapter) + "\n\n"
         + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
-        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode)
+        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language))
     )
     return _SYSTEM, user
 
@@ -252,6 +278,9 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
     # a beat-count guide (~1 beat per ~6s) so the model develops a full arc.
     _min_chars = int(budget * 0.85) if budget else 0
     _min_beats = max(6, int(round(duration_sec / 6.0))) if (duration_sec and duration_sec > 0) else 0
+    # Concrete visual-count target (P-B): ~4 beats per image, clamped to [2, ceiling].
+    # Turns the "reuse" rule into a number the model can aim at.
+    _target_visuals = max(2, min(int(ceiling), int(round(_min_beats / 4.0)))) if _min_beats else 0
     dur_line = (
         f"TARGET LENGTH: ~{int(duration_sec)} seconds. This REQUIRES ~{budget} characters of "
         f"narration IN TOTAL across all beats (at least ~{_min_chars}), spread over roughly "
@@ -269,8 +298,10 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
         "coherent with no filler repetition, but flesh out plot, characters and detail to reach the length.\n"
         "(a) CHARACTERS: the recurring cast you invented + canonical look + voice.\n"
         "(b) SETTINGS: the places.\n"
-        f"(c) VISUALS (≤{ceiling}): a SMALL set of WIDE images, each reused across many beats.\n"
-        "(d) TIMELINE: narrate your story as ordered beats (enough beats to fill the target length), "
+        + (f"(c) VISUALS: aim for about {_target_visuals} images (≤{ceiling}) for the ~{_min_beats} "
+           "beats — a SMALL set, each reused across many beats.\n" if _target_visuals else
+           f"(c) VISUALS (≤{ceiling}): a SMALL set of WIDE images, each reused across many beats.\n")
+        + "(d) TIMELINE: narrate your story as ordered beats (enough beats to fill the target length), "
         "each pointing to a visual + focus.\n"
     )
     user = (
@@ -281,7 +312,7 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
         + _vocab_block()
         + "\n═══ STORY IDEA (create FROM this) ═══\n" + _fit(idea, 8000) + "\n\n"
         + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
-        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode)
+        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language))
     )
     return _SYSTEM, user
 

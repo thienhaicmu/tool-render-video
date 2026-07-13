@@ -115,7 +115,7 @@ def test_super_prompt_carries_bgm_mood_vocab():
     from app.features.render.ai.llm.story_prompts_v2 import (
         build_super_story_prompt, build_super_idea_prompt, SUPER_PROMPT_VERSION, _MOOD_VOCAB,
     )
-    assert SUPER_PROMPT_VERSION == "s11"
+    assert SUPER_PROMPT_VERSION == "s13"
     assert "default" not in _MOOD_VOCAB.split("|")   # "default" is a fallback folder, not a choice
     _, user = build_super_story_prompt("once upon a time", "vi")
     assert "bgm_mood" in user

@@ -1,0 +1,30 @@
+"""
+P-C — language-aware per-beat narration budget in the super-prompt.
+
+A beat is one TTS clip; giving the model a per-beat character range (derived from
+the language CPS, ~3-8s of speech) keeps beats evenly paced instead of a mix of
+one-word stubs and paragraph-long blocks.
+"""
+from __future__ import annotations
+
+from app.features.render.ai.llm.story_prompts_v2 import (
+    build_super_story_prompt, build_super_idea_prompt, _beat_char_hint,
+)
+
+
+def test_beat_hint_language_aware():
+    assert _beat_char_hint("vi") == " (~45-120 characters, ~1-2 short sentences)"   # cps 15 → 15*3, 15*8
+    assert _beat_char_hint("en") == " (~42-112 characters, ~1-2 short sentences)"   # cps 14
+    assert _beat_char_hint("ja") == " (~24-64 characters, ~1-2 short sentences)"    # cps 8
+    assert _beat_char_hint("zz") == " (~42-112 characters, ~1-2 short sentences)"   # unknown → default 14
+
+
+def test_budget_present_in_both_modes():
+    vi_story = build_super_story_prompt("once", "vi")[1]
+    vi_idea = build_super_idea_prompt("an idea", duration_sec=60, language="vi")[1]
+    for user in (vi_story, vi_idea):
+        assert "~45-120 characters" in user            # VI budget threaded into rule 5
+        assert "EVENLY sized" in user
+    # English uses the English range, not the Vietnamese one.
+    en = build_super_story_prompt("once", "en")[1]
+    assert "~42-112 characters" in en and "~45-120 characters" not in en

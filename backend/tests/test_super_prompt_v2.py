@@ -81,4 +81,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s11"  # s11: short visual caption (P-A); s10: idea-mode length + reuse; s9: drop negative_prompt
+    assert SUPER_PROMPT_VERSION == "s13"  # s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A)
