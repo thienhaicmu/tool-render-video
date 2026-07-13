@@ -609,6 +609,18 @@ def generate_narration_audio(
             job_id=job_id, content_type=content_type, output_path=output_path,
         )
 
+    def _elevenlabs() -> str:
+        from app.features.render.engine.audio.tts_elevenlabs import (
+            elevenlabs_available, synthesize_elevenlabs,
+        )
+        if not elevenlabs_available():
+            raise RuntimeError("elevenlabs unavailable (SDK or API key absent)")
+        _clean = _sanitize_plain_tts(str(text or "").strip())
+        return synthesize_elevenlabs(
+            text=_clean, language=language, gender=gender, job_id=job_id,
+            voice_id=voice_id, output_path=output_path,
+        )
+
     # ── Piper requested ──────────────────────────────────────────────────
     if engine == "piper":
         from app.features.render.ai.dependencies import has_piper
@@ -667,6 +679,18 @@ def generate_narration_audio(
                 "gemini_tts_failed_fallback job_id=%s: %s — falling back to edge chain",
                 job_id, gemini_exc,
             )
+        # P4 (user directive): a Gemini TTS failure prefers ElevenLabs (audiobook-grade,
+        # multilingual) over the free Edge chain — so a dialogue voice stays high quality
+        # when Gemini is down. No-op when ElevenLabs isn't configured (falls through to
+        # Edge below). Kill-switch: TTS_GEMINI_ELEVEN_FALLBACK=0.
+        if os.getenv("TTS_GEMINI_ELEVEN_FALLBACK", "1") == "1":
+            try:
+                return _elevenlabs()
+            except Exception as _el_exc:
+                logger.warning(
+                    "gemini_to_elevenlabs_fallback_failed job_id=%s: %s — using edge chain",
+                    job_id, _el_exc,
+                )
 
     # ── ElevenLabs requested (cloud, audiobook-grade — Story EN/JP) ──────
     # Opt-in only (Story routes EN/JP here). On ANY failure (SDK/key absent,
@@ -674,20 +698,7 @@ def generate_narration_audio(
     # below, so a paid-provider outage never loses a render's narration.
     if engine == "elevenlabs":
         try:
-            from app.features.render.engine.audio.tts_elevenlabs import (
-                elevenlabs_available,
-                synthesize_elevenlabs,
-            )
-            if elevenlabs_available():
-                _clean = _sanitize_plain_tts(str(text or "").strip())
-                return synthesize_elevenlabs(
-                    text=_clean, language=language, gender=gender, job_id=job_id,
-                    voice_id=voice_id, output_path=output_path,
-                )
-            logger.warning(
-                "elevenlabs_unavailable_fallback job_id=%s — SDK or API key absent, using edge chain",
-                job_id,
-            )
+            return _elevenlabs()
         except Exception as el_exc:
             logger.warning(
                 "elevenlabs_failed_fallback job_id=%s: %s — falling back to edge chain",

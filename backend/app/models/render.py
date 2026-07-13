@@ -432,6 +432,11 @@ class RenderRequest(BaseModel):
     # render + character overlay. Sacred Contract #2: default inert; an invalid/missing
     # path degrades to the image-based path (Sacred #3 spirit), never aborts.
     story_base_video_path: str = ""
+    # P2 — how narration voices are cast for a beat's dialogue lines. "dialogue" (default)
+    # = each character's line uses its OWN cast voice — this is the legacy per-beat
+    # behaviour, so a replayed job stays bit-identical (Sacred #2). "narrator" = one
+    # narrator voice reads every line (pure storytelling / kể chuyện).
+    story_voice_mode: str = "dialogue"   # dialogue|narrator
 
     target_duration: int = 90
     output_count: int = 1
@@ -558,6 +563,14 @@ class RenderRequest(BaseModel):
         # "" (paste). Only "idea" activates the AI-authored path.
         v = str(v or "").strip().lower()
         return v if v in {"paste", "idea"} else ""
+
+    @field_validator("story_voice_mode", mode="before")
+    @classmethod
+    def _validate_story_voice_mode(cls, v) -> str:
+        # Coerce (never raise) — Sacred #2: "dialogue" (default) reproduces the legacy
+        # per-beat per-speaker voice, so a stored payload without it is bit-identical.
+        v = str(v or "dialogue").strip().lower()
+        return v if v in {"dialogue", "narrator"} else "dialogue"
 
     @field_validator("story_image_provider", mode="before")
     @classmethod

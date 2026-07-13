@@ -7,7 +7,7 @@
  * Studio BASE only — no content-studio.
  */
 import { StudioCard } from '../../../components/studio'
-import type { StoryPlanV2, Beat } from '../../../api/story'
+import type { StoryPlanV2, Beat, Line } from '../../../api/story'
 import { FOCUS, MOTION, TRANSITION, EMOTION, POSE, type StoryLang } from '../types'
 import { beatEstSec } from './helpers'
 
@@ -40,14 +40,27 @@ export function TimelineEditor({ vi, plan, language, colors, previews, onChangeB
             </div>
 
             <div className="st-tl-main">
-              <textarea className="st-textarea st-textarea--sm" rows={2}
-                placeholder={vi ? 'Lời kể…' : 'Narration…'} value={b.narration}
-                onChange={(e) => onChangeBeat(b.id, { narration: e.target.value })} />
+              {b.lines && b.lines.length ? (
+                <LinesEditor vi={vi} lines={b.lines} speakers={speakers}
+                  onChange={(lines) => onChangeBeat(b.id, { lines })} />
+              ) : (
+                <div className="st-tl-narr" style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                  <textarea className="st-textarea st-textarea--sm" rows={2} style={{ flex: 1 }}
+                    placeholder={vi ? 'Lời kể…' : 'Narration…'} value={b.narration}
+                    onChange={(e) => onChangeBeat(b.id, { narration: e.target.value })} />
+                  <button type="button" className="st-icon-btn" title={vi ? 'Tách thành nhiều lượt thoại' : 'Split into dialogue lines'}
+                    onClick={() => onChangeBeat(b.id, { lines: [{ speaker_id: b.speaker_id, text: b.narration, emotion: b.emotion || 'normal', pose: b.pose || 'stand' }] })}>
+                    💬
+                  </button>
+                </div>
+              )}
 
               <div className="st-tl-controls">
+                {!(b.lines && b.lines.length) && (
                 <Sel label={vi ? 'Giọng' : 'Speaker'} value={b.speaker_id}
                   onChange={(v) => onChangeBeat(b.id, { speaker_id: v })}
                   opts={speakers.map((s) => ({ value: s.id, label: s.name }))} />
+                )}
                 <Sel label={vi ? 'Hình' : 'Visual'} value={b.visual_id}
                   onChange={(v) => onChangeBeat(b.id, { visual_id: v })}
                   opts={plan.visuals.map((v) => ({ value: v.id, label: v.id }))} />
@@ -60,8 +73,9 @@ export function TimelineEditor({ vi, plan, language, colors, previews, onChangeB
                 <Sel label={vi ? 'Chuyển cảnh' : 'Transition'} value={b.transition_in}
                   onChange={(v) => onChangeBeat(b.id, { transition_in: v })}
                   opts={TRANSITION.map((t) => ({ value: t, label: t }))} />
-                {/* Per-beat speaker expression + gesture — only relevant when a character speaks. */}
-                {b.speaker_id && (
+                {/* Per-beat speaker expression + gesture — single-line mode only (in
+                    multi-line mode emotion/pose live per line inside the LinesEditor). */}
+                {!(b.lines && b.lines.length) && b.speaker_id && (
                   <>
                     <Sel label={vi ? 'Cảm xúc' : 'Emotion'} value={b.emotion || 'normal'}
                       onChange={(v) => onChangeBeat(b.id, { emotion: v })}
@@ -101,6 +115,45 @@ export function TimelineEditor({ vi, plan, language, colors, previews, onChangeB
         ))}
       </div>
     </StudioCard>
+  )
+}
+
+/** P2 — edit a beat's dialogue lines: one row per turn (speaker · text · emotion),
+ * with add/remove. A beat = one shot that may hold several turns. */
+function LinesEditor({ vi, lines, speakers, onChange }: {
+  vi: boolean
+  lines: Line[]
+  speakers: { id: string; name: string }[]
+  onChange: (lines: Line[]) => void
+}) {
+  const set = (i: number, up: Partial<Line>) => onChange(lines.map((l, j) => (j === i ? { ...l, ...up } : l)))
+  const add = () => onChange([...lines, { speaker_id: '', text: '', emotion: 'normal', pose: 'stand' }])
+  const del = (i: number) => onChange(lines.filter((_, j) => j !== i))
+  return (
+    <div className="st-tl-lines" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {lines.map((l, i) => (
+        <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+          <select className="st-select st-select--sm" value={l.speaker_id}
+            title={vi ? 'Người nói' : 'Speaker'}
+            onChange={(e) => set(i, { speaker_id: e.target.value })}>
+            {speakers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <textarea className="st-textarea st-textarea--sm" rows={1} style={{ flex: 1 }}
+            placeholder={vi ? 'Lời thoại…' : 'Line…'} value={l.text}
+            onChange={(e) => set(i, { text: e.target.value })} />
+          <select className="st-select st-select--sm" value={l.emotion || 'normal'}
+            title={vi ? 'Cảm xúc' : 'Emotion'}
+            onChange={(e) => set(i, { emotion: e.target.value })}>
+            {EMOTION.map((em) => <option key={em} value={em}>{em}</option>)}
+          </select>
+          <button type="button" className="st-icon-btn st-icon-btn--danger"
+            disabled={lines.length <= 1} title={vi ? 'Xoá dòng' : 'Delete line'}
+            onClick={() => del(i)}>✕</button>
+        </div>
+      ))}
+      <button type="button" className="st-icon-btn" style={{ alignSelf: 'flex-start' }}
+        title={vi ? 'Thêm lượt thoại' : 'Add line'} onClick={add}>＋ {vi ? 'thoại' : 'line'}</button>
+    </div>
   )
 }
 

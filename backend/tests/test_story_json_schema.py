@@ -40,10 +40,11 @@ def test_schema_is_strict_and_supported():
 
 
 def test_schema_enums_derived_from_domain():
-    from app.domain.story_plan_v2 import FOCUS, MOTION, EMOTION, POSE, BGM_MOODS
+    from app.domain.story_plan_v2 import FOCUS, EMOTION, POSE, BGM_MOODS
+    # Default = LEAN contract (Phase 3): the model emits only the CREATIVE per-beat
+    # fields; the mechanical style labels are derived by StoryPlan.derive_beat_styling.
     beat = build_story_plan_schema()["properties"]["timeline"]["items"]["properties"]
     assert beat["focus"]["enum"] == list(FOCUS)
-    assert beat["motion"]["enum"] == list(MOTION)
     assert beat["emotion"]["enum"] == list(EMOTION)
     assert beat["pose"]["enum"] == list(POSE)
     # bgm_mood drops the "default" fallback folder (AI-facing vocab).
@@ -56,6 +57,23 @@ def test_schema_enums_derived_from_domain():
     assert "voice_style" not in chars
     # Pipeline-derived timing fields are never exposed either.
     assert "reading_speed" not in beat and "hold_sec" not in beat
+    # Phase 3: the 9 mechanical style labels are NOT asked of the model under lean.
+    for f in ("motion", "transition_in", "bgm_cue", "bgm_intensity", "source_audio",
+              "char_anchor", "char_scale", "char_motion", "text_anchor"):
+        assert f not in beat, f"lean contract must not expose {f!r}"
+
+
+def test_lean_contract_toggle(monkeypatch):
+    from app.domain.story_plan_v2 import MOTION
+    # Kill-switch: STORY_LEAN_CONTRACT=0 restores the full 19-field beat (pre-Phase-3).
+    monkeypatch.setenv("STORY_LEAN_CONTRACT", "0")
+    beat = build_story_plan_schema()["properties"]["timeline"]["items"]["properties"]
+    assert beat["motion"]["enum"] == list(MOTION)
+    for f in ("bgm_cue", "char_anchor", "text_anchor", "source_audio"):
+        assert f in beat
+    # strict-mode invariant holds in both modes (every property required).
+    obj = build_story_plan_schema()["properties"]["timeline"]["items"]
+    assert set(obj["required"]) == set(obj["properties"].keys())
 
 
 def test_once_uses_json_schema_when_enabled(monkeypatch):

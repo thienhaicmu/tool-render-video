@@ -20,9 +20,11 @@ Sacred Contract #3 spirit: never raises; a beat whose TTS fails gets an empty au
 from __future__ import annotations
 
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from app.domain.story_plan_v2 import BeatAudio
+from app.domain.story_plan_v2 import BeatAudio, LineSpan
 from app.features.render.engine.audio.tts import generate_narration_audio
 from app.features.render.engine.stages.content_scene_render import (
     _reading_speed_to_rate, probe_audio_duration,
@@ -47,47 +49,155 @@ def _gender_for(plan, speaker_id: str) -> str:
 
 
 def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "hook_only",
-                        effective_channel: str = "") -> None:
+                        effective_channel: str = "", on_progress=None,
+                        voice_mode: str = "dialogue") -> None:
     """Synthesize every beat's narration → ``plan.render.beat_audio``. Never raises.
+
+    P2 — a beat may carry several dialogue lines (``Beat.effective_lines()``). ONE
+    ``beat_audio`` is still produced per beat (TTS stays "per beat"):
+      • ``voice_mode='narrator'`` (or a beat with a single speaker) → ONE TTS call
+        joining the line texts (best prosody, fewest calls). Legacy single-line beats
+        take this path unchanged.
+      • ``voice_mode='dialogue'`` with 2+ distinct speakers → per-line synth in each
+        speaker's cast voice, concatenated back-to-back.
 
     ``generate_narration_audio`` already falls back through its own engine chain
     (elevenlabs/gemini → edge → offline piper), so an EMPTY result here means EVERY
     engine failed for that beat — the beat renders silent. When that happens on beats
     that HAD narration text, emit one ``story.tts.silent`` warning so the loss is visible
-    in the monitor instead of a silently muted stretch (F-R1')."""
+    in the monitor instead of a silently muted stretch (F-R1').
+
+    P0: the spoken beats are synthesized in a bounded thread POOL (``STORY_TTS_WORKERS``,
+    default 4) instead of one-by-one — each beat is independent (own file, own
+    ``beat_audio`` key), so this cuts the ~N×latency wall that froze the UI at 0%. Result
+    collection + ``on_progress(done, total)`` run on the CALLING thread (no cross-thread DB
+    writes). ``on_progress`` lets the pipeline stream per-beat progress so the monitor
+    moves during narration. Order-independent (keyed by beat id) — deterministic output."""
     silent_spoken: list[str] = []
     try:
         d = Path(audio_dir)
         d.mkdir(parents=True, exist_ok=True)
         locale = _LOCALE.get((plan.language or "vi").strip().lower()[:2], "vi-VN")
         runs = plan.voice_runs()
+        beats = list(plan.timeline)
+        total = len(beats)
         logger.info("story_narration: %d beats in %d voice-run(s) lang=%s",
-                    plan.beat_count(), len(runs), locale)
-        for beat in plan.timeline:
-            text = (beat.narration or "").strip()
-            if not text:                                   # silent hold beat (intentional)
+                    total, len(runs), locale)
+
+        # Silent-hold beats (no text) resolve instantly; only text beats hit TTS.
+        spoken = []
+        for beat in beats:
+            if beat.effective_lines():
+                spoken.append(beat)
+            else:                                          # silent hold beat (intentional)
                 plan.render.beat_audio[beat.id] = BeatAudio("", max(0.0, float(beat.hold_sec or 0.0)), [])
-                continue
-            engine, voice_id = _voice_for(plan, beat.speaker_id)
-            gender = _gender_for(plan, beat.speaker_id)
-            rate = _reading_speed_to_rate(beat.reading_speed)
-            out = d / f"beat_{beat.id}.mp3"
+
+        done = total - len(spoken)                         # silent beats already resolved
+
+        def _emit(n: int) -> None:
+            if on_progress is not None:
+                try:
+                    on_progress(n, total)
+                except Exception:
+                    pass
+        _emit(done)
+
+        def _synth_line(text, speaker_id, emotion, rate, out) -> "tuple[str, float]":
+            """One TTS call for one line → (path|"", dur). Worker-thread safe (own file)."""
+            text = (text or "").strip()
+            if not text:
+                return "", 0.0
+            eng, vid = _voice_for(plan, speaker_id)
             try:
                 path = generate_narration_audio(
-                    text=text, language=locale, gender=gender, rate=rate,
-                    job_id=f"{job_id}-{beat.id}", voice_id=(voice_id or None),
-                    output_path=str(out), content_type="vlog", tts_engine=engine,
-                    emotion=(beat.emotion or ""),
+                    text=text, language=locale, gender=_gender_for(plan, speaker_id), rate=rate,
+                    job_id=f"{job_id}-{out.stem}", voice_id=(vid or None),
+                    output_path=str(out), content_type="story", tts_engine=eng,
+                    emotion=(emotion or ""),
                 )
             except Exception as exc:
-                logger.warning("story_narration: beat %s TTS failed %s", beat.id, exc)
+                logger.warning("story_narration: line TTS failed (%s) %s", out.stem, exc)
                 path = None
             if not path or not Path(path).exists() or Path(path).stat().st_size <= 0:
-                plan.render.beat_audio[beat.id] = BeatAudio("", 0.0, [])
-                silent_spoken.append(beat.id)              # had text but produced no audio
-                continue
-            dur = probe_audio_duration(str(path))
-            plan.render.beat_audio[beat.id] = BeatAudio(str(path), float(dur or 0.0), [])
+                return "", 0.0
+            return str(path), float(probe_audio_duration(str(path)) or 0.0)
+
+        def _synth_beat(beat) -> "tuple[str, BeatAudio, bool]":
+            """Synthesize ONE beat's lines → (beat_id, BeatAudio, produced_no_audio).
+            narrator mode / single speaker = one joined call; dialogue = per-line voices
+            concatenated. Worker-thread safe — no shared state, own output files."""
+            lines = beat.effective_lines()
+            rate = _reading_speed_to_rate(beat.reading_speed)
+            distinct = {(ln.speaker_id or "") for ln in lines}
+            # One-voice path: narrator mode, or every line is already the same speaker.
+            if voice_mode == "narrator" or len(distinct) <= 1:
+                spk = "" if voice_mode == "narrator" else (lines[0].speaker_id if lines else "")
+                text = " ".join((ln.text or "").strip() for ln in lines)
+                emo = (lines[0].emotion if lines else "") or ""
+                path, dur = _synth_line(text, spk, emo, rate, d / f"beat_{beat.id}.mp3")
+                if not path:
+                    return beat.id, BeatAudio("", 0.0, []), True
+                return beat.id, BeatAudio(path, dur, []), False
+            # Dialogue path: per-line voice, laid back-to-back and concatenated.
+            segs: list[tuple[str, float, object]] = []
+            for i, ln in enumerate(lines):
+                p, dur = _synth_line(ln.text, ln.speaker_id, ln.emotion, rate,
+                                     d / f"beat_{beat.id}_L{i:02d}.mp3")
+                if p and dur > 0:
+                    segs.append((p, dur, ln))
+            if not segs:
+                return beat.id, BeatAudio("", 0.0, []), True
+            if len(segs) == 1:
+                return beat.id, BeatAudio(segs[0][0], segs[0][1], []), False
+            # P3 — record each line's time window (speaker/emotion/pose) so the cue render
+            # can switch the on-screen character as the line changes. Offsets are relative
+            # to the concatenated beat audio (= the cue clip's own timeline).
+            offsets, spans, t = [], [], 0.0
+            for p, dur, ln in segs:
+                offsets.append((t, Path(p)))
+                spans.append(LineSpan(start=round(t, 3), end=round(t + dur, 3),
+                                      speaker_id=(ln.speaker_id or ""),
+                                      emotion=(ln.emotion or "normal"), pose=(ln.pose or "stand")))
+                t += dur
+            out = d / f"beat_{beat.id}.mp3"
+            try:
+                from app.features.render.engine.audio.timed_narration import _concat_with_pads
+                ok = _concat_with_pads(offsets, t, out)
+            except Exception as exc:
+                logger.warning("story_narration: beat %s concat failed %s", beat.id, exc)
+                ok = False
+            if ok and out.exists() and out.stat().st_size > 0:
+                return beat.id, BeatAudio(str(out), float(probe_audio_duration(str(out)) or t), [], spans), False
+            return beat.id, BeatAudio(segs[0][0], segs[0][1], []), False   # fallback: first line
+
+        try:
+            workers = max(1, int(os.getenv("STORY_TTS_WORKERS", "4") or 4))
+        except (TypeError, ValueError):
+            workers = 4
+
+        if workers <= 1 or len(spoken) <= 1:               # serial path (rollback / trivial)
+            for beat in spoken:
+                bid, ba, no_audio = _synth_beat(beat)
+                plan.render.beat_audio[bid] = ba
+                if no_audio:
+                    silent_spoken.append(bid)
+                done += 1
+                _emit(done)
+        else:                                              # bounded parallel synth
+            with ThreadPoolExecutor(max_workers=workers) as ex:
+                futs = {ex.submit(_synth_beat, b): b.id for b in spoken}
+                for f in as_completed(futs):
+                    try:
+                        bid, ba, no_audio = f.result()
+                    except Exception as exc:               # _synth_one already guards; belt-and-suspenders
+                        bid = futs[f]
+                        ba, no_audio = BeatAudio("", 0.0, []), True
+                        logger.warning("story_narration: beat %s task error %s", bid, exc)
+                    plan.render.beat_audio[bid] = ba
+                    if no_audio:
+                        silent_spoken.append(bid)
+                    done += 1
+                    _emit(done)
     except Exception as exc:
         logger.warning("story_narration: synthesize_timeline error %s", exc)
     if silent_spoken:

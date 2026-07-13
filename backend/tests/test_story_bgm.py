@@ -115,7 +115,7 @@ def test_super_prompt_carries_bgm_mood_vocab():
     from app.features.render.ai.llm.story_prompts_v2 import (
         build_super_story_prompt, build_super_idea_prompt, SUPER_PROMPT_VERSION, _MOOD_VOCAB,
     )
-    assert SUPER_PROMPT_VERSION == "s17"
+    assert SUPER_PROMPT_VERSION == "s20"
     assert "default" not in _MOOD_VOCAB.split("|")   # "default" is a fallback folder, not a choice
     _, user = build_super_story_prompt("once upon a time", "vi")
     assert "bgm_mood" in user
@@ -176,3 +176,32 @@ def test_placed_bgm_track_none_without_music(tmp_path):
 def test_placed_bgm_track_empty_placements(tmp_path):
     from app.features.render.engine.audio.mixer import build_placed_bgm_track
     assert build_placed_bgm_track([], 5.0, str(tmp_path / "t.wav")) is None
+
+
+def test_story_bgm_no_double_gain_and_gentle_duck(tmp_path, monkeypatch):
+    # Fix: the placed track already carries each scene's gain; the story mix must NOT
+    # attenuate a SECOND time (bgm_db_gain=0), and it ducks GENTLY so the music is
+    # audible under near-continuous narration (ratio 2.5, not the default 6).
+    from pathlib import Path
+    from app.features.render.engine.audio import mixer
+    from app.features.render.engine.stages.story import bgm_stage
+    from app.domain.story_plan_v2 import StoryPlan, Cue
+    p = StoryPlan()
+    p.render.total_sec = 6.0
+    p.render.cues = [Cue(beat_id="b1", visual_id="v1", start_sec=0.0, end_sec=6.0,
+                         bgm_mood="tense", bgm_cue="under", bgm_intensity="med")]
+    cap = {}
+    monkeypatch.setattr(mixer, "build_placed_bgm_track", lambda *a, **k: str(tmp_path / "track.wav"))
+
+    def _fake_mix(**kw):
+        cap.update(kw)
+        Path(kw["output_path"]).write_bytes(b"x")
+        return kw["output_path"]
+    monkeypatch.setattr(mixer, "mix_with_bgm", _fake_mix)
+    monkeypatch.setattr(bgm_stage, "_emit_render_event", lambda **k: None)
+    monkeypatch.setattr(bgm_stage, "_job_log", lambda *a, **k: None)
+    final = tmp_path / "out.mp4"
+    final.write_bytes(b"video")
+    bgm_stage._mix_scene_bgm("job", "chan", p, str(final), tmp_path)
+    assert cap.get("bgm_db_gain") == 0.0             # no second attenuation
+    assert "ratio=2.5" in (cap.get("duck_params") or "")   # gentle duck

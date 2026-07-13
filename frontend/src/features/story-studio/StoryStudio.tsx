@@ -272,6 +272,7 @@ export function StoryStudio() {
       story_chapter_no: cfg.chapterNo,
       story_plan_override: JSON.stringify(p),
       story_base_video_path: cfg.baseVideoPath,
+      story_voice_mode: cfg.voiceMode,
       voice_language: VOICE_LOCALE[cfg.language],
       aspect_ratio: cfg.aspect,
       add_subtitle: cfg.subtitles,

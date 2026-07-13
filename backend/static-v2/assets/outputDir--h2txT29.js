@@ -1,1 +1,0 @@
-import{l as t}from"./index-tXc_4YKu.js";async function r(){return t("/api/settings/output-dir")}async function n(u){return t("/api/settings/output-dir",{method:"PUT",body:JSON.stringify({path:u})})}export{r as g,n as p};

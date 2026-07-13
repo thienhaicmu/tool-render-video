@@ -243,11 +243,14 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
     try:
         used: dict[str, set] = {}                            # cid → {(emotion, pose), ...}
         for b in plan.timeline:
-            sp = (getattr(b, "speaker_id", "") or "").strip()
-            if sp:
-                used.setdefault(sp, set()).add((
-                    (getattr(b, "emotion", "normal") or "normal").strip().lower(),
-                    (getattr(b, "pose", "stand") or "stand").strip().lower()))
+            # P3 — iterate the beat's LINES (effective_lines() = the multi-line dialogue,
+            # or the single legacy line) so every on-screen speaker/emotion/pose gets a master.
+            for ln in b.effective_lines():
+                sp = (getattr(ln, "speaker_id", "") or "").strip()
+                if sp:
+                    used.setdefault(sp, set()).add((
+                        (getattr(ln, "emotion", "normal") or "normal").strip().lower(),
+                        (getattr(ln, "pose", "stand") or "stand").strip().lower()))
         if not used:
             return
         from app.features.render.engine.visual.svg_char import build_char, emotion_expr

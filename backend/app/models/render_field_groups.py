@@ -56,6 +56,7 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
         "story_image_provider",
         # A1: optional local base video the story is composited over ("" = image-based).
         "story_base_video_path",
+        "story_voice_mode",
     }),
     "lifecycle": frozenset({
         "resume_job_id", "resume_from_last", "render_profile", "render_preset",

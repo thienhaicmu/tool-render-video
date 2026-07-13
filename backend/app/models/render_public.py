@@ -182,6 +182,8 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # only to deserialise legacy stored payloads.
     # A1 — optional local base video the story is composited over ("" = image-based).
     "story_base_video_path",
+    # P2 — voice casting for dialogue beats: "dialogue" (per-character voices) | "narrator".
+    "story_voice_mode",
 })
 
 

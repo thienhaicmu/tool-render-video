@@ -605,7 +605,7 @@ def _call_openai_content(api_key: str, model: str, system_prompt: str, user_prom
 # returning half a plan. Kept out of _call_openai_content so tuning Story never
 # perturbs Content Mode. gemini/claude Story fallback still reuses their _content
 # call (they have no story-specific tuning yet) — see llm._get_story_call_fn.
-_STORY_PLAN_MAX_TOKENS = int(os.getenv("OPENAI_STORY_PLAN_MAX_TOKENS", "12288"))
+_STORY_PLAN_MAX_TOKENS = int(os.getenv("OPENAI_STORY_PLAN_MAX_TOKENS", "16384"))
 _STORY_PLAN_TEMPERATURE = float(os.getenv("OPENAI_STORY_PLAN_TEMPERATURE", "0.4"))
 _STORY_PLAN_RETRY_EMPTY = os.getenv("OPENAI_STORY_PLAN_RETRY_EMPTY", "1") == "1"
 # F-05: native structured output (strict JSON Schema) for the super-plan. Default

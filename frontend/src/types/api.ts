@@ -237,6 +237,9 @@ export interface RenderRequest {
   // A1 — optional LOCAL base video the story is composited over. '' = image-based
   // story (default). A valid path makes it the cue base layer (consumed in a later phase).
   story_base_video_path?: string
+  // P2 — voice casting for dialogue beats: 'dialogue' (per-character voices, default) |
+  // 'narrator' (one narrator voice reads all lines — pure storytelling).
+  story_voice_mode?: 'dialogue' | 'narrator'
 
   // Architecture-review C.1 Phase 1 (2026-06-30): Clip-path feature flag
   // for the Comprehension stage. When true AND render_format === 'clips',

@@ -135,8 +135,10 @@ def test_render_request_field_count_unchanged():
     # verified: default "gpt_image" reproduces the existing paid behaviour.
     # 2026-07-11 Story A1: +1 story_base_video_path → 176. Sacred #2 verified:
     # default "" = image-based story (no base video), stored payloads replay identically.
-    assert field_count == 176, (
-        f"RenderRequest now has {field_count} fields (expected 176). "
+    # 2026-07-13 Story P2: +1 story_voice_mode → 177. Sacred #2 verified: default
+    # "dialogue" = the legacy per-beat per-speaker voice, stored payloads replay identically.
+    assert field_count == 177, (
+        f"RenderRequest now has {field_count} fields (expected 177). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

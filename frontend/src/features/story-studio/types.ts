@@ -62,6 +62,7 @@ export interface StoryConfig {
   chapterNo: number
   outputDir: string
   baseVideoPath: string          // A1 — optional local base video ('' = image-based)
+  voiceMode: 'dialogue' | 'narrator'   // P2 — dialogue = per-character voices; narrator = one voice reads all
 }
 
 export const DEFAULT_STORY_CFG: StoryConfig = {
@@ -78,4 +79,5 @@ export const DEFAULT_STORY_CFG: StoryConfig = {
   chapterNo: 0,
   outputDir: '',
   baseVideoPath: '',
+  voiceMode: 'dialogue',
 }

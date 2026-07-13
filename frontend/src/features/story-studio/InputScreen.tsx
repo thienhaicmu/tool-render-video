@@ -155,6 +155,17 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
               options={ASPECTS.map((a) => ({ value: a, label: a }))} />
           </StudioField>
         </div>
+        <StudioField label={vi ? 'Chế độ giọng' : 'Voice mode'}
+          hint={vi ? 'Kể chuyện = một giọng đọc hết. Hội thoại = mỗi nhân vật một giọng riêng khi beat có nhiều lượt thoại.'
+                   : 'Narrator = one voice reads all. Dialogue = a distinct voice per character when a beat has multiple turns.'}>
+          <SegRow<'dialogue' | 'narrator'>
+            value={cfg.voiceMode} onChange={(v) => setKey('voiceMode', v)}
+            options={[
+              { value: 'narrator', label: vi ? 'Kể chuyện (1 giọng)' : 'Narrator (1 voice)' },
+              { value: 'dialogue', label: vi ? 'Hội thoại (đa giọng)' : 'Dialogue (multi-voice)' },
+            ]}
+          />
+        </StudioField>
         <StudioField label={vi ? 'Phong cách hình (tùy chọn)' : 'Art style (optional)'}
           hint={vi ? 'Ảnh là chibi vẽ trong máy (SVG) — phong cách chỉ tác động nhẹ tới màu/khớp kho.'
                    : 'Images are locally-drawn chibi (SVG) — style only lightly affects palette/library match.'}>

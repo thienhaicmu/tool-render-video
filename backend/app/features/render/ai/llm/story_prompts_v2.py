@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s17"  # s17: P3 length compensation (aim ~1.8× since gpt-4o delivers ~55% of a requested length from a thin idea in one call; STORY_IDEA_LENGTH_FACTOR). s16: five-act beat QUOTA (mandate beats per stage → model can't compress a 3-min story into too few beats). s15: P3 RICH-beat length lever — beats are full ~10s paragraphs (~cps*10 chars), count+length derived from target with explicit arithmetic (fixes the terse-beat cap that held a 3-min idea at ~70s). s14: THREE specialised super-prompts by use-case — P1 adapt→SVG, P2 adapt→over-video (new, overlay/source_audio focus), P3 idea→length-as-brief scene scaffold. Full schema kept. s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A); s10: idea length; s9: drop negative_prompt (F-12); s8: emotion+vocab; s7: pose; s6: library-pick; s5: asset hints; s4: bgm_cue/char_*
+SUPER_PROMPT_VERSION = "s20"  # s20: P1 MULTI-LINE beats — STORY_MULTILINE_BEATS=1 makes a beat carry a lines[] dialogue array (each turn its own speaker/text/emotion/pose); one shot may hold 1-4 turns. Default off = pre-P1, bit-identical. s19: Phase-3 LEAN CONTRACT — SVG prompts (P1/P3) ask only for the CREATIVE per-beat fields (narration/speaker/visual/focus/bgm_mood/emotion/pose/hook); the 9 mechanical style labels are derived by StoryPlan.derive_beat_styling (cuts OpenAI strict-mode truncation). P2 keeps the full schema. Toggle STORY_LEAN_CONTRACT=0 to restore the 19-field ask. s18: Phase-1 hygiene — rule-5 self-contradiction fixed (RICH beats no longer told "no paragraph-long beats"); OUTPUT FRAME/aspect now injected in-prompt (was a dead param); STORY_IDEA_DEFAULT_SEC fallback when the FE omits a target length. s17: P3 length compensation (aim ~1.8× since gpt-4o delivers ~55% of a requested length from a thin idea in one call; STORY_IDEA_LENGTH_FACTOR). s16: five-act beat QUOTA (mandate beats per stage → model can't compress a 3-min story into too few beats). s15: P3 RICH-beat length lever — beats are full ~10s paragraphs (~cps*10 chars), count+length derived from target with explicit arithmetic (fixes the terse-beat cap that held a 3-min idea at ~70s). s14: THREE specialised super-prompts by use-case — P1 adapt→SVG, P2 adapt→over-video (new, overlay/source_audio focus), P3 idea→length-as-brief scene scaffold. Full schema kept. s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A); s10: idea length; s9: drop negative_prompt (F-12); s8: emotion+vocab; s7: pose; s6: library-pick; s5: asset hints; s4: bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -145,9 +145,112 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
   ]
 }"""
 
+# Phase 3 — LEAN CONTRACT beat: only the CREATIVE per-beat fields. The mechanical style
+# labels (motion/transition_in/bgm_cue/bgm_intensity/source_audio/char_*/text_anchor) are
+# derived deterministically by the pipeline (StoryPlan.derive_beat_styling), so asking the
+# model for them only costs tokens + truncation. Used for the SVG prompts (P1/P3) when
+# STORY_LEAN_CONTRACT is on; P2 (over-video) keeps the FULL schema (overlay is AI-decided).
+_SCHEMA_LEAN = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ═══
+{
+  "topic": "<short topic in {LANG}>",
+  "tone": "<detected/created tone>",
+  "language": "<LANG code>",
+  "art_style": "<overall art style, e.g. cinematic ink-wash wuxia>",
+  "region": "cn|jp|ko|vi|eu|us|",
+  "genre_key": "wuxia|ngontinh|horror|fantasy|codai|hiendai|",
+  "characters": [
+    { "id": "<short slug, e.g. han_phong>", "name": "<display name>",
+      "canonical_desc": "<the character's canonical look: age, hair, attire, weapon, aura — kept consistent across the whole story / later chapters>",
+      "archetype": "<lowercase English role token, e.g. swordsman|emperor|office_worker|princess|witch|child|ghost — or '' if unsure>",
+      "asset": "<a CHARACTERS slug from the ASSET LIBRARY that best fits this character, or '' if none fits / no library given>",
+      "age": "", "gender": "male|female|", "voice_gender": "male|female" }
+  ],
+  "settings": [
+    { "id": "<slug>", "name": "<place>", "canonical_desc": "<canonical look of the place>",
+      "scene_kind": "<lowercase English scene token, e.g. cafe|forest|throne_room|bedroom|garden|street — or '' if unsure>",
+      "asset": "<a BACKGROUNDS slug from the ASSET LIBRARY that best fits this place, or '' if none fits / no library given>" }
+  ],
+  "visuals": [
+    { "id": "v1", "setting_id": "<a settings id>",
+      "character_ids": ["<characters ids present>"] }
+  ],
+  "timeline": [
+    { "id": "b1", "narration": "<voice-over for this beat, in target language>",
+      "speaker_id": "<a characters id, or '' for narrator>",
+      "visual_id": "<a visuals id>",
+      "focus": "wide|left|center|right|top|bottom|close",
+      "bgm_mood": "<MOOD_VOCAB>",
+      "emotion": "normal|happy|angry|sad|surprised",
+      "pose": "stand|wave|cheer|point|hip",
+      "hook": false, "hook_text": "" }
+  ]
+}"""
+
+
+def _lean_contract() -> bool:
+    """Phase 3 — SVG prompts ask only for the creative per-beat fields (default on).
+    STORY_LEAN_CONTRACT=0 restores the full 19-field ask (pre-Phase-3, bit-identical)."""
+    return _os.getenv("STORY_LEAN_CONTRACT", "1") != "0"
+
+
+def _multiline() -> bool:
+    """P1 — a beat carries a ``lines[]`` dialogue array (each turn its own speaker/
+    emotion) instead of a single narration. Default off. STORY_MULTILINE_BEATS=1 to
+    enable. Off = the pre-P1 contract, bit-identical."""
+    return _os.getenv("STORY_MULTILINE_BEATS", "0") == "1"
+
+
+# P1 — MULTI-LINE beat: one shot (khung hình) holding a `lines[]` dialogue array. The
+# khung-hình fields (visual_id/focus/bgm_mood/hook) stay on the beat; who-says-what +
+# emotion/pose move INTO each line. Used when STORY_MULTILINE_BEATS is on.
+_SCHEMA_MULTILINE = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ═══
+{
+  "topic": "<short topic in {LANG}>",
+  "tone": "<detected/created tone>",
+  "language": "<LANG code>",
+  "art_style": "<overall art style, e.g. cinematic ink-wash wuxia>",
+  "region": "cn|jp|ko|vi|eu|us|",
+  "genre_key": "wuxia|ngontinh|horror|fantasy|codai|hiendai|",
+  "characters": [
+    { "id": "<short slug, e.g. han_phong>", "name": "<display name>",
+      "canonical_desc": "<the character's canonical look: age, hair, attire, weapon, aura — kept consistent across the whole story / later chapters>",
+      "archetype": "<lowercase English role token, e.g. swordsman|emperor|office_worker|princess|witch|child|ghost — or '' if unsure>",
+      "asset": "<a CHARACTERS slug from the ASSET LIBRARY that best fits this character, or '' if none fits / no library given>",
+      "age": "", "gender": "male|female|", "voice_gender": "male|female" }
+  ],
+  "settings": [
+    { "id": "<slug>", "name": "<place>", "canonical_desc": "<canonical look of the place>",
+      "scene_kind": "<lowercase English scene token, e.g. cafe|forest|throne_room|bedroom|garden|street — or '' if unsure>",
+      "asset": "<a BACKGROUNDS slug from the ASSET LIBRARY that best fits this place, or '' if none fits / no library given>" }
+  ],
+  "visuals": [
+    { "id": "v1", "setting_id": "<a settings id>",
+      "character_ids": ["<characters ids present>"] }
+  ],
+  "timeline": [
+    { "id": "b1", "visual_id": "<a visuals id>",
+      "focus": "wide|left|center|right|top|bottom|close",
+      "bgm_mood": "<MOOD_VOCAB>",
+      "hook": false, "hook_text": "",
+      "lines": [
+        { "speaker_id": "<a characters id, or '' for narrator>",
+          "text": "<what this speaker says here, in target language>",
+          "emotion": "normal|happy|angry|sad|surprised",
+          "pose": "stand|wave|cheer|point|hip" }
+      ] }
+  ]
+}"""
+
+
+def _schema(lean: bool) -> str:
+    if _multiline():
+        return _SCHEMA_MULTILINE
+    return _SCHEMA_LEAN if lean else _SCHEMA
+
 
 def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_char_hint: str = "",
-           render_mode: str = "svg") -> str:
+           render_mode: str = "svg", rich_beats: bool = False, lean: bool = False,
+           multiline: bool = False) -> str:
     if subtitle_mode == "off":
         hook_rule = "Every beat: hook=false, hook_text=\"\" (no on-screen text at all)."
     else:
@@ -161,9 +264,88 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_c
         _r4 = ("4. ONE visual per SETTING/moment — group beats in the same place onto ONE visual. The "
                "render draws each picture procedurally from the visual's setting + present characters "
                "(there is NO image prompt — do not write scene descriptions).\n")
+    # A1: OUTPUT FRAME — was a dead param (never in the prompt); now tells the model the
+    # aspect so it composes focus / character placement / on-screen text for the frame.
+    _frame = {"9:16": "vertical / portrait", "16:9": "widescreen / landscape",
+              "1:1": "square"}.get((aspect or "").strip(), (aspect or "16:9"))
+    _frame_line = (f"0. OUTPUT FRAME is {aspect or '16:9'} ({_frame}) — compose focus, character "
+                   "placement and on-screen text for THIS frame.\n")
+    # A3: rule 5 must not self-contradict. For RICH beats (idea/long-adapt paragraphs)
+    # the "no paragraph-long beats" clause is dropped; terse beats keep it.
+    if multiline:
+        _r5 = (f"5. narration in {lang_name}; each beat = ONE SHOT (one image) holding a SHORT SCENE as a "
+               "\"lines\" array of 1-4 spoken turns. Each line = {speaker_id, text, emotion, pose}; "
+               "speaker_id \"\" = narrator. A pure-narration beat has ONE narrator line; a dialogue beat "
+               "interleaves narrator + characters. Keep ALL lines of a beat in the SAME place/visual — start "
+               "a NEW beat when the scene/image changes. The lines in order narrate the whole story "
+               "faithfully (preserve names/facts, never invent).\n")
+    elif rich_beats:
+        _r5 = (f"5. narration in {lang_name}; each beat = a self-contained MINI-SCENE{beat_char_hint} — "
+               "keep beats EVENLY sized (no one-word beats, no half-empty beats); the beats in order "
+               "narrate the whole story faithfully (preserve names/facts, never invent).\n")
+    else:
+        _r5 = (f"5. narration in {lang_name}; each beat = ONE contiguous idea{beat_char_hint} — keep beats "
+               "EVENLY sized (no one-word beats, no paragraph-long beats); the beats in order narrate the "
+               "whole story faithfully (preserve names/facts, never invent).\n")
+    # Rules 7+ describe the per-beat STYLE labels. Under the lean contract (SVG) the model
+    # emits only bgm_mood + emotion + pose; the rest are pipeline-derived, so we drop their
+    # instructions. Multiline: emotion/pose live INSIDE each line. Full block keeps all.
+    if multiline:
+        _style = (
+            f"7. Each beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the music mood for THAT shot "
+            "(a creative label only, NOT an audio file/timestamp).\n"
+            "8. INSIDE each line: emotion = that speaker's feeling — normal|happy|angry|sad|surprised "
+            "(use normal when neutral); pose = that speaker's gesture — stand|wave|cheer|point|hip "
+            "(use stand unless the action clearly calls for one).\n"
+            "9. region/genre_key/archetype/scene_kind are OPTIONAL asset-library hints: lowercase English "
+            "tokens only; leave \"\" when unsure (never invent). They do NOT change the story.\n"
+            "10. \"asset\" (character/setting) = an exact SLUG copied from the ASSET LIBRARY section when one "
+            "fits, else \"\". Never a path; never a slug that is not listed. Absent library → \"\".\n"
+            "11. DO NOT output any render/path/timestamp field, an image prompt, NOR camera motion / "
+            "transitions / music placement / character-overlay position — those are added AUTOMATICALLY. "
+            "Emit ONLY the fields shown in the schema.\n"
+        )
+    elif lean:
+        _style = (
+            f"7. Each timeline beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood "
+            "matching THAT beat's emotional tone (a creative label only, NOT an audio file/timestamp).\n"
+            "8. emotion = the SPEAKER's feeling THIS beat: normal|happy|angry|sad|surprised — match the "
+            "beat's tone (use normal when neutral). pose = the speaker's gesture THIS beat: stand (neutral) | "
+            "wave (greeting) | cheer (excited) | point (accusing/indicating) | hip (defiant) — use stand "
+            "unless the action clearly calls for one.\n"
+            "9. region/genre_key/archetype/scene_kind are OPTIONAL asset-library hints: lowercase English "
+            "tokens only; leave \"\" when unsure (never invent). They do NOT change the story.\n"
+            "10. \"asset\" (character/setting) = an exact SLUG copied from the ASSET LIBRARY section when one "
+            "fits, else \"\". Never a path; never a slug that is not listed. Absent library → \"\".\n"
+            "11. DO NOT output any render/path/timestamp/duration/seconds field, an image prompt, NOR camera "
+            "motion / transitions / music placement / character-overlay position — those are added "
+            "AUTOMATICALLY. Emit ONLY the fields shown in the schema.\n"
+        )
+    else:
+        _style = (
+            f"7. Each timeline beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood "
+            "matching THAT beat's emotional tone (a creative label only, NOT an audio file/timestamp).\n"
+            "8. bgm_cue = WHERE the music sits in the beat: under (whole beat) | intro (start only) | "
+            "outro (end only) | none (silence). Use intro on a scene's FIRST beat, outro on its LAST, "
+            "none for a quiet beat; under otherwise. bgm_intensity = low|med|high. LABELS only, never seconds.\n"
+            "9. char_anchor = where the SPEAKING character stands: none|left|center|right — set none when "
+            "speaker_id is '' (narrator). char_scale = small|medium|large; char_motion = static|fade|slide|float. "
+            "emotion = the SPEAKER's feeling THIS beat: normal|happy|angry|sad|surprised — match the beat's tone "
+            "(use normal when neutral). pose = the speaker's gesture THIS beat: stand (neutral) | wave (greeting) | "
+            "cheer (excited) | point (accusing/indicating) | hip (defiant) — use stand unless the action clearly "
+            "calls for one. source_audio = mute|duck|keep (how a base video's own audio is treated).\n"
+            "10. text_anchor = where on-screen text sits: auto|top|bottom|left|right. Use auto normally; pick a "
+            "side OPPOSITE char_anchor so text never covers the character.\n"
+            "11. region/genre_key/archetype/scene_kind are OPTIONAL asset-library hints: lowercase English "
+            "tokens only; leave \"\" when unsure (never invent). They do NOT change the story.\n"
+            "12. \"asset\" (character/setting) = an exact SLUG copied from the ASSET LIBRARY section when one "
+            "fits, else \"\". Never a path; never a slug that is not listed. Absent library → \"\".\n"
+            "13. DO NOT output any render/path/timestamp/duration/seconds field, nor an image prompt.\n"
+        )
     return (
         "═══ HARD RULES ═══\n"
-        "1. ONE JSON object. No prose, no markdown, no code fences.\n"
+        + _frame_line
+        + "1. ONE JSON object. No prose, no markdown, no code fences.\n"
         f"2. AT MOST {ceiling} entries in \"visuals\" — usually FAR FEWER than the number of "
         "beats. REUSE each visual across MANY beats (aim for ~3-6 beats per visual): beats in the "
         "same place/moment share ONE visual_id. NEVER make one image per beat — the TIMELINE can be "
@@ -171,28 +353,9 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_c
         "3. Every timeline.visual_id MUST be an id in \"visuals\"; focus MUST be one of the "
         "listed values; speaker_id and every visuals.character_ids MUST be ids in \"characters\".\n"
         + _r4
-        + f"5. narration in {lang_name}; each beat = ONE contiguous idea{beat_char_hint} — keep beats "
-        "EVENLY sized (no one-word beats, no paragraph-long beats); the beats in order narrate the "
-        "whole story faithfully (preserve names/facts, never invent).\n"
-        f"6. {hook_rule}\n"
-        f"7. Each timeline beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood "
-        "matching THAT beat's emotional tone (a creative label only, NOT an audio file/timestamp).\n"
-        "8. bgm_cue = WHERE the music sits in the beat: under (whole beat) | intro (start only) | "
-        "outro (end only) | none (silence). Use intro on a scene's FIRST beat, outro on its LAST, "
-        "none for a quiet beat; under otherwise. bgm_intensity = low|med|high. LABELS only, never seconds.\n"
-        "9. char_anchor = where the SPEAKING character stands: none|left|center|right — set none when "
-        "speaker_id is '' (narrator). char_scale = small|medium|large; char_motion = static|fade|slide|float. "
-        "emotion = the SPEAKER's feeling THIS beat: normal|happy|angry|sad|surprised — match the beat's tone "
-        "(use normal when neutral). pose = the speaker's gesture THIS beat: stand (neutral) | wave (greeting) | "
-        "cheer (excited) | point (accusing/indicating) | hip (defiant) — use stand unless the action clearly "
-        "calls for one. source_audio = mute|duck|keep (how a base video's own audio is treated).\n"
-        "10. text_anchor = where on-screen text sits: auto|top|bottom|left|right. Use auto normally; pick a "
-        "side OPPOSITE char_anchor so text never covers the character.\n"
-        "11. region/genre_key/archetype/scene_kind are OPTIONAL asset-library hints: lowercase English "
-        "tokens only; leave \"\" when unsure (never invent). They do NOT change the story.\n"
-        "12. \"asset\" (character/setting) = an exact SLUG copied from the ASSET LIBRARY section when one "
-        "fits, else \"\". Never a path; never a slug that is not listed. Absent library → \"\".\n"
-        "13. DO NOT output any render/path/timestamp/duration/seconds field, nor an image prompt.\n"
+        + _r5
+        + f"6. {hook_rule}\n"
+        + _style
         + _reuse_example()
         + "═══ SELF-CHECK before answering ═══\n"
         "Verify every visual_id / speaker_id / character_ids exists in the arrays above; if not, fix it.\n"
@@ -295,8 +458,9 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
         + _library_block(library_catalog)
         + _vocab_block()
         + "\n═══ SOURCE STORY (adapt THIS faithfully) ═══\n" + _fit(chapter) + "\n\n"
-        + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
-        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language), "svg")
+        + _schema(_lean_contract()).replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
+        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language), "svg",
+                 lean=_lean_contract(), multiline=_multiline())
     )
     return _SYS_ADAPT, user
 
@@ -331,8 +495,9 @@ def build_super_video_prompt(chapter: str, language: str = "vi", art_style: str 
         + _library_block(library_catalog)
         + _vocab_block()
         + "\n═══ SOURCE STORY (narrate THIS over the video, faithfully) ═══\n" + _fit(chapter) + "\n\n"
-        + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
-        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language), "video")
+        + _schema(False).replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
+        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language), "video",
+                 multiline=_multiline())
     )
     return _SYS_VIDEO, user
 
@@ -346,6 +511,13 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
     tacked on after), broken into a scene scaffold the model fills. ``prior_context``
     (G1) grounds a later chapter; ``library_catalog`` enables ``asset`` slugs."""
     lang_name = _lang_name(language)
+    # A2: when the FE omits a target length, fall back to STORY_IDEA_DEFAULT_SEC
+    # (default 0 = keep the "model decides" behaviour — backward compatible).
+    if not duration_sec or duration_sec <= 0:
+        try:
+            duration_sec = int(_os.getenv("STORY_IDEA_DEFAULT_SEC", "0") or 0)
+        except (TypeError, ValueError):
+            duration_sec = 0
     cps = _CPS.get((language or "").strip().lower()[:2], 14.0)
     # Compensation (measured): gpt-4o delivers only ~50-60% of a requested length from a
     # thin idea in one call, so aim the BRIEF higher than the user's target and it lands
@@ -424,8 +596,9 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
         + _library_block(library_catalog)
         + _vocab_block()
         + "\n═══ STORY IDEA (create FROM this) ═══\n" + _fit(idea, 8000) + "\n\n"
-        + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
-        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _idea_beat_hint, "svg")
+        + _schema(_lean_contract()).replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
+        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _idea_beat_hint, "svg",
+                 rich_beats=bool(_per_beat), lean=_lean_contract(), multiline=_multiline())
     )
     return _SYS_IDEA, user
 

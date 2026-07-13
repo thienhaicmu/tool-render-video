@@ -215,6 +215,7 @@ def mix_with_bgm(
     output_path: str,
     bgm_db_gain: float = -18.0,
     duck: bool = False,
+    duck_params: str = "",
 ) -> str:
     """Mix background music under the video's existing audio track.
 
@@ -246,9 +247,13 @@ def mix_with_bgm(
         # Duck the BGM under the narration: sidechaincompress lowers [bg] while
         # the video's audio ([0:a]) is loud, then amix at unity gain (normalize=0
         # so the music returns to its set level in the gaps).
+        # ``duck_params`` (default = the legacy ratio-6 sidechain) lets a caller soften
+        # the ducking — a heavy ratio dips the music too far under near-continuous
+        # narration (Story). "" → byte-identical to the previous behaviour.
+        _sc = (duck_params or "sidechaincompress=threshold=0.03:ratio=6:attack=20:release=400").strip()
         filter_graph = (
             f"[1:a]aloop=loop=-1:size=2147483647,volume={gain:.1f}dB[bg];"
-            "[bg][0:a]sidechaincompress=threshold=0.03:ratio=6:attack=20:release=400[bgduck];"
+            f"[bg][0:a]{_sc}[bgduck];"
             "[0:a][bgduck]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[out]"
         )
     else:

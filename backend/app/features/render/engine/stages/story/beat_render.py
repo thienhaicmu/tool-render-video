@@ -172,17 +172,19 @@ def _overlay_suffix(cue, width: int, height: int, part_no: int = 0, text_anchor:
         return ""
 
 
-def _char_overlay_parts(cue, width: int, height: int, dur: float) -> "tuple[str, str, str]":
+def _char_overlay_parts(cue, width: int, height: int, dur: float, *,
+                        anchor: str = "", scale: str = "", motion: str = "") -> "tuple[str, str, str]":
     """(fg_chain, x_expr, y_expr) to composite a speaking character's transparent master
     over the base. Scale by char_scale (height fraction of the canvas), position by
-    char_anchor, animate by char_motion. Uses overlay expression vars W/H (main), w/h
-    (overlay), t (time). x/y are single-quoted at the call site so commas inside
-    ``if(...)`` are safe in the filtergraph. Never raises."""
+    char_anchor, animate by char_motion. ``anchor``/``scale``/``motion`` OVERRIDE the
+    cue's values (P3 — per-line overlays place each speaker at its own slot). Uses overlay
+    expression vars W/H (main), w/h (overlay), t (time). x/y are single-quoted at the call
+    site so commas inside ``if(...)`` are safe in the filtergraph. Never raises."""
     try:
-        frac = _CHAR_SCALE_FRAC.get((getattr(cue, "char_scale", "medium") or "medium"), 0.72)
+        frac = _CHAR_SCALE_FRAC.get((scale or getattr(cue, "char_scale", "medium") or "medium"), 0.72)
         ch = max(2, int(height * frac))
-        anchor = (getattr(cue, "char_anchor", "left") or "left")
-        motion = (getattr(cue, "char_motion", "fade") or "fade")
+        anchor = (anchor or getattr(cue, "char_anchor", "left") or "left")
+        motion = (motion or getattr(cue, "char_motion", "fade") or "fade")
         margin = width * 0.03
         if anchor == "center":
             xt = "(W-w)/2"
@@ -241,23 +243,37 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         #    picked per EMOTION ("speaker:emotion" → base "speaker"). "" → no overlay
         #    (base-video/image path byte-identical to A3 when the env is off).
         overlay_master = ""
+        multi_overlays: list = []                                 # P3 — [(master_path, span), ...]
         _sp = (getattr(cue, "speaker_id", "") or "")
         _anchor = (getattr(cue, "char_anchor", "none") or "none")
         _base_ov = bool(use_video) and _anchor != "none"          # A3 base-video overlay
         _want_img = os.getenv("STORY_CHAR_OVERLAY", "1") != "0"   # N4 image overlay (default ON, opt out =0)
-        if _sp and (_base_ov or _want_img):
+        if _base_ov or _want_img:
             _masters = (getattr(plan.render, "masters", None) or {})
-            _emo = (getattr(cue, "emotion", "normal") or "normal").strip().lower()
-            _pose = (getattr(cue, "pose", "stand") or "stand").strip().lower()
-            # emotion/pose master first (both A3 + N4). The plain-cid master is used ONLY on
-            # the A3 base-video path — the N4 image overlay requires an emotion/pose master
-            # (which exists only in SVG overlay mode), so a non-SVG render with a stray
-            # plain-cid master is never overlaid when the default is on.
-            _m = _masters.get(f"{_sp}:{_emo}:{_pose}") or _masters.get(f"{_sp}:{_emo}")
-            if not _m and _base_ov:
-                _m = _masters.get(_sp)
-            if _ok_file(_m):
-                overlay_master = _m
+
+            def _pick(sp, emo, pose):
+                # emotion/pose master first (A3 + N4); plain-cid only on the base-video path.
+                _mm = _masters.get(f"{sp}:{emo}:{pose}") or _masters.get(f"{sp}:{emo}")
+                if not _mm and _base_ov:
+                    _mm = _masters.get(sp)
+                return _mm
+
+            # P3 — per-line overlays (dialogue): one master per line so the on-screen
+            # character switches with the speaker. Only lines with a real master participate.
+            for span in (getattr(cue, "line_overlays", None) or []):
+                _s = (getattr(span, "speaker_id", "") or "")
+                if not _s:
+                    continue
+                _mm = _pick(_s, (getattr(span, "emotion", "normal") or "normal").strip().lower(),
+                            (getattr(span, "pose", "stand") or "stand").strip().lower())
+                if _ok_file(_mm):
+                    multi_overlays.append((_mm, span))
+            # Single overlay (legacy / narrator / single-speaker) — only when no per-line set.
+            if not multi_overlays and _sp:
+                _m = _pick(_sp, (getattr(cue, "emotion", "normal") or "normal").strip().lower(),
+                           (getattr(cue, "pose", "stand") or "stand").strip().lower())
+                if _ok_file(_m):
+                    overlay_master = _m
 
         cmd = [get_ffmpeg_bin(), "-y"]
         if use_video:
@@ -275,14 +291,17 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         # Composition-QA: when a character is overlaid (bottom-aligned), keep an auto/
         # bottom hook at the TOP so the character never covers it. Only affects the
         # overlay path — the image/no-overlay hook position is unchanged.
-        _ta_qa = "top" if (overlay_master and (getattr(cue, "text_anchor", "auto") in ("auto", "bottom"))) else ""
+        _ta_qa = "top" if ((overlay_master or multi_overlays) and (getattr(cue, "text_anchor", "auto") in ("auto", "bottom"))) else ""
         vf += _overlay_suffix(cue, width, height, part_no, text_anchor=_ta_qa)   # burn hook title
         if have_audio:
             cmd += ["-i", str(cue.audio_path)]
         else:
             cmd += ["-f", "lavfi", "-t", f"{dur:.3f}",
                     "-i", f"anullsrc=channel_layout=stereo:sample_rate={_SAMPLE_RATE}"]
-        if overlay_master:                       # input [2] — a looped still so motion has frames
+        if multi_overlays:                       # inputs [2..] — one looped still per dialogue line
+            for _mp, _ in multi_overlays:
+                cmd += ["-loop", "1", "-t", f"{dur:.3f}", "-i", str(_mp)]
+        elif overlay_master:                     # input [2] — a looped still so motion has frames
             cmd += ["-loop", "1", "-t", f"{dur:.3f}", "-i", str(overlay_master)]
 
         af = f"aformat=sample_rates={_SAMPLE_RATE}:channel_layouts=stereo,apad"
@@ -303,7 +322,25 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         else:
             _ag = f"[1:a]{af}[a]"
 
-        if overlay_master:
+        if multi_overlays:
+            # P3 — chain one time-gated overlay per line so the on-screen character
+            # switches with the speaker (each master input [2+i], shown only in its window).
+            _parts = [f"[0:v]{vf}[bg]"]
+            _prev = "bg"
+            _n = len(multi_overlays)
+            for _i, (_mp, _span) in enumerate(multi_overlays):
+                _fg, _x, _y = _char_overlay_parts(cue, width, height, dur,
+                                                  anchor=(getattr(_span, "anchor", "center") or "center"),
+                                                  scale="medium", motion="static")
+                _s = max(0.0, float(getattr(_span, "start", 0.0)))
+                _e = float(getattr(_span, "end", dur) or dur)
+                _out = "v" if _i == _n - 1 else f"o{_i}"
+                _parts.append(f"[{_i + 2}:v]{_fg}[f{_i}]")
+                _parts.append(f"[{_prev}][f{_i}]overlay=x='{_x}':y='{_y}':"
+                              f"enable='between(t,{_s:.3f},{_e:.3f})':format=auto[{_out}]")
+                _prev = _out
+            _fc = ";".join(_parts) + f";{_ag}"
+        elif overlay_master:
             _fg, _x, _y = _char_overlay_parts(cue, width, height, dur)
             _fc = (f"[0:v]{vf}[bg];[2:v]{_fg}[fg];"
                    f"[bg][fg]overlay=x='{_x}':y='{_y}':format=auto[v];{_ag}")

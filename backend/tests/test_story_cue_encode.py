@@ -127,6 +127,31 @@ def test_char_overlay_slide_uses_time_expr(monkeypatch, tmp_path):
     assert "if(lt(t," in fc                            # slide animates x over time
 
 
+def test_char_overlay_switches_per_line(monkeypatch, tmp_path):
+    # P3 — a dialogue cue with line_overlays chains one TIME-GATED overlay per line so
+    # the on-screen character switches with the speaker (image path, no base video).
+    from app.domain.story_plan_v2 import LineSpan
+    captured = _capture(monkeypatch)
+    monkeypatch.setattr(br, "_ok_file", lambda p: p in ("/mA.png", "/mB.png") or (bool(p) and Path(p).exists()))
+    plan = SimpleNamespace(render=SimpleNamespace(
+        visual_assets={}, masters={"a:angry:point": "/mA.png", "b:sad:stand": "/mB.png"}))
+    ctx = SimpleNamespace(width=1280, height=720, fps=30.0, shots_dir=str(tmp_path),
+                          bg_value="#101820", ffmpeg_threads=0)
+    cue = SimpleNamespace(start_sec=0.0, end_sec=4.0, crop_from=(0, 0, 1, 1), crop_to=(0, 0, 1, 1),
+                          visual_id="v1", audio_path="", hook=False, hook_text="", text_anchor="auto",
+                          speaker_id="", char_anchor="none", char_scale="medium", char_motion="fade",
+                          emotion="normal", pose="stand", source_audio="mute",
+                          line_overlays=[LineSpan(0.0, 2.0, "a", "angry", "point", "center"),
+                                         LineSpan(2.0, 4.0, "b", "sad", "stand", "left")])
+    br.render_one_cue(ctx, plan, 1, cue)
+    cmd = captured["cmd"]
+    assert "/mA.png" in cmd and "/mB.png" in cmd          # both line masters added as inputs
+    fc = cmd[cmd.index("-filter_complex") + 1]
+    assert "[2:v]" in fc and "[3:v]" in fc                # two overlay inputs
+    assert "enable='between(t,0.000,2.000)'" in fc        # line A window
+    assert "enable='between(t,2.000,4.000)'" in fc        # line B window
+
+
 def test_no_overlay_when_char_anchor_none(monkeypatch, tmp_path):
     captured = _capture(monkeypatch)
     monkeypatch.setattr(br, "_ok_file", lambda p: p == "/base.mp4" or bool(p) and Path(p).exists())

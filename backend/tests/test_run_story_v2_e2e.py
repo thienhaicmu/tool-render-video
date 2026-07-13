@@ -92,7 +92,7 @@ def _mock_cast(plan, language, narrator_gender="female"):
     return plan.render.voices
 
 
-def _mock_synth(plan, *, job_id, audio_dir, subtitle_mode="hook_only", effective_channel=""):
+def _mock_synth(plan, *, job_id, audio_dir, subtitle_mode="hook_only", effective_channel="", on_progress=None, voice_mode="dialogue"):
     from app.services.bin_paths import get_ffmpeg_bin
     Path(audio_dir).mkdir(parents=True, exist_ok=True)
     for b in plan.timeline:
