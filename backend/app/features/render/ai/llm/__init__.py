@@ -252,7 +252,13 @@ def _get_story_call_fn(provider_name: str, api_key: str, model: Optional[str]):
             from app.features.render.ai.llm.providers import claude as _mod
         else:
             from app.features.render.ai.llm.providers import gemini as _mod
-        raw_call = getattr(_mod, f"_call_{provider_name}_content", None)
+        # Prefer a provider's DEDICATED story-plan raw call (OpenAI has one with
+        # Story-specific temperature / token budget / truncation detection — P1);
+        # fall back to its Content-Mode raw call for providers without one
+        # (gemini / claude Story fallback). Never touches the provider modules'
+        # other call paths.
+        raw_call = (getattr(_mod, f"_call_{provider_name}_story_plan", None)
+                    or getattr(_mod, f"_call_{provider_name}_content", None))
         if raw_call is None:
             return None
         resolved_model = model or getattr(_mod, "_DEFAULT_MODEL", None)
@@ -295,10 +301,27 @@ def generate_story_plan_v2(
             ceiling = int(os.getenv("STORY_MAX_IMAGES", "15") or 15)
         except (TypeError, ValueError):
             ceiling = 15
-    super_model = model or (os.getenv("STORY_SUPER_MODEL", "gpt-4o").strip() or "gpt-4o")
+    # Model is resolved PER-PROVIDER (fix: a cross-provider fallback must NOT
+    # receive the primary provider's model id — e.g. passing OpenAI's "gpt-4o"
+    # to Gemini/Claude rejected the request and silently broke fallback). The
+    # explicit user model (llm_model) OR STORY_SUPER_MODEL (an OpenAI-flavoured
+    # default) applies ONLY to the OpenAI super call; every other provider (as
+    # primary OR as a fallback) uses its own _DEFAULT_MODEL via _get_story_call_fn
+    # (model=None → provider default).
+    _explicit_model = (model or "").strip() or None
+    _openai_super_model = _explicit_model or (
+        os.getenv("STORY_SUPER_MODEL", "gpt-4o").strip() or "gpt-4o")
     primary = (provider or "openai").strip().lower()
     if primary not in SUPPORTED_PROVIDERS:
         primary = "openai" if "openai" in SUPPORTED_PROVIDERS else DEFAULT_PROVIDER
+
+    def _model_for(_p: str) -> "Optional[str]":
+        if _p == "openai":
+            return _openai_super_model
+        # A non-OpenAI provider uses its own default UNLESS the user explicitly
+        # chose a model AND that provider is the primary they picked.
+        return _explicit_model if (_explicit_model and _p == primary) else None
+
     for _p in _provider_chain(primary):
         _key = api_key
         if resolve_key is not None:
@@ -308,9 +331,10 @@ def generate_story_plan_v2(
                 _key = api_key
         if not _key:
             continue
-        call_fn = _get_story_call_fn(_p, _key, super_model)
+        call_fn = _get_story_call_fn(_p, _key, _model_for(_p))
         if call_fn is None:
             continue
+        _t0 = _time.perf_counter()
         try:
             plan = run_super_plan(
                 call_fn=call_fn, source=source, chapter=chapter, idea=idea,
@@ -322,6 +346,15 @@ def generate_story_plan_v2(
         except Exception as exc:
             logger.warning("llm: generate_story_plan_v2 provider=%s raised %s", _p, exc)
             plan = None
+        # F-07: instrument the Story super-plan call (previously invisible on
+        # /metrics). Pure observation — never breaks the dispatch.
+        try:
+            from app.services.metrics import LLM_STORY_PLAN_CALLS, LLM_STORY_PLAN_LATENCY
+            LLM_STORY_PLAN_LATENCY.labels(provider=_p).observe(_time.perf_counter() - _t0)
+            LLM_STORY_PLAN_CALLS.labels(
+                provider=_p, status=("success" if plan is not None else "empty")).inc()
+        except Exception:
+            pass
         if plan is not None:
             if _p != primary:
                 logger.info("llm: story-plan-v2 fallback succeeded provider=%s (primary=%s None)", _p, primary)

@@ -133,7 +133,9 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
     try:
         from app.features.render.engine.pipeline.llm_stage import _resolve_api_key
         api_key, _ = _resolve_api_key(payload, provider)
-        resolve_key = lambda _p: _resolve_api_key(payload, _p)[0]  # noqa: E731
+        # F-11: generic key belongs to the active provider only — a cross-provider
+        # fallback resolves solely from its own per-provider/env key.
+        resolve_key = lambda _p: _resolve_api_key(payload, _p, allow_generic=(_p == provider))[0]  # noqa: E731
     except Exception:
         api_key, resolve_key = "", None
     _sid = (getattr(payload, "story_series_id", "") or "")

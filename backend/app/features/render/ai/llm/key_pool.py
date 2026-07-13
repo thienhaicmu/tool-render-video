@@ -228,6 +228,83 @@ def call_gemini_with_model_rotation(
     return None
 
 
+def pool_for(provider: str, seed_key: str = "") -> "list[str]":
+    """Provider-agnostic key pool. For ``gemini`` this is exactly :func:`pool`
+    (``GEMINI_API_KEYS`` → ``GEMINI_API_KEY``). For any other provider it reads
+    ``<PROVIDER>_API_KEYS`` (comma-separated) else ``<PROVIDER>_API_KEY``.
+
+    ``seed_key`` (the already-resolved key, which may come from a request payload
+    rather than the env) is placed FIRST when present so an explicitly supplied
+    key is always tried before the env pool. Deduped, order-preserving; blank
+    entries dropped. Never raises — returns ``[seed_key]`` (or ``[]``) on any error."""
+    keys: list[str] = []
+    try:
+        p = (provider or "").strip().lower()
+        if p == "gemini":
+            keys = pool()
+        elif p:
+            up = p.upper()
+            multi = [k.strip() for k in (os.getenv(f"{up}_API_KEYS", "") or "").split(",") if k.strip()]
+            if multi:
+                keys = multi
+            else:
+                single = (os.getenv(f"{up}_API_KEY", "") or "").strip()
+                keys = [single] if single else []
+    except Exception:
+        keys = []
+    out: list[str] = []
+    if seed_key and seed_key not in out:
+        out.append(seed_key)
+    for k in keys:
+        if k and k not in out:
+            out.append(k)
+    return out
+
+
+def _rotation_sequence_keys(seed: str, keys: "list[str]") -> "list[str]":
+    """Ordered keys to try for one request over an explicit ``keys`` list: ``seed``
+    first (if real), then the remaining keys non-cooled before cooled. Deduped.
+    The provider-agnostic sibling of :func:`rotation_sequence` (which is gemini-only)."""
+    now = time.time()
+    with _lock:
+        others = [k for k in keys if k != seed]
+        fresh = [k for k in others if not _is_cooled(k, now)]
+        cooled = [k for k in others if _is_cooled(k, now)]
+    seq: list[str] = []
+    if seed:
+        seq.append(seed)
+    seq.extend(fresh)
+    seq.extend(cooled)
+    seen: set[str] = set()
+    return [k for k in seq if k and (k not in seen and not seen.add(k))]
+
+
+def call_with_key_rotation(
+    once_factory: Callable[[str], Optional[object]],
+    *,
+    label: str,
+    seed_key: str,
+    provider: str,
+) -> Optional[object]:
+    """Provider-agnostic single-model key rotation for OpenAI / Claude (and any
+    future provider), mirroring :func:`call_gemini_with_rotation` but sourcing the
+    pool from ``<PROVIDER>_API_KEYS``/``<PROVIDER>_API_KEY`` via :func:`pool_for`.
+
+    Rotates ``once_factory(key)`` across the pool: RATE-LIMIT (429/quota) cools the
+    key and advances; TRANSIENT (503/504) advances without cooling; a hard failure
+    (auth / bad prompt / empty response) fails fast. Returns the first non-None
+    result, or None. Never raises (Sacred Contract #3). The shared ``_cooldown_until``
+    map is keyed by the raw key string, so cooldowns are correct across providers."""
+    keys = pool_for(provider, seed_key=seed_key)
+    seq = _rotation_sequence_keys(seed_key, keys)
+    if not seq:
+        return None
+    result, _exhausted = _run_key_rotation(
+        lambda _k, _m: once_factory(_k), "", label=label, seq=seq,
+    )
+    return result
+
+
 def call_gemini_with_rotation(
     once_factory: Callable[[str], Optional[object]],
     *,

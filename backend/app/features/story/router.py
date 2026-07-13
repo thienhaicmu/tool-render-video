@@ -118,7 +118,9 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         series_id=_sid, chapter_no=_cno, prior_context=prior_context,
         library_catalog=library_catalog,
         api_key=api_key, model=req.llm_model,
-        resolve_key=lambda _p: _resolve_api_key(req, _p)[0],
+        # F-11: the generic ai_cloud_api_key is the ACTIVE provider's key — a
+        # cross-provider fallback resolves only from its own per-provider/env key.
+        resolve_key=lambda _p: _resolve_api_key(req, _p, allow_generic=(_p == provider))[0],
     )
     if plan is None or plan.is_empty() or plan.image_count() == 0:
         raise HTTPException(status_code=502, detail="Story planning returned no usable plan")
@@ -131,6 +133,11 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     _IDEA_MAX = 8000
     _src_len = len(chapter) if source == "paste" else len(idea)
     _src_limit = MAX_SOURCE_CHARS if source == "paste" else _IDEA_MAX
+    # F-08: Story imagery is procedural SVG ($0), but the planning LLM is NOT free.
+    # Surface an ESTIMATE so the pre-flight no longer reports a misleading $0 total.
+    from app.features.render.ai.llm.story_director_v2 import estimate_super_plan_cost
+    _llm_cost = estimate_super_plan_cost(
+        source_chars=_src_len, ceiling=_visual_count, model=(req.llm_model or "gpt-4o"))
     return {
         "plan": json.loads(plan.to_json()),
         "image_count": _visual_count,
@@ -140,12 +147,15 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         "source_truncated": bool(_src_len > _src_limit),
         "source_chars": _src_len,
         "source_char_limit": _src_limit,
-        # Story Mode is SVG-only → all imagery is procedural + offline ($0).
+        # Story imagery is procedural SVG + offline ($0); the super-plan LLM is not.
         "cost_preflight": {
             "visual_count": _visual_count,
             "character_count": len(plan.characters),
             "premium_image_count": 0,
-            "estimated_cost_usd": 0.0,
+            "image_cost_usd": 0.0,
+            "estimated_llm_input_tokens": _llm_cost["input_tokens"],
+            "estimated_llm_cost_usd": _llm_cost["cost_usd"],
+            "estimated_cost_usd": _llm_cost["cost_usd"],   # total = image($0) + LLM
         },
     }
 

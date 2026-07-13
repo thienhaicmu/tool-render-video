@@ -28,6 +28,26 @@ logger = logging.getLogger("app.render.story_director_v2")
 SuperCall = Callable[[str, str], Optional[str]]
 
 
+def estimate_super_plan_cost(*, source_chars: int, ceiling: int, model: str = "gpt-4o") -> dict:
+    """Rough $ estimate for ONE super-plan LLM call (F-08 — Story audit).
+
+    Story imagery is procedural SVG ($0), but the planning LLM is NOT free — the
+    pre-flight previously reported $0 total, hiding the only real cost. Returns
+    ``{input_tokens, output_tokens, cost_usd}`` as an ESTIMATE (not billed usage).
+    Per-1M rates are env-tunable (``OPENAI_STORY_PRICE_IN_PER_M`` /
+    ``OPENAI_STORY_PRICE_OUT_PER_M``, default gpt-4o). Never raises."""
+    try:
+        # ~4 chars/token; +~3500 chars fixed prompt overhead (schema+rules+vocab).
+        in_tok = int((max(0, int(source_chars)) + 3500) / 4)
+        out_tok = int(max(1, int(ceiling)) * 300)   # ~1 visual + its beats per slot
+        price_in = float(os.getenv("OPENAI_STORY_PRICE_IN_PER_M", "2.5"))
+        price_out = float(os.getenv("OPENAI_STORY_PRICE_OUT_PER_M", "10.0"))
+        cost = in_tok / 1_000_000 * price_in + out_tok / 1_000_000 * price_out
+        return {"input_tokens": in_tok, "output_tokens": out_tok, "cost_usd": round(cost, 4)}
+    except Exception:
+        return {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+
+
 def _stable_seed(text: str) -> int:
     try:
         return int(hashlib.sha1((text or "").encode("utf-8", "ignore")).hexdigest()[:8], 16)
@@ -225,4 +245,4 @@ def run_super_plan(
         return None
 
 
-__all__ = ["run_super_plan", "inject_character_canon", "SuperCall"]
+__all__ = ["run_super_plan", "inject_character_canon", "estimate_super_plan_cost", "SuperCall"]

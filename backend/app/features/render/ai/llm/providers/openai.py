@@ -13,6 +13,7 @@ import logging
 import os
 from typing import Optional
 
+from app.features.render.ai.llm.key_pool import call_with_key_rotation, pool_for
 from app.features.render.ai.llm.cache import llm_cache_get, llm_cache_put
 from app.features.render.ai.llm.parser import parse_render_plan_response
 from app.features.render.ai.llm.prompts import build_render_plan_prompt
@@ -568,17 +569,128 @@ def _call_openai_content_once(api_key: str, model: str, system_prompt: str, user
 
 
 def _call_openai_content(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Content/Story super-plan raw call with cache + reliability.
+
+    F-03: when an OpenAI key POOL is configured (``OPENAI_API_KEYS`` comma-
+    separated, or the resolved key differs from ``OPENAI_API_KEY``) the call
+    rotates across the pool on a 429/quota — the same headroom the Gemini path
+    has had. With a SINGLE key (the common case) it stays on the pre-F-03
+    ``call_with_retry`` path (Retry-After honoured), so behaviour is byte-
+    identical for single-key deployments.
+    """
     cached = llm_cache_get("openai-content", model, system_prompt, user_prompt)
     if cached is not None:
         logger.info("openai_client: content cache HIT model=%s", model)
         return cached
-    result = call_with_retry(
-        lambda: _call_openai_content_once(api_key, model, system_prompt, user_prompt),
-        label="openai-content",
-    )
+    if len(pool_for("openai", seed_key=api_key)) > 1:
+        result = call_with_key_rotation(
+            lambda _k: _call_openai_content_once(_k, model, system_prompt, user_prompt),
+            label="openai-content", seed_key=api_key, provider="openai",
+        )
+    else:
+        result = call_with_retry(
+            lambda: _call_openai_content_once(api_key, model, system_prompt, user_prompt),
+            label="openai-content",
+        )
     if result is not None:
         llm_cache_put("openai-content", model, system_prompt, user_prompt, result)
     return result
+
+
+# ── Story Mode v2 super-plan call (dedicated; SEPARATE from Content Mode) ─────
+# The Story super-plan is a distinct task from Content Mode even though both emit
+# a big JSON plan: it must (a) run cooler than Content's 0.5 so an ADAPT pass
+# preserves facts (F-06), (b) carry a larger token budget so a ≤ceiling-visual plan
+# is not truncated (F-04), and (c) surface a length-truncation instead of silently
+# returning half a plan. Kept out of _call_openai_content so tuning Story never
+# perturbs Content Mode. gemini/claude Story fallback still reuses their _content
+# call (they have no story-specific tuning yet) — see llm._get_story_call_fn.
+_STORY_PLAN_MAX_TOKENS = int(os.getenv("OPENAI_STORY_PLAN_MAX_TOKENS", "12288"))
+_STORY_PLAN_TEMPERATURE = float(os.getenv("OPENAI_STORY_PLAN_TEMPERATURE", "0.4"))
+_STORY_PLAN_RETRY_EMPTY = os.getenv("OPENAI_STORY_PLAN_RETRY_EMPTY", "1") == "1"
+
+
+def _call_openai_story_plan_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """One Story super-plan call. Returns the raw content EVEN IF truncated (the
+    director's repair pass can salvage a cut JSON) but logs a WARNING so the
+    truncation is visible instead of a silently-halved plan (F-04)."""
+    client = _openai.OpenAI(api_key=api_key, timeout=120)
+    kwargs = dict(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        response_format={"type": "json_object"},
+    )
+    if _is_reasoning_model(model):
+        kwargs["max_completion_tokens"] = _STORY_PLAN_MAX_TOKENS
+        if _STORY_REASONING_EFFORT in ("minimal", "low", "medium", "high"):
+            kwargs["reasoning_effort"] = _STORY_REASONING_EFFORT
+    else:
+        kwargs["max_tokens"] = _STORY_PLAN_MAX_TOKENS
+        kwargs["temperature"] = _STORY_PLAN_TEMPERATURE
+    resp = client.chat.completions.create(**kwargs)
+    choice = resp.choices[0]
+    if getattr(choice, "finish_reason", None) == "length":
+        logger.warning(
+            "openai_client: story-plan TRUNCATED (finish_reason=length, max_tokens=%d) — "
+            "plan may be incomplete; raise OPENAI_STORY_PLAN_MAX_TOKENS or split the chapter",
+            _STORY_PLAN_MAX_TOKENS,
+        )
+    return choice.message.content
+
+
+def _call_openai_story_plan(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Story super-plan raw call: cache → key-rotation (pool) / retry → optional
+    single retry-on-empty. Namespaced 'openai-story-plan' so a Story cache entry
+    never aliases a Content-Mode one.
+
+    F-10: the namespace embeds the Story super-prompt version + StoryPlan schema
+    version so a prompt/schema/parser change invalidates the cache even when the
+    literal prompt bytes are unchanged (the shared cache key's global
+    PROMPT_VERSION belongs to the CLIP prompts.py — unrelated to Story)."""
+    _ns = _story_cache_namespace()
+    cached = llm_cache_get(_ns, model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("openai_client: story-plan cache HIT model=%s ns=%s", model, _ns)
+        return cached
+
+    def _run() -> Optional[str]:
+        if len(pool_for("openai", seed_key=api_key)) > 1:
+            return call_with_key_rotation(
+                lambda _k: _call_openai_story_plan_once(_k, model, system_prompt, user_prompt),
+                label="openai-story-plan", seed_key=api_key, provider="openai",
+            )
+        return call_with_retry(
+            lambda: _call_openai_story_plan_once(api_key, model, system_prompt, user_prompt),
+            label="openai-story-plan",
+        )
+
+    result = _run()
+    # F-09: call_with_retry deliberately does NOT re-attempt a None (non-raising)
+    # result to avoid doubling cost — but a fully EMPTY super-plan response is a
+    # total failure (safety trim / hiccup) where ONE extra attempt is cheap
+    # insurance vs. failing the whole render. Opt out with
+    # OPENAI_STORY_PLAN_RETRY_EMPTY=0.
+    if not result and _STORY_PLAN_RETRY_EMPTY:
+        logger.info("openai_client: story-plan empty — one retry-on-empty")
+        result = _run()
+    if result is not None:
+        llm_cache_put(_ns, model, system_prompt, user_prompt, result)
+    return result
+
+
+def _story_cache_namespace() -> str:
+    """'openai-story-plan|s<super_prompt_ver>|v<schema_ver>' — versioned so a
+    prompt/schema change invalidates the story cache by construction. Defensive:
+    falls back to the bare namespace if either version import fails."""
+    try:
+        from app.features.render.ai.llm.story_prompts_v2 import SUPER_PROMPT_VERSION
+        from app.domain.story_plan_v2 import SCHEMA_VERSION
+        return f"openai-story-plan|{SUPER_PROMPT_VERSION}|v{SCHEMA_VERSION}"
+    except Exception:
+        return "openai-story-plan"
 
 
 def select_content_plan(

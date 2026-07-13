@@ -107,13 +107,20 @@ def _build_editorial_hint(payload: Any) -> str:
     return " ".join(parts)
 
 
-def _resolve_api_key(payload: Any, provider: str) -> tuple[str, str]:
+def _resolve_api_key(payload: Any, provider: str, allow_generic: bool = True) -> tuple[str, str]:
     """Return (api_key, source_label) for the given provider.
 
     Resolution order per provider:
       1. Per-provider payload field (e.g. payload.gemini_api_key)
       2. Generic payload field (payload.ai_cloud_api_key) — UI sends the active provider's key here
       3. Server env var (GEMINI_API_KEY / GROQ_API_KEY / etc.)
+
+    ``allow_generic`` (F-11 — Story audit): the generic ``ai_cloud_api_key`` belongs
+    to the ACTIVE provider only. Pass ``allow_generic=False`` when resolving a key for
+    a cross-provider FALLBACK so the active provider's key (e.g. an OpenAI key) is
+    never handed to a different provider's endpoint (e.g. Gemini). The fallback then
+    resolves only from its own per-provider field / env var. Default True keeps every
+    existing caller's primary-provider behaviour byte-identical.
     """
     _per_provider_attr = {
         "gemini": "gemini_api_key",
@@ -131,9 +138,10 @@ def _resolve_api_key(payload: Any, provider: str) -> tuple[str, str]:
         if _key:
             return _key, f"payload.{_per_provider_attr}"
 
-    _generic = (getattr(payload, "ai_cloud_api_key", "") or "").strip()
-    if _generic:
-        return _generic, "payload.ai_cloud_api_key"
+    if allow_generic:
+        _generic = (getattr(payload, "ai_cloud_api_key", "") or "").strip()
+        if _generic:
+            return _generic, "payload.ai_cloud_api_key"
 
     if _per_provider_env:
         import os

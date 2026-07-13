@@ -165,6 +165,23 @@ if _AVAILABLE:
         registry=REGISTRY,
     )
 
+    # F-07 (Story audit): the Story Mode super-plan LLM call was previously
+    # invisible on /metrics (only the clip render-plan path was instrumented).
+    # status ∈ {success, empty}; provider ∈ {openai, gemini, claude}.
+    LLM_STORY_PLAN_CALLS = Counter(
+        "llm_story_plan_calls_total",
+        "Story Mode super-plan LLM calls by provider and outcome",
+        ["provider", "status"],
+        registry=REGISTRY,
+    )
+    LLM_STORY_PLAN_LATENCY = Histogram(
+        "llm_story_plan_seconds",
+        "Latency of the Story Mode super-plan LLM call per provider",
+        ["provider"],
+        buckets=(0.5, 1, 2, 5, 10, 30, 60, 120, 240),
+        registry=REGISTRY,
+    )
+
     # CM-1 (2026-07-07): Content Studio preview cost/abuse guard. The
     # /visual/preview + /narration/preview endpoints are unauthenticated
     # (loopback) and can trigger PAID provider calls (Imagen/Veo). Every call is
@@ -340,6 +357,8 @@ else:
     LLM_RENDER_PLAN_CALLS = _NoOpMetric()     # type: ignore[assignment]
     LLM_RENDER_PLAN_LATENCY = _NoOpMetric()   # type: ignore[assignment]
     LLM_SEGMENTS_SELECTED = _NoOpMetric()     # type: ignore[assignment]
+    LLM_STORY_PLAN_CALLS = _NoOpMetric()      # type: ignore[assignment]
+    LLM_STORY_PLAN_LATENCY = _NoOpMetric()    # type: ignore[assignment]
     LLM_RECAP_PASS_CALLS = _NoOpMetric()      # type: ignore[assignment]
     LLM_RECAP_TWO_PASS_TOTAL = _NoOpMetric()  # type: ignore[assignment]
     LLM_CALL_PROMPT_CHARS_TOTAL = _NoOpMetric()  # type: ignore[assignment]
