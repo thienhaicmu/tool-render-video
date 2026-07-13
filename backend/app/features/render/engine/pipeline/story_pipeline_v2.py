@@ -278,6 +278,23 @@ def run_story_v2(
         )
         update_story_plan(job_id, plan.to_json())
 
+        # P3: soft semantic lint (non-mutating) — surface weak-plan signals in the
+        # monitor without gating the render. Best-effort; never raises.
+        try:
+            from app.features.render.ai.llm.story_director_v2 import lint_story_plan
+            _lint = lint_story_plan(plan)
+            if _lint:
+                _job_log(effective_channel, job_id,
+                         "Story v2 plan lint: " + "; ".join(_lint))
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id, event="story.plan.lint",
+                    level="INFO",
+                    message=f"{len(_lint)} plan quality note(s) — see log",
+                    step="render.story", context={"warnings": _lint},
+                )
+        except Exception:
+            pass
+
         # G1: ensure the series row exists BEFORE any character / reference-sheet
         # upsert (FK parent) — a first chapter would otherwise silently fail to pin
         # its reference sheets. No-op when story_series_id is empty (one-off chapter).

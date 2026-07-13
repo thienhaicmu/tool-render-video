@@ -135,9 +135,12 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     _src_limit = MAX_SOURCE_CHARS if source == "paste" else _IDEA_MAX
     # F-08: Story imagery is procedural SVG ($0), but the planning LLM is NOT free.
     # Surface an ESTIMATE so the pre-flight no longer reports a misleading $0 total.
-    from app.features.render.ai.llm.story_director_v2 import estimate_super_plan_cost
+    from app.features.render.ai.llm.story_director_v2 import estimate_super_plan_cost, lint_story_plan
     _llm_cost = estimate_super_plan_cost(
         source_chars=_src_len, ceiling=_visual_count, model=(req.llm_model or "gpt-4o"))
+    # P3: soft semantic lint (non-mutating) so the FE Review can flag weak-plan
+    # signals (orphan visuals, generic-look speakers, looping narration).
+    _lint = lint_story_plan(plan)
     return {
         "plan": json.loads(plan.to_json()),
         "image_count": _visual_count,
@@ -147,6 +150,7 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         "source_truncated": bool(_src_len > _src_limit),
         "source_chars": _src_len,
         "source_char_limit": _src_limit,
+        "warnings": _lint,
         # Story imagery is procedural SVG + offline ($0); the super-plan LLM is not.
         "cost_preflight": {
             "visual_count": _visual_count,

@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s8"   # s8: +per-beat emotion + code-derived archetype/scene vocab; s7: +pose; s6: library-pick; s5: asset-library hints; s4: bgm_cue/char_*
+SUPER_PROMPT_VERSION = "s9"   # s9: drop dead negative_prompt (SVG-only render ignores it — F-12); s8: +per-beat emotion + code-derived archetype/scene vocab; s7: +pose; s6: library-pick; s5: asset-library hints; s4: bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -84,7 +84,6 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
   "visuals": [
     { "id": "v1", "setting_id": "<a settings id>",
       "prompt": "<FULL English image prompt: a WIDE 16:9 scene; place key elements in clear LEFT / CENTER / RIGHT zones so the camera can pan to them; reuse each present character's canonical look; cinematic, detailed>",
-      "negative_prompt": "text, watermark, distorted faces",
       "character_ids": ["<characters ids present>"], "tier": "low|medium|high" }
   ],
   "timeline": [

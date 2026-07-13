@@ -122,6 +122,9 @@ export interface StoryPlanResponse {
   source_truncated?: boolean
   source_chars?: number
   source_char_limit?: number
+  // P3 — soft semantic lint of the plan (non-blocking): orphan visuals,
+  // generic-look speakers, looping narration. Shown as review hints.
+  warnings?: string[]
 }
 
 // Story Mode is SVG-only: the Review composes procedural SVG key-visuals server-side

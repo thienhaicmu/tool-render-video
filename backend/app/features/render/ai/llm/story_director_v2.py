@@ -48,6 +48,48 @@ def estimate_super_plan_cost(*, source_chars: int, ceiling: int, model: str = "g
         return {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
 
 
+def lint_story_plan(plan) -> list:
+    """Best-effort SEMANTIC lint of a BUILT StoryPlan (P3). Returns a list of
+    human-readable warnings for a reviewer/monitor. NEVER mutates the plan and
+    never raises — structural integrity is already enforced by
+    StoryPlan.validate_refs; this only surfaces SOFT quality signals (weak plan)
+    and does NOT gate the render (Sacred Contract #3 spirit)."""
+    warnings: list = []
+    try:
+        chars = list(getattr(plan, "characters", []) or [])
+        visuals = list(getattr(plan, "visuals", []) or [])
+        timeline = list(getattr(plan, "timeline", []) or [])
+        by_id = {c.id: c for c in chars}
+        spoken = {(b.speaker_id or "") for b in timeline if (b.speaker_id or "")}
+        # 1. A speaking character with no canonical look → generic overlay/voice.
+        for cid in sorted(spoken):
+            c = by_id.get(cid)
+            if c is not None and not (c.canonical_desc or "").strip():
+                warnings.append(f"character '{cid}' speaks but has no canonical_desc (generic look)")
+        # 2. Orphan visuals (composed but no beat uses them → wasted work).
+        used_vis = {(b.visual_id or "") for b in timeline}
+        for v in visuals:
+            if v.id and v.id not in used_vis:
+                warnings.append(f"visual '{v.id}' is never used by any beat")
+        # 3. Unused cast (defined but never speaks and never in a visual).
+        in_visual = {cid for v in visuals for cid in (v.character_ids or [])}
+        for c in chars:
+            if c.id and c.id not in spoken and c.id not in in_visual:
+                warnings.append(f"character '{c.id}' is defined but never speaks or appears")
+        # 4. Degenerate repeated narration (possible looping output).
+        from collections import Counter
+        counts = Counter((b.narration or "").strip() for b in timeline if (b.narration or "").strip())
+        for txt, n in counts.items():
+            if n >= 3:
+                warnings.append(f"narration repeated {n}× (possible loop): {txt[:40]!r}")
+        # 5. No narration at all → a silent video.
+        if timeline and not any((b.narration or "").strip() for b in timeline):
+            warnings.append("no beat has narration (silent video)")
+    except Exception:
+        return warnings
+    return warnings[:20]
+
+
 def _stable_seed(text: str) -> int:
     try:
         return int(hashlib.sha1((text or "").encode("utf-8", "ignore")).hexdigest()[:8], 16)
@@ -245,4 +287,5 @@ def run_super_plan(
         return None
 
 
-__all__ = ["run_super_plan", "inject_character_canon", "estimate_super_plan_cost", "SuperCall"]
+__all__ = ["run_super_plan", "inject_character_canon", "estimate_super_plan_cost",
+           "lint_story_plan", "SuperCall"]

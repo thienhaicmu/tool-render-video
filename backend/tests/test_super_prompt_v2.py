@@ -79,4 +79,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s8"   # s8: +per-beat emotion + code-derived archetype/scene vocab
+    assert SUPER_PROMPT_VERSION == "s9"   # s9: drop dead negative_prompt (F-12); s8: +per-beat emotion + vocab
