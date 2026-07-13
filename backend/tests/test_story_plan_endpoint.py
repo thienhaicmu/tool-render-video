@@ -85,8 +85,10 @@ def test_plan_source_idea_passes_idea_and_duration(monkeypatch):
     assert out["image_count"] == 1 and out["beat_count"] == 2
 
 
-def test_plan_cost_preflight_is_zero_for_svg(monkeypatch):
-    """Story Mode is SVG-only → all imagery is procedural + offline ($0)."""
+def test_plan_cost_preflight_image_free_llm_surfaced(monkeypatch):
+    """Story imagery is SVG-only → procedural + offline ($0). But the super-plan
+    LLM is NOT free — F-08 surfaces its estimated cost so the pre-flight no longer
+    reports a misleading $0 total."""
     monkeypatch.setattr(story_router, "generate_story_plan_v2", lambda **kw: _plan())
     out = plan_storyboard(StoryPlanRequest(source="paste", chapter_text="Nội dung.", language="vi"))
     assert out["character_count"] == 1
@@ -94,7 +96,12 @@ def test_plan_cost_preflight_is_zero_for_svg(monkeypatch):
     assert cp["visual_count"] == 1
     assert cp["character_count"] == 1
     assert cp["premium_image_count"] == 0
-    assert cp["estimated_cost_usd"] == 0.0
+    # Imagery is always free (procedural SVG).
+    assert cp["image_cost_usd"] == 0.0
+    # The LLM cost is an estimate that is surfaced (non-negative; total == LLM).
+    assert cp["estimated_llm_cost_usd"] >= 0.0
+    assert cp["estimated_llm_input_tokens"] > 0
+    assert cp["estimated_cost_usd"] == cp["estimated_llm_cost_usd"]
 
 
 # ── /api/story/visual/svg-preview ─────────────────────────────────────────────
