@@ -288,11 +288,15 @@ def generate_story_plan_v2(
     seed: int = 0,
     prior_context: str = "",
     library_catalog: str = "",
+    has_base_video: bool = False,
+    base_video_dur: float = 0.0,
     api_key: str = "",
     model: Optional[str] = None,
     resolve_key: Optional[Callable[[str], str]] = None,
 ) -> Optional["StoryPlan"]:
-    """Story v2 — ONE super call → StoryPlan v2 (mode A adapt / B idea). GPT-centric
+    """Story v2 — ONE super call → StoryPlan v2. Three specialised prompts by use-case:
+    idea → P3 (write to length); paste + base video → P2 (narrate over video); paste →
+    P1 (adapt → SVG). GPT-centric
     default; super model from ``STORY_SUPER_MODEL`` (gpt-4o, big context). Returns a
     StoryPlan or None (Sacred Contract #3 — never raises)."""
     from app.features.render.ai.llm.story_director_v2 import run_super_plan
@@ -341,7 +345,8 @@ def generate_story_plan_v2(
                 duration_sec=duration_sec, genre=genre, language=language, art_style=art_style,
                 aspect_ratio=aspect_ratio, subtitle_mode=subtitle_mode, ceiling=ceiling,
                 series_id=series_id, chapter_no=chapter_no, seed=seed,
-                prior_context=prior_context, library_catalog=library_catalog, provider_label=_p,
+                prior_context=prior_context, library_catalog=library_catalog,
+                has_base_video=has_base_video, base_video_dur=base_video_dur, provider_label=_p,
             )
         except Exception as exc:
             logger.warning("llm: generate_story_plan_v2 provider=%s raised %s", _p, exc)

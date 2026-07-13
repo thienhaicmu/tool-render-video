@@ -45,13 +45,14 @@ def test_library_catalog_injection():
     assert "cn_wuxia_bamboo_forest" in yes2
 
 
-def test_idea_prompt_budget_and_genre():
+def test_idea_prompt_budget_and_genre(monkeypatch):
+    monkeypatch.setenv("STORY_IDEA_LENGTH_FACTOR", "1.0")   # predictable numbers
     sysm, user = build_super_idea_prompt("A fallen disciple awakens a forbidden power.",
                                          duration_sec=300, genre="wuxia", language="vi", ceiling=10)
     assert "GENRE: wuxia" in user
-    # 300s × 15 cps (vi) = 4500 chars budget (now a REQUIREMENT, s10).
-    assert "~4500 characters" in user
-    assert "INVENT a COMPLETE story" in user
+    # 300s × 15 cps (vi) = 4500 chars budget (factor 1.0).
+    assert "4500" in user
+    assert "INVENT the story" in user             # s14+: P3 screenwriter/act brief
     assert "never pad" not in user.lower()        # s10: the length-killer is gone
     assert "create FROM this".lower() in user.lower()
 
@@ -81,4 +82,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s13"  # s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A)
+    assert SUPER_PROMPT_VERSION == "s17"  # s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A)

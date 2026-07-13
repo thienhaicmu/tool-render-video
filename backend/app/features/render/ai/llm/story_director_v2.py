@@ -18,8 +18,8 @@ from typing import Callable, Optional
 
 from app.domain.story_plan_v2 import StoryPlan
 from app.features.render.ai.llm.story_prompts_v2 import (
-    build_super_story_prompt, build_super_idea_prompt, build_super_repair_prompt,
-    SUPER_PROMPT_VERSION,
+    build_super_story_prompt, build_super_video_prompt, build_super_idea_prompt,
+    build_super_repair_prompt, SUPER_PROMPT_VERSION,
 )
 from app.features.render.ai.llm.story_parser_v2 import parse_super_plan_response
 
@@ -174,8 +174,20 @@ def _merge_plans(a: StoryPlan, b: StoryPlan) -> StoryPlan:
         return a
 
 
+def _build_paste_prompt(chapter, language, art_style, aspect_ratio, subtitle_mode, ceiling,
+                        prior_context, library_catalog, has_base_video, base_video_dur):
+    """Pick the right PASTE-mode builder: P2 (narrate over a base video) when a base
+    video is present, else P1 (adapt → SVG)."""
+    if has_base_video:
+        return build_super_video_prompt(chapter, language, art_style, aspect_ratio, subtitle_mode,
+                                        ceiling, prior_context, library_catalog, base_video_dur)
+    return build_super_story_prompt(chapter, language, art_style, aspect_ratio, subtitle_mode,
+                                    ceiling, prior_context, library_catalog)
+
+
 def _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio, subtitle_mode,
-                       ceiling, threshold, prior_context="", library_catalog="") -> Optional[StoryPlan]:
+                       ceiling, threshold, prior_context="", library_catalog="",
+                       has_base_video=False, base_video_dur=0.0) -> Optional[StoryPlan]:
     """Split an over-long chapter at a paragraph boundary into 2 halves, super-plan each
     under a PER-HALF slice of the visual budget, merge. Bounded to 2 calls. None if
     neither half planned."""
@@ -192,8 +204,9 @@ def _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio, subt
     per_half = max(1, -(-int(ceiling) // len(parts)))
     plans = []
     for part in parts:
-        sysm, user = build_super_story_prompt(part, language, art_style, aspect_ratio,
-                                              subtitle_mode, per_half, prior_context, library_catalog)
+        sysm, user = _build_paste_prompt(part, language, art_style, aspect_ratio, subtitle_mode,
+                                         per_half, prior_context, library_catalog,
+                                         has_base_video, base_video_dur)
         p = _call_and_parse(call_fn, sysm, user, per_half)
         if p is not None:
             plans.append(p)
@@ -223,11 +236,14 @@ def run_super_plan(
     seed: int = 0,
     prior_context: str = "",
     library_catalog: str = "",
+    has_base_video: bool = False,
+    base_video_dur: float = 0.0,
     provider_label: str = "",
 ) -> Optional[StoryPlan]:
     """Turn a source (chapter text OR idea) into a StoryPlan v2. ``prior_context`` (G1)
-    grounds a later series chapter on earlier ones. Returns None on any failure
-    (Sacred Contract #3 — never raises)."""
+    grounds a later series chapter on earlier ones. ``has_base_video`` routes a PASTE
+    source to the over-video prompt (P2) instead of the SVG prompt (P1). Returns None on
+    any failure (Sacred Contract #3 — never raises)."""
     try:
         src = (source or "paste").strip().lower()
         _p = provider_label or "?"
@@ -250,10 +266,12 @@ def run_super_plan(
                         _p, SUPER_PROMPT_VERSION, len(chapter), ceiling)
             if len(chapter) > int(threshold * 1.2):
                 plan = _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio,
-                                          subtitle_mode, ceiling, threshold, prior_context, library_catalog)
+                                          subtitle_mode, ceiling, threshold, prior_context,
+                                          library_catalog, has_base_video, base_video_dur)
             else:
-                sysm, user = build_super_story_prompt(chapter, language, art_style, aspect_ratio,
-                                                      subtitle_mode, ceiling, prior_context, library_catalog)
+                sysm, user = _build_paste_prompt(chapter, language, art_style, aspect_ratio,
+                                                 subtitle_mode, ceiling, prior_context,
+                                                 library_catalog, has_base_video, base_video_dur)
                 plan = _call_and_parse(call_fn, sysm, user, ceiling)
             _seed_src = chapter
         if plan is None:

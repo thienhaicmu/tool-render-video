@@ -60,13 +60,14 @@ def test_cap_visuals_unchanged_when_under_ceiling():
     assert plan.image_count() == 2 and plan.beat_count() == 2
 
 
-def test_idea_prompt_enforces_length_no_never_pad():
+def test_idea_prompt_enforces_length_no_never_pad(monkeypatch):
+    monkeypatch.setenv("STORY_IDEA_LENGTH_FACTOR", "1.0")   # predictable numbers
     _, user = build_super_idea_prompt("a lone knight", duration_sec=180, language="vi")
     low = user.lower()
     assert "never pad" not in low                     # the length-killer instruction is gone
-    assert "requires" in low or "genuinely fill" in low
-    # 180s × 15 cps = 2700 chars budgeted, and a beat-count guide appears.
-    assert "2700 characters" in user
+    assert "definition of the task" in low or "short is a failure" in low   # length brief
+    # 180s × 15 cps = 2700 chars budgeted (factor 1.0), and a beat-count guide appears.
+    assert "2700" in user
     assert "beats" in low
     # Reuse is quantified (decouples long timeline from a small image set).
     assert "beats per visual" in low or "far fewer" in low
@@ -75,3 +76,14 @@ def test_idea_prompt_enforces_length_no_never_pad():
 def test_idea_prompt_no_duration_is_soft():
     _, user = build_super_idea_prompt("a lone knight", duration_sec=0, language="vi")
     assert "model decides" in user.lower()
+
+
+def test_idea_length_compensation_factor(monkeypatch):
+    # s17: gpt-4o under-delivers length from a thin idea in one call, so the char
+    # budget shown to the model is inflated by STORY_IDEA_LENGTH_FACTOR (1.0 disables).
+    monkeypatch.setenv("STORY_IDEA_LENGTH_FACTOR", "1.0")
+    _, u1 = build_super_idea_prompt("idea", duration_sec=180, language="vi")
+    monkeypatch.setenv("STORY_IDEA_LENGTH_FACTOR", "2.0")
+    _, u2 = build_super_idea_prompt("idea", duration_sec=180, language="vi")
+    assert "2700" in u1                      # 180 × 15 cps × 1.0
+    assert "5400" in u2                      # 180 × 15 cps × 2.0 (aim-high)

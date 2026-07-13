@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s13"  # s13: language-aware per-beat narration budget for even TTS pacing (P-C). s12: 1-shot REUSE EXAMPLE + computed visual-count target for idea mode (P-B). s11: SVG-only cleanup — drop visual.prompt/tier + voice_style (P-A). s10: idea-mode length enforcement + quantified reuse; s9: drop dead negative_prompt (F-12); s8: +per-beat emotion + vocab; s7: +pose; s6: library-pick; s5: asset-library hints; s4: bgm_cue/char_*
+SUPER_PROMPT_VERSION = "s17"  # s17: P3 length compensation (aim ~1.8× since gpt-4o delivers ~55% of a requested length from a thin idea in one call; STORY_IDEA_LENGTH_FACTOR). s16: five-act beat QUOTA (mandate beats per stage → model can't compress a 3-min story into too few beats). s15: P3 RICH-beat length lever — beats are full ~10s paragraphs (~cps*10 chars), count+length derived from target with explicit arithmetic (fixes the terse-beat cap that held a 3-min idea at ~70s). s14: THREE specialised super-prompts by use-case — P1 adapt→SVG, P2 adapt→over-video (new, overlay/source_audio focus), P3 idea→length-as-brief scene scaffold. Full schema kept. s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A); s10: idea length; s9: drop negative_prompt (F-12); s8: emotion+vocab; s7: pose; s6: library-pick; s5: asset hints; s4: bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -58,16 +58,46 @@ def _fit(text: str, n: int = MAX_SOURCE_CHARS) -> str:
         return (text or "")
 
 
-_SYSTEM = (
-    "You are an expert STORY-TO-VIDEO DIRECTOR for a faceless narrated video channel "
-    "(wuxia / xianxia / romance / horror / fantasy). You understand the WHOLE story, "
-    "then design ONE production plan: recurring CHARACTERS (with a canonical look), "
-    "SETTINGS, a SMALL set of WIDE key IMAGES (reused across many narration beats via "
-    "camera focus), and a BEAT TIMELINE that narrates the story. You think like a "
-    "cinematographer: few strong images, camera pans/zooms to focus regions, hold on "
-    "emotion. Output ONLY one valid JSON object in the exact shape requested — no prose, "
-    "no markdown, no code fences."
+_JSON_TAIL = ("Output ONLY one valid JSON object in the exact shape requested — no prose, "
+              "no markdown, no code fences.")
+
+# Three SPECIALISED director roles (one super-prompt per use-case, selected by the
+# caller). Same StoryPlan schema + HARD RULES; only the ROLE + INPUT + emphasis differ,
+# so the model gets a clear, single job instead of one generic prompt serving all cases.
+
+# P1 — ADAPT an existing story → procedurally-illustrated (SVG) narrated video.
+_SYS_ADAPT = (
+    "You are an expert STORY-TO-VIDEO DIRECTOR adapting an EXISTING written story into a "
+    "procedurally-illustrated (SVG) narrated video for a faceless channel (wuxia / xianxia / "
+    "romance / horror / fantasy). Understand the WHOLE given story, then design ONE production "
+    "plan that NARRATES IT FAITHFULLY: recurring CHARACTERS (canonical look), SETTINGS, a SMALL "
+    "set of reused key IMAGES (drawn procedurally), and a BEAT TIMELINE that tells the story in "
+    "order. Preserve the original names, facts and plot; never invent new events. Think like a "
+    "cinematographer: few strong images, camera focus per beat, hold on emotion. " + _JSON_TAIL
 )
+
+# P2 — NARRATE + overlay characters over an EXISTING background VIDEO (no scene design).
+_SYS_VIDEO = (
+    "You are an expert VIDEO DIRECTOR creating a NARRATED CHARACTER-OVERLAY track over an EXISTING "
+    "BACKGROUND VIDEO. The supplied video provides ALL imagery — you NEVER design scenes or key "
+    "images. Understand the given story, then write a BEAT TIMELINE that narrates it over the "
+    "video, deciding per beat: the narration, WHICH character is on screen and where (overlay), "
+    "their emotion/pose, and how the video's own audio is treated. Preserve the original names, "
+    "facts and plot; never invent. " + _JSON_TAIL
+)
+
+# P3 — WRITE a story of a TARGET LENGTH from an idea, then storyboard it (SVG).
+_SYS_IDEA = (
+    "You are an expert SCREENWRITER and story-to-video director. Given a short IDEA and a TARGET "
+    "LENGTH, FIRST write a complete, engaging story OF THAT LENGTH (a real arc: hook → rising "
+    "action → climax → resolution), THEN storyboard it as a procedurally-illustrated (SVG) "
+    "narrated video: recurring CHARACTERS, SETTINGS, a SMALL set of reused key IMAGES, and a BEAT "
+    "TIMELINE. The story must GENUINELY run the requested length — write it out in full, never "
+    "summarise. " + _JSON_TAIL
+)
+
+# Back-compat alias (repair prompt + any external reference).
+_SYSTEM = _SYS_ADAPT
 
 # Raw JSON schema (single braces; NOT str.format'd) — mirrors StoryPlan v2 contract.
 _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ═══
@@ -116,12 +146,21 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
 }"""
 
 
-def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_char_hint: str = "") -> str:
+def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_char_hint: str = "",
+           render_mode: str = "svg") -> str:
     if subtitle_mode == "off":
         hook_rule = "Every beat: hook=false, hook_text=\"\" (no on-screen text at all)."
     else:
         hook_rule = ("Mark ONLY 1-3 climactic beats as hook=true with a SHORT punchy "
                      "hook_text (a few words); all other beats hook=false, hook_text=\"\".")
+    if render_mode == "video":
+        _r4 = ("4. The BACKGROUND is the SUPPLIED VIDEO — do NOT design scenes or picture content. "
+               "Create only a FEW \"visuals\" as grouping anchors (one per story moment); their look "
+               "is IGNORED (the video shows through). Put your effort into the timeline + character overlay.\n")
+    else:
+        _r4 = ("4. ONE visual per SETTING/moment — group beats in the same place onto ONE visual. The "
+               "render draws each picture procedurally from the visual's setting + present characters "
+               "(there is NO image prompt — do not write scene descriptions).\n")
     return (
         "═══ HARD RULES ═══\n"
         "1. ONE JSON object. No prose, no markdown, no code fences.\n"
@@ -131,10 +170,8 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_c
         "long (many beats = a long video), but the IMAGE SET stays small.\n"
         "3. Every timeline.visual_id MUST be an id in \"visuals\"; focus MUST be one of the "
         "listed values; speaker_id and every visuals.character_ids MUST be ids in \"characters\".\n"
-        "4. ONE visual per SETTING/moment — group beats in the same place onto ONE visual. The render "
-        "draws each picture procedurally from the visual's setting + present characters (there is NO "
-        "image prompt — do not write scene descriptions).\n"
-        f"5. narration in {lang_name}; each beat = ONE contiguous idea{beat_char_hint} — keep beats "
+        + _r4
+        + f"5. narration in {lang_name}; each beat = ONE contiguous idea{beat_char_hint} — keep beats "
         "EVENLY sized (no one-word beats, no paragraph-long beats); the beats in order narrate the "
         "whole story faithfully (preserve names/facts, never invent).\n"
         f"6. {hook_rule}\n"
@@ -238,16 +275,17 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
                              aspect_ratio: str = "16:9", subtitle_mode: str = "hook_only",
                              ceiling: int = 15, prior_context: str = "",
                              library_catalog: str = "") -> "tuple[str, str]":
-    """Mode A — (system, user) to ADAPT an existing story into a StoryPlan v2.
-    ``prior_context`` (G1) grounds a later chapter on earlier ones when non-empty.
-    ``library_catalog`` (library-pick) lets the AI choose ``asset`` slugs when non-empty."""
+    """P1 — (system, user) to ADAPT an existing story into a StoryPlan v2, rendered as
+    procedural SVG (no base video). Role: faithful adaptation. ``prior_context`` (G1)
+    grounds a later chapter; ``library_catalog`` (library-pick) enables ``asset`` slugs."""
     lang_name = _lang_name(language)
     method = (
         "═══ METHOD (follow this order) ═══\n"
-        "(a) CHARACTERS: define recurring characters + canonical look + voice.\n"
-        "(b) SETTINGS: define recurring places.\n"
-        f"(c) VISUALS (≤{ceiling}): one WIDE image per key setting/moment, grounded in (a)(b).\n"
-        "(d) TIMELINE: narrate the whole story as ordered beats, each pointing to a visual + focus.\n"
+        "(a) CHARACTERS: identify the recurring cast in the source + a canonical look + voice.\n"
+        "(b) SETTINGS: identify the recurring places.\n"
+        f"(c) VISUALS (≤{ceiling}): a SMALL set of key images, each REUSED across many beats.\n"
+        "(d) TIMELINE: narrate the WHOLE source story as ordered beats — cover it from start to "
+        "end, preserving the original names, facts and order; do not skip or invent.\n"
     )
     style_line = f"ART STYLE HINT: {art_style.strip()}\n" if (art_style or "").strip() else ""
     user = (
@@ -256,65 +294,140 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
         + _series_memory_block(prior_context)
         + _library_block(library_catalog)
         + _vocab_block()
-        + "\n═══ SOURCE STORY (adapt THIS) ═══\n" + _fit(chapter) + "\n\n"
+        + "\n═══ SOURCE STORY (adapt THIS faithfully) ═══\n" + _fit(chapter) + "\n\n"
         + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
-        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language))
+        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language), "svg")
     )
-    return _SYSTEM, user
+    return _SYS_ADAPT, user
+
+
+def build_super_video_prompt(chapter: str, language: str = "vi", art_style: str = "",
+                             aspect_ratio: str = "16:9", subtitle_mode: str = "hook_only",
+                             ceiling: int = 15, prior_context: str = "",
+                             library_catalog: str = "", base_video_dur: float = 0.0) -> "tuple[str, str]":
+    """P2 — (system, user) to ADAPT a story into a NARRATED CHARACTER-OVERLAY over an
+    existing BACKGROUND VIDEO. The video is all the imagery: NO scene design; the model
+    focuses on narration + which character is on screen + overlay placement + how the
+    video's own audio is treated (``source_audio``). Same schema; visuals are just
+    grouping anchors. ``base_video_dur`` (when >0) paces the narration to the clip."""
+    lang_name = _lang_name(language)
+    dur_line = (f"BACKGROUND VIDEO LENGTH: ~{int(base_video_dur)} seconds — pace the narration so it "
+                f"fits roughly this long when read aloud.\n") if base_video_dur and base_video_dur > 0 else ""
+    method = (
+        "═══ METHOD (follow this order) ═══\n"
+        "(a) CHARACTERS: the cast that appears/speaks in the story + a canonical look + voice.\n"
+        "(b) SETTINGS + VISUALS: create only a FEW grouping anchors (the VIDEO is the real "
+        "background — its look is ignored; do NOT describe scenes).\n"
+        "(c) TIMELINE (the main work): narrate the story over the video as ordered beats. For EACH "
+        "beat set: narration, speaker_id, emotion + pose, char_anchor/char_scale (WHERE/how big the "
+        "speaking character overlays the video), and source_audio (mute | duck under the voice | "
+        "keep) — how the video's OWN sound is treated for that beat.\n"
+    )
+    style_line = f"ART STYLE HINT: {art_style.strip()}\n" if (art_style or "").strip() else ""
+    user = (
+        f"NARRATION LANGUAGE: {lang_name}\n{style_line}{dur_line}"
+        + method
+        + _series_memory_block(prior_context)
+        + _library_block(library_catalog)
+        + _vocab_block()
+        + "\n═══ SOURCE STORY (narrate THIS over the video, faithfully) ═══\n" + _fit(chapter) + "\n\n"
+        + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
+        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language), "video")
+    )
+    return _SYS_VIDEO, user
 
 
 def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
                             language: str = "vi", art_style: str = "", aspect_ratio: str = "16:9",
                             subtitle_mode: str = "hook_only", ceiling: int = 15,
                             prior_context: str = "", library_catalog: str = "") -> "tuple[str, str]":
-    """Mode B — (system, user) to CREATE a story from an idea then storyboard it (same schema).
-    ``prior_context`` (G1) grounds a later chapter on earlier ones when non-empty.
-    ``library_catalog`` (library-pick) lets the AI choose ``asset`` slugs when non-empty."""
+    """P3 — (system, user) to WRITE a story OF A TARGET LENGTH from an idea, then
+    storyboard it (SVG). The length is baked into the creative BRIEF (not a constraint
+    tacked on after), broken into a scene scaffold the model fills. ``prior_context``
+    (G1) grounds a later chapter; ``library_catalog`` enables ``asset`` slugs."""
     lang_name = _lang_name(language)
     cps = _CPS.get((language or "").strip().lower()[:2], 14.0)
-    budget = int(max(0, duration_sec) * cps) if duration_sec and duration_sec > 0 else 0
-    # Length is a REQUIREMENT, not a soft target: a thin idea + "never pad" used to
-    # collapse a 3-minute request into a ~30s stub. Floor at ~85% of budget and give
-    # a beat-count guide (~1 beat per ~6s) so the model develops a full arc.
-    _min_chars = int(budget * 0.85) if budget else 0
-    _min_beats = max(6, int(round(duration_sec / 6.0))) if (duration_sec and duration_sec > 0) else 0
-    # Concrete visual-count target (P-B): ~4 beats per image, clamped to [2, ceiling].
-    # Turns the "reuse" rule into a number the model can aim at.
-    _target_visuals = max(2, min(int(ceiling), int(round(_min_beats / 4.0)))) if _min_beats else 0
-    dur_line = (
-        f"TARGET LENGTH: ~{int(duration_sec)} seconds. This REQUIRES ~{budget} characters of "
-        f"narration IN TOTAL across all beats (at least ~{_min_chars}), spread over roughly "
-        f"{_min_beats}+ beats. GENUINELY FILL {int(duration_sec)}s — develop the plot to reach it; "
-        f"do NOT stop early or hand back a short stub.\n"
+    # Compensation (measured): gpt-4o delivers only ~50-60% of a requested length from a
+    # thin idea in one call, so aim the BRIEF higher than the user's target and it lands
+    # near it. Tunable via STORY_IDEA_LENGTH_FACTOR (1.0 disables). Applied to the numbers
+    # shown to the model; the FE still compares the real estimate to the user's target.
+    try:
+        _factor = max(1.0, float(_os.getenv("STORY_IDEA_LENGTH_FACTOR", "1.8") or 1.8))
+    except (TypeError, ValueError):
+        _factor = 1.8
+    _eff_sec = int(round(duration_sec * _factor)) if (duration_sec and duration_sec > 0) else 0
+    budget = int(_eff_sec * cps) if _eff_sec else 0
+    _mins = round(duration_sec / 60.0, 1) if duration_sec else 0
+    # RICH beats (the real length lever): the model writes TERSE narration in JSON mode,
+    # so a "~45-120 char" per-beat hint capped a 3-min request at ~70s. Instead aim ~10s
+    # of speech PER BEAT — a full 2-4 sentence PARAGRAPH — and derive the beat COUNT and
+    # per-beat LENGTH from the (compensated) target so beats × per_beat ≈ budget.
+    _sec_per_beat = 10.0
+    _target_beats = max(6, int(round(_eff_sec / _sec_per_beat))) if _eff_sec else 0
+    _per_beat = int(round(cps * _sec_per_beat)) if _target_beats else 0
+    _scenes = max(2, min(int(ceiling), int(round(_target_beats / 4.0)))) if _target_beats else 0
+    # Five-act beat quota (fixes the "model tells the whole story in too few beats" cap):
+    # mandate a beat count PER STAGE so the model must develop each act, not summarise.
+    _a1 = max(1, int(round(_target_beats * 0.18)))
+    _a2 = max(1, int(round(_target_beats * 0.32)))
+    _a3 = max(1, int(round(_target_beats * 0.18)))
+    _a4 = max(1, int(round(_target_beats * 0.20)))
+    _a5 = max(1, _target_beats - _a1 - _a2 - _a3 - _a4)
+    brief = (
+        "═══ BRIEF (this defines the whole task) ═══\n"
+        f"Write a LONG, fully-narrated STORY in {lang_name} from the STORY IDEA below. The finished "
+        f"narration must TOTAL about {budget} CHARACTERS of spoken text (roughly {_target_beats} full "
+        "paragraphs) — that total is the DEFINITION of the task, not a limit. Aim for the FULL length; a "
+        "little OVER is fine, SHORT is a FAILURE. Write the ENTIRE story out, scene by scene, in RICH "
+        "detail (dialogue, action, inner feeling).\n"
     ) if budget else "TARGET LENGTH: model decides.\n"
     genre_line = f"GENRE: {genre.strip()}\n" if (genre or "").strip() else ""
     style_line = f"ART STYLE HINT: {art_style.strip()}\n" if (art_style or "").strip() else ""
+    if _target_beats:
+        act_block = (
+            "(0) INVENT the story and WRITE IT OUT as an ordered TIMELINE that fully develops ALL FIVE "
+            f"stages below in {lang_name} — you MUST hit roughly the beat count for EACH stage (do not "
+            "compress the story into fewer beats):\n"
+            f"    • HOOK / SETUP — introduce world + characters (~{_a1} beats)\n"
+            f"    • RISING ACTION — complications build, deepen the conflict (~{_a2} beats)\n"
+            f"    • MIDPOINT TWIST — a turn that raises the stakes (~{_a3} beats)\n"
+            f"    • CLIMAX — the confrontation / revelation (~{_a4} beats)\n"
+            f"    • RESOLUTION — aftermath + ending (~{_a5} beats)\n"
+            f"  → ~{_target_beats} beats TOTAL, and EACH beat's narration is a FULL, vivid 2-4 sentence "
+            f"PARAGRAPH of ~{_per_beat} characters (dialogue + action + feeling), NOT a one-line summary. "
+            f"(~{_target_beats} beats × ~{_per_beat} chars ≈ {budget} characters total.)\n"
+        )
+        tail_e = (f"(e) CHECK before you output: count your beats and estimate their total characters. "
+                  f"If you have far fewer than {_target_beats} beats OR under ~{budget} characters, you "
+                  "compressed the story — go back, expand each act with more beats and fuller paragraphs, "
+                  "THEN output.\n")
+    else:
+        act_block = ("(0) INVENT a full story with a real arc (hook → rising action → climax → resolution), "
+                     f"in {lang_name}, written out beat by beat (never summarised).\n")
+        tail_e = ""
     method = (
         "═══ METHOD (follow this order) ═══\n"
-        "(0) INVENT a COMPLETE story from the idea below with a full arc "
-        "(hook→rising action→climax→resolution), "
-        f"in {lang_name}, DEVELOPED richly enough to fill the whole TARGET LENGTH above — a longer "
-        "target needs MORE scenes, MORE beats and fuller narration. Do NOT stop short. Keep it "
-        "coherent with no filler repetition, but flesh out plot, characters and detail to reach the length.\n"
-        "(a) CHARACTERS: the recurring cast you invented + canonical look + voice.\n"
-        "(b) SETTINGS: the places.\n"
-        + (f"(c) VISUALS: aim for about {_target_visuals} images (≤{ceiling}) for the ~{_min_beats} "
-           "beats — a SMALL set, each reused across many beats.\n" if _target_visuals else
-           f"(c) VISUALS (≤{ceiling}): a SMALL set of WIDE images, each reused across many beats.\n")
-        + "(d) TIMELINE: narrate your story as ordered beats (enough beats to fill the target length), "
-        "each pointing to a visual + focus.\n"
+        + act_block
+        + "(a) CHARACTERS: the recurring cast you invented + canonical look + voice.\n"
+        "(b) SETTINGS: the places (one per scene).\n"
+        + (f"(c) VISUALS: about {_scenes} images (≤{ceiling}), each reused across many beats.\n"
+           if _scenes else f"(c) VISUALS (≤{ceiling}): a SMALL set, each reused across many beats.\n")
+        + tail_e
     )
+    _idea_beat_hint = (f" (a FULL 2-4 sentence paragraph, ~{_per_beat} characters)"
+                       if _per_beat else _beat_char_hint(language))
     user = (
-        f"NARRATION LANGUAGE: {lang_name}\n{genre_line}{dur_line}{style_line}"
+        f"NARRATION LANGUAGE: {lang_name}\n{genre_line}{style_line}"
+        + brief
         + method
         + _series_memory_block(prior_context)
         + _library_block(library_catalog)
         + _vocab_block()
         + "\n═══ STORY IDEA (create FROM this) ═══\n" + _fit(idea, 8000) + "\n\n"
         + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
-        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language))
+        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _idea_beat_hint, "svg")
     )
-    return _SYSTEM, user
+    return _SYS_IDEA, user
 
 
 _SYSTEM_REPAIR = (
@@ -330,5 +443,5 @@ def build_super_repair_prompt(broken: str) -> "tuple[str, str]":
     return _SYSTEM_REPAIR, "Fix this into ONE valid StoryPlan JSON object:\n\n" + _fit(broken)
 
 
-__all__ = ["build_super_story_prompt", "build_super_idea_prompt", "build_super_repair_prompt",
-           "SUPER_PROMPT_VERSION"]
+__all__ = ["build_super_story_prompt", "build_super_video_prompt", "build_super_idea_prompt",
+           "build_super_repair_prompt", "SUPER_PROMPT_VERSION"]

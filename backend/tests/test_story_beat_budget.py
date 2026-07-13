@@ -20,11 +20,12 @@ def test_beat_hint_language_aware():
 
 
 def test_budget_present_in_both_modes():
+    # P1 (adapt) uses the standard per-beat budget threaded into rule 5.
     vi_story = build_super_story_prompt("once", "vi")[1]
+    assert "~45-120 characters" in vi_story and "EVENLY sized" in vi_story
+    # P3 (idea) uses a RICHER per-beat hint (full paragraphs) — the length lever.
     vi_idea = build_super_idea_prompt("an idea", duration_sec=60, language="vi")[1]
-    for user in (vi_story, vi_idea):
-        assert "~45-120 characters" in user            # VI budget threaded into rule 5
-        assert "EVENLY sized" in user
+    assert "FULL 2-4 sentence paragraph" in vi_idea
     # English uses the English range, not the Vietnamese one.
     en = build_super_story_prompt("once", "en")[1]
     assert "~42-112 characters" in en and "~45-120 characters" not in en

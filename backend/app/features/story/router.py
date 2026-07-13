@@ -57,6 +57,7 @@ class StoryPlanRequest(BaseModel):
     chapter_no: int = 0
     ai_provider: Optional[str] = None
     llm_model: Optional[str] = None
+    use_video: bool = False            # paste + base video → P2 (narrate over video) prompt
 
 
 @router.post("/plan")
@@ -117,6 +118,7 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         subtitle_mode=(req.subtitle_mode or "hook_only"), ceiling=req.ceiling,
         series_id=_sid, chapter_no=_cno, prior_context=prior_context,
         library_catalog=library_catalog,
+        has_base_video=bool(req.use_video and source == "paste"),
         api_key=api_key, model=req.llm_model,
         # F-11: the generic ai_cloud_api_key is the ACTIVE provider's key — a
         # cross-provider fallback resolves only from its own per-provider/env key.

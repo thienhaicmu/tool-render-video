@@ -105,7 +105,8 @@ def _genre_group(genre: str) -> tuple:
 
 
 def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, idea,
-                           duration_sec, genre, language, art_style, aspect, subtitle_mode) -> "tuple[StoryPlan, dict]":
+                           duration_sec, genre, language, art_style, aspect, subtitle_mode,
+                           has_base_video=False, base_video_dur=0.0) -> "tuple[StoryPlan, dict]":
     """Resolve the StoryPlan v2 to render: approved override → persisted (resume) →
     fresh super-plan call. Returns ``(plan, meta)`` where ``meta`` records how the
     plan was obtained (plan_source/provider/model) for result_json reproducibility.
@@ -161,6 +162,7 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
         aspect_ratio=aspect, subtitle_mode=subtitle_mode,
         series_id=_sid, chapter_no=_cno, prior_context=prior_context,
         library_catalog=library_catalog,
+        has_base_video=has_base_video, base_video_dur=base_video_dur,
         api_key=api_key, model=(getattr(payload, "llm_model", None) or None),
         resolve_key=resolve_key,
     )
@@ -275,6 +277,7 @@ def run_story_v2(
             payload, job_id=job_id, resume_mode=resume_mode, source=source, chapter=chapter,
             idea=idea, duration_sec=duration_sec, genre=genre, language=language,
             art_style=art_style, aspect=aspect, subtitle_mode=subtitle_mode,
+            has_base_video=bool(base_video_path), base_video_dur=base_video_dur,
         )
         update_story_plan(job_id, plan.to_json())
 
