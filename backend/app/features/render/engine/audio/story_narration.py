@@ -112,7 +112,7 @@ def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "h
                 path = generate_narration_audio(
                     text=text, language=locale, gender=_gender_for(plan, speaker_id), rate=rate,
                     job_id=f"{job_id}-{out.stem}", voice_id=(vid or None),
-                    output_path=str(out), content_type="vlog", tts_engine=eng,
+                    output_path=str(out), content_type="story", tts_engine=eng,
                     emotion=(emotion or ""),
                 )
             except Exception as exc:

@@ -57,7 +57,19 @@ def _mix_scene_bgm(job_id, effective_channel, plan, final_out, work_dir) -> None
             _job_log(effective_channel, job_id,
                      "Story v2: no BGM (no music files for the planned moods — see BGM_DIR)")
             return
-        mix_with_bgm(video_path=str(final_out), bgm_path=track, output_path=tmp, duck=True)
+        # The track ALREADY carries each scene's gain (build_placed_bgm_track applies the
+        # per-beat bgm_intensity → dB). Pass bgm_db_gain=0 so mix_with_bgm does NOT
+        # attenuate a SECOND time (the old default -18 dB stacked on top → ~-36 dB,
+        # near-inaudible). Duck GENTLY (ratio 2.5 vs the default 6) so the music stays
+        # present under the near-continuous story narration. Both env-tunable.
+        try:
+            _bgm_gain = float(os.getenv("STORY_BGM_GAIN_DB", "0") or 0)
+        except (TypeError, ValueError):
+            _bgm_gain = 0.0
+        _duck = os.getenv("STORY_BGM_DUCK_PARAMS",
+                          "sidechaincompress=threshold=0.05:ratio=2.5:attack=25:release=500")
+        mix_with_bgm(video_path=str(final_out), bgm_path=track, output_path=tmp, duck=True,
+                     bgm_db_gain=_bgm_gain, duck_params=_duck)
         Path(tmp).replace(final_out)
         moods = sorted({(seg[0] or "default") for seg in segments})
         _emit_render_event(
