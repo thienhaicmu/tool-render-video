@@ -131,7 +131,12 @@ Beat {
 | **P1** | BE-A domain `lines[]` + BE-B schema/prompt | FE-A types + `beatLines()` | `STORY_MULTILINE_BEATS` off | HIGH (contract) |
 | **P2** | BE-C TTS đa dòng + BE-D voice_mode | FE-B TimelineEditor đa dòng + FE-C voice toggle | bật cờ ở môi trường dev | HIGH |
 | **P3** | BE-E overlay theo dòng (v2) | FE-D preview beat + FE-E validation | — | MEDIUM |
-| **P4** | Dọn deprecated đường đơn (sau khi ổn định) | polish UI, i18n | bật cờ default | MEDIUM |
+| **P4** | TTS fallback gemini→ElevenLabs (TTS_GEMINI_ELEVEN_FALLBACK) | LinesEditor CSS polish | cờ GIỮ opt-in (default off) | MEDIUM |
+
+> **P4 note (2026-07-13):** cờ `STORY_MULTILINE_BEATS` GIỮ default **off**. Bật default
+> đổi hành vi LLM sinh plan (Gemini phải sinh `lines[]`) — CHƯA đo compliance ở quy mô,
+> nên để opt-in tới khi đo. ElevenLabs là engine TTS (giọng), KHÔNG thay LLM sinh plan;
+> nó chỉ là fallback giọng khi Gemini TTS lỗi (`gemini → ElevenLabs → edge → piper`).
 
 **Cổng giữa các phase:** P1 chỉ merge khi FE-A đã đọc được `lines` (kể cả rỗng). P2 chỉ bật cờ khi TimelineEditor sửa được đa dòng. Không bật `STORY_MULTILINE_BEATS` mặc định cho tới hết P3.
 
