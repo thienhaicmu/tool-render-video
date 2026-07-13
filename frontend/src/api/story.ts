@@ -40,6 +40,15 @@ export interface Visual {
   tier: string
 }
 
+/** P1 — one spoken line inside a Beat (a beat = one shot that may hold several
+ * dialogue turns). speaker_id '' = narrator. */
+export interface Line {
+  speaker_id: string
+  text: string
+  emotion: string
+  pose?: string
+}
+
 export interface Beat {
   id: string
   narration: string
@@ -55,6 +64,15 @@ export interface Beat {
   transition_in: string
   hook: boolean
   hook_text: string
+  lines?: Line[]        // P1 — multi-line dialogue; empty/absent → legacy single line
+}
+
+/** P1 — a beat's spoken lines, normalised. Mirrors the backend Beat.effective_lines():
+ * uses `lines` when present (dropping blanks), else the legacy single narration line. */
+export function beatLines(b: Beat): Line[] {
+  if (b.lines && b.lines.length) return b.lines.filter((l) => (l.text || '').trim().length > 0)
+  if ((b.narration || '').trim()) return [{ speaker_id: b.speaker_id, text: b.narration, emotion: b.emotion, pose: b.pose }]
+  return []
 }
 
 export interface Cue {
@@ -110,6 +128,7 @@ export interface StoryPlanRequest {
   chapter_no?: number
   ai_provider?: string
   llm_model?: string
+  voice_mode?: 'narrator' | 'dialogue'   // P1 — narrator = one voice reads all; dialogue = per-character voices
 }
 
 export interface StoryPlanResponse {

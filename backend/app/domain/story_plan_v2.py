@@ -130,6 +130,17 @@ class Visual:
 
 
 @dataclass
+class Line:
+    """P1 — one spoken line inside a Beat (a beat = one shot/khung hình that may hold
+    several dialogue turns). ``speaker_id`` '' = narrator. Additive: a beat with no
+    ``lines`` falls back to its legacy single-line fields (backward-compat)."""
+    speaker_id: str = ""      # → CharacterDef.id ∪ "" (narrator)
+    text: str = ""
+    emotion: str = "normal"   # ∈ EMOTION — this line's expression
+    pose: str = "stand"       # ∈ POSE — this line's gesture
+
+
+@dataclass
 class Beat:
     id: str = ""
     narration: str = ""
@@ -154,6 +165,29 @@ class Beat:
     char_scale: str = "medium"  # ∈ CHAR_SCALE — speaker overlay size (consumed later)
     char_motion: str = "fade"   # ∈ CHAR_MOTION — speaker overlay entrance (consumed later)
     text_anchor: str = "auto"   # ∈ TEXT_ANCHOR — on-screen text placement
+    # P1 — multi-line dialogue: a beat may carry several spoken lines (each its own
+    # speaker/emotion). Empty → the legacy single-line fields above ARE the one line.
+    lines: list["Line"] = field(default_factory=list)
+
+    def effective_lines(self) -> "list[Line]":
+        """The beat's spoken lines, normalised. Uses ``lines`` when present (dropping
+        blank ones), else synthesises ONE line from the legacy ``narration`` /
+        ``speaker_id`` fields. A silent-hold beat (no text at all) yields []."""
+        if self.lines:
+            return [ln for ln in self.lines if (ln.text or "").strip()]
+        if (self.narration or "").strip():
+            return [Line(self.speaker_id, self.narration, self.emotion, self.pose)]
+        return []
+
+    def primary_speaker(self) -> str:
+        """Beat-level speaker for overlay/anchor: legacy ``speaker_id`` if set, else the
+        first non-narrator line's speaker, else '' (narrator)."""
+        if (self.speaker_id or "").strip():
+            return self.speaker_id
+        for ln in self.effective_lines():
+            if (ln.speaker_id or "").strip():
+                return ln.speaker_id
+        return ""
 
 
 # ── Render-state dataclasses (pipeline-filled) ───────────────────────────────
@@ -251,16 +285,16 @@ class StoryPlan:
         return len(self.timeline)
 
     def is_empty(self) -> bool:
-        return not any((b.narration or "").strip() or b.hold_sec > 0 for b in self.timeline)
+        return not any(b.effective_lines() or b.hold_sec > 0 for b in self.timeline)
 
     # ── Timing (rule-based; AI never emits seconds) ──────────────────────
     def beat_est_sec(self, beat: "Beat") -> float:
         try:
-            n = (beat.narration or "").strip()
-            if not n:
+            chars = sum(len((ln.text or "").strip()) for ln in beat.effective_lines())
+            if not chars:
                 return max(0.0, float(beat.hold_sec or 0.0))
             spd = (float(beat.reading_speed or 1.0) or 1.0)
-            return len(n) / cps_for(self.language) / spd
+            return chars / cps_for(self.language) / spd
         except Exception:
             return 0.0
 
@@ -308,10 +342,15 @@ class StoryPlan:
                     continue
                 if b.speaker_id and b.speaker_id not in char_ids:    # INV2
                     b.speaker_id = ""
+                for ln in b.lines:                                   # INV2 (per line) + INV5
+                    if ln.speaker_id and ln.speaker_id not in char_ids:
+                        ln.speaker_id = ""
+                    ln.emotion = _norm(ln.emotion, EMOTION, "normal")
+                    ln.pose = _norm(ln.pose, POSE, "stand")
                 b.focus = _norm(b.focus, FOCUS, "center")            # INV5
                 b.motion = _norm(b.motion, MOTION, "zoom_in")
                 b.transition_in = _norm(b.transition_in, TRANSITION, "cut")
-                if not (b.narration or "").strip() and b.hold_sec <= 0:   # INV8
+                if not b.effective_lines() and b.hold_sec <= 0:      # INV8
                     continue
                 kept.append(b)
             self.timeline = kept
@@ -405,8 +444,9 @@ class StoryPlan:
                 next_vid = self.timeline[i + 1].visual_id if i < n - 1 else None
                 scene_first = (b.visual_id != prev_vid)
                 scene_last = (b.visual_id != next_vid)
-                if (b.char_anchor or "none") == "none" and (b.speaker_id or ""):
-                    b.char_anchor = char_pos.get(b.speaker_id, "center")
+                sp = b.primary_speaker()
+                if (b.char_anchor or "none") == "none" and sp:
+                    b.char_anchor = char_pos.get(sp, "center")
                 if (b.motion or "zoom_in") == "zoom_in":            # variety (else all zoom_in)
                     b.motion = _MOT[(i + seed) % len(_MOT)]
                 if (b.transition_in or "cut") == "cut":             # fade on a scene change
@@ -675,6 +715,13 @@ def _visual_from(x) -> Visual:
     return Visual(id=_str(x.get("id")), setting_id=_str(x.get("setting_id")),
                   prompt=_str(x.get("prompt")), negative_prompt=_str(x.get("negative_prompt")),
                   character_ids=_str_list(x.get("character_ids")), tier=_norm(x.get("tier"), TIER, "medium"))
+def _line_from(x) -> Line:
+    if not isinstance(x, dict):
+        return Line()
+    return Line(speaker_id=_str(x.get("speaker_id")),
+                text=_str(x.get("text") or x.get("narration")),
+                emotion=_norm(x.get("emotion"), EMOTION, "normal"),
+                pose=_norm(x.get("pose"), POSE, "stand"))
 def _beat_from(x, i) -> Beat:
     if not isinstance(x, dict): return Beat(id=f"b{i}")
     return Beat(id=(_str(x.get("id")) or f"b{i}"), narration=_str(x.get("narration")),
@@ -694,7 +741,8 @@ def _beat_from(x, i) -> Beat:
                 char_anchor=_norm(x.get("char_anchor"), CHAR_ANCHOR, "none"),
                 char_scale=_norm(x.get("char_scale"), CHAR_SCALE, "medium"),
                 char_motion=_norm(x.get("char_motion"), CHAR_MOTION, "fade"),
-                text_anchor=_norm(x.get("text_anchor"), TEXT_ANCHOR, "auto"))
+                text_anchor=_norm(x.get("text_anchor"), TEXT_ANCHOR, "auto"),
+                lines=[_line_from(l) for l in _list(x.get("lines"))])
 def _render_from(x) -> RenderState:
     if not isinstance(x, dict): return RenderState()
     rs = RenderState()
@@ -738,7 +786,7 @@ def _render_from(x) -> RenderState:
 
 
 __all__ = [
-    "StoryPlan", "CharacterDef", "SettingDef", "Visual", "Beat",
+    "StoryPlan", "CharacterDef", "SettingDef", "Visual", "Beat", "Line",
     "Word", "BeatAudio", "Cue", "RenderState",
     "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE", "BGM_MOODS",
     "REGION", "GENRE_KEY",

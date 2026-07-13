@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s19"  # s19: Phase-3 LEAN CONTRACT — SVG prompts (P1/P3) ask only for the CREATIVE per-beat fields (narration/speaker/visual/focus/bgm_mood/emotion/pose/hook); the 9 mechanical style labels are derived by StoryPlan.derive_beat_styling (cuts OpenAI strict-mode truncation). P2 keeps the full schema. Toggle STORY_LEAN_CONTRACT=0 to restore the 19-field ask. s18: Phase-1 hygiene — rule-5 self-contradiction fixed (RICH beats no longer told "no paragraph-long beats"); OUTPUT FRAME/aspect now injected in-prompt (was a dead param); STORY_IDEA_DEFAULT_SEC fallback when the FE omits a target length. s17: P3 length compensation (aim ~1.8× since gpt-4o delivers ~55% of a requested length from a thin idea in one call; STORY_IDEA_LENGTH_FACTOR). s16: five-act beat QUOTA (mandate beats per stage → model can't compress a 3-min story into too few beats). s15: P3 RICH-beat length lever — beats are full ~10s paragraphs (~cps*10 chars), count+length derived from target with explicit arithmetic (fixes the terse-beat cap that held a 3-min idea at ~70s). s14: THREE specialised super-prompts by use-case — P1 adapt→SVG, P2 adapt→over-video (new, overlay/source_audio focus), P3 idea→length-as-brief scene scaffold. Full schema kept. s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A); s10: idea length; s9: drop negative_prompt (F-12); s8: emotion+vocab; s7: pose; s6: library-pick; s5: asset hints; s4: bgm_cue/char_*
+SUPER_PROMPT_VERSION = "s20"  # s20: P1 MULTI-LINE beats — STORY_MULTILINE_BEATS=1 makes a beat carry a lines[] dialogue array (each turn its own speaker/text/emotion/pose); one shot may hold 1-4 turns. Default off = pre-P1, bit-identical. s19: Phase-3 LEAN CONTRACT — SVG prompts (P1/P3) ask only for the CREATIVE per-beat fields (narration/speaker/visual/focus/bgm_mood/emotion/pose/hook); the 9 mechanical style labels are derived by StoryPlan.derive_beat_styling (cuts OpenAI strict-mode truncation). P2 keeps the full schema. Toggle STORY_LEAN_CONTRACT=0 to restore the 19-field ask. s18: Phase-1 hygiene — rule-5 self-contradiction fixed (RICH beats no longer told "no paragraph-long beats"); OUTPUT FRAME/aspect now injected in-prompt (was a dead param); STORY_IDEA_DEFAULT_SEC fallback when the FE omits a target length. s17: P3 length compensation (aim ~1.8× since gpt-4o delivers ~55% of a requested length from a thin idea in one call; STORY_IDEA_LENGTH_FACTOR). s16: five-act beat QUOTA (mandate beats per stage → model can't compress a 3-min story into too few beats). s15: P3 RICH-beat length lever — beats are full ~10s paragraphs (~cps*10 chars), count+length derived from target with explicit arithmetic (fixes the terse-beat cap that held a 3-min idea at ~70s). s14: THREE specialised super-prompts by use-case — P1 adapt→SVG, P2 adapt→over-video (new, overlay/source_audio focus), P3 idea→length-as-brief scene scaffold. Full schema kept. s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A); s10: idea length; s9: drop negative_prompt (F-12); s8: emotion+vocab; s7: pose; s6: library-pick; s5: asset hints; s4: bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -193,12 +193,64 @@ def _lean_contract() -> bool:
     return _os.getenv("STORY_LEAN_CONTRACT", "1") != "0"
 
 
+def _multiline() -> bool:
+    """P1 — a beat carries a ``lines[]`` dialogue array (each turn its own speaker/
+    emotion) instead of a single narration. Default off. STORY_MULTILINE_BEATS=1 to
+    enable. Off = the pre-P1 contract, bit-identical."""
+    return _os.getenv("STORY_MULTILINE_BEATS", "0") == "1"
+
+
+# P1 — MULTI-LINE beat: one shot (khung hình) holding a `lines[]` dialogue array. The
+# khung-hình fields (visual_id/focus/bgm_mood/hook) stay on the beat; who-says-what +
+# emotion/pose move INTO each line. Used when STORY_MULTILINE_BEATS is on.
+_SCHEMA_MULTILINE = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ═══
+{
+  "topic": "<short topic in {LANG}>",
+  "tone": "<detected/created tone>",
+  "language": "<LANG code>",
+  "art_style": "<overall art style, e.g. cinematic ink-wash wuxia>",
+  "region": "cn|jp|ko|vi|eu|us|",
+  "genre_key": "wuxia|ngontinh|horror|fantasy|codai|hiendai|",
+  "characters": [
+    { "id": "<short slug, e.g. han_phong>", "name": "<display name>",
+      "canonical_desc": "<the character's canonical look: age, hair, attire, weapon, aura — kept consistent across the whole story / later chapters>",
+      "archetype": "<lowercase English role token, e.g. swordsman|emperor|office_worker|princess|witch|child|ghost — or '' if unsure>",
+      "asset": "<a CHARACTERS slug from the ASSET LIBRARY that best fits this character, or '' if none fits / no library given>",
+      "age": "", "gender": "male|female|", "voice_gender": "male|female" }
+  ],
+  "settings": [
+    { "id": "<slug>", "name": "<place>", "canonical_desc": "<canonical look of the place>",
+      "scene_kind": "<lowercase English scene token, e.g. cafe|forest|throne_room|bedroom|garden|street — or '' if unsure>",
+      "asset": "<a BACKGROUNDS slug from the ASSET LIBRARY that best fits this place, or '' if none fits / no library given>" }
+  ],
+  "visuals": [
+    { "id": "v1", "setting_id": "<a settings id>",
+      "character_ids": ["<characters ids present>"] }
+  ],
+  "timeline": [
+    { "id": "b1", "visual_id": "<a visuals id>",
+      "focus": "wide|left|center|right|top|bottom|close",
+      "bgm_mood": "<MOOD_VOCAB>",
+      "hook": false, "hook_text": "",
+      "lines": [
+        { "speaker_id": "<a characters id, or '' for narrator>",
+          "text": "<what this speaker says here, in target language>",
+          "emotion": "normal|happy|angry|sad|surprised",
+          "pose": "stand|wave|cheer|point|hip" }
+      ] }
+  ]
+}"""
+
+
 def _schema(lean: bool) -> str:
+    if _multiline():
+        return _SCHEMA_MULTILINE
     return _SCHEMA_LEAN if lean else _SCHEMA
 
 
 def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_char_hint: str = "",
-           render_mode: str = "svg", rich_beats: bool = False, lean: bool = False) -> str:
+           render_mode: str = "svg", rich_beats: bool = False, lean: bool = False,
+           multiline: bool = False) -> str:
     if subtitle_mode == "off":
         hook_rule = "Every beat: hook=false, hook_text=\"\" (no on-screen text at all)."
     else:
@@ -220,7 +272,14 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_c
                    "placement and on-screen text for THIS frame.\n")
     # A3: rule 5 must not self-contradict. For RICH beats (idea/long-adapt paragraphs)
     # the "no paragraph-long beats" clause is dropped; terse beats keep it.
-    if rich_beats:
+    if multiline:
+        _r5 = (f"5. narration in {lang_name}; each beat = ONE SHOT (one image) holding a SHORT SCENE as a "
+               "\"lines\" array of 1-4 spoken turns. Each line = {speaker_id, text, emotion, pose}; "
+               "speaker_id \"\" = narrator. A pure-narration beat has ONE narrator line; a dialogue beat "
+               "interleaves narrator + characters. Keep ALL lines of a beat in the SAME place/visual — start "
+               "a NEW beat when the scene/image changes. The lines in order narrate the whole story "
+               "faithfully (preserve names/facts, never invent).\n")
+    elif rich_beats:
         _r5 = (f"5. narration in {lang_name}; each beat = a self-contained MINI-SCENE{beat_char_hint} — "
                "keep beats EVENLY sized (no one-word beats, no half-empty beats); the beats in order "
                "narrate the whole story faithfully (preserve names/facts, never invent).\n")
@@ -230,8 +289,23 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_c
                "whole story faithfully (preserve names/facts, never invent).\n")
     # Rules 7+ describe the per-beat STYLE labels. Under the lean contract (SVG) the model
     # emits only bgm_mood + emotion + pose; the rest are pipeline-derived, so we drop their
-    # instructions. The full block (P2 / lean off) keeps all of them.
-    if lean:
+    # instructions. Multiline: emotion/pose live INSIDE each line. Full block keeps all.
+    if multiline:
+        _style = (
+            f"7. Each beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the music mood for THAT shot "
+            "(a creative label only, NOT an audio file/timestamp).\n"
+            "8. INSIDE each line: emotion = that speaker's feeling — normal|happy|angry|sad|surprised "
+            "(use normal when neutral); pose = that speaker's gesture — stand|wave|cheer|point|hip "
+            "(use stand unless the action clearly calls for one).\n"
+            "9. region/genre_key/archetype/scene_kind are OPTIONAL asset-library hints: lowercase English "
+            "tokens only; leave \"\" when unsure (never invent). They do NOT change the story.\n"
+            "10. \"asset\" (character/setting) = an exact SLUG copied from the ASSET LIBRARY section when one "
+            "fits, else \"\". Never a path; never a slug that is not listed. Absent library → \"\".\n"
+            "11. DO NOT output any render/path/timestamp field, an image prompt, NOR camera motion / "
+            "transitions / music placement / character-overlay position — those are added AUTOMATICALLY. "
+            "Emit ONLY the fields shown in the schema.\n"
+        )
+    elif lean:
         _style = (
             f"7. Each timeline beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood "
             "matching THAT beat's emotional tone (a creative label only, NOT an audio file/timestamp).\n"
@@ -386,7 +460,7 @@ def build_super_story_prompt(chapter: str, language: str = "vi", art_style: str 
         + "\n═══ SOURCE STORY (adapt THIS faithfully) ═══\n" + _fit(chapter) + "\n\n"
         + _schema(_lean_contract()).replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language), "svg",
-                 lean=_lean_contract())
+                 lean=_lean_contract(), multiline=_multiline())
     )
     return _SYS_ADAPT, user
 
@@ -421,8 +495,9 @@ def build_super_video_prompt(chapter: str, language: str = "vi", art_style: str 
         + _library_block(library_catalog)
         + _vocab_block()
         + "\n═══ SOURCE STORY (narrate THIS over the video, faithfully) ═══\n" + _fit(chapter) + "\n\n"
-        + _SCHEMA.replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
-        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language), "video")
+        + _schema(False).replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
+        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language), "video",
+                 multiline=_multiline())
     )
     return _SYS_VIDEO, user
 
@@ -523,7 +598,7 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
         + "\n═══ STORY IDEA (create FROM this) ═══\n" + _fit(idea, 8000) + "\n\n"
         + _schema(_lean_contract()).replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _idea_beat_hint, "svg",
-                 rich_beats=bool(_per_beat), lean=_lean_contract())
+                 rich_beats=bool(_per_beat), lean=_lean_contract(), multiline=_multiline())
     )
     return _SYS_IDEA, user
 
