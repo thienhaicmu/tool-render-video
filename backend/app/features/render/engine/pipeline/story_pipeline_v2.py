@@ -8,7 +8,7 @@ render_format="story" (routers/_common.process_render).
 
 Flow (all engine blocks reused; nothing in the clips/recap/content paths is touched):
   setup_render_pipeline · prepare_output_dir · generate_story_plan_v2 (1 super call) ·
-  apply_voice_cast_v2 · generate_visual_image (per Visual, gpt-image-1) ·
+  apply_voice_cast_v2 · _generate_images (procedural SVG per Visual, offline $0) ·
   synthesize_timeline (per voice-run TTS → beat_audio) · StoryPlan.build_cues
   (deterministic) · beat_render.render_one_cue (per cue) · assemble_shots
   (content_assembler xfade) · qa_pipeline (Sacred #8) · upsert_job(DONE) with the
@@ -66,9 +66,6 @@ from app.features.render.engine.stages.story.beat_render import render_one_cue
 from app.features.render.engine.stages.story.visuals_stage import (
     _worker_count,
     _generate_images,
-    _generate_reference_sheets,
-    _generate_env_reference_sheets,
-    _generate_character_masters,
     _generate_overlay_masters,
 )
 from app.features.render.engine.stages.story.bgm_stage import (
@@ -301,60 +298,72 @@ def run_story_v2(
         # by the periodic cache prune).
         visuals_dir = CACHE_DIR / "story_visuals" / job_id
         visuals_dir.mkdir(parents=True, exist_ok=True)
-        # Phase 2 — FINAL image provider from the payload (validator guarantees a valid
-        # value; default "gpt_image" = the existing paid, character-consistent path).
-        image_provider = (getattr(payload, "story_image_provider", "gpt_image") or "gpt_image").strip().lower()
-        if image_provider not in ("gpt_image", "pollinations", "svg"):
-            image_provider = "gpt_image"
+        # Story Mode is SVG-only (the schema validator coerces any stored legacy value →
+        # "svg"); this local is kept for the guard + call-site parity below.
+        image_provider = (getattr(payload, "story_image_provider", "svg") or "svg").strip().lower()
+        if image_provider != "svg":
+            image_provider = "svg"
+        # SVG foundation guard: when the SVG art path is active the resvg-py rasteriser
+        # is the SOLE source of key-visuals AND character overlays. If it's unavailable
+        # every visual would silently degrade to a solid background with no characters —
+        # a near-blank video delivered as success. Fail fast with a clear, actionable
+        # error instead. Only the image path is guarded here; a base video supplies its
+        # own imagery from the video frames (its overlay masters are guarded separately).
+        _svg_active = image_provider == "svg" or os.getenv("STORY_SVG_GEN", "0") == "1"
+        if _svg_active and not base_video_path:
+            from app.features.render.engine.visual import svg_raster
+            if not svg_raster.available():
+                raise RuntimeError(
+                    "Story SVG rendering needs the 'resvg-py' package, which is not "
+                    "installed — the video would have no artwork or characters. Install "
+                    "it (pip install resvg-py) and retry."
+                )
         visual_fallbacks = []
-        # A6 cost: when a base video is the visual layer, the key-visual images + reference
-        # sheets would be generated but NEVER used (render_one_cue draws from the video) —
-        # skip them entirely to save the gpt-image spend. Character masters (the overlay
-        # asset) are still generated in 3b below.
+        # When a base video is the visual layer the key-visual images are NEVER used
+        # (render_one_cue draws from the video) — skip composing them. The character
+        # overlay masters are generated in 3b below.
         if base_video_path:
             _job_log(effective_channel, job_id,
                      "Story v2: base video present — skipping key-visual image gen (unused)")
         else:
-            # Q3 — character reference sheets (gpt_image only) → fill plan.render.refs so
-            # image-edit keeps characters consistent. Best-effort; runs before image gen.
-            _generate_reference_sheets(plan, art_style, job_id=job_id,
-                                       effective_channel=effective_channel, provider=image_provider)
-            # G6 — environment reference sheets (gpt_image + series only) → keep locations
-            # consistent across shots + chapters. Best-effort; runs before image gen.
-            _generate_env_reference_sheets(plan, art_style, job_id=job_id,
-                                           effective_channel=effective_channel, provider=image_provider)
+            # Procedural SVG key-visuals (offline, $0). With the overlay default ON they are
+            # composed BACKGROUND-ONLY; the speaking character is composited per-beat below.
             visual_fallbacks = _generate_images(
                 plan, visuals_dir, art_style, img_w, img_h,
                 job_id=job_id, effective_channel=effective_channel, provider=image_provider,
             )
             if visual_fallbacks:
-                _hint = "OPENAI_API_KEY / prompts" if image_provider == "gpt_image" else "network / prompts"
                 _emit_render_event(
                     channel_code=effective_channel, job_id=job_id,
                     event="story.visual.fallback", level="WARNING",
                     message=(f"{len(visual_fallbacks)}/{plan.image_count()} image(s) unavailable — "
-                             f"used a solid background. Check {_hint}."),
+                             f"used a solid background. Check resvg-py / the visual prompts."),
                     step="render.story",
                     context={"fallback_visuals": visual_fallbacks, "total": plan.image_count()},
                 )
-            # N4 — per-(speaker, emotion, pose) overlay masters. SVG mode + overlay on
-            # (default ON, opt out STORY_CHAR_OVERLAY=0). Key-visuals were composed
-            # BACKGROUND-ONLY, so these masters are what the cue render overlays. Best-effort.
-            _svg = image_provider == "svg" or os.getenv("STORY_SVG_GEN", "0") == "1"
-            if _svg and os.getenv("STORY_CHAR_OVERLAY", "1") != "0":
+            # N4 — per-(speaker, emotion, pose) overlay masters. Key-visuals were composed
+            # BACKGROUND-ONLY, so these masters are what the cue render overlays (default ON,
+            # opt out STORY_CHAR_OVERLAY=0). Best-effort.
+            if os.getenv("STORY_CHAR_OVERLAY", "1") != "0":
                 _generate_overlay_masters(plan, visuals_dir, job_id=job_id,
                                           effective_channel=effective_channel)
 
-        # ── 3b. Character masters (A3) — transparent PNG per overlaid speaker, ONLY
-        #        when a base video is present (overlay compositing target). Best-effort;
-        #        a no-op when no beat sets char_anchor. Fills plan.render.masters.
-        if base_video_path:
-            _generate_character_masters(plan, art_style, job_id=job_id,
-                                        effective_channel=effective_channel)
+        # ── 3b. Character overlay masters (per emotion/pose) — when a base video is the
+        #        base layer, the SPEAKING CHARACTER is composited over the VIDEO. The video
+        #        is the background (no SVG background is ever drawn over it), so only the
+        #        transparent character masters are generated here — one per (speaker,
+        #        emotion, pose), matching the image path so a base-video story shows the
+        #        same per-beat expressions. Best-effort; a no-op with STORY_CHAR_OVERLAY=0
+        #        or no speaking beats. resvg-absent simply yields no overlay (the video
+        #        still plays), so this path is not hard-gated on the rasteriser.
+        if base_video_path and os.getenv("STORY_CHAR_OVERLAY", "1") != "0":
+            _generate_overlay_masters(plan, visuals_dir, job_id=job_id,
+                                      effective_channel=effective_channel)
 
         # ── 4. Narration (per voice-run TTS → beat_audio) ───────────────────
         _set_stage(JobStage.SEGMENT_BUILDING, 45, "Narration timeline")
-        synthesize_timeline(plan, job_id=job_id, audio_dir=audio_dir, subtitle_mode=subtitle_mode)
+        synthesize_timeline(plan, job_id=job_id, audio_dir=audio_dir, subtitle_mode=subtitle_mode,
+                            effective_channel=effective_channel)
 
         # ── 5. CUE SHEET (deterministic) ────────────────────────────────────
         plan.build_cues(subtitle_mode)

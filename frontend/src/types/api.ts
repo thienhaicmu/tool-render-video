@@ -232,10 +232,8 @@ export interface RenderRequest {
   story_idea?: string
   story_duration_sec?: number
   story_genre?: string
-  // Phase 2 — image provider for the FINAL render: 'gpt_image' (default, paid,
-  // character-consistent) | 'pollinations' (free Flux). Review always previews
-  // with the free provider (draft/final split).
-  story_image_provider?: 'svg' | 'gpt_image' | 'pollinations'
+  // NOTE: story_image_provider is intentionally NOT on the wire — Story Mode is
+  // SVG-only (procedural chibi, offline $0), so there is no provider choice.
   // A1 — optional LOCAL base video the story is composited over. '' = image-based
   // story (default). A valid path makes it the cue base layer (consumed in a later phase).
   story_base_video_path?: string

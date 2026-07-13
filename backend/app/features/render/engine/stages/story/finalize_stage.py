@@ -38,19 +38,31 @@ def _finalize_story_v2(job_id, effective_channel, payload, plan, *, output_dir, 
 
     _thumb_path = ""
     if os.getenv("STORY_THUMBNAIL", "1") == "1":
-        try:
-            from app.services.bin_paths import get_ffmpeg_bin
-            _thumb = output_dir / f"{final_out.stem}.thumb.jpg"
-            _tss = max(0.5, _final_dur / 3.0)
-            subprocess.run(
-                [get_ffmpeg_bin(), "-y", "-ss", f"{_tss:.2f}", "-i", str(final_out),
-                 "-frames:v", "1", "-q:v", "3", str(_thumb)],
-                capture_output=True, timeout=60,
-            )
-            if _thumb.exists() and _thumb.stat().st_size > 0:
-                _thumb_path = str(_thumb)
-        except Exception as _th_exc:
-            logger.warning("story v2: thumbnail failed (non-fatal): %s", _th_exc)
+        _thumb = output_dir / f"{final_out.stem}.thumb.jpg"
+        # Prefer a designed SVG poster (topic + hero visual) — offline, on-brand. Falls
+        # back to a mid-video frame grab when the poster can't be composed.
+        if os.getenv("STORY_THUMBNAIL_POSTER", "1") == "1":
+            try:
+                from app.features.render.engine.visual.story_poster import compose_story_poster
+                from app.features.render.engine.encoder.ffmpeg_helpers import resolve_target_dimensions
+                _pw, _ph = resolve_target_dimensions(getattr(payload, "aspect_ratio", "16:9") or "16:9")
+                if compose_story_poster(plan, str(_thumb), int(_pw), int(_ph)):
+                    _thumb_path = str(_thumb)
+            except Exception as _p_exc:
+                logger.warning("story v2: poster thumbnail failed (non-fatal): %s", _p_exc)
+        if not _thumb_path:
+            try:
+                from app.services.bin_paths import get_ffmpeg_bin
+                _tss = max(0.5, _final_dur / 3.0)
+                subprocess.run(
+                    [get_ffmpeg_bin(), "-y", "-ss", f"{_tss:.2f}", "-i", str(final_out),
+                     "-frames:v", "1", "-q:v", "3", str(_thumb)],
+                    capture_output=True, timeout=60,
+                )
+                if _thumb.exists() and _thumb.stat().st_size > 0:
+                    _thumb_path = str(_thumb)
+            except Exception as _th_exc:
+                logger.warning("story v2: thumbnail failed (non-fatal): %s", _th_exc)
 
     try:
         from app.db.jobs_repo import update_part_output_path

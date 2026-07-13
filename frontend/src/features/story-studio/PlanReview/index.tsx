@@ -2,20 +2,19 @@
  * PlanReview — Story v2 phase 2 (F3): review + EDIT the StoryPlan before render.
  *
  * Three panels over the same immutable plan (edits flow up via setPlan):
- *   CharactersPanel — name · canonical_desc · voice · optional reference sheet
- *   VisualsPanel    — per key-visual prompt/negative/characters/tier + preview
+ *   CharactersPanel — name · canonical_desc · voice · optional character master
+ *   VisualsPanel    — per key-visual prompt/negative/characters + SVG preview
  *   TimelineEditor  — the beat list (narration · visual · focus/motion/transition
- *                     · hook) with reorder / add / delete + live duration
+ *                     · emotion/pose · hook) with reorder / add / delete + live duration
  *
- * A locally-held ``previews`` map (visual_id → preview image url) is shared so the
- * TimelineEditor can show a thumbnail once a visual has been previewed. Uses the
- * Studio BASE (F0) only — no content-studio.
+ * Story Mode is SVG-only: previews are composed procedurally server-side (offline, $0,
+ * WYSIWYG) via /api/story/visual/svg-preview. A locally-held ``previews`` map
+ * (visual_id → image url) is shared so the TimelineEditor can thumbnail each visual.
  */
 import { useEffect, useRef, useState } from 'react'
 import type { StoryPlanV2, Beat, Visual, CharacterDef } from '../../../api/story'
-import { previewVisual } from '../../../api/story'
-import type { Aspect, ImageProvider, StoryLang } from '../types'
-import { PREMIUM_IMG_COST_USD } from '../types'
+import { svgPreview } from '../../../api/story'
+import type { Aspect, StoryLang } from '../types'
 import { beatEstSec, visualColorMap } from './helpers'
 import { CharactersPanel } from './CharactersPanel'
 import { VisualsPanel } from './VisualsPanel'
@@ -29,7 +28,7 @@ function newBeatId(existing: Beat[]): string {
 }
 
 export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language,
-  imageProvider, onImageProvider, onRender, onBack }: {
+  onRender, onBack }: {
   vi: boolean
   plan: StoryPlanV2
   setPlan: (p: StoryPlanV2) => void
@@ -38,39 +37,28 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
   artStyle: string
   aspect: Aspect
   language: StoryLang
-  imageProvider: ImageProvider
-  onImageProvider: (p: ImageProvider) => void
   onRender: () => void
   onBack: () => void
 }) {
   const [previews, setPreviews] = useState<Record<string, string>>({})
   const setPreview = (id: string, url: string) => setPreviews((p) => ({ ...p, [id]: url }))
 
-  // Phase 2 (draft/final split): on entering Review, auto-generate a FREE draft image
-  // for the whole storyboard so the user sees it BEFORE paying for the premium final.
-  // Sequential + best-effort (gentle on the free service; one bad image never blocks).
+  // On entering Review, compose the procedural SVG for the whole storyboard so the user
+  // sees exactly what the render will produce (WYSIWYG, offline $0). One batch call.
   const draftRan = useRef(false)
   const [drafting, setDrafting] = useState(false)
   const [draftMsg, setDraftMsg] = useState('')
 
   async function draftAll(force = false) {
     if (drafting) return
-    const targets = plan.visuals.filter((v) => v.prompt.trim() && (force || !previews[v.id]))
+    const targets = plan.visuals.filter((v) => force || !previews[v.id])
     if (!targets.length) return
     setDrafting(true)
-    let done = 0
-    for (const v of targets) {
-      setDraftMsg(vi ? `Đang tạo nháp ${done + 1}/${targets.length}…` : `Drafting ${done + 1}/${targets.length}…`)
-      try {
-        const r = await previewVisual({
-          prompt: v.prompt, negative_prompt: v.negative_prompt,
-          art_style: artStyle, aspect_ratio: aspect, tier: v.tier,
-          provider: 'pollinations',   // draft = FREE regardless of the final choice
-        })
-        setPreview(v.id, r.url)
-      } catch { /* best-effort per visual */ }
-      done++
-    }
+    setDraftMsg(vi ? 'Đang dựng ảnh…' : 'Composing…')
+    try {
+      const r = await svgPreview({ plan, visual_ids: targets.map((v) => v.id) })
+      for (const it of r.items) setPreview(it.visual_id, it.url)
+    } catch { /* best-effort — a badge fallback shows where a preview is missing */ }
     setDrafting(false); setDraftMsg('')
   }
 
@@ -81,7 +69,6 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const premiumCost = (plan.visuals.length * PREMIUM_IMG_COST_USD).toFixed(2)
   // Library-pick matching visibility (D3): how many characters/settings the AI resolved
   // to a library asset slug (the rest fall back to fuzzy match → procedural art).
   const libChars = plan.characters.filter((c) => (c.asset || '').trim()).length
@@ -110,7 +97,7 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
   const updateVisual = (id: string, up: Partial<Visual>) =>
     patch({ visuals: plan.visuals.map((v) => (v.id === id ? { ...v, ...up } : v)) })
   // AL4 — pin a library background into render.visual_assets so the render reuses that
-  // exact file (library-first, skips AI image gen). "" clears it (back to AI/draft).
+  // exact file (library-first, skips SVG compose). "" clears it (back to procedural).
   const updateVisualAsset = (id: string, path: string) => {
     const va = { ...(plan.render?.visual_assets ?? {}) }
     if (path) va[id] = path; else delete va[id]
@@ -164,51 +151,25 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
           </div>
         </div>
         <div className="st-actions">
-          {/* Phase 2 — pick what the FINAL render uses (draft above is always free). */}
-          <div className="st-provider" role="group" aria-label={vi ? 'Chất lượng ảnh' : 'Image quality'}>
-            <button type="button" className={`st-provider-opt${imageProvider === 'svg' ? ' is-on' : ''}`}
-              disabled={busy} onClick={() => onImageProvider('svg')}
-              title={vi ? 'Ảnh chibi vẽ trong máy — $0, offline, không cần AI' : 'Chibi art rendered locally — $0, offline, no AI'}>
-              {vi ? 'Chibi' : 'Chibi'} · $0
-            </button>
-            <button type="button" className={`st-provider-opt${imageProvider === 'pollinations' ? ' is-on' : ''}`}
-              disabled={busy} onClick={() => onImageProvider('pollinations')}
-              title={vi ? 'Ảnh miễn phí (Flux) — $0' : 'Free images (Flux) — $0'}>
-              {vi ? 'Free' : 'Free'} · $0
-            </button>
-            <button type="button" className={`st-provider-opt${imageProvider === 'gpt_image' ? ' is-on' : ''}`}
-              disabled={busy} onClick={() => onImageProvider('gpt_image')}
-              title={vi ? 'Ảnh cao cấp (gpt-image-1) — nhân vật nhất quán' : 'Premium (gpt-image-1) — consistent characters'}>
-              {vi ? 'Premium' : 'Premium'} · ~${premiumCost}
-            </button>
-          </div>
+          <span className="st-tag st-tag--dim" title={vi ? 'Ảnh chibi vẽ trong máy — offline, $0' : 'Chibi art rendered locally — offline, $0'}>
+            🖍 {vi ? 'Chibi · $0' : 'Chibi · $0'}
+          </span>
           <button type="button" className="st-btn" disabled={busy || drafting} onClick={() => void draftAll(true)}>
-            {drafting ? draftMsg : (vi ? '↻ Nháp lại' : '↻ Re-draft')}
+            {drafting ? draftMsg : (vi ? '↻ Dựng lại ảnh' : '↻ Recompose')}
           </button>
           <button type="button" className="st-btn" disabled={busy} onClick={onBack}>
             {vi ? '‹ Sửa nguồn' : '‹ Edit source'}
           </button>
           <button type="button" className="st-btn st-btn--primary" disabled={busy} onClick={onRender}>
-            {busy ? (vi ? 'Đang gửi…' : 'Submitting…')
-              : imageProvider === 'gpt_image'
-                ? (vi ? `🎥 Render · ~$${premiumCost}` : `🎥 Render · ~$${premiumCost}`)
-                : (vi ? '🎥 Render · Free' : '🎥 Render · Free')}
+            {busy ? (vi ? 'Đang gửi…' : 'Submitting…') : (vi ? '🎥 Render · $0' : '🎥 Render · $0')}
           </button>
         </div>
       </div>
 
-      {imageProvider === 'gpt_image' && plan.visuals.length >= 8 && (
-        <div className="st-cost-hint">
-          {vi
-            ? `💡 ${plan.visuals.length} ảnh Premium ≈ $${premiumCost}. Bản nháp trên đã miễn phí — chuyển "Free" nếu muốn render $0.`
-            : `💡 ${plan.visuals.length} premium images ≈ $${premiumCost}. The drafts above are free — switch to "Free" to render at $0.`}
-        </div>
-      )}
-
       <CharactersPanel vi={vi} plan={plan} artStyle={artStyle} language={language}
         onChange={updateCharacter} onVoiceChange={updateVoice} onMasterChange={updateMaster} />
       <VisualsPanel
-        vi={vi} plan={plan} artStyle={artStyle} aspect={aspect} colors={colors}
+        vi={vi} plan={plan} aspect={aspect} colors={colors}
         previews={previews} setPreview={setPreview}
         onChange={updateVisual} onVisualAsset={updateVisualAsset}
       />

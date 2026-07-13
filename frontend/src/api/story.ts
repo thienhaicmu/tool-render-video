@@ -124,20 +124,21 @@ export interface StoryPlanResponse {
   source_char_limit?: number
 }
 
-export interface VisualPreviewRequest {
-  prompt: string
-  negative_prompt?: string
-  art_style?: string
-  aspect_ratio?: string
-  tier?: string
-  // Phase 2 — draft/final split. Omit → backend defaults to the FREE provider
-  // (Pollinations) so storyboard previews/regenerates cost $0.
-  provider?: 'pollinations' | 'gpt_image'
+// Story Mode is SVG-only: the Review composes procedural SVG key-visuals server-side
+// (offline, $0, WYSIWYG) from the plan being edited.
+export interface SvgPreviewRequest {
+  plan: StoryPlanV2
+  visual_ids?: string[]   // subset to compose ([]/omit = all)
 }
 
-export interface VisualPreviewResponse {
+export interface SvgPreviewItem {
+  visual_id: string
   token: string
   url: string
+}
+
+export interface SvgPreviewResponse {
+  items: SvgPreviewItem[]
 }
 
 export interface NarrationPreviewRequest {
@@ -155,15 +156,18 @@ export interface NarrationPreviewResponse {
   duration_sec: number
 }
 
-export interface ReferenceSheetRequest {
-  series_id?: string
+// Cutout-ready transparent CHARACTER MASTER (procedural SVG chibi) — the same asset
+// the render overlays. Derived from archetype/gender (+ region/genre palette).
+export interface CharacterMasterRequest {
   character_id?: string
   name?: string
-  description?: string
+  description?: string   // kept for compatibility (unused by the SVG builder)
+  archetype?: string
+  gender?: string
+  region?: string
+  genre?: string
   art_style?: string
-  // true → cutout-ready CHARACTER MASTER (transparent PNG) for overlay/preview.
-  transparent?: boolean
-  // A5 — 0 = canonical master; >0 regenerates a different look to pick from.
+  // 0 = canonical stand pose; >0 rotates the pose so "regenerate" yields a new look.
   variant?: number
 }
 
@@ -189,17 +193,17 @@ function post<T>(path: string, body: unknown): Promise<T> {
 export const planStory = (req: StoryPlanRequest) =>
   post<StoryPlanResponse>('/api/story/plan', req)
 
-/** Generate ONE key-visual image from a prompt (storyboard preview / regenerate). */
-export const previewVisual = (req: VisualPreviewRequest) =>
-  post<VisualPreviewResponse>('/api/story/visual/preview', req)
+/** Compose the procedural SVG key-visual(s) for a plan (Review preview, offline $0). */
+export const svgPreview = (req: SvgPreviewRequest) =>
+  post<SvgPreviewResponse>('/api/story/visual/svg-preview', req)
 
 /** Synthesize ONE beat's narration to previewable audio. */
 export const previewNarration = (req: NarrationPreviewRequest) =>
   post<NarrationPreviewResponse>('/api/story/narration/preview', req)
 
-/** Generate a Character Reference Sheet, or (transparent=true) a cutout-ready
- * character master. Returns the durable path and, for a master, a viewable url. */
-export const generateReferenceSheet = (req: ReferenceSheetRequest) =>
+/** Compose a cutout-ready transparent character master (procedural SVG chibi).
+ * Returns the durable path + a viewable url. */
+export const generateCharacterMaster = (req: CharacterMasterRequest) =>
   post<{ path: string; url?: string }>('/api/story/character/reference-sheet', req)
 
 /** Reattach: fetch a job's persisted StoryPlan v2 (polling fallback). */

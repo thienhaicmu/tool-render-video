@@ -1,6 +1,9 @@
-"""Story Mode v2 — B8 /api/story/plan (super plan, source A/B) + /visual/preview
-router logic (offline, monkeypatched)."""
+"""Story Mode v2 — /api/story/plan (super plan, source A/B) + /visual/svg-preview
+router logic (offline, monkeypatched). Story Mode is SVG-only, so the preview composes
+procedural SVG (no paid provider)."""
 from __future__ import annotations
+
+import json
 
 import pytest
 from fastapi import HTTPException
@@ -9,15 +12,19 @@ from app.domain.story_plan_v2 import StoryPlan, CharacterDef, SettingDef, Visual
 from app.features.story import router as story_router
 from app.features.story.router import (
     StoryPlanRequest, plan_storyboard,
-    StoryVisualPreviewRequest, visual_preview,
+    SvgPreviewRequest, svg_visual_preview,
 )
+from app.features.render.engine.visual import svg_raster
+
+_resvg = pytest.mark.skipif(not svg_raster.available(),
+                            reason="resvg-py not installed (SVG raster unavailable)")
 
 
 def _plan() -> StoryPlan:
     return StoryPlan(
-        language="vi", topic="Kiem The",
-        characters=[CharacterDef(id="han", name="Han")],
-        settings=[SettingDef(id="s1", name="Hall")],
+        language="vi", topic="Kiem The", region="cn", genre_key="wuxia",
+        characters=[CharacterDef(id="han", name="Han", archetype="swordsman", gender="male")],
+        settings=[SettingDef(id="s1", name="Hall", scene_kind="palace")],
         visuals=[Visual(id="v1", setting_id="s1", prompt="wide hall", character_ids=["han"])],
         timeline=[
             Beat(id="b1", narration="Đêm lạnh.", speaker_id="", visual_id="v1"),
@@ -78,59 +85,52 @@ def test_plan_source_idea_passes_idea_and_duration(monkeypatch):
     assert out["image_count"] == 1 and out["beat_count"] == 2
 
 
-def test_plan_returns_cost_preflight(monkeypatch):
-    """C6: /plan surfaces reference-sheet + premium-image counts so a consumer's
-    cost estimate isn't blind to the per-character sheets the gpt_image path adds."""
+def test_plan_cost_preflight_is_zero_for_svg(monkeypatch):
+    """Story Mode is SVG-only → all imagery is procedural + offline ($0)."""
     monkeypatch.setattr(story_router, "generate_story_plan_v2", lambda **kw: _plan())
     out = plan_storyboard(StoryPlanRequest(source="paste", chapter_text="Nội dung.", language="vi"))
     assert out["character_count"] == 1
     cp = out["cost_preflight"]
     assert cp["visual_count"] == 1
     assert cp["character_count"] == 1
-    assert cp["reference_sheet_count"] == 1        # v1 references character "han"
-    assert cp["environment_sheet_count"] == 0      # no series → no env sheets
-    assert cp["premium_image_count"] == 2          # 1 visual + 1 reference sheet
+    assert cp["premium_image_count"] == 0
+    assert cp["estimated_cost_usd"] == 0.0
 
 
-def test_plan_cost_preflight_counts_env_sheets_for_series(monkeypatch):
-    """G6: a series render (with env sheets opted in) also generates one environment
-    sheet per distinct setting."""
-    monkeypatch.setenv("STORY_ENV_REFERENCE_SHEETS", "1")   # opt-in (default off)
-    monkeypatch.setattr(story_router, "generate_story_plan_v2", lambda **kw: _plan())
-    out = plan_storyboard(StoryPlanRequest(source="paste", chapter_text="x",
-                                           series_id="ser-x", chapter_no=1))
-    cp = out["cost_preflight"]
-    assert cp["reference_sheet_count"] == 1        # character "han"
-    assert cp["environment_sheet_count"] == 1      # setting "s1"
-    assert cp["premium_image_count"] == 3          # 1 visual + 1 refsheet + 1 env
+# ── /api/story/visual/svg-preview ─────────────────────────────────────────────
 
-
-# ── /api/story/visual/preview ─────────────────────────────────────────────────
-
-def test_visual_preview_422_empty_prompt():
+def test_svg_preview_422_empty_plan():
     with pytest.raises(HTTPException) as ei:
-        visual_preview(StoryVisualPreviewRequest(prompt="  "))
+        svg_visual_preview(SvgPreviewRequest(plan={}))
     assert ei.value.status_code == 422
 
 
-def test_visual_preview_502_on_failure(monkeypatch):
-    monkeypatch.setattr(story_router, "generate_story_plan_v2", lambda **kw: None)  # unrelated guard
-    from app.features.render.engine.visual import story_image
-    monkeypatch.setattr(story_image, "generate_visual_image", lambda *a, **k: None)
+def test_svg_preview_502_when_raster_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        "app.features.render.engine.visual.svg_raster.available", lambda: False)
+    plan_dict = json.loads(_plan().to_json())
     with pytest.raises(HTTPException) as ei:
-        visual_preview(StoryVisualPreviewRequest(prompt="a wide hall"))
+        svg_visual_preview(SvgPreviewRequest(plan=plan_dict))
     assert ei.value.status_code == 502
 
 
-def test_visual_preview_success_returns_token(monkeypatch, tmp_path):
+@_resvg
+def test_svg_preview_success_returns_items(monkeypatch, tmp_path):
     monkeypatch.setattr(story_router, "_VISUAL_DIR", tmp_path)
-    from app.features.render.engine.visual import story_image
+    plan_dict = json.loads(_plan().to_json())
+    out = svg_visual_preview(SvgPreviewRequest(plan=plan_dict))
+    items = out["items"]
+    assert items and items[0]["visual_id"] == "v1"
+    tok = items[0]["token"]
+    assert items[0]["url"] == f"/api/story/visual/image/{tok}"
+    assert (tmp_path / f"{tok}.png").exists()
 
-    def _fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
-        from pathlib import Path
-        Path(out_path).write_bytes(b"\x89PNG_preview")
-        return out_path
-    monkeypatch.setattr(story_image, "generate_visual_image", _fake_img)
-    out = visual_preview(StoryVisualPreviewRequest(prompt="a wide moonlit hall", tier="low"))
-    assert out["token"] and out["url"] == f"/api/story/visual/image/{out['token']}"
-    assert (tmp_path / f"{out['token']}.png").exists()
+
+@_resvg
+def test_svg_preview_subset_by_visual_ids(monkeypatch, tmp_path):
+    monkeypatch.setattr(story_router, "_VISUAL_DIR", tmp_path)
+    plan = _plan()
+    plan.visuals.append(Visual(id="v2", setting_id="s1", prompt="courtyard"))
+    out = svg_visual_preview(SvgPreviewRequest(plan=json.loads(plan.to_json()), visual_ids=["v2"]))
+    ids = {it["visual_id"] for it in out["items"]}
+    assert ids == {"v2"}

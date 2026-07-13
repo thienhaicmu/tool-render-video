@@ -236,13 +236,23 @@ export function StoryStudio() {
                     : 'AI produced no plan. Check API key / retry.')
       } else {
         setPlan(r.plan); resetHistory()
-        setEstTotal(r.estimated_total_sec || 0)
+        const est = r.estimated_total_sec || 0
+        setEstTotal(est)
         if (r.source_truncated) {
           const n = (r.source_chars ?? 0).toLocaleString()
           const lim = (r.source_char_limit ?? 0).toLocaleString()
           setNotice(vi
             ? `Nguồn dài ${n} ký tự — chỉ ${lim} ký tự đầu được dùng, phần cuối bị lược. Cân nhắc tách chương để không mất nội dung.`
             : `Source is ${n} chars — only the first ${lim} were used; the tail was cut. Consider splitting the chapter so no content is lost.`)
+        } else if (cfg.source === 'idea' && cfg.durationSec > 0 && est > 0
+                   && Math.abs(est - cfg.durationSec) / cfg.durationSec > 0.3) {
+          // F-UX2: the AI authors the story freely, so its length can drift from the
+          // requested target — surface the gap (edit the timeline in Review to adjust).
+          const want = Math.round(cfg.durationSec / 60)
+          const got = Math.round(est / 60)
+          setNotice(vi
+            ? `Bạn đặt ~${want} phút nhưng AI dựng ~${got} phút (≈${Math.round(est)}s). Chỉnh timeline ở bước Duyệt nếu cần đúng thời lượng.`
+            : `You targeted ~${want} min but the AI wrote ~${got} min (≈${Math.round(est)}s). Edit the timeline in Review to hit the length.`)
         }
         setPhase('review')
       }
@@ -261,7 +271,6 @@ export function StoryStudio() {
       story_series_id: cfg.seriesId,
       story_chapter_no: cfg.chapterNo,
       story_plan_override: JSON.stringify(p),
-      story_image_provider: cfg.imageProvider,
       story_base_video_path: cfg.baseVideoPath,
       voice_language: VOICE_LOCALE[cfg.language],
       aspect_ratio: cfg.aspect,
@@ -315,7 +324,6 @@ export function StoryStudio() {
         <PlanReview
           vi={vi} plan={plan} setPlan={recordPlan} estTotal={estTotal} busy={busy}
           artStyle={cfg.artStyle} aspect={cfg.aspect} language={cfg.language}
-          imageProvider={cfg.imageProvider} onImageProvider={(p) => setKey('imageProvider', p)}
           onRender={onRender} onBack={reset}
         />
       )}

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -98,6 +99,30 @@ def get_output_thumbnail(
 
     if not Path(output_file).is_file():
         raise HTTPException(status_code=404, detail="Output file no longer exists on disk")
+
+    # Prefer a designed poster sibling ({stem}.thumb.jpg) when present — Story Mode writes
+    # a procedural SVG cover there at finalize. Scaled to `width` + cached; on any failure
+    # we fall through to the video frame grab below (unchanged for clips/recap/content).
+    poster = Path(output_file).with_name(Path(output_file).stem + ".thumb.jpg")
+    if poster.is_file() and poster.stat().st_size > 0:
+        try:
+            pkey = _cache_key(str(poster), poster.stat().st_mtime) + f"|w{width}"
+            pcached = _cache_get(pkey)
+            if pcached:
+                return Response(content=pcached, media_type="image/jpeg",
+                                headers={"Cache-Control": "max-age=3600"})
+            from app.services.bin_paths import get_ffmpeg_bin
+            r = subprocess.run(
+                [get_ffmpeg_bin(), "-y", "-i", str(poster), "-vf", f"scale={width}:-2",
+                 "-frames:v", "1", "-q:v", "4", "-f", "mjpeg", "pipe:1"],
+                capture_output=True, timeout=30,
+            )
+            if r.returncode == 0 and r.stdout:
+                _cache_put(pkey, r.stdout)
+                return Response(content=r.stdout, media_type="image/jpeg",
+                                headers={"Cache-Control": "max-age=3600"})
+        except Exception:
+            pass   # fall through to the frame grab
 
     # Cache lookup — keyed by path + mtime so a re-render invalidates the entry.
     try:

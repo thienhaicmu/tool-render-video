@@ -298,6 +298,13 @@ def _run_periodic_cleanup():
                 _cleanup_logger.warning("data_retention read failed: %s", _exc)
             _retention_days = _db_days if _db_days is not None else _JOB_RETENTION_DAYS
             result_jobs = prune_old_jobs(_retention_days)
+            # F-DB1: empty old Story-project trash so the authoring store doesn't grow
+            # unbounded. Only ever removes already-trashed projects. Off by default.
+            try:
+                from app.db.story_project_repo import prune_trashed_projects
+                prune_trashed_projects(int(os.getenv("STORY_PROJECT_TRASH_RETENTION_DAYS", "0") or 0))
+            except Exception:
+                pass
             # Reconcile phantom jobs (DB 'running'/'queued' but no live worker)
             # so a dead render can't block new renders. See
             # app.jobs.manager.reconcile_orphaned_render_jobs.

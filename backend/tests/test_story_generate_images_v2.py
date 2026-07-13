@@ -1,13 +1,14 @@
-"""Story Mode v2 — V2: _generate_images persists incrementally + writes to the
-persistent visuals dir + emits story.visual.ready per image (offline, mocked)."""
+"""Story Mode v2 — _generate_images persists incrementally + writes to the persistent
+visuals dir + emits story.visual.ready per image. Story Mode is SVG-only, so image gen
+composes procedural SVG (svg_raster.save_svg_png is mocked for deterministic control)."""
 from __future__ import annotations
 
 from pathlib import Path
 
-# A0 refactor: _generate_images + its deps (update_story_plan / _emit_render_event /
-# generate_visual_image) live in visuals_stage now — unit-test it there.
 import app.features.render.engine.stages.story.visuals_stage as sp2
 from app.domain.story_plan_v2 import StoryPlan, Visual, Beat
+
+_SAVE = "app.features.render.engine.visual.svg_raster.save_svg_png"
 
 
 def _plan():
@@ -20,13 +21,14 @@ def _plan():
 def test_incremental_persist_and_persistent_dir(monkeypatch, tmp_path):
     persisted: list[str] = []
     events: list[dict] = []
+    monkeypatch.setenv('STORY_IMAGE_WORKERS', '1')   # serial → deterministic reveal order
     monkeypatch.setattr(sp2, 'update_story_plan', lambda jid, blob: persisted.append(blob))
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **kw: events.append(kw))
 
-    def fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
+    def fake_save(svg, out_path, w, h, opaque_bg=''):
         Path(out_path).write_bytes(b'\x89PNG')
-        return out_path
-    monkeypatch.setattr(sp2, 'generate_visual_image', fake_img)
+        return str(out_path)
+    monkeypatch.setattr(_SAVE, fake_save)
 
     p = _plan()
     out_dir = tmp_path / 'story_visuals' / 'job1'
@@ -51,13 +53,14 @@ def test_fallback_skips_persist(monkeypatch, tmp_path):
     persisted: list[str] = []
     monkeypatch.setattr(sp2, 'update_story_plan', lambda jid, blob: persisted.append(blob))
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **kw: None)
-    # v1 ok, v2 fails (None).
-    def fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
-        if visual.id == 'v2':
+
+    # v1 ok, v2 fails (raster returns None → solid-background fallback).
+    def fake_save(svg, out_path, w, h, opaque_bg=''):
+        if str(out_path).endswith('v2.png'):
             return None
         Path(out_path).write_bytes(b'\x89PNG')
-        return out_path
-    monkeypatch.setattr(sp2, 'generate_visual_image', fake_img)
+        return str(out_path)
+    monkeypatch.setattr(_SAVE, fake_save)
 
     p = _plan()
     out_dir = tmp_path / 'v'; out_dir.mkdir()
@@ -68,47 +71,6 @@ def test_fallback_skips_persist(monkeypatch, tmp_path):
     assert len(persisted) == 1  # only the successful visual persisted
 
 
-# ── Cost cap: STORY_MAX_PREMIUM_IMAGES ────────────────────────────────────────
-
-def test_premium_image_cap_limits_gen(monkeypatch, tmp_path):
-    from app.domain.story_plan_v2 import StoryPlan, Visual, Beat
-    monkeypatch.setenv("STORY_MAX_PREMIUM_IMAGES", "1")
-    monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
-    monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
-    calls = {"n": 0}
-
-    def fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
-        calls["n"] += 1
-        Path(out_path).write_bytes(b'\x89PNG')
-        return out_path
-    monkeypatch.setattr(sp2, 'generate_visual_image', fake_img)
-    p = StoryPlan(visuals=[Visual(id=f'v{i}', prompt='x') for i in range(1, 4)],
-                  timeline=[Beat(id='b1', narration='a', visual_id='v1')])
-    fb = sp2._generate_images(p, tmp_path, '', 1024, 1024,
-                              job_id='j', effective_channel='c', provider='gpt_image')
-    assert calls["n"] == 1                     # cap=1 → only one premium image generated
-    assert set(fb) == {'v2', 'v3'}             # the rest fall back to a solid background
-
-
-def test_premium_cap_off_by_default(monkeypatch, tmp_path):
-    from app.domain.story_plan_v2 import StoryPlan, Visual, Beat
-    monkeypatch.delenv("STORY_MAX_PREMIUM_IMAGES", raising=False)
-    monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
-    monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
-    calls = {"n": 0}
-
-    def fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
-        calls["n"] += 1
-        Path(out_path).write_bytes(b'\x89PNG')
-        return out_path
-    monkeypatch.setattr(sp2, 'generate_visual_image', fake_img)
-    p = StoryPlan(visuals=[Visual(id=f'v{i}', prompt='x') for i in range(1, 4)],
-                  timeline=[Beat(id='b1', narration='a', visual_id='v1')])
-    fb = sp2._generate_images(p, tmp_path, '', 1024, 1024,
-                              job_id='j', effective_channel='c', provider='gpt_image')
-    assert calls["n"] == 3 and fb == []        # default 0 = unlimited (all generated)
-
-
 # ── A3: character masters for overlaid speakers ───────────────────────────────
 
 def test_generate_character_masters_only_overlaid_speakers(monkeypatch):
@@ -116,7 +78,7 @@ def test_generate_character_masters_only_overlaid_speakers(monkeypatch):
     import app.features.render.engine.visual.story_reference_sheet as rs
     monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
-    monkeypatch.setattr(rs, 'generate_character_master', lambda c, art_style='': f'/m/{c.id}.png')
+    monkeypatch.setattr(rs, 'generate_character_master', lambda c, art_style='', **k: f'/m/{c.id}.png')
 
     p = StoryPlan(
         characters=[CharacterDef(id='han', name='Han'), CharacterDef(id='lo', name='Lo')],
@@ -135,7 +97,7 @@ def test_generate_character_masters_noop_without_overlay(monkeypatch):
     import app.features.render.engine.visual.story_reference_sheet as rs
     called = {'n': 0}
     monkeypatch.setattr(rs, 'generate_character_master',
-                        lambda c, art_style='': called.__setitem__('n', called['n'] + 1) or '/x.png')
+                        lambda c, art_style='', **k: called.__setitem__('n', called['n'] + 1) or '/x.png')
     p = StoryPlan(characters=[CharacterDef(id='han', name='Han')],
                   visuals=[Visual(id='v1', prompt='x')],
                   timeline=[Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='none')])
@@ -151,19 +113,18 @@ def test_library_first_skips_preassigned_visual(monkeypatch, tmp_path):
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
     calls = {"n": 0}
 
-    def fake_img(visual, refs, art_style, w, h, out_path, seed=0, provider="gpt_image"):
+    def fake_save(svg, out_path, w, h, opaque_bg=''):
         calls["n"] += 1
         Path(out_path).write_bytes(b'\x89PNG')
-        return out_path
-    monkeypatch.setattr(sp2, 'generate_visual_image', fake_img)
+        return str(out_path)
+    monkeypatch.setattr(_SAVE, fake_save)
     lib = tmp_path / 'lib_bg.png'
     lib.write_bytes(b'\x89PNG')                       # a library background already on disk
     p = StoryPlan(visuals=[Visual(id='v1', prompt='x'), Visual(id='v2', prompt='y')],
                   timeline=[Beat(id='b1', narration='a', visual_id='v1')])
     p.render.visual_assets['v1'] = str(lib)           # v1 assigned from the library
-    fb = sp2._generate_images(p, tmp_path, '', 1024, 1024,
-                              job_id='j', effective_channel='c', provider='gpt_image')
-    assert calls["n"] == 1                            # only v2 generated (v1 came from library)
+    fb = sp2._generate_images(p, tmp_path, '', 1024, 1024, job_id='j', effective_channel='c')
+    assert calls["n"] == 1                            # only v2 composed (v1 came from library)
     assert p.render.visual_assets['v1'] == str(lib)   # library asset untouched
     assert 'v2' in p.render.visual_assets and fb == []
 
@@ -178,7 +139,7 @@ def test_library_first_auto_matches_character_master(monkeypatch):
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
     gen = {'n': 0}
     monkeypatch.setattr(rs, 'generate_character_master',
-                        lambda c, art_style='': gen.__setitem__('n', gen['n'] + 1) or '/ai/gen.png')
+                        lambda c, art_style='', **k: gen.__setitem__('n', gen['n'] + 1) or '/ai/gen.png')
     monkeypatch.setattr(ar, 'match_asset',
                         lambda kind, name='', region='', genre='', transparent_only=False:
                         '/lib/han.png' if (kind == 'character' and name == 'Han') else None)
@@ -189,7 +150,7 @@ def test_library_first_auto_matches_character_master(monkeypatch):
                   timeline=[Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='left')])
     sp2._generate_character_masters(p, '', job_id='j', effective_channel='c')
     assert p.render.masters == {'han': '/lib/han.png'}   # library match used
-    assert gen['n'] == 0                                 # AI gen never called
+    assert gen['n'] == 0                                 # procedural gen never called
 
 
 def test_library_first_off_generates_master(monkeypatch):
@@ -198,7 +159,7 @@ def test_library_first_off_generates_master(monkeypatch):
     import app.db.story_asset_repo as ar
     monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
-    monkeypatch.setattr(rs, 'generate_character_master', lambda c, art_style='': '/ai/gen.png')
+    monkeypatch.setattr(rs, 'generate_character_master', lambda c, art_style='', **k: '/ai/gen.png')
     monkeypatch.setattr(ar, 'match_asset',
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError('must not consult library when off')))
     monkeypatch.delenv('STORY_LIBRARY_FIRST', raising=False)   # default off
@@ -207,4 +168,4 @@ def test_library_first_off_generates_master(monkeypatch):
                   visuals=[Visual(id='v1', prompt='x')],
                   timeline=[Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='left')])
     sp2._generate_character_masters(p, '', job_id='j', effective_channel='c')
-    assert p.render.masters == {'han': '/ai/gen.png'}   # byte-identical: AI gen path
+    assert p.render.masters == {'han': '/ai/gen.png'}   # procedural gen path

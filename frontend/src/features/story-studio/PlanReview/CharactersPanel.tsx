@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { StudioCard, StudioField } from '../../../components/studio'
 import { BASE_URL } from '../../../api/client'
 import type { StoryPlanV2, CharacterDef, StoryVoicesResponse } from '../../../api/story'
-import { generateReferenceSheet, getStoryVoices, previewNarration } from '../../../api/story'
+import { generateCharacterMaster, getStoryVoices, previewNarration } from '../../../api/story'
 import { AssetPicker } from './AssetPicker'
 
 // Short spoken sample when a character has no line yet in the timeline.
@@ -69,25 +69,14 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
   onVoiceChange: (cid: string, engine: string, voiceId: string) => void
   onMasterChange: (cid: string, path: string) => void
 }) {
-  const [sheet, setSheet] = useState<'idle' | 'busy' | 'done' | 'err'>('idle')
   const [master, setMaster] = useState<{ st: 'idle' | 'busy' | 'err'; url: string }>({ st: 'idle', url: '' })
   const [variant, setVariant] = useState(0)
   const [picker, setPicker] = useState(false)
   const [voiceState, setVoiceState] = useState<'idle' | 'busy' | 'playing' | 'err'>('idle')
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  async function makeSheet() {
-    setSheet('busy')
-    try {
-      const r = await generateReferenceSheet({
-        name: c.name, description: c.canonical_desc, art_style: artStyle,
-      })
-      setSheet(r.path ? 'done' : 'err')
-    } catch { setSheet('err') }
-  }
-
-  // Cutout-ready character master (transparent PNG) — shown on a checkerboard so the
-  // transparent areas are visible. Regenerate bumps `variant` for a different look; the
+  // Cutout-ready character master (transparent SVG chibi) — shown on a checkerboard so the
+  // transparent areas are visible. Regenerate bumps `variant` for a different pose; the
   // shown master's PATH is locked into the plan (render reuses it, skips regen).
   async function makeMaster(regen = false) {
     if (master.st === 'busy') return
@@ -95,9 +84,9 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
     setVariant(v)
     setMaster({ st: 'busy', url: '' })
     try {
-      const r = await generateReferenceSheet({
-        name: c.name, description: c.canonical_desc, art_style: artStyle,
-        transparent: true, variant: v,
+      const r = await generateCharacterMaster({
+        character_id: c.id, name: c.name, archetype: c.archetype || '',
+        gender: c.voice_gender || c.gender || '', art_style: artStyle, variant: v,
       })
       if (r.url && r.path) {
         setMaster({ st: 'idle', url: r.url })
@@ -170,12 +159,6 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
             )}
           </select>
         )}
-        <button type="button" className="st-btn st-btn--sm" disabled={sheet === 'busy'} onClick={makeSheet}>
-          {sheet === 'busy' ? (vi ? 'Đang tạo…' : 'Making…')
-            : sheet === 'done' ? (vi ? '✓ Ảnh chuẩn' : '✓ Sheet')
-            : sheet === 'err' ? (vi ? '⚠ Thử lại' : '⚠ Retry')
-            : (vi ? 'Ảnh chuẩn' : 'Ref sheet')}
-        </button>
         <button type="button" className="st-btn st-btn--sm" disabled={master.st === 'busy'}
           onClick={() => void makeMaster(!!master.url)}
           title={vi ? 'Ảnh nhân vật nền trong — chèn lên video (bấm lại để đổi mẫu)'

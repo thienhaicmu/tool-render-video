@@ -39,6 +39,10 @@ def _ffmpeg_ok() -> bool:
 
 _NEEDS_FFMPEG = pytest.mark.skipif(not _ffmpeg_ok(), reason="FFmpeg not available")
 
+from app.features.render.engine.visual import svg_raster as _svg_raster
+# Story Mode is SVG-only: the image-path render composes procedural SVG via resvg-py.
+_NEEDS_SVG = pytest.mark.skipif(not _svg_raster.available(), reason="resvg-py not installed")
+
 
 @pytest.fixture
 def _story_sandbox(tmp_path, monkeypatch):
@@ -88,17 +92,7 @@ def _mock_cast(plan, language, narrator_gender="female"):
     return plan.render.voices
 
 
-def _mock_image(visual, refs, art_style, width, height, out_path, seed=0, provider="gpt_image"):
-    from app.services.bin_paths import get_ffmpeg_bin
-    subprocess.run(
-        [get_ffmpeg_bin(), "-y", "-f", "lavfi", "-i", f"testsrc=size={width}x{height}",
-         "-frames:v", "1", str(out_path)],
-        capture_output=True, check=True, timeout=60,
-    )
-    return str(out_path)
-
-
-def _mock_synth(plan, *, job_id, audio_dir, subtitle_mode="hook_only"):
+def _mock_synth(plan, *, job_id, audio_dir, subtitle_mode="hook_only", effective_channel=""):
     from app.services.bin_paths import get_ffmpeg_bin
     Path(audio_dir).mkdir(parents=True, exist_ok=True)
     for b in plan.timeline:
@@ -135,16 +129,16 @@ def _payload(output_dir, sub="story-e2e", **extra):
 
 
 def _wire_mocks(monkeypatch, plan_fn):
-    # A0 refactor: image gen lives in visuals_stage now → patch it there (the moved
-    # _generate_images resolves generate_visual_image in that module's globals).
-    from app.features.render.engine.stages.story import visuals_stage as vs
+    # Story Mode is SVG-only: the key-visual + overlay masters are composed for REAL via
+    # resvg-py (offline, fast) — only the AI plan, voice cast and TTS are mocked (no
+    # network). Guard the callers that render with @_NEEDS_SVG.
     monkeypatch.setattr(sp2, "generate_story_plan_v2", plan_fn)
     monkeypatch.setattr(sp2, "apply_voice_cast_v2", _mock_cast)
-    monkeypatch.setattr(vs, "generate_visual_image", _mock_image)
     monkeypatch.setattr(sp2, "synthesize_timeline", _mock_synth)
 
 
 @_NEEDS_FFMPEG
+@_NEEDS_SVG
 def test_run_story_v2_end_to_end(_story_sandbox, monkeypatch):
     job_id = str(uuid.uuid4())
     output_dir = _story_sandbox["output_dir"]
@@ -187,6 +181,7 @@ def test_run_story_v2_end_to_end(_story_sandbox, monkeypatch):
 
 
 @_NEEDS_FFMPEG
+@_NEEDS_SVG
 def test_run_story_v2_uses_plan_override(_story_sandbox, monkeypatch):
     """When story_plan_override (v2) is set, run_story_v2 renders FROM it and never
     calls the super plan."""
@@ -209,6 +204,29 @@ def test_run_story_v2_uses_plan_override(_story_sandbox, monkeypatch):
     assert list((output_dir / "story-override").rglob("*.mp4"))
 
 
+def test_run_story_v2_blocks_when_resvg_unavailable(_story_sandbox, monkeypatch):
+    """SVG foundation guard (Lô 0): when the SVG art path is active but the resvg-py
+    rasteriser is unavailable, run_story_v2 must FAIL FAST with a clear resvg-py error
+    rather than silently deliver a solid-background, character-less video as success.
+
+    An approved override skips the AI plan; svg_raster.available() is forced False."""
+    job_id = str(uuid.uuid4())
+    output_dir = _story_sandbox["output_dir"]
+    _wire_mocks(monkeypatch, lambda **k: _make_plan_v2())
+    monkeypatch.setattr(
+        "app.features.render.engine.visual.svg_raster.available", lambda: False)
+
+    approved = _make_plan_v2().to_json()
+    with pytest.raises(RuntimeError, match="resvg-py"):
+        sp2.run_story_v2(
+            job_id=job_id,
+            payload=_payload(output_dir, sub="story-noresvg",
+                             story_image_provider="svg", story_plan_override=approved),
+            resume_mode=False, load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None,
+        )
+    assert not list((output_dir / "story-noresvg").rglob("*.mp4"))
+
+
 @_NEEDS_FFMPEG
 def test_run_story_v2_honors_cancel(_story_sandbox, monkeypatch):
     job_id = str(uuid.uuid4())
@@ -225,6 +243,7 @@ def test_run_story_v2_honors_cancel(_story_sandbox, monkeypatch):
 
 
 @_NEEDS_FFMPEG
+@_NEEDS_SVG
 @pytest.mark.parametrize("workers,sub", [("3", "story-par"), ("1", "story-serial")])
 def test_run_story_v2_parallel_matches_serial(_story_sandbox, monkeypatch, workers, sub):
     """Phase 3 — the cue render + image gen run in a bounded pool. workers=3 (parallel)
@@ -257,24 +276,26 @@ def test_run_story_v2_parallel_matches_serial(_story_sandbox, monkeypatch, worke
 @_NEEDS_FFMPEG
 def test_run_story_v2_base_video_skips_image_gen(_story_sandbox, monkeypatch, tmp_path):
     """A6 — with a base video, the key-visual images are unused (the video is the base),
-    so image gen is skipped; the render still completes over the base video."""
+    so SVG key-visual compose is skipped; the render still completes over the base video."""
     from app.services.bin_paths import get_ffmpeg_bin
-    from app.features.render.engine.stages.story import visuals_stage as vs
+    import app.features.render.engine.visual.svg_compose as svg_compose
     output_dir = _story_sandbox["output_dir"]
     base = tmp_path / "base.mp4"
     subprocess.run(
         [get_ffmpeg_bin(), "-y", "-f", "lavfi", "-i", "testsrc=size=320x568:rate=30",
          "-t", "8", "-c:v", "libx264", str(base)], capture_output=True, check=True)
 
-    img_calls = {"n": 0}
+    # Disable the poster so the compose counter reflects ONLY key-visual gen (the poster
+    # also composes a hero visual at finalize — covered by test_story_poster).
+    monkeypatch.setenv("STORY_THUMBNAIL_POSTER", "0")
+    compose_calls = {"n": 0}
+    _real = svg_compose.compose_visual
 
-    def _counting_img(*a, **k):
-        img_calls["n"] += 1
-        return _mock_image(*a, **k)
-    monkeypatch.setattr(sp2, "generate_story_plan_v2", lambda **k: _make_plan_v2())
-    monkeypatch.setattr(sp2, "apply_voice_cast_v2", _mock_cast)
-    monkeypatch.setattr(vs, "generate_visual_image", _counting_img)
-    monkeypatch.setattr(sp2, "synthesize_timeline", _mock_synth)
+    def _counting_compose(*a, **k):
+        compose_calls["n"] += 1
+        return _real(*a, **k)
+    monkeypatch.setattr(svg_compose, "compose_visual", _counting_compose)
+    _wire_mocks(monkeypatch, lambda **k: _make_plan_v2())
 
     job_id = str(uuid.uuid4())
     sp2.run_story_v2(
@@ -285,8 +306,41 @@ def test_run_story_v2_base_video_skips_image_gen(_story_sandbox, monkeypatch, tm
     from app.db.jobs_repo import get_job
     row = get_job(job_id)
     assert row is not None and row["status"] == "completed"
-    assert img_calls["n"] == 0                       # A6: no key-visual images generated
+    assert compose_calls["n"] == 0                    # A6: no key-visual SVG composed
     assert list((output_dir / "story-basevid").rglob("*.mp4"))   # rendered over the base video
+
+
+@_NEEDS_FFMPEG
+@_NEEDS_SVG
+def test_run_story_v2_base_video_overlay_masters_per_emotion_pose(_story_sandbox, monkeypatch, tmp_path):
+    """Lô D — with a base video, the SPEAKING character is composited over the video via
+    per-(emotion, pose) SVG masters (no background is drawn over the video)."""
+    from app.services.bin_paths import get_ffmpeg_bin
+    output_dir = _story_sandbox["output_dir"]
+    base = tmp_path / "base.mp4"
+    subprocess.run(
+        [get_ffmpeg_bin(), "-y", "-f", "lavfi", "-i", "testsrc=size=320x568:rate=30",
+         "-t", "8", "-c:v", "libx264", str(base)], capture_output=True, check=True)
+
+    def _expressive_plan(**_k):
+        p = _make_plan_v2()
+        for b in p.timeline:
+            if b.speaker_id == "han":
+                b.char_anchor = "left"; b.emotion = "angry"; b.pose = "point"
+        return p
+    _wire_mocks(monkeypatch, _expressive_plan)
+
+    job_id = str(uuid.uuid4())
+    sp2.run_story_v2(
+        job_id=job_id,
+        payload=_payload(output_dir, sub="story-bv-ov", story_base_video_path=str(base)),
+        resume_mode=False, load_session_fn=lambda s: None, cleanup_session_fn=lambda s: None,
+    )
+    from app.db.jobs_repo import get_job, get_story_plan
+    assert get_job(job_id)["status"] == "completed"
+    pp = StoryPlan.from_json(get_story_plan(job_id))
+    assert "han:angry:point" in (pp.render.masters or {})   # per-emotion/pose overlay master
+    assert list((output_dir / "story-bv-ov").rglob("*.mp4"))
 
 
 @_NEEDS_FFMPEG

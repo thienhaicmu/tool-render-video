@@ -215,3 +215,36 @@ def get_version(version_id: str) -> Optional[dict]:
     except Exception as exc:
         logger.warning("get_version failed id=%s: %s", version_id, exc)
         return None
+
+
+# ── Retention (F-DB1) ─────────────────────────────────────────────────────────
+
+def prune_trashed_projects(max_age_days: int) -> dict:
+    """Empty-trash retention: HARD-delete soft-deleted projects whose ``deleted_at`` is
+    older than ``max_age_days`` (and their versions). ``max_age_days <= 0`` → disabled
+    (no-op). LIVE projects are never touched. Returns ``{pruned, versions}``. Never raises.
+
+    Only ever removes rows the user already trashed — this just auto-empties old trash so
+    the authoring store doesn't grow unbounded."""
+    if int(max_age_days or 0) <= 0:
+        return {"pruned": 0, "versions": 0}
+    try:
+        with db_conn() as conn:
+            cutoff = f"-{int(max_age_days)} days"
+            ids = [r[0] if isinstance(r, tuple) else r["id"] for r in conn.execute(
+                "SELECT id FROM story_projects WHERE deleted_at IS NOT NULL "
+                "AND deleted_at < strftime('%Y-%m-%dT%H:%M:%SZ','now',?)", (cutoff,)).fetchall()]
+            vers = 0
+            for pid in ids:
+                cur = conn.execute("DELETE FROM story_project_versions WHERE project_id = ?", (pid,))
+                vers += int(getattr(cur, "rowcount", 0) or 0)
+            if ids:
+                conn.executemany("DELETE FROM story_projects WHERE id = ?", [(i,) for i in ids])
+            conn.commit()
+        if ids:
+            logger.info("prune_trashed_projects: removed %d trashed project(s) + %d version(s) (>%dd)",
+                        len(ids), vers, max_age_days)
+        return {"pruned": len(ids), "versions": vers}
+    except Exception as exc:
+        logger.warning("prune_trashed_projects failed (non-fatal): %s", exc)
+        return {"pruned": 0, "versions": 0}

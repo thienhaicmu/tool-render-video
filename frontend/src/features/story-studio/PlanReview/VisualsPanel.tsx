@@ -1,21 +1,20 @@
 /**
  * VisualsPanel — Story v2 review (F3): edit each key-visual's prompt / negative /
- * characters / tier and PREVIEW it (POST /api/story/visual/preview → one image).
+ * characters and PREVIEW it (POST /api/story/visual/svg-preview → procedural SVG image).
  * The preview url is lifted to the parent so the TimelineEditor can thumbnail it.
- * Studio BASE only.
+ * Story Mode is SVG-only — offline, $0. Studio BASE only.
  */
 import { useState } from 'react'
 import { StudioCard, StudioField } from '../../../components/studio'
 import type { StoryPlanV2, Visual } from '../../../api/story'
-import { previewVisual } from '../../../api/story'
+import { svgPreview } from '../../../api/story'
 import { storyAssetImageUrl } from '../../../api/storyAssets'
-import { TIER, type Aspect } from '../types'
+import type { Aspect } from '../types'
 import { AssetPicker } from './AssetPicker'
 
-export function VisualsPanel({ vi, plan, artStyle, aspect, colors, previews, setPreview, onChange, onVisualAsset }: {
+export function VisualsPanel({ vi, plan, aspect, colors, previews, setPreview, onChange, onVisualAsset }: {
   vi: boolean
   plan: StoryPlanV2
-  artStyle: string
   aspect: Aspect
   colors: Record<string, string>
   previews: Record<string, string>
@@ -28,7 +27,7 @@ export function VisualsPanel({ vi, plan, artStyle, aspect, colors, previews, set
     <StudioCard icon="🖼️" title={vi ? 'Key-visual' : 'Key visuals'} aside={`${plan.visuals.length}`}>
       <div className="st-visual-grid">
         {plan.visuals.map((v) => (
-          <VisualCard key={v.id} vi={vi} v={v} plan={plan} artStyle={artStyle} aspect={aspect}
+          <VisualCard key={v.id} vi={vi} v={v} plan={plan} aspect={aspect}
             color={colors[v.id]} preview={previews[v.id]} setPreview={setPreview}
             onChange={onChange} onVisualAsset={onVisualAsset} />
         ))}
@@ -37,11 +36,10 @@ export function VisualsPanel({ vi, plan, artStyle, aspect, colors, previews, set
   )
 }
 
-function VisualCard({ vi, v, plan, artStyle, aspect, color, preview, setPreview, onChange, onVisualAsset }: {
+function VisualCard({ vi, v, plan, aspect, color, preview, setPreview, onChange, onVisualAsset }: {
   vi: boolean
   v: Visual
   plan: StoryPlanV2
-  artStyle: string
   aspect: Aspect
   color: string
   preview?: string
@@ -55,14 +53,12 @@ function VisualCard({ vi, v, plan, artStyle, aspect, color, preview, setPreview,
   const settingAsset = (plan.settings.find((s) => s.id === v.setting_id)?.asset || '').trim()
 
   async function doPreview() {
-    if (busy || !v.prompt.trim()) return
+    if (busy) return
     setBusy(true); setErr(false)
     try {
-      const r = await previewVisual({
-        prompt: v.prompt, negative_prompt: v.negative_prompt,
-        art_style: artStyle, aspect_ratio: aspect, tier: v.tier,
-      })
-      setPreview(v.id, r.url)
+      const r = await svgPreview({ plan, visual_ids: [v.id] })
+      const item = r.items.find((it) => it.visual_id === v.id)
+      if (item) setPreview(v.id, item.url); else setErr(true)
     } catch { setErr(true) } finally { setBusy(false) }
   }
 
@@ -104,14 +100,10 @@ function VisualCard({ vi, v, plan, artStyle, aspect, color, preview, setPreview,
           </div>
         )}
         <div className="st-visual-foot">
-          <select className="st-select st-select--sm" value={v.tier}
-            onChange={(e) => onChange(v.id, { tier: e.target.value })}>
-            {TIER.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <button type="button" className="st-btn st-btn--sm" disabled={busy || !v.prompt.trim()} onClick={doPreview}>
-            {busy ? (vi ? 'Đang tạo…' : 'Rendering…')
+          <button type="button" className="st-btn st-btn--sm" disabled={busy} onClick={doPreview}>
+            {busy ? (vi ? 'Đang dựng…' : 'Composing…')
               : err ? (vi ? '⚠ Thử lại' : '⚠ Retry')
-              : preview ? (vi ? 'Tạo lại' : 'Regenerate')
+              : preview ? (vi ? 'Dựng lại' : 'Recompose')
               : (vi ? 'Xem thử' : 'Preview')}
           </button>
           <button type="button" className="st-btn st-btn--sm" onClick={() => setPicker(true)}

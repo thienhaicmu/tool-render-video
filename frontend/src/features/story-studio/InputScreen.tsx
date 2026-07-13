@@ -155,7 +155,9 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
               options={ASPECTS.map((a) => ({ value: a, label: a }))} />
           </StudioField>
         </div>
-        <StudioField label={vi ? 'Phong cách hình (tùy chọn)' : 'Art style (optional)'}>
+        <StudioField label={vi ? 'Phong cách hình (tùy chọn)' : 'Art style (optional)'}
+          hint={vi ? 'Ảnh là chibi vẽ trong máy (SVG) — phong cách chỉ tác động nhẹ tới màu/khớp kho.'
+                   : 'Images are locally-drawn chibi (SVG) — style only lightly affects palette/library match.'}>
           <input className="st-input" list="story-art-styles" value={cfg.artStyle}
             placeholder={vi ? '— AI tự chọn —' : '— AI decides —'}
             onChange={(e) => setKey('artStyle', e.target.value)} />

@@ -75,21 +75,23 @@ def _patch_io(monkeypatch):
     monkeypatch.setattr(vs, "_emit_render_event", lambda *a, **k: None)
 
 
-def test_gate_on_matches_and_skips_ai(monkeypatch, tmp_path):
+def test_gate_on_matches_and_skips_compose(monkeypatch, tmp_path):
     _patch_io(monkeypatch)
     monkeypatch.setenv("STORY_LIBRARY_FIRST", "1")
     # v1 matches library, v2 does not.
     monkeypatch.setattr(vs, "_match_library_background",
                         lambda plan, v: "/lib/v1.png" if v.id == "v1" else None)
-    gen_calls = []
-    monkeypatch.setattr(vs, "generate_visual_image",
-                        lambda v, *a, **k: gen_calls.append(v.id) or str(tmp_path / f"{v.id}.png"))
+    composed: list = []
+    monkeypatch.setattr("app.features.render.engine.visual.svg_compose.compose_visual",
+                        lambda *a, **k: "<svg/>")
+    monkeypatch.setattr("app.features.render.engine.visual.svg_raster.save_svg_png",
+                        lambda svg, out, w, h, opaque_bg="": composed.append(Path(out).stem) or str(out))
     p = _plan(visuals=[Visual(id="v1", setting_id="hall", character_ids=[]),
                        Visual(id="v2", setting_id="hall", character_ids=[])])
     fallbacks = vs._generate_images(p, tmp_path, "wuxia", 1536, 1024,
-                                    job_id="j", effective_channel="c", provider="gpt_image")
+                                    job_id="j", effective_channel="c")
     assert p.render.visual_assets["v1"] == "/lib/v1.png"          # matched from library
-    assert gen_calls == ["v2"]                                    # only the unmatched one hit AI
+    assert composed == ["v2"]                                     # only the unmatched one composed SVG
     assert fallbacks == []
 
 
@@ -99,9 +101,11 @@ def test_gate_off_never_matches(monkeypatch, tmp_path):
     hit = {"n": 0}
     monkeypatch.setattr(vs, "_match_library_background",
                         lambda plan, v: hit.__setitem__("n", hit["n"] + 1) or "/x.png")
-    monkeypatch.setattr(vs, "generate_visual_image",
-                        lambda v, *a, **k: str(tmp_path / f"{v.id}.png"))
+    monkeypatch.setattr("app.features.render.engine.visual.svg_compose.compose_visual",
+                        lambda *a, **k: "<svg/>")
+    monkeypatch.setattr("app.features.render.engine.visual.svg_raster.save_svg_png",
+                        lambda svg, out, w, h, opaque_bg="": str(out))
     p = _plan(visuals=[Visual(id="v1", setting_id="hall", character_ids=[])])
     vs._generate_images(p, tmp_path, "wuxia", 1536, 1024, job_id="j", effective_channel="c")
     assert hit["n"] == 0                                          # match layer skipped entirely
-    assert "v1" in p.render.visual_assets                         # generated via AI as before
+    assert "v1" in p.render.visual_assets                         # composed via SVG as before

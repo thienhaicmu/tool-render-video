@@ -159,3 +159,39 @@ def test_restore_missing_version_404():
         assert ei.value.status_code == 404
     finally:
         purge_story_project(pid)
+
+
+# ── Retention (F-DB1): empty old trash ────────────────────────────────────────
+
+def test_prune_trashed_projects_respects_window():
+    pid = "proj-" + uuid.uuid4().hex[:8]
+    repo.upsert_project(pid, name="Trash me", plan_json='{"x":1}')
+    repo.save_version(pid, label="v1", plan_json='{"x":1}')
+    repo.delete_project(pid)                                   # soft-delete (trash), deleted_at = now
+
+    # Assertions target THIS project only (the test DB is shared, so global counts vary).
+    repo.prune_trashed_projects(0)                             # disabled → no-op
+    assert repo.get_project(pid) is not None
+    repo.prune_trashed_projects(30)                            # recent trash is inside the window
+    assert repo.get_project(pid) is not None                  # not pruned yet
+
+    # Backdate deleted_at well past the window → this project + its versions are pruned.
+    with db_conn() as conn:
+        conn.execute(
+            "UPDATE story_projects SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ','now','-40 days') "
+            "WHERE id = ?", (pid,))
+        conn.commit()
+    repo.prune_trashed_projects(30)
+    assert repo.get_project(pid) is None
+    assert repo.list_versions(pid) == []
+
+
+def test_prune_trashed_never_touches_live_projects():
+    pid = "proj-" + uuid.uuid4().hex[:8]
+    repo.upsert_project(pid, name="Keep me alive")
+    try:
+        # Even with an aggressive window, a LIVE (non-trashed) project is never removed.
+        repo.prune_trashed_projects(1)
+        assert repo.get_project(pid) is not None
+    finally:
+        purge_story_project(pid)

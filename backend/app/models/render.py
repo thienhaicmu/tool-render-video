@@ -420,12 +420,12 @@ class RenderRequest(BaseModel):
     story_idea: str = ""            # premise for story_source="idea" ("" = not an idea job)
     story_duration_sec: int = 0     # target length for the idea path (0 = model decides)
     story_genre: str = ""           # wuxia|romance|horror|fantasy|... (idea path hint)
-    # Image provider for the FINAL render (Phase 2). "gpt_image" (default — gpt-image-1,
-    # character-consistent, paid) | "pollinations" (free Flux, $0). Sacred Contract #2:
-    # the default reproduces the existing paid behavior so stored payloads replay
-    # identically. The Storyboard review always previews with the FREE provider
-    # (draft/final split) regardless of this final choice.
-    story_image_provider: str = "gpt_image"  # gpt_image|pollinations|svg (default gpt_image — Sacred #2; FE defaults to svg)
+    # Image provider — Story Mode is SVG-ONLY (procedural chibi, offline, $0). The field
+    # is RETAINED (not dropped) so a stored payload that still carries an old
+    # "gpt_image"/"pollinations" value deserialises cleanly; the validator coerces every
+    # value to "svg", so a replayed historical job renders via the SVG engine (the paid
+    # gpt-image / free Pollinations story paths were removed).
+    story_image_provider: str = "svg"  # svg only — validator coerces any legacy value → "svg"
     # Optional LOCAL base video the story is composited over (A1). "" = image-based
     # story (the default — AI key-visuals + Ken Burns, byte-identical replay). When a
     # valid local path is given, later phases use it as the base layer for the cue
@@ -562,12 +562,10 @@ class RenderRequest(BaseModel):
     @field_validator("story_image_provider", mode="before")
     @classmethod
     def _validate_story_image_provider(cls, v) -> str:
-        # Coerce (never raise) — Sacred Contract #2: default/unknown → "gpt_image"
-        # (the existing paid behavior), so stored payloads replay identically. "svg" =
-        # the offline procedural chibi path (Phase C); the FE defaults to it, the backend
-        # field default stays "gpt_image" so replay is bit-identical.
-        v = str(v or "gpt_image").strip().lower()
-        return v if v in {"gpt_image", "pollinations", "svg"} else "gpt_image"
+        # Story Mode is SVG-ONLY. Coerce EVERY value → "svg" (never raise) so a stored
+        # payload carrying a legacy "gpt_image"/"pollinations" value replays through the
+        # SVG engine (the gpt-image / Pollinations story paths were removed).
+        return "svg"
 
     @field_validator("content_background_kind", mode="before")
     @classmethod

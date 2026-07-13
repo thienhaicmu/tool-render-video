@@ -1,96 +1,39 @@
 """
-story_reference_sheet.py — Character Reference Sheet generation (P3).
+story_reference_sheet.py — procedural SVG character master (SVG-only Story Mode).
 
-Generates a canonical "reference sheet" image for a Story Bible character ONCE
-(front view + neutral background) from its canonical description. The result is
-pinned as a durable asset (APP_DATA_DIR/content_assets, never pruned) and its path
-is stored on the character (characters.reference_image_path) so EVERY later shot
-feeds it to gpt-image-1's image-edit endpoint → the character looks the same
-across the whole video / series.
+Story Mode is SVG-only: a character's overlay "master" (cutout-ready, transparent
+full-body figure) is composed procedurally from its archetype/gender via the chibi
+builder — offline, $0, deterministic. This replaces the former gpt-image-1 reference
+sheet / environment sheet / transparent master (all removed with the paid image path).
 
-Reuses story_image.generate_image_bytes. Opt-in + graceful: None on no key / no
-SDK / error. Never raises (Sacred Contract #3 spirit).
+Content-addressed + cached in the durable asset store (never pruned) so an identical
+character reuses its master across the whole video / series. Best-effort: None on any
+failure — never raises (Sacred Contract #3 spirit).
 """
 from __future__ import annotations
 
 import hashlib
 import logging
-import os
 from pathlib import Path
 from typing import Optional
 
 from app.core.config import APP_DATA_DIR
-from app.features.render.engine.visual.story_image import generate_image_bytes
+from app.features.render.engine.visual.svg_char import build_char
+from app.features.render.engine.visual.svg_presets import preset
+from app.features.render.engine.visual.svg_raster import save_svg_png
 
 logger = logging.getLogger("app.render.visual.story_ref_sheet")
 
 # Durable asset store (shared with Content's pinned assets — never pruned).
 _ASSETS_DIR = Path(APP_DATA_DIR) / "content_assets"
 
-# gpt-image-1 quality tiers a reference sheet may use.
-_REFSHEET_TIERS = ("low", "medium", "high", "auto")
-
-
-def _refsheet_quality() -> str:
-    """gpt-image-1 quality tier for reference sheets (C3 cost knob). Reference sheets
-    are INTERNAL conditioning images (fed to image-edit), not final output, so their
-    tier is env-tunable via ``STORY_REFSHEET_QUALITY``. Default ``high`` preserves the
-    historical behaviour (and the byte-identical cache key). Never raises."""
-    q = (os.getenv("STORY_REFSHEET_QUALITY", "high") or "high").strip().lower()
-    return q if q in _REFSHEET_TIERS else "high"
+# Poses a "regenerate" (variant>0) rotates through so the user gets a different look.
+_VARIANT_POSES = ("stand", "wave", "cheer", "point", "hip")
 
 
 def _safe_cid(character) -> str:
     cid = (getattr(character, "id", "") or getattr(character, "name", "") or "char").strip().lower()
     return "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in cid)[:40] or "char"
-
-
-def generate_character_reference_sheet(
-    character,
-    art_style: str = "",
-    width: int = 1024,
-    height: int = 1024,
-) -> Optional[str]:
-    """Generate a reference sheet for a character → a durable PNG path, or None on no
-    key / no usable description / error. Never raises.
-
-    Accepts BOTH the v1 StoryCharacter (``.description``) and the v2 CharacterDef
-    (``.canonical_desc``). Content-addressed: the file name hashes (subject, style,
-    size), so an identical character across renders REUSES the sheet (no re-gen, no
-    extra gpt-image-1 cost). The prompt asks for a neutral, well-lit character study."""
-    try:
-        desc = (getattr(character, "description", "") or getattr(character, "canonical_desc", "") or "").strip()
-        name = (getattr(character, "name", "") or "").strip()
-        subject = desc or name
-        if not subject:
-            return None
-        style = (art_style or "").strip() or "cinematic"
-        quality = _refsheet_quality()
-        # Non-default tiers namespace the cache so a cheaper sheet never masquerades as
-        # a "high" one; the default "high" keeps the historical key (no regen, no cost).
-        _qtag = "" if quality == "high" else f"|{quality}"
-        # Content-addressed cache: same subject+style+size(+tier) → same file → generate once.
-        _key = hashlib.sha1(f"{subject}|{style}|{width}x{height}{_qtag}".encode("utf-8", "ignore")).hexdigest()[:12]
-        _ASSETS_DIR.mkdir(parents=True, exist_ok=True)
-        dst = _ASSETS_DIR / f"refsheet_{_safe_cid(character)}_{_key}.png"
-        if dst.exists() and dst.stat().st_size > 0:
-            return str(dst)                     # cache hit — no API call
-        prompt = (
-            f"Character reference sheet of {subject}. "
-            f"Front-facing full-body view and a face close-up, neutral grey studio "
-            f"background, even lighting, consistent design, {style} style. "
-            f"Clean reference art, no text, no watermark."
-        )
-        data = generate_image_bytes(prompt, width, height, quality=quality)
-        if not data:
-            return None
-        dst.write_bytes(data)
-        if not (dst.exists() and dst.stat().st_size > 0):
-            return None
-        return str(dst)
-    except Exception as exc:
-        logger.info("story_ref_sheet: generation error %s", exc)
-        return None
 
 
 def generate_character_master(
@@ -99,100 +42,45 @@ def generate_character_master(
     width: int = 1024,
     height: int = 1536,
     variant: int = 0,
+    *,
+    region: str = "",
+    genre: str = "",
 ) -> Optional[str]:
-    """Generate a cutout-ready CHARACTER MASTER — a full-body character on a
-    TRANSPARENT background (gpt-image-1 ``background=transparent``) → a durable
-    PNG-with-alpha path ready to composite as an overlay, or None on no key / no
-    description / error. Never raises (Sacred Contract #3 spirit).
+    """Compose a cutout-ready transparent CHARACTER MASTER (procedural chibi SVG) →
+    a durable PNG-with-alpha path, or None on failure. Never raises.
 
-    Unlike the reference sheet (opaque grey studio, fed to image-EDIT for scene
-    consistency), the master's transparent background means NO separate cutout step
-    is needed — Phase 5 is solved at the generation call. Content-addressed with a
-    ``master|`` namespace so ONE master per character is reused across the whole
-    video / series (Strategy A). Portrait 1024x1536 gives head-to-toe headroom.
-
-    ``variant`` (A5 approval/lock): 0 = the canonical master (existing cache key,
-    byte-identical). >0 busts the cache so a Review "regenerate" yields a DIFFERENT
-    look (gpt-image-1 is stochastic), letting the user pick/lock one they like."""
+    Derives the look from the character's ``archetype`` + gender (+ optional
+    ``region``/``genre`` for a market-appropriate palette). Portrait 1024x1536 gives
+    head-to-toe headroom. Content-addressed with a ``master|`` namespace so ONE master
+    per character (variant/pose) is reused across renders. ``variant`` (A5 approval/lock):
+    0 = the canonical stand pose; >0 rotates the pose so a Review "regenerate" yields a
+    different look for the user to pick/lock. ``art_style`` is accepted for call-site
+    compatibility but unused (the chibi style is fixed)."""
     try:
-        desc = (getattr(character, "canonical_desc", "") or getattr(character, "description", "") or "").strip()
+        arch = (getattr(character, "archetype", "") or "").strip()
+        gender = (getattr(character, "gender", "") or getattr(character, "voice_gender", "") or "").strip()
         name = (getattr(character, "name", "") or "").strip()
-        subject = desc or name
+        subject = arch or name or (getattr(character, "id", "") or "").strip()
         if not subject:
             return None
-        style = (art_style or "").strip() or "cinematic"
-        quality = _refsheet_quality()
-        _qtag = "" if quality == "high" else f"|{quality}"
-        _vtag = "" if int(variant or 0) <= 0 else f"|v{int(variant)}"
+        _v = int(variant or 0)
+        pose = _VARIANT_POSES[_v % len(_VARIANT_POSES)] if _v > 0 else "stand"
         _key = hashlib.sha1(
-            f"master|{subject}|{style}|{width}x{height}{_qtag}{_vtag}".encode("utf-8", "ignore")).hexdigest()[:12]
+            f"master|{arch}|{gender}|{region}|{genre}|{name}|{pose}".encode("utf-8", "ignore")
+        ).hexdigest()[:12]
         _ASSETS_DIR.mkdir(parents=True, exist_ok=True)
         dst = _ASSETS_DIR / f"master_{_safe_cid(character)}_{_key}.png"
         if dst.exists() and dst.stat().st_size > 0:
-            return str(dst)                     # cache hit — no API call
-        prompt = (
-            f"Full-body character illustration of {subject}. "
-            f"Entire body visible head-to-toe, standing, front-facing, centered, nothing "
-            f"cropped at the edges, {style} style. Transparent background, isolated subject "
-            f"only — no scene, no floor, no cast shadow. No text, no watermark."
-        )
-        data = generate_image_bytes(prompt, width, height, quality=quality, background="transparent")
-        if not data:
-            return None
-        dst.write_bytes(data)
-        if not (dst.exists() and dst.stat().st_size > 0):
+            return str(dst)                     # cache hit — no recompute
+        opts = preset(arch, region, genre, gender)
+        opts["pose"] = pose
+        path = save_svg_png(build_char(opts), str(dst), width, height)  # transparent (no opaque_bg)
+        if not path or not (dst.exists() and dst.stat().st_size > 0):
             return None
         return str(dst)
     except Exception as exc:
-        logger.info("story_ref_sheet: master generation error %s", exc)
+        logger.info("story_ref_sheet: SVG master generation error %s", exc)
         return None
 
 
-def generate_environment_reference_sheet(
-    setting,
-    art_style: str = "",
-    width: int = 1536,
-    height: int = 1024,
-) -> Optional[str]:
-    """Generate a canonical ESTABLISHING reference view of a setting/location → a
-    durable PNG path, or None on no key / no description / error. Never raises (G6).
-
-    Accepts the v2 SettingDef (``.canonical_desc``/``.name``). Content-addressed
-    (subject, style, size, tier) with an ``env|`` namespace so it never collides with
-    a character sheet — an identical location across renders REUSES the sheet. The
-    prompt asks for a wide, people-free establishing shot so later scenes can condition
-    on it for a consistent location. Tier follows the STORY_REFSHEET_QUALITY knob."""
-    try:
-        desc = (getattr(setting, "canonical_desc", "") or getattr(setting, "description", "") or "").strip()
-        name = (getattr(setting, "name", "") or "").strip()
-        subject = desc or name
-        if not subject:
-            return None
-        style = (art_style or "").strip() or "cinematic"
-        quality = _refsheet_quality()
-        _qtag = "" if quality == "high" else f"|{quality}"
-        _key = hashlib.sha1(
-            f"env|{subject}|{style}|{width}x{height}{_qtag}".encode("utf-8", "ignore")).hexdigest()[:12]
-        _ASSETS_DIR.mkdir(parents=True, exist_ok=True)
-        dst = _ASSETS_DIR / f"envsheet_{_safe_cid(setting)}_{_key}.png"
-        if dst.exists() and dst.stat().st_size > 0:
-            return str(dst)                     # cache hit — no API call
-        prompt = (
-            f"Establishing reference view of the location: {subject}. "
-            f"Wide cinematic establishing shot, no people, consistent architecture and "
-            f"mood, {style} style. Clean reference art, no text, no watermark."
-        )
-        data = generate_image_bytes(prompt, width, height, quality=quality)
-        if not data:
-            return None
-        dst.write_bytes(data)
-        if not (dst.exists() and dst.stat().st_size > 0):
-            return None
-        return str(dst)
-    except Exception as exc:
-        logger.info("story_ref_sheet: env generation error %s", exc)
-        return None
-
-
-__all__ = ["generate_character_reference_sheet", "generate_character_master",
-           "generate_environment_reference_sheet"]
+__all__ = ["generate_character_master"]

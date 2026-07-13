@@ -4,13 +4,14 @@ Story Studio API — Story-to-Video v2 pre-render review endpoints.
 The render itself goes through the shared render API (render_format="story"); this
 router covers the review flow the FE Story Studio drives before render:
 
-    POST /api/story/plan                     — ONE super call → StoryPlan v2
-    POST /api/story/visual/preview           — one key-visual image (preview/regen)
-    POST /api/story/character/reference-sheet — canonical character reference sheet
-    POST /api/story/narration/preview        — one beat's narration to audio
+    POST /api/story/plan                      — ONE super call → StoryPlan v2
+    POST /api/story/visual/svg-preview        — compose procedural SVG key-visual(s)
+    POST /api/story/character/reference-sheet — transparent SVG character master
+    POST /api/story/narration/preview         — one beat's narration to audio
 
-All AI calls are defensive (Sacred Contract #3): a None/empty result surfaces as a
-clean 4xx/502 — no unhandled raise reaches the client.
+Story Mode is SVG-only: all imagery is procedural (offline, $0). AI is used ONLY for
+the super plan. All calls are defensive (Sacred Contract #3): a None/empty result
+surfaces as a clean 4xx/502 — no unhandled raise reaches the client.
 """
 from __future__ import annotations
 
@@ -93,6 +94,21 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     _cno = int(req.chapter_no or 0)
     prior_context = build_prior_context(_sid, before_chapter=(_cno or None))
 
+    # Library-pick: give the Review plan the SAME asset-library catalog the render
+    # pipeline injects (STORY_LIBRARY_PICK, scoped by genre group) so the AI can pick
+    # `asset` slugs here too. Without this the reviewed/approved plan (rendered verbatim
+    # via story_plan_override) carried no asset picks — library matching was bypassed
+    # for the FE review flow. Empty catalog → prompt byte-identical (Sacred #2 rollback).
+    library_catalog = ""
+    if _os.getenv("STORY_LIBRARY_PICK", "1") == "1":
+        try:
+            from app.db import story_asset_repo
+            from app.features.render.engine.pipeline.story_pipeline_v2 import _genre_group
+            library_catalog = story_asset_repo.build_library_catalog(
+                genres=_genre_group(req.genre or ""))
+        except Exception:
+            library_catalog = ""
+
     plan = generate_story_plan_v2(
         provider=provider, source=source, chapter=chapter, idea=idea,
         duration_sec=int(req.duration_sec or 0), genre=(req.genre or ""),
@@ -100,24 +116,13 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         aspect_ratio=(req.aspect_ratio or "16:9"),
         subtitle_mode=(req.subtitle_mode or "hook_only"), ceiling=req.ceiling,
         series_id=_sid, chapter_no=_cno, prior_context=prior_context,
+        library_catalog=library_catalog,
         api_key=api_key, model=req.llm_model,
         resolve_key=lambda _p: _resolve_api_key(req, _p)[0],
     )
     if plan is None or plan.is_empty() or plan.image_count() == 0:
         raise HTTPException(status_code=502, detail="Story planning returned no usable plan")
 
-    # Cost preflight (C6): the gpt_image (premium) render generates one image per
-    # Visual PLUS one reference sheet per distinct character present in the visuals.
-    # Surface both counts so a consumer's cost estimate isn't blind to the sheets
-    # (upper bound — series-pinned sheets are reused at render, so actual may be fewer).
-    _ref_chars = {cid for v in plan.visuals for cid in (v.character_ids or []) if cid}
-    _refsheet_count = len(_ref_chars)
-    # G6: environment reference sheets are generated only for a SERIES (one per distinct
-    # setting) AND only when opted in — mirror the render-time gate so the estimate is
-    # honest (STORY_ENV_REFERENCE_SHEETS defaults off).
-    _env_on = _sid.strip() and _os.getenv("STORY_ENV_REFERENCE_SHEETS", "0") == "1"
-    _envsheet_count = len({(v.setting_id or "").strip() for v in plan.visuals
-                           if (v.setting_id or "").strip()}) if _env_on else 0
     _visual_count = plan.image_count()
     # Source-truncation transparency: the super-prompt fits the chapter to
     # MAX_SOURCE_CHARS (idea path to 8000) — surface when we cut so the FE can warn
@@ -135,57 +140,62 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         "source_truncated": bool(_src_len > _src_limit),
         "source_chars": _src_len,
         "source_char_limit": _src_limit,
+        # Story Mode is SVG-only → all imagery is procedural + offline ($0).
         "cost_preflight": {
             "visual_count": _visual_count,
             "character_count": len(plan.characters),
-            "reference_sheet_count": _refsheet_count,
-            "environment_sheet_count": _envsheet_count,
-            "premium_image_count": _visual_count + _refsheet_count + _envsheet_count,
-            # Character MASTERS are opt-in (user generates them in Review, one per
-            # character) — reported separately so the estimate isn't blind to them,
-            # but NOT folded into premium_image_count (which is the automatic render cost).
-            "character_master_count": len(plan.characters),
+            "premium_image_count": 0,
+            "estimated_cost_usd": 0.0,
         },
     }
 
 
-# ── B8: single key-visual preview (Storyboard review) ─────────────────────────
+# ── SVG key-visual preview (Storyboard review — WYSIWYG, offline $0) ──────────
 
-class StoryVisualPreviewRequest(BaseModel):
-    prompt: str = Field(default="", description="The key-visual image prompt")
-    negative_prompt: str = ""
-    art_style: str = ""
-    aspect_ratio: str = "16:9"
-    tier: str = "medium"               # low | medium | high (capped at STORY_IMAGE_MAX_TIER)
-    # Phase 2 — draft/final split: the Storyboard review previews with the FREE
-    # provider by default ($0 to regenerate). "gpt_image" available for a paid preview.
-    provider: str = "pollinations"     # pollinations (free) | gpt_image (paid)
+class SvgPreviewRequest(BaseModel):
+    plan: dict = Field(default_factory=dict, description="The StoryPlan v2 being reviewed")
+    visual_ids: list = Field(default_factory=list, description="Subset to compose ([] = all)")
 
 
-@router.post("/visual/preview")
-def visual_preview(req: StoryVisualPreviewRequest) -> dict:
-    """Story v2 — generate ONE key-visual image from a prompt so the FE storyboard
-    can preview/regenerate a Visual before render. Returns ``{token, url}``. 422 empty
-    prompt; 502 when generation failed (no key / error — Sacred Contract #3)."""
-    from app.domain.story_plan_v2 import Visual, ASPECT_SIZE
-    from app.features.render.engine.visual.story_image import generate_visual_image
+@router.post("/visual/svg-preview")
+def svg_visual_preview(req: SvgPreviewRequest) -> dict:
+    """Compose the procedural SVG key-visual(s) for a StoryPlan so the FE Review shows
+    exactly what the render will produce (WYSIWYG, offline, $0). Returns
+    ``{items: [{visual_id, token, url}]}`` for every visual that composed. 422 on an
+    empty/invalid plan; 502 when the SVG rasteriser is unavailable (resvg-py). Composes
+    with characters placed so the reviewer sees who is in each scene (the render itself
+    overlays the speaker per-beat). Never raises past a clean HTTP error."""
+    from app.domain.story_plan_v2 import StoryPlan, ASPECT_SIZE
+    from app.features.render.engine.visual import svg_raster
+    from app.features.render.engine.visual.svg_compose import compose_visual
 
-    prompt = (req.prompt or "").strip()
-    if not prompt:
-        raise HTTPException(status_code=422, detail="prompt is required")
-    w, h = ASPECT_SIZE.get((req.aspect_ratio or "16:9"), ASPECT_SIZE["16:9"])
+    try:
+        plan = StoryPlan.from_json(json.dumps(req.plan or {}, ensure_ascii=False))
+    except Exception:
+        plan = None
+    if plan is None or not plan.visuals:
+        raise HTTPException(status_code=422, detail="a StoryPlan with visuals is required")
+    if not svg_raster.available():
+        raise HTTPException(status_code=502, detail="SVG rasteriser unavailable (install resvg-py)")
+    w, h = ASPECT_SIZE.get((plan.aspect_ratio or "16:9"), ASPECT_SIZE["16:9"])
+    wanted = {str(v) for v in (req.visual_ids or []) if v}
     _VISUAL_DIR.mkdir(parents=True, exist_ok=True)
-    token = uuid.uuid4().hex
-    out = _VISUAL_DIR / f"{token}.png"
-    visual = Visual(id=token, prompt=prompt, negative_prompt=(req.negative_prompt or ""),
-                    tier=(req.tier or "medium"))
-    provider = (req.provider or "pollinations").strip().lower()
-    if provider not in ("pollinations", "gpt_image"):
-        provider = "pollinations"
-    path = generate_visual_image(visual, {}, (req.art_style or ""), w, h, str(out), provider=provider)
-    if not path or not Path(path).exists() or Path(path).stat().st_size <= 0:
-        raise HTTPException(status_code=502, detail="visual generation failed")
-    return {"token": token, "url": f"/api/story/visual/image/{token}"}
+    items: list = []
+    for v in plan.visuals:
+        if wanted and v.id not in wanted:
+            continue
+        try:
+            svg = compose_visual(plan, v, w, h, chars=True)
+            if not svg:
+                continue
+            token = uuid.uuid4().hex
+            out = _VISUAL_DIR / f"{token}.png"
+            if svg_raster.save_svg_png(svg, str(out), w, h, opaque_bg="#101820"):
+                items.append({"visual_id": v.id, "token": token,
+                              "url": f"/api/story/visual/image/{token}"})
+        except Exception as exc:
+            logger.info("story svg-preview: visual %s failed: %s", v.id, exc)
+    return {"items": items}
 
 
 @router.get("/visual/image/{token}")
@@ -199,83 +209,52 @@ def visual_image(token: str):
     return FileResponse(str(p), media_type="image/png")
 
 
-# ── P3: Character Reference Sheet (Duyệt #1 — visual consistency) ─────────────
+# ── Character master (transparent SVG chibi — Review preview + overlay asset) ─
 
-class ReferenceSheetRequest(BaseModel):
-    series_id: str = ""
+class CharacterMasterRequest(BaseModel):
     character_id: str = ""
-    name: str = ""              # used when generating ad-hoc (no series persistence)
-    description: str = ""
-    art_style: str = ""
-    # True → generate a cutout-ready CHARACTER MASTER (transparent PNG) for overlay /
-    # Review preview instead of the opaque conditioning reference sheet. Default False
-    # keeps the legacy behaviour (Sacred Contract #2 spirit).
-    transparent: bool = False
-    # A5 approval/lock: 0 = canonical master; >0 busts the cache so "regenerate" yields
-    # a different look for the user to pick from. Only used with transparent=True.
+    name: str = ""
+    description: str = ""       # kept for FE compatibility (unused by the SVG builder)
+    archetype: str = ""        # drives the chibi look (e.g. "swordsman")
+    gender: str = ""
+    region: str = ""
+    genre: str = ""
+    art_style: str = ""        # accepted for compatibility (the chibi style is fixed)
+    # 0 = canonical stand pose; >0 rotates the pose so "regenerate" yields a different look.
     variant: int = 0
 
 
 @router.post("/character/reference-sheet")
-def character_reference_sheet(req: ReferenceSheetRequest) -> dict:
-    """Generate a canonical Character Reference Sheet (gpt-image-1) and, when a
-    series is given, PIN it on the character (characters.reference_image_path) so
-    every later shot conditions generation on it. 422 without a description;
-    502 when generation failed (no key / error — Sacred Contract #3)."""
-    from app.domain.story_plan import StoryCharacter
-    from app.features.render.engine.visual.story_reference_sheet import (
-        generate_character_master,
-        generate_character_reference_sheet,
-    )
+def character_master(req: CharacterMasterRequest) -> dict:
+    """Compose a cutout-ready transparent CHARACTER MASTER (procedural SVG chibi, offline
+    $0) for the Review character panel — the SAME asset the render overlays. Returns
+    ``{path, url}``. 422 without any character signal; 502 on compose failure / resvg-py
+    unavailable (Sacred Contract #3)."""
+    from types import SimpleNamespace
+    from app.features.render.engine.visual.story_reference_sheet import generate_character_master
 
-    # Prefer the persisted canonical description when a character id is given.
-    desc = (req.description or "").strip()
     name = (req.name or "").strip()
+    arch = (req.archetype or "").strip()
     cid = (req.character_id or "").strip()
-    if cid and (req.series_id or "").strip() and not desc:
-        row = story_repo.get_character(cid)
-        if row is not None:
-            desc = (row.get("canonical_desc") or "").strip()
-            name = name or (row.get("name") or "").strip()
-    if not (desc or name):
-        raise HTTPException(status_code=422, detail="description or a persisted character is required")
-
-    character = StoryCharacter(id=cid or name, name=name, description=desc)
-
-    # transparent=True → cutout-ready overlay master (Phase 5): generate a PNG-alpha
-    # master and expose a viewable URL so Review can show it on a checkerboard. It is
-    # an OVERLAY asset, NOT the conditioning reference sheet → it is not pinned.
-    if req.transparent:
-        path = generate_character_master(character, art_style=(req.art_style or ""),
-                                         variant=int(req.variant or 0))
-        if not path:
-            raise HTTPException(status_code=502, detail="character master generation failed")
-        url = ""
-        try:
-            import shutil
-            _MASTER_DIR.mkdir(parents=True, exist_ok=True)
-            token = uuid.uuid4().hex
-            shutil.copyfile(path, _MASTER_DIR / f"{token}.png")
-            url = f"/api/story/character/master/{token}"
-        except Exception as exc:
-            logger.warning("story: master preview copy failed: %s", exc)
-        return {"path": path, "url": url}
-
-    path = generate_character_reference_sheet(character, art_style=(req.art_style or ""))
+    if not (name or arch or cid):
+        raise HTTPException(status_code=422, detail="a character (name/archetype) is required")
+    character = SimpleNamespace(id=(cid or name), name=name, archetype=arch,
+                                gender=(req.gender or ""))
+    path = generate_character_master(
+        character, art_style=(req.art_style or ""), variant=int(req.variant or 0),
+        region=(req.region or ""), genre=(req.genre or ""))
     if not path:
-        raise HTTPException(status_code=502, detail="reference sheet generation failed")
-
-    # Pin on the character so later shots reuse it (only when persisting to a series).
-    if cid and (req.series_id or "").strip():
-        try:
-            story_repo.upsert_character(
-                cid, series_id=req.series_id, name=name,
-                canonical_desc=desc, reference_image_path=path,
-            )
-        except Exception as exc:
-            logger.warning("story: pin reference sheet failed cid=%s: %s", cid, exc)
-
-    return {"path": path}
+        raise HTTPException(status_code=502, detail="character master generation failed")
+    url = ""
+    try:
+        import shutil
+        _MASTER_DIR.mkdir(parents=True, exist_ok=True)
+        token = uuid.uuid4().hex
+        shutil.copyfile(path, _MASTER_DIR / f"{token}.png")
+        url = f"/api/story/character/master/{token}"
+    except Exception as exc:
+        logger.warning("story: master preview copy failed: %s", exc)
+    return {"path": path, "url": url}
 
 
 @router.get("/character/master/{token}")

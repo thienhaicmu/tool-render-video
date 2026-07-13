@@ -1,15 +1,15 @@
 """
-visuals_stage.py — Story v2 visual-asset generation (extracted from
-story_pipeline_v2.py, A0 refactor — behaviour unchanged).
+visuals_stage.py — Story v2 visual-asset generation (SVG-only).
 
 Holds the per-render VISUAL asset generation the orchestrator drives before the cue
-render: key-visual images (one per Visual), character reference sheets (Q3) and
-environment reference sheets (G6). Grouped here so the orchestrator stays lean and
-the character-master / overlay work (later phases) has a natural home.
+render: procedural SVG key-visuals (one per Visual) and the per-(speaker, emotion,
+pose) transparent overlay masters. Story Mode is SVG-only — everything here is offline
+and $0 (the paid gpt-image / free Pollinations key-visual + reference-sheet paths were
+removed).
 
 All functions are best-effort (Sacred Contract #3 spirit): a per-visual failure
-degrades to a solid-background fallback, a reference-sheet hiccup is non-fatal —
-neither aborts the render.
+degrades to a solid-background fallback, a master hiccup simply means that beat renders
+background-only — neither aborts the render.
 """
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from app.db.jobs_repo import update_story_plan
-from app.features.render.engine.visual.story_image import generate_visual_image
 from app.features.render.engine.pipeline.render_events import _emit_render_event
 
 logger = logging.getLogger("app.render.story")
@@ -36,16 +35,14 @@ def _worker_count(env_name: str, default: int, n_items: int) -> int:
 
 
 def _match_library_background(plan, visual):
-    """Phase A — offline library-first: resolve a stock BACKGROUND for a CHARACTER-LESS
-    Visual (establishing shot) before paying for AI. Returns an on-disk path or None.
+    """Offline library-first: resolve a stock BACKGROUND for a CHARACTER-LESS Visual
+    (establishing shot) before composing procedurally. Returns an on-disk path or None.
     Never raises.
 
     Same precedence as svg_compose._bg_layer (single policy): the AI-chosen
     ``setting.asset`` slug (exact, library-pick) → a fuzzy ``scene_kind``/name match. Only
-    for a Visual with NO character_ids — the image cue render does not overlay characters,
-    so a plain library background would drop them; those keep AI gen. This is the gated
-    (STORY_LIBRARY_FIRST) early-exit for the PAID gpt-image flow; the SVG path resolves the
-    same precedence inline in svg_compose (unconditional, since library ≥ procedural)."""
+    for a Visual with NO character_ids — the cue render overlays characters per-beat, so a
+    plain library background would drop them; those keep procedural gen."""
     try:
         if getattr(visual, "character_ids", None):
             return None
@@ -67,22 +64,21 @@ def _match_library_background(plan, visual):
 
 
 def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int,
-                     *, job_id: str, effective_channel: str, provider: str = "gpt_image") -> list:
-    """Generate one image per Visual → plan.render.visual_assets[vid]. Returns the
-    list of visual_ids that FELL BACK (no image). Never raises per-visual.
+                     *, job_id: str, effective_channel: str, provider: str = "svg") -> list:
+    """Compose one procedural SVG image per Visual → plan.render.visual_assets[vid].
+    Returns the list of visual_ids that FELL BACK (no image). Never raises per-visual.
 
-    Images land in a PERSISTENT dir (``out_dir`` under CACHE_DIR, not the temp
-    shots dir) so they survive the finalize cleanup and the live-monitor thumbnail
-    endpoint can serve them during AND after the render. The plan is persisted +
-    a ``story.visual.ready`` event emitted after EACH image so the FE reveals the
-    visuals one by one (best-effort — a persist/emit hiccup never fails a visual)."""
+    Images land in a PERSISTENT dir (``out_dir`` under CACHE_DIR, not the temp shots dir)
+    so they survive the finalize cleanup and the live-monitor thumbnail endpoint can serve
+    them during AND after the render. The plan is persisted + a ``story.visual.ready``
+    event emitted after EACH image so the FE reveals the visuals one by one (best-effort).
+
+    ``provider`` is accepted for call-site compatibility but Story Mode is SVG-only."""
     fallbacks: list = []
     total = plan.image_count()
-    seed = int(plan.seed or 0)
 
-    # AL3 library-first: a Visual whose image is ALREADY set to an existing file (a
-    # library background assigned in Review, carried in the plan override) is NOT
-    # regenerated — skip it, no AI call. Keeps render.visual_assets as-is.
+    # A Visual whose image is ALREADY an existing file (a library background assigned in
+    # Review, carried in the plan override) is NOT regenerated — skip it.
     def _ready(vid: str) -> bool:
         p = plan.render.visual_assets.get(vid) or ""
         try:
@@ -91,9 +87,9 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
             return False
     gen_visuals = [v for v in plan.visuals if not _ready(v.id)]
 
-    # Phase A — offline library-first: auto-match a stock BACKGROUND for character-less
-    # Visuals before paying for AI. Gated by STORY_LIBRARY_FIRST (off by default →
-    # byte-identical). A matched visual is filled + dropped from gen_visuals (skip AI).
+    # Offline library-first: auto-match a stock BACKGROUND for character-less Visuals
+    # before composing procedurally. Gated by STORY_LIBRARY_FIRST (off by default). A
+    # matched visual is filled + dropped from gen_visuals (skip compose).
     if os.getenv("STORY_LIBRARY_FIRST", "0") == "1":
         _matched: list = []
         for v in list(gen_visuals):
@@ -112,70 +108,28 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
                     _emit_render_event(
                         channel_code=effective_channel, job_id=job_id,
                         event="story.visual.matched", level="INFO",
-                        message=f"Key-visual {vid} matched from library (no AI)",
+                        message=f"Key-visual {vid} matched from library (no compose)",
                         step="render.story",
                         context={"visual_id": vid, "done": len(plan.render.visual_assets), "total": total})
                 except Exception:
                     pass
 
-    # Hard cost cap (premium only): STORY_MAX_PREMIUM_IMAGES > 0 limits how many
-    # key-visuals are gpt-image-generated; the rest fall back to a solid background.
-    # 0 = unlimited (default — no behaviour change). Bounds runaway spend on a long story.
-    if provider == "gpt_image":
-        try:
-            _cap = int(os.getenv("STORY_MAX_PREMIUM_IMAGES", "0") or 0)
-        except (TypeError, ValueError):
-            _cap = 0
-        if _cap > 0 and len(gen_visuals) > _cap:
-            _capped = [v.id for v in gen_visuals[_cap:]]
-            gen_visuals = gen_visuals[:_cap]
-            fallbacks.extend(_capped)
-            try:
-                _emit_render_event(
-                    channel_code=effective_channel, job_id=job_id,
-                    event="story.visual.capped", level="WARNING",
-                    message=(f"Premium image cap reached ({_cap}) — {len(_capped)} visual(s) "
-                             f"use a solid background."),
-                    step="render.story", context={"cap": _cap, "capped": _capped})
-            except Exception:
-                pass
-
-    # Phase B/C — procedural SVG image path. Active when provider=="svg" (the FE default
-    # since Phase C) OR env STORY_SVG_GEN=1 (global override). Composes background +
-    # characters into a wide PNG offline ($0). On failure it degrades: provider=="svg" ->
-    # solid fallback; env-gate mode -> falls through to AI (gpt-image), never worse than before.
-    _svg_mode = (provider == "svg") or (os.getenv("STORY_SVG_GEN", "0") == "1")
-    # N4 overlay: key-visual is BACKGROUND-ONLY and the speaking character is composited
-    # per-beat at cue render (emotion + pose aware). DEFAULT ON for the SVG path (P4) — the
-    # per-beat emotion/pose the AI now emits (s8) only shows via the overlay. Opt out with
-    # STORY_CHAR_OVERLAY=0 (→ characters baked static into the key-visual as before).
-    _overlay = _svg_mode and (os.getenv("STORY_CHAR_OVERLAY", "1") != "0")
+    # N4 overlay: the key-visual is composed BACKGROUND-ONLY and the speaking character is
+    # composited per-beat at cue render (emotion + pose aware). DEFAULT ON — the per-beat
+    # emotion/pose the AI emits only shows via the overlay. Opt out with STORY_CHAR_OVERLAY=0
+    # (→ characters baked static into the key-visual).
+    _overlay = os.getenv("STORY_CHAR_OVERLAY", "1") != "0"
 
     def _gen_one(v):
-        # WORKER thread: pure image gen (network/file I/O). No DB, no plan mutation —
-        # only reads plan.render.refs. Returns (visual_id, path|None). Never raises.
+        # WORKER thread: pure SVG compose + raster (file I/O). No DB, no plan mutation.
+        # Returns (visual_id, path|None). Never raises.
         try:
             out = out_dir / f"{v.id}.png"
-            if _svg_mode:
-                try:
-                    from app.features.render.engine.visual.svg_compose import compose_visual
-                    from app.features.render.engine.visual.svg_raster import save_svg_png
-                    _svg = compose_visual(plan, v, img_w, img_h, chars=not _overlay)
-                    _p = save_svg_png(_svg, str(out), img_w, img_h, opaque_bg="#101820") if _svg else None
-                except Exception:
-                    _p = None
-                if _p:
-                    return v.id, _p
-                if provider == "svg":
-                    return v.id, None                    # strict svg -> solid fallback (no AI)
-                # env-gate trial: fall through to AI below
-            _rids = list(getattr(v, "character_ids", []) or [])
-            _sid = (getattr(v, "setting_id", "") or "").strip()
-            if _sid:
-                _rids.append(_sid)                       # G6: environment ref too
-            refs = {rid: plan.render.refs[rid] for rid in _rids if rid in plan.render.refs}
-            return v.id, generate_visual_image(v, refs, art_style, img_w, img_h, str(out),
-                                               seed=seed, provider=provider)
+            from app.features.render.engine.visual.svg_compose import compose_visual
+            from app.features.render.engine.visual.svg_raster import save_svg_png
+            _svg = compose_visual(plan, v, img_w, img_h, chars=not _overlay)
+            _p = save_svg_png(_svg, str(out), img_w, img_h, opaque_bg="#101820") if _svg else None
+            return v.id, _p
         except Exception:
             return v.id, None
 
@@ -217,154 +171,12 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
     return fallbacks
 
 
-def _generate_reference_sheets(plan, art_style: str, *, job_id: str,
-                               effective_channel: str, provider: str) -> None:
-    """Fill ``plan.render.refs[char_id]`` with a canonical reference-sheet path for
-    every character present in the visuals, so gpt-image-1's image-edit keeps that
-    character consistent across shots (Q3).
-
-    ONLY for provider='gpt_image' (Pollinations is a URL API — it can't condition on a
-    reference image, so free renders skip this and pay nothing extra). Env-gated by
-    STORY_REFERENCE_SHEETS (default on). A series-pinned sheet is reused; a freshly
-    generated one is pinned for later chapters. Best-effort — never raises."""
-    if provider != "gpt_image" or os.getenv("STORY_REFERENCE_SHEETS", "1") != "1":
-        return
-    try:
-        used: list[str] = []
-        seen: set[str] = set()
-        for v in plan.visuals:
-            for cid in (getattr(v, "character_ids", None) or []):
-                if cid and cid not in seen:
-                    seen.add(cid); used.append(cid)
-        if not used:
-            return
-        from app.features.render.engine.visual.story_reference_sheet import (
-            generate_character_reference_sheet,
-        )
-        series_id = (getattr(plan, "series_id", "") or "").strip()
-        for cid in used:
-            if plan.render.refs.get(cid):
-                continue
-            c = plan.character(cid)
-            if c is None:
-                continue
-            path = None
-            if series_id:                      # reuse a sheet pinned by an earlier chapter
-                try:
-                    from app.db import story_repo
-                    row = story_repo.get_character(cid)
-                    rp = (row.get("reference_image_path") or "").strip() if row else ""
-                    if rp and Path(rp).exists() and Path(rp).stat().st_size > 0:
-                        path = rp
-                except Exception:
-                    path = None
-            if not path:
-                path = generate_character_reference_sheet(c, art_style=art_style)
-                if path and series_id:         # pin for later chapters
-                    try:
-                        from app.db import story_repo
-                        story_repo.upsert_character(
-                            cid, series_id=series_id, name=c.name,
-                            canonical_desc=c.canonical_desc, reference_image_path=path)
-                    except Exception:
-                        pass
-            if not path:
-                continue
-            plan.render.refs[cid] = path
-            try:
-                update_story_plan(job_id, plan.to_json())
-            except Exception:
-                pass
-            try:
-                _emit_render_event(
-                    channel_code=effective_channel, job_id=job_id,
-                    event="story.refsheet.ready", level="INFO",
-                    message=f"Reference sheet ready for {c.name or cid}",
-                    step="render.story", context={"character_id": cid, "refs": len(plan.render.refs)},
-                )
-            except Exception:
-                pass
-    except Exception as exc:
-        logger.warning("story v2: reference sheets failed (non-fatal): %s", exc)
-
-
-def _generate_env_reference_sheets(plan, art_style: str, *, job_id: str,
-                                   effective_channel: str, provider: str) -> None:
-    """Fill ``plan.render.refs[setting_id]`` with a canonical ENVIRONMENT reference
-    sheet for each setting used by the visuals, so gpt-image-1's image-edit keeps the
-    LOCATION consistent across shots + chapters (G6).
-
-    ONLY for provider='gpt_image' AND a series (series_id set) — a one-off chapter
-    can't reuse the sheet across chapters, so it pays nothing. OPT-IN via
-    STORY_ENV_REFERENCE_SHEETS (default OFF): it adds a gpt-image-1 generation per
-    setting AND an extra input image to every visual's image-edit, and its quality
-    benefit is unproven — enable it only for a consistency-critical series. A
-    series-pinned sheet is reused; a freshly generated one is pinned. Never raises."""
-    series_id = (getattr(plan, "series_id", "") or "").strip()
-    if (provider != "gpt_image" or not series_id
-            or os.getenv("STORY_ENV_REFERENCE_SHEETS", "0") != "1"):
-        return
-    try:
-        used: list[str] = []
-        seen: set[str] = set()
-        for v in plan.visuals:
-            sid = (getattr(v, "setting_id", "") or "").strip()
-            if sid and sid not in seen:
-                seen.add(sid); used.append(sid)
-        if not used:
-            return
-        from app.features.render.engine.visual.story_reference_sheet import (
-            generate_environment_reference_sheet,
-        )
-        from app.db import story_repo
-        for sid in used:
-            if plan.render.refs.get(sid):
-                continue
-            s = plan.setting(sid)
-            if s is None:
-                continue
-            path = None
-            try:                                   # reuse a sheet pinned by an earlier chapter
-                row = story_repo.get_environment(sid)
-                rp = (row.get("reference_image_path") or "").strip() if row else ""
-                if rp and Path(rp).exists() and Path(rp).stat().st_size > 0:
-                    path = rp
-            except Exception:
-                path = None
-            if not path:
-                path = generate_environment_reference_sheet(s, art_style=art_style)
-                if path:                           # pin for later chapters
-                    try:
-                        story_repo.upsert_environment(
-                            sid, series_id=series_id, name=s.name,
-                            canonical_desc=s.canonical_desc, reference_image_path=path)
-                    except Exception:
-                        pass
-            if not path:
-                continue
-            plan.render.refs[sid] = path
-            try:
-                update_story_plan(job_id, plan.to_json())
-            except Exception:
-                pass
-            try:
-                _emit_render_event(
-                    channel_code=effective_channel, job_id=job_id,
-                    event="story.envref.ready", level="INFO",
-                    message=f"Environment reference ready for {s.name or sid}",
-                    step="render.story", context={"setting_id": sid, "refs": len(plan.render.refs)})
-            except Exception:
-                pass
-    except Exception as exc:
-        logger.warning("story v2: env reference sheets failed (non-fatal): %s", exc)
-
-
 def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_channel: str) -> None:
-    """Fill ``plan.render.masters[speaker_id]`` with a cutout-ready transparent CHARACTER
-    MASTER PNG for every speaker the timeline overlays (a beat with char_anchor != 'none';
-    A3). Best-effort — a master that can't be generated (no key / error) simply leaves
-    that character with NO overlay (the cue renders video-only). One master per character,
-    content-addressed + reused (a Review preview is reused). Never raises."""
+    """Fill ``plan.render.masters[speaker_id]`` with a procedural SVG transparent CHARACTER
+    MASTER for every speaker the timeline overlays (a beat with char_anchor != 'none';
+    A3 — the base-video overlay target). Best-effort — a master that can't be composed
+    simply leaves that character with NO overlay. One master per character, content-
+    addressed + reused. Never raises."""
     try:
         used: list[str] = []
         seen: set[str] = set()
@@ -375,6 +187,8 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
         if not used:
             return
         from app.features.render.engine.visual.story_reference_sheet import generate_character_master
+        region = (getattr(plan, "region", "") or "")
+        genre = (getattr(plan, "genre_key", "") or "")
         library_first = os.getenv("STORY_LIBRARY_FIRST", "0") == "1"
         for cid in used:
             if plan.render.masters.get(cid):
@@ -383,8 +197,7 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
             if c is None:
                 continue
             # AL5 library-first (opt-in): reuse a matching offline library character
-            # (transparent master) by name before paying for AI gen — free + consistent
-            # for recurring named characters. Default off → byte-identical (path stays None).
+            # (transparent master) by name before composing. Default off → procedural.
             path = None
             if library_first:
                 try:
@@ -394,7 +207,7 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
                 except Exception:
                     path = None
             if not path:
-                path = generate_character_master(c, art_style=art_style)
+                path = generate_character_master(c, art_style=art_style, region=region, genre=genre)
             if not path:
                 continue
             plan.render.masters[cid] = path
@@ -419,13 +232,12 @@ _LIB_POSES = ("wave", "cheer", "point", "hip")           # pose variants that ex
 
 
 def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: str) -> None:
-    """N4 — fill ``plan.render.masters['cid:emotion']`` with a transparent per-(speaker,
-    emotion) master for the image-overlay path. A library-picked character (character.asset)
+    """N4 — fill ``plan.render.masters['cid:emotion:pose']`` with a transparent per-(speaker,
+    emotion, pose) master for the overlay path. A library-picked character (character.asset)
     uses its ``{asset}_{emotion}`` variant (else the base asset); a procedural character is
-    svg_char-generated with that emotion. Only speakers on a beat drive this. Best-effort —
-    a missing master simply means that beat renders background-only. Never raises.
-    Self-gated by STORY_CHAR_OVERLAY (default ON — opt out with =0) so a stray call
-    only no-ops when explicitly disabled."""
+    svg_char-generated with that emotion + pose. Only speakers on a beat drive this.
+    Best-effort — a missing master simply means that beat renders background-only. Never
+    raises. Self-gated by STORY_CHAR_OVERLAY (default ON — opt out with =0)."""
     if os.getenv("STORY_CHAR_OVERLAY", "1") == "0":
         return
     try:
@@ -468,9 +280,8 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
                     ve = emo if emo in _LIB_EMOTIONS else ""
                     # The library has SEPARATE emotion and pose variants (never combined). When
                     # BOTH are requested, a single-axis library variant would silently DROP the
-                    # other axis (e.g. the _point pose variant has a neutral face) — so fall
-                    # through to procedural, which combines emotion + pose. Otherwise use the
-                    # single-axis variant (emotion preferred), else the base asset.
+                    # other axis — so fall through to procedural, which combines emotion + pose.
+                    # Otherwise use the single-axis variant (emotion preferred), else base asset.
                     if not (vp and ve):
                         path = (get_by_slug(f"{asset}_{ve}", "character") if ve else None) \
                             or (get_by_slug(f"{asset}_{vp}", "character") if vp else None) \
@@ -491,6 +302,5 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
         logger.warning("story v2: overlay masters failed (non-fatal): %s", exc)
 
 
-__all__ = ["_worker_count", "_generate_images", "_generate_reference_sheets",
-           "_generate_env_reference_sheets", "_generate_character_masters",
+__all__ = ["_worker_count", "_generate_images", "_generate_character_masters",
            "_generate_overlay_masters"]

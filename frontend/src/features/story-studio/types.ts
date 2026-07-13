@@ -42,18 +42,11 @@ export const TIER = ['low', 'medium', 'high'] as const
 export const EMOTION = ['normal', 'happy', 'angry', 'sad', 'surprised'] as const
 export const POSE = ['stand', 'wave', 'cheer', 'point', 'hip'] as const
 
-// Phase 2 — FINAL image provider. Draft/review always previews with the free
-// provider; this picks what the actual render uses.
-export type ImageProvider = 'svg' | 'gpt_image' | 'pollinations'
-// Rough per-image cost for the premium provider (gpt-image-1, medium) — used only
-// for the FE cost hint on the Render button. Free provider = $0.
-export const PREMIUM_IMG_COST_USD = 0.04
-
 /**
  * FE input config. Minimal by design — the AI decides tone / image count / voices.
  * Source A (paste) uses ``chapterText``; source B (idea) uses ``idea`` +
  * ``durationSec``. ``subtitles`` is off by default (voice-only, hook titles burn
- * regardless on the backend).
+ * regardless on the backend). Story Mode is SVG-only — no image provider choice.
  */
 export interface StoryConfig {
   source: StorySource
@@ -68,7 +61,6 @@ export interface StoryConfig {
   seriesId: string
   chapterNo: number
   outputDir: string
-  imageProvider: ImageProvider   // FINAL render provider (draft always previews free)
   baseVideoPath: string          // A1 — optional local base video ('' = image-based)
 }
 
@@ -85,6 +77,5 @@ export const DEFAULT_STORY_CFG: StoryConfig = {
   seriesId: '',
   chapterNo: 0,
   outputDir: '',
-  imageProvider: 'svg',          // Phase C: chibi SVG = default ($0, offline); toggle to free/premium
   baseVideoPath: '',
 }

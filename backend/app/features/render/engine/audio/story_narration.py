@@ -46,8 +46,16 @@ def _gender_for(plan, speaker_id: str) -> str:
     return g or "female"
 
 
-def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "hook_only") -> None:
-    """Synthesize every beat's narration → ``plan.render.beat_audio``. Never raises."""
+def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "hook_only",
+                        effective_channel: str = "") -> None:
+    """Synthesize every beat's narration → ``plan.render.beat_audio``. Never raises.
+
+    ``generate_narration_audio`` already falls back through its own engine chain
+    (elevenlabs/gemini → edge → offline piper), so an EMPTY result here means EVERY
+    engine failed for that beat — the beat renders silent. When that happens on beats
+    that HAD narration text, emit one ``story.tts.silent`` warning so the loss is visible
+    in the monitor instead of a silently muted stretch (F-R1')."""
+    silent_spoken: list[str] = []
     try:
         d = Path(audio_dir)
         d.mkdir(parents=True, exist_ok=True)
@@ -57,7 +65,7 @@ def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "h
                     plan.beat_count(), len(runs), locale)
         for beat in plan.timeline:
             text = (beat.narration or "").strip()
-            if not text:                                   # silent hold beat
+            if not text:                                   # silent hold beat (intentional)
                 plan.render.beat_audio[beat.id] = BeatAudio("", max(0.0, float(beat.hold_sec or 0.0)), [])
                 continue
             engine, voice_id = _voice_for(plan, beat.speaker_id)
@@ -76,11 +84,26 @@ def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "h
                 path = None
             if not path or not Path(path).exists() or Path(path).stat().st_size <= 0:
                 plan.render.beat_audio[beat.id] = BeatAudio("", 0.0, [])
+                silent_spoken.append(beat.id)              # had text but produced no audio
                 continue
             dur = probe_audio_duration(str(path))
             plan.render.beat_audio[beat.id] = BeatAudio(str(path), float(dur or 0.0), [])
     except Exception as exc:
         logger.warning("story_narration: synthesize_timeline error %s", exc)
+    if silent_spoken:
+        logger.warning("story_narration: %d spoken beat(s) produced NO audio (every TTS "
+                       "engine failed) — they render silent: %s", len(silent_spoken), silent_spoken)
+        if effective_channel:
+            try:
+                from app.features.render.engine.pipeline.render_events import _emit_render_event
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id, event="story.tts.silent",
+                    level="WARNING",
+                    message=(f"{len(silent_spoken)} narrated beat(s) had no audio — TTS "
+                             f"unavailable (check network / voice config); they play silent."),
+                    step="render.story", context={"silent_beats": silent_spoken})
+            except Exception:
+                pass
 
 
 __all__ = ["synthesize_timeline"]
