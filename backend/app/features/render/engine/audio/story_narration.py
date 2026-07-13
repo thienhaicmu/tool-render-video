@@ -24,7 +24,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from app.domain.story_plan_v2 import BeatAudio
+from app.domain.story_plan_v2 import BeatAudio, LineSpan
 from app.features.render.engine.audio.tts import generate_narration_audio
 from app.features.render.engine.stages.content_scene_render import (
     _reading_speed_to_rate, probe_audio_duration,
@@ -139,19 +139,26 @@ def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "h
                     return beat.id, BeatAudio("", 0.0, []), True
                 return beat.id, BeatAudio(path, dur, []), False
             # Dialogue path: per-line voice, laid back-to-back and concatenated.
-            segs: list[tuple[str, float]] = []
+            segs: list[tuple[str, float, object]] = []
             for i, ln in enumerate(lines):
                 p, dur = _synth_line(ln.text, ln.speaker_id, ln.emotion, rate,
                                      d / f"beat_{beat.id}_L{i:02d}.mp3")
                 if p and dur > 0:
-                    segs.append((p, dur))
+                    segs.append((p, dur, ln))
             if not segs:
                 return beat.id, BeatAudio("", 0.0, []), True
             if len(segs) == 1:
                 return beat.id, BeatAudio(segs[0][0], segs[0][1], []), False
-            offsets, t = [], 0.0
-            for p, dur in segs:
-                offsets.append((t, Path(p))); t += dur
+            # P3 — record each line's time window (speaker/emotion/pose) so the cue render
+            # can switch the on-screen character as the line changes. Offsets are relative
+            # to the concatenated beat audio (= the cue clip's own timeline).
+            offsets, spans, t = [], [], 0.0
+            for p, dur, ln in segs:
+                offsets.append((t, Path(p)))
+                spans.append(LineSpan(start=round(t, 3), end=round(t + dur, 3),
+                                      speaker_id=(ln.speaker_id or ""),
+                                      emotion=(ln.emotion or "normal"), pose=(ln.pose or "stand")))
+                t += dur
             out = d / f"beat_{beat.id}.mp3"
             try:
                 from app.features.render.engine.audio.timed_narration import _concat_with_pads
@@ -160,7 +167,7 @@ def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "h
                 logger.warning("story_narration: beat %s concat failed %s", beat.id, exc)
                 ok = False
             if ok and out.exists() and out.stat().st_size > 0:
-                return beat.id, BeatAudio(str(out), float(probe_audio_duration(str(out)) or t), []), False
+                return beat.id, BeatAudio(str(out), float(probe_audio_duration(str(out)) or t), [], spans), False
             return beat.id, BeatAudio(segs[0][0], segs[0][1], []), False   # fallback: first line
 
         try:

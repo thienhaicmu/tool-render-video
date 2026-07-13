@@ -199,10 +199,24 @@ class Word:
 
 
 @dataclass
+class LineSpan:
+    """P3 — one dialogue line's time window WITHIN a beat's concatenated audio, plus who
+    speaks it + how they look. Drives the per-line character overlay (the on-screen
+    speaker switches as the line changes). ``anchor`` = that speaker's stable screen slot."""
+    start: float = 0.0
+    end: float = 0.0
+    speaker_id: str = ""
+    emotion: str = "normal"
+    pose: str = "stand"
+    anchor: str = "center"    # ∈ CHAR_ANCHOR — filled by build_cues from the character order
+
+
+@dataclass
 class BeatAudio:
     path: str = ""
     dur: float = 0.0
     words: list[Word] = field(default_factory=list)
+    spans: list[LineSpan] = field(default_factory=list)   # P3 — per-line windows (dialogue)
 
 
 @dataclass
@@ -231,6 +245,7 @@ class Cue:
     emotion: str = "normal"     # N4 — carried from the beat; picks the speaker's emotion master
     pose: str = "stand"         # N4+ ∈ POSE — carried from the beat; picks the pose master
     source_audio: str = "mute"  # ∈ SOURCE_AUDIO — base-video audio (A4; "mute" = drop it)
+    line_overlays: list = field(default_factory=list)   # P3 — [LineSpan] per-line speaker overlays
 
 
 @dataclass
@@ -418,6 +433,18 @@ class StoryPlan:
             pass
         return self
 
+    def _char_positions(self) -> dict:
+        """Stable screen slot per character by first appearance (center → left → right → …).
+        Shared by derive_beat_styling (beat.char_anchor) and build_cues (per-line overlays)
+        so a character stands in the SAME spot whether it's the beat's sole speaker or one
+        turn in a dialogue."""
+        _POS = ("center", "left", "right")
+        order: list[str] = []
+        for c in self.characters:
+            if c.id and c.id not in order:
+                order.append(c.id)
+        return {cid: _POS[i % len(_POS)] for i, cid in enumerate(order)}
+
     def derive_beat_styling(self) -> "StoryPlan":
         """Phase 3 (lean contract): the AI no longer emits the MECHANICAL per-beat style
         labels — derive them here so the render keeps its variety and the speaking-
@@ -430,12 +457,7 @@ class StoryPlan:
             # char_anchor — CORRECTNESS: a speaking beat with anchor 'none' composites NO
             # character overlay. Give each character a STABLE screen position by first
             # appearance (center → left → right → …); narrator beats stay 'none'.
-            _POS = ("center", "left", "right")
-            order: list[str] = []
-            for c in self.characters:
-                if c.id and c.id not in order:
-                    order.append(c.id)
-            char_pos = {cid: _POS[i % len(_POS)] for i, cid in enumerate(order)}
+            char_pos = self._char_positions()
             _MOT = ("zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up", "pan_down")
             seed = int(self.seed or 0)
             n = len(self.timeline)
@@ -480,6 +502,7 @@ class StoryPlan:
         full-video subtitle. ``subtitle_mode`` is reserved for hook gating upstream."""
         try:
             rng = random.Random(int(self.seed or 0))
+            char_pos = self._char_positions()          # P3 — per-line overlay anchors
             cues: list[Cue] = []
             t = 0.0
             prev_vid = None
@@ -510,6 +533,12 @@ class StoryPlan:
                     char_scale=(b.char_scale or "medium"), char_motion=(b.char_motion or "fade"),
                     emotion=(b.emotion or "normal"), pose=(b.pose or "stand"),
                     source_audio=(b.source_audio or "mute"),
+                    line_overlays=[
+                        LineSpan(start=s.start, end=s.end, speaker_id=s.speaker_id,
+                                 emotion=s.emotion, pose=s.pose,
+                                 anchor=(char_pos.get(s.speaker_id, "center") if (s.speaker_id or "") else "none"))
+                        for s in (list(getattr(ba, "spans", []) or []) if ba else [])
+                    ],
                 ))
                 t = end
                 prev_vid = b.visual_id
@@ -722,6 +751,14 @@ def _line_from(x) -> Line:
                 text=_str(x.get("text") or x.get("narration")),
                 emotion=_norm(x.get("emotion"), EMOTION, "normal"),
                 pose=_norm(x.get("pose"), POSE, "stand"))
+def _linespan_from(x) -> LineSpan:
+    if not isinstance(x, dict):
+        return LineSpan()
+    return LineSpan(start=_float(x.get("start")), end=_float(x.get("end")),
+                    speaker_id=_str(x.get("speaker_id")),
+                    emotion=_norm(x.get("emotion"), EMOTION, "normal"),
+                    pose=_norm(x.get("pose"), POSE, "stand"),
+                    anchor=_norm(x.get("anchor"), CHAR_ANCHOR, "center"))
 def _beat_from(x, i) -> Beat:
     if not isinstance(x, dict): return Beat(id=f"b{i}")
     return Beat(id=(_str(x.get("id")) or f"b{i}"), narration=_str(x.get("narration")),
@@ -757,7 +794,8 @@ def _render_from(x) -> RenderState:
                 if isinstance(v, dict):
                     words = [Word(_str(w.get("text")), _float(w.get("start")), _float(w.get("end")))
                              for w in _list(v.get("words")) if isinstance(w, dict)]
-                    rs.beat_audio[str(k)] = BeatAudio(_str(v.get("path")), _float(v.get("dur")), words)
+                    spans = [_linespan_from(s) for s in _list(v.get("spans")) if isinstance(s, dict)]
+                    rs.beat_audio[str(k)] = BeatAudio(_str(v.get("path")), _float(v.get("dur")), words, spans)
         for c in _list(x.get("cues")):
             if isinstance(c, dict):
                 rs.cues.append(Cue(
@@ -778,7 +816,8 @@ def _render_from(x) -> RenderState:
                     char_motion=_norm(c.get("char_motion"), CHAR_MOTION, "fade"),
                     emotion=_norm(c.get("emotion"), EMOTION, "normal"),
                     pose=_norm(c.get("pose"), POSE, "stand"),
-                    source_audio=_norm(c.get("source_audio"), SOURCE_AUDIO, "mute")))
+                    source_audio=_norm(c.get("source_audio"), SOURCE_AUDIO, "mute"),
+                    line_overlays=[_linespan_from(s) for s in _list(c.get("line_overlays")) if isinstance(s, dict)]))
         rs.total_sec = _float(x.get("total_sec"))
     except Exception:
         pass
@@ -787,7 +826,7 @@ def _render_from(x) -> RenderState:
 
 __all__ = [
     "StoryPlan", "CharacterDef", "SettingDef", "Visual", "Beat", "Line",
-    "Word", "BeatAudio", "Cue", "RenderState",
+    "Word", "BeatAudio", "LineSpan", "Cue", "RenderState",
     "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE", "BGM_MOODS",
     "REGION", "GENRE_KEY",
     "BGM_CUE", "BGM_INTENSITY", "SOURCE_AUDIO", "CHAR_ANCHOR", "CHAR_SCALE",

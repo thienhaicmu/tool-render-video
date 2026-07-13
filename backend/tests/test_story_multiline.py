@@ -114,3 +114,28 @@ def test_prose_prompt_multiline_toggle(monkeypatch):
     monkeypatch.setenv("STORY_MULTILINE_BEATS", "1")
     _, on = build_super_idea_prompt("x", duration_sec=60, language="vi")
     assert '"lines"' in on and "spoken turns" in on          # dialogue guidance present
+
+
+# ── P3: build_cues carries per-line spans → cue.line_overlays with anchors ────
+
+def test_build_cues_fills_line_overlays_from_spans():
+    from app.domain.story_plan_v2 import BeatAudio, LineSpan
+    p = _plan(Beat(id="b1", visual_id="v1", lines=[Line("a", "x"), Line("b", "y")]))
+    # simulate TTS having concatenated 2 lines with time windows
+    p.render.beat_audio["b1"] = BeatAudio("a.mp3", 4.0, [], [
+        LineSpan(0.0, 2.0, "a", "angry", "point"), LineSpan(2.0, 4.0, "b", "sad", "stand")])
+    p.build_cues()
+    ov = p.render.cues[0].line_overlays
+    assert len(ov) == 2
+    # first character → center, second → left (stable per-character slot); windows preserved
+    assert (ov[0].speaker_id, ov[0].anchor, ov[0].start, ov[0].end) == ("a", "center", 0.0, 2.0)
+    assert (ov[1].speaker_id, ov[1].anchor, ov[1].start, ov[1].end) == ("b", "left", 2.0, 4.0)
+
+
+def test_beat_audio_spans_round_trip():
+    from app.domain.story_plan_v2 import StoryPlan as SP, BeatAudio, LineSpan
+    p = _plan(Beat(id="b1", visual_id="v1", lines=[Line("a", "x")]))
+    p.render.beat_audio["b1"] = BeatAudio("a.mp3", 3.0, [], [LineSpan(0.0, 3.0, "a", "happy", "wave", "center")])
+    p2 = SP.from_json(p.to_json())
+    sp = p2.render.beat_audio["b1"].spans
+    assert len(sp) == 1 and sp[0].speaker_id == "a" and sp[0].emotion == "happy" and sp[0].end == 3.0
