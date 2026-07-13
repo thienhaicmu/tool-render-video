@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s9"   # s9: drop dead negative_prompt (SVG-only render ignores it — F-12); s8: +per-beat emotion + code-derived archetype/scene vocab; s7: +pose; s6: library-pick; s5: asset-library hints; s4: bgm_cue/char_*
+SUPER_PROMPT_VERSION = "s10"  # s10: idea-mode length enforcement (fill target duration, no "never pad") + quantified visual reuse; s9: drop dead negative_prompt (F-12); s8: +per-beat emotion + code-derived vocab; s7: +pose; s6: library-pick; s5: asset-library hints; s4: bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -117,8 +117,10 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
     return (
         "═══ HARD RULES ═══\n"
         "1. ONE JSON object. No prose, no markdown, no code fences.\n"
-        f"2. AT MOST {ceiling} entries in \"visuals\". REUSE a visual across many beats "
-        "(a beat sharing a place keeps the same visual_id); do NOT make one image per beat.\n"
+        f"2. AT MOST {ceiling} entries in \"visuals\" — usually FAR FEWER than the number of "
+        "beats. REUSE each visual across MANY beats (aim for ~3-6 beats per visual): beats in the "
+        "same place/moment share ONE visual_id. NEVER make one image per beat — the TIMELINE can be "
+        "long (many beats = a long video), but the IMAGE SET stays small.\n"
         "3. Every timeline.visual_id MUST be an id in \"visuals\"; focus MUST be one of the "
         "listed values; speaker_id and every visuals.character_ids MUST be ids in \"characters\".\n"
         f"4. visuals[].prompt in ENGLISH, a WIDE {aspect} scene composed with clear LEFT/CENTER/"
@@ -246,18 +248,31 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
     lang_name = _lang_name(language)
     cps = _CPS.get((language or "").strip().lower()[:2], 14.0)
     budget = int(max(0, duration_sec) * cps) if duration_sec and duration_sec > 0 else 0
-    dur_line = (f"TARGET LENGTH: ~{int(duration_sec)} seconds → total narration ~{budget} characters "
-                f"(size the timeline to fit).\n") if budget else "TARGET LENGTH: model decides.\n"
+    # Length is a REQUIREMENT, not a soft target: a thin idea + "never pad" used to
+    # collapse a 3-minute request into a ~30s stub. Floor at ~85% of budget and give
+    # a beat-count guide (~1 beat per ~6s) so the model develops a full arc.
+    _min_chars = int(budget * 0.85) if budget else 0
+    _min_beats = max(6, int(round(duration_sec / 6.0))) if (duration_sec and duration_sec > 0) else 0
+    dur_line = (
+        f"TARGET LENGTH: ~{int(duration_sec)} seconds. This REQUIRES ~{budget} characters of "
+        f"narration IN TOTAL across all beats (at least ~{_min_chars}), spread over roughly "
+        f"{_min_beats}+ beats. GENUINELY FILL {int(duration_sec)}s — develop the plot to reach it; "
+        f"do NOT stop early or hand back a short stub.\n"
+    ) if budget else "TARGET LENGTH: model decides.\n"
     genre_line = f"GENRE: {genre.strip()}\n" if (genre or "").strip() else ""
     style_line = f"ART STYLE HINT: {art_style.strip()}\n" if (art_style or "").strip() else ""
     method = (
         "═══ METHOD (follow this order) ═══\n"
-        "(0) INVENT a complete short story from the idea below (arc: hook→rising→climax→resolution), "
-        f"in {lang_name}, sized to the target length. Never pad; keep it coherent.\n"
+        "(0) INVENT a COMPLETE story from the idea below with a full arc "
+        "(hook→rising action→climax→resolution), "
+        f"in {lang_name}, DEVELOPED richly enough to fill the whole TARGET LENGTH above — a longer "
+        "target needs MORE scenes, MORE beats and fuller narration. Do NOT stop short. Keep it "
+        "coherent with no filler repetition, but flesh out plot, characters and detail to reach the length.\n"
         "(a) CHARACTERS: the recurring cast you invented + canonical look + voice.\n"
         "(b) SETTINGS: the places.\n"
-        f"(c) VISUALS (≤{ceiling}): one WIDE image per key setting/moment.\n"
-        "(d) TIMELINE: narrate your story as ordered beats, each pointing to a visual + focus.\n"
+        f"(c) VISUALS (≤{ceiling}): a SMALL set of WIDE images, each reused across many beats.\n"
+        "(d) TIMELINE: narrate your story as ordered beats (enough beats to fill the target length), "
+        "each pointing to a visual + focus.\n"
     )
     user = (
         f"NARRATION LANGUAGE: {lang_name}\n{genre_line}{dur_line}{style_line}"

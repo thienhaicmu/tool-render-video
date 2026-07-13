@@ -320,8 +320,16 @@ class StoryPlan:
             return self
 
     def cap_visuals(self, ceiling: int) -> "StoryPlan":
-        """INV6: len(visuals) ≤ ceiling — keep visuals referenced by beats first
-        (in first-reference order), then drop beats whose visual was cut."""
+        """INV6: len(visuals) ≤ ceiling — keep the visuals referenced by beats first
+        (first-reference order). Beats whose visual is cut are REMAPPED to a kept
+        visual (same setting when possible, else the last kept one) — NEVER dropped.
+
+        Capping the IMAGE count must never truncate the STORY: the previous
+        implementation deleted every beat referencing a cut visual, so an
+        over-imaged plan (≈one image per beat) had its whole back half silently
+        removed — a 3-minute story collapsed to ~30 seconds. Remapping preserves
+        every narrated beat, so the video keeps its full length regardless of how
+        many distinct images the AI proposed."""
         try:
             ceiling = max(1, int(ceiling or 1))
             if len(self.visuals) <= ceiling:
@@ -330,7 +338,7 @@ class StoryPlan:
             for b in self.timeline:
                 if b.visual_id and b.visual_id not in order:
                     order.append(b.visual_id)
-            by_id = {v.id: v for v in self.visuals}
+            by_id = {v.id: v for v in self.visuals}          # full set (pre-trim)
             keep_ids = order[:ceiling]
             # Fill remaining slots with any unreferenced visuals (defensive).
             for v in self.visuals:
@@ -340,7 +348,19 @@ class StoryPlan:
                     keep_ids.append(v.id)
             keep_set = set(keep_ids)
             self.visuals = [by_id[i] for i in keep_ids if i in by_id]
-            self.timeline = [b for b in self.timeline if b.visual_id in keep_set]
+            # Remap (do NOT drop) beats whose visual was cut → a kept visual in the
+            # SAME setting when one exists, else the last kept visual.
+            kept_by_setting: dict[str, str] = {}
+            for vid in keep_ids:
+                v = by_id.get(vid)
+                if v is not None and v.setting_id:
+                    kept_by_setting.setdefault(v.setting_id, vid)
+            fallback = keep_ids[-1] if keep_ids else ""
+            for b in self.timeline:
+                if b.visual_id in keep_set:
+                    continue
+                orig = by_id.get(b.visual_id)
+                b.visual_id = (kept_by_setting.get(orig.setting_id) if orig is not None else None) or fallback
             return self.reindex()
         except Exception:
             return self

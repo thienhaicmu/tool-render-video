@@ -48,9 +48,10 @@ def test_idea_prompt_budget_and_genre():
     sysm, user = build_super_idea_prompt("A fallen disciple awakens a forbidden power.",
                                          duration_sec=300, genre="wuxia", language="vi", ceiling=10)
     assert "GENRE: wuxia" in user
-    # 300s × 15 cps (vi) = 4500 chars budget.
+    # 300s × 15 cps (vi) = 4500 chars budget (now a REQUIREMENT, s10).
     assert "~4500 characters" in user
-    assert "INVENT a complete short story" in user
+    assert "INVENT a COMPLETE story" in user
+    assert "never pad" not in user.lower()        # s10: the length-killer is gone
     assert "create FROM this".lower() in user.lower()
 
 
@@ -79,4 +80,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s9"   # s9: drop dead negative_prompt (F-12); s8: +per-beat emotion + vocab
+    assert SUPER_PROMPT_VERSION == "s10"  # s10: idea-mode length enforcement + quantified reuse; s9: drop negative_prompt (F-12)
