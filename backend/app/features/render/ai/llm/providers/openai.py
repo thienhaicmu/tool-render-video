@@ -608,12 +608,25 @@ def _call_openai_content(api_key: str, model: str, system_prompt: str, user_prom
 _STORY_PLAN_MAX_TOKENS = int(os.getenv("OPENAI_STORY_PLAN_MAX_TOKENS", "12288"))
 _STORY_PLAN_TEMPERATURE = float(os.getenv("OPENAI_STORY_PLAN_TEMPERATURE", "0.4"))
 _STORY_PLAN_RETRY_EMPTY = os.getenv("OPENAI_STORY_PLAN_RETRY_EMPTY", "1") == "1"
+# F-05: native structured output (strict JSON Schema) for the super-plan. Default
+# ON; set OPENAI_STORY_JSON_SCHEMA=0 to revert to plain JSON-mode. On any schema
+# error (unsupported model / API rejection) the call auto-degrades to json_object
+# in the SAME attempt, so a schema hiccup never fails the render.
+_STORY_JSON_SCHEMA = os.getenv("OPENAI_STORY_JSON_SCHEMA", "1") == "1"
 
 
-def _call_openai_story_plan_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-    """One Story super-plan call. Returns the raw content EVEN IF truncated (the
-    director's repair pass can salvage a cut JSON) but logs a WARNING so the
-    truncation is visible instead of a silently-halved plan (F-04)."""
+def _story_response_format(use_schema: bool) -> dict:
+    if use_schema:
+        from app.features.render.ai.llm.story_schema_v2 import build_story_plan_schema
+        return {"type": "json_schema", "json_schema": {
+            "name": "story_plan_v2", "strict": True, "schema": build_story_plan_schema()}}
+    return {"type": "json_object"}
+
+
+def _story_plan_create(api_key: str, model: str, system_prompt: str, user_prompt: str,
+                       use_schema: bool) -> Optional[str]:
+    """One super-plan create() with the chosen response_format. Returns raw content
+    EVEN IF truncated (repair can salvage) but WARNs on finish_reason=length (F-04)."""
     client = _openai.OpenAI(api_key=api_key, timeout=120)
     kwargs = dict(
         model=model,
@@ -621,7 +634,7 @@ def _call_openai_story_plan_once(api_key: str, model: str, system_prompt: str, u
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        response_format={"type": "json_object"},
+        response_format=_story_response_format(use_schema),
     )
     if _is_reasoning_model(model):
         kwargs["max_completion_tokens"] = _STORY_PLAN_MAX_TOKENS
@@ -639,6 +652,20 @@ def _call_openai_story_plan_once(api_key: str, model: str, system_prompt: str, u
             _STORY_PLAN_MAX_TOKENS,
         )
     return choice.message.content
+
+
+def _call_openai_story_plan_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """One Story super-plan call. Uses strict JSON Schema (F-05) when enabled, and
+    on ANY schema error auto-degrades to json_object in the same attempt so an
+    unsupported model / schema rejection never fails the render."""
+    if _STORY_JSON_SCHEMA:
+        try:
+            return _story_plan_create(api_key, model, system_prompt, user_prompt, True)
+        except Exception as exc:
+            logger.warning(
+                "openai_client: story-plan json_schema failed (%s) — retrying json_object", exc)
+            return _story_plan_create(api_key, model, system_prompt, user_prompt, False)
+    return _story_plan_create(api_key, model, system_prompt, user_prompt, False)
 
 
 def _call_openai_story_plan(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:

@@ -1,0 +1,101 @@
+"""
+F-05 — native OpenAI structured output (strict JSON Schema) for the Story super-plan.
+
+  * build_story_plan_schema is a valid STRICT schema (additionalProperties=false +
+    every key required on every object) derived from the domain enums, using only
+    the OpenAI-supported keyword subset.
+  * _call_openai_story_plan_once uses json_schema when enabled and auto-degrades to
+    json_object on a schema error (so an unsupported model never fails the render).
+"""
+from __future__ import annotations
+
+from app.features.render.ai.llm.story_schema_v2 import build_story_plan_schema
+from app.features.render.ai.llm.providers import openai as oai
+
+_UNSUPPORTED = {"minLength", "maxLength", "pattern", "minimum", "maximum",
+                "minItems", "maxItems", "format", "default"}
+
+
+def _walk_objects(node, fn):
+    if isinstance(node, dict):
+        fn(node)
+        for v in node.values():
+            _walk_objects(v, fn)
+    elif isinstance(node, list):
+        for v in node:
+            _walk_objects(v, fn)
+
+
+def test_schema_is_strict_and_supported():
+    s = build_story_plan_schema()
+
+    def _check(o):
+        assert not (set(o) & _UNSUPPORTED), f"unsupported keyword: {set(o) & _UNSUPPORTED}"
+        if o.get("type") == "object":
+            assert o.get("additionalProperties") is False
+            # strict mode: every property must be listed in required.
+            assert set(o.get("required", [])) == set(o.get("properties", {}).keys())
+
+    _walk_objects(s, _check)
+
+
+def test_schema_enums_derived_from_domain():
+    from app.domain.story_plan_v2 import FOCUS, MOTION, EMOTION, POSE, TIER, BGM_MOODS
+    beat = build_story_plan_schema()["properties"]["timeline"]["items"]["properties"]
+    assert beat["focus"]["enum"] == list(FOCUS)
+    assert beat["motion"]["enum"] == list(MOTION)
+    assert beat["emotion"]["enum"] == list(EMOTION)
+    assert beat["pose"]["enum"] == list(POSE)
+    # bgm_mood drops the "default" fallback folder (AI-facing vocab).
+    assert "default" not in beat["bgm_mood"]["enum"]
+    assert set(beat["bgm_mood"]["enum"]) == {m for m in BGM_MOODS if m != "default"}
+    vis = build_story_plan_schema()["properties"]["visuals"]["items"]["properties"]
+    assert vis["tier"]["enum"] == list(TIER)
+    # Pipeline-derived fields are NOT exposed to the model.
+    assert "reading_speed" not in beat and "hold_sec" not in beat and "negative_prompt" not in vis
+
+
+def test_once_uses_json_schema_when_enabled(monkeypatch):
+    monkeypatch.setattr(oai, "_STORY_JSON_SCHEMA", True)
+    seen = {"use_schema": None, "n": 0}
+
+    def _fake_create(api_key, model, sysm, usr, use_schema):
+        seen["use_schema"] = use_schema
+        seen["n"] += 1
+        return '{"ok": 1}'
+
+    monkeypatch.setattr(oai, "_story_plan_create", _fake_create)
+    out = oai._call_openai_story_plan_once("k", "gpt-4o", "s", "u")
+    assert out == '{"ok": 1}'
+    assert seen["use_schema"] is True and seen["n"] == 1
+
+
+def test_once_degrades_to_json_object_on_schema_error(monkeypatch):
+    monkeypatch.setattr(oai, "_STORY_JSON_SCHEMA", True)
+    calls = []
+
+    def _fake_create(api_key, model, sysm, usr, use_schema):
+        calls.append(use_schema)
+        if use_schema:
+            raise RuntimeError("400 response_format.json_schema not supported")
+        return '{"ok": 1}'
+
+    monkeypatch.setattr(oai, "_story_plan_create", _fake_create)
+    out = oai._call_openai_story_plan_once("k", "gpt-4o", "s", "u")
+    assert out == '{"ok": 1}'
+    assert calls == [True, False]        # schema attempt → degrade to json_object
+
+
+def test_json_schema_kill_switch(monkeypatch):
+    monkeypatch.setattr(oai, "_STORY_JSON_SCHEMA", False)
+    calls = []
+    monkeypatch.setattr(oai, "_story_plan_create",
+                        lambda *a: (calls.append(a[-1]) or '{"ok": 1}'))
+    oai._call_openai_story_plan_once("k", "gpt-4o", "s", "u")
+    assert calls == [False]              # never attempts schema when disabled
+
+
+def test_response_format_shapes():
+    rf = oai._story_response_format(True)
+    assert rf["type"] == "json_schema" and rf["json_schema"]["strict"] is True
+    assert oai._story_response_format(False) == {"type": "json_object"}
