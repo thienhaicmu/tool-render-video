@@ -46,10 +46,12 @@ def test_mode_b_idea_uses_idea_builder():
     assert p is not None and seen["mode"] == "idea"
 
 
-def test_character_canon_injected():
+def test_canon_not_injected_into_visual_prompt():
+    # P-A (s11): Story is SVG-only → run_super_plan no longer appends canonical_desc
+    # to visual.prompt (that was an image-gen concern). Character continuity lives in
+    # canonical_desc via series memory, not the visual prompt.
     p = run_super_plan(call_fn=lambda s, u: _super_json(), source="paste", chapter=_CHAPTER)
-    # visual v1 has character_ids=["han"] whose canon is "áo trắng, tóc bạc".
-    assert "áo trắng" in p.visual("v1").prompt
+    assert "áo trắng" not in (p.visual("v1").prompt or "")
 
 
 def test_none_and_empty():

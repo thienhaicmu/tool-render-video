@@ -5,7 +5,7 @@
  * Story Mode is SVG-only — offline, $0. Studio BASE only.
  */
 import { useState } from 'react'
-import { StudioCard, StudioField } from '../../../components/studio'
+import { StudioCard } from '../../../components/studio'
 import type { StoryPlanV2, Visual } from '../../../api/story'
 import { svgPreview } from '../../../api/story'
 import { storyAssetImageUrl } from '../../../api/storyAssets'
@@ -77,14 +77,9 @@ function VisualCard({ vi, v, plan, aspect, color, preview, setPreview, onChange,
         {busy && <span className="st-visual-spin" aria-hidden />}
       </div>
       <div className="st-visual-body">
-        <StudioField label={vi ? 'Mô tả hình' : 'Prompt'}>
-          <textarea className="st-textarea st-textarea--sm" rows={3} value={v.prompt}
-            onChange={(e) => onChange(v.id, { prompt: e.target.value })} />
-        </StudioField>
-        <StudioField label={vi ? 'Tránh (negative)' : 'Negative'}>
-          <input className="st-input" value={v.negative_prompt}
-            onChange={(e) => onChange(v.id, { negative_prompt: e.target.value })} />
-        </StudioField>
+        {/* Story is SVG-only: the picture is composed procedurally from the visual's
+            setting + present characters (the WYSIWYG preview above shows exactly what
+            renders). The old image-gen prompt / negative-prompt fields are gone. */}
         {settingAsset && (
           <span className="st-tag st-tag--dim" title={vi ? 'Nền AI khớp sẵn từ kho' : 'AI matched this background from the library'}>
             📚 {settingAsset}

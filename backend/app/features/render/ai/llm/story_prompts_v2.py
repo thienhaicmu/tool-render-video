@@ -24,7 +24,7 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s10"  # s10: idea-mode length enforcement (fill target duration, no "never pad") + quantified visual reuse; s9: drop dead negative_prompt (F-12); s8: +per-beat emotion + code-derived vocab; s7: +pose; s6: library-pick; s5: asset-library hints; s4: bgm_cue/char_*
+SUPER_PROMPT_VERSION = "s11"  # s11: SVG-only cleanup (P-A) — drop dead image-gen fields the AI no longer emits: visual.prompt + visual.tier + character.voice_style (SVG composes from setting/archetype/asset; dataclass fields kept for old-plan compat). s10: idea-mode length enforcement + quantified reuse; s9: drop dead negative_prompt (F-12); s8: +per-beat emotion + vocab; s7: +pose; s6: library-pick; s5: asset-library hints; s4: bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -71,10 +71,10 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
   "genre_key": "wuxia|ngontinh|horror|fantasy|codai|hiendai|",
   "characters": [
     { "id": "<short slug, e.g. han_phong>", "name": "<display name>",
-      "canonical_desc": "<CANONICAL look: age, hair, attire, weapon, aura — reused every image>",
+      "canonical_desc": "<the character's canonical look: age, hair, attire, weapon, aura — kept consistent across the whole story / later chapters>",
       "archetype": "<lowercase English role token, e.g. swordsman|emperor|office_worker|princess|witch|child|ghost — or '' if unsure>",
       "asset": "<a CHARACTERS slug from the ASSET LIBRARY that best fits this character, or '' if none fits / no library given>",
-      "age": "", "gender": "male|female|", "voice_gender": "male|female", "voice_style": "calm|fierce|young|…" }
+      "age": "", "gender": "male|female|", "voice_gender": "male|female" }
   ],
   "settings": [
     { "id": "<slug>", "name": "<place>", "canonical_desc": "<canonical look of the place>",
@@ -83,8 +83,7 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
   ],
   "visuals": [
     { "id": "v1", "setting_id": "<a settings id>",
-      "prompt": "<FULL English image prompt: a WIDE 16:9 scene; place key elements in clear LEFT / CENTER / RIGHT zones so the camera can pan to them; reuse each present character's canonical look; cinematic, detailed>",
-      "character_ids": ["<characters ids present>"], "tier": "low|medium|high" }
+      "character_ids": ["<characters ids present>"] }
   ],
   "timeline": [
     { "id": "b1", "narration": "<voice-over for this beat, in target language>",
@@ -123,30 +122,30 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str) -> str
         "long (many beats = a long video), but the IMAGE SET stays small.\n"
         "3. Every timeline.visual_id MUST be an id in \"visuals\"; focus MUST be one of the "
         "listed values; speaker_id and every visuals.character_ids MUST be ids in \"characters\".\n"
-        f"4. visuals[].prompt in ENGLISH, a WIDE {aspect} scene composed with clear LEFT/CENTER/"
-        "RIGHT zones (so the camera pans to focus regions). Reuse each character's canonical look.\n"
-        "5. ONE image per SETTING/moment — group beats in the same place onto ONE visual.\n"
-        f"6. narration in {lang_name}; each beat = ONE contiguous idea (~1-3 sentences); the beats "
+        "4. ONE visual per SETTING/moment — group beats in the same place onto ONE visual. The render "
+        "draws each picture procedurally from the visual's setting + present characters (there is NO "
+        "image prompt — do not write scene descriptions).\n"
+        f"5. narration in {lang_name}; each beat = ONE contiguous idea (~1-3 sentences); the beats "
         "in order narrate the whole story faithfully (preserve names/facts, never invent).\n"
-        f"7. {hook_rule}\n"
-        f"8. Each timeline beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood "
+        f"6. {hook_rule}\n"
+        f"7. Each timeline beat's bgm_mood = ONE of [{_MOOD_VOCAB}] — the background-music mood "
         "matching THAT beat's emotional tone (a creative label only, NOT an audio file/timestamp).\n"
-        "9. bgm_cue = WHERE the music sits in the beat: under (whole beat) | intro (start only) | "
+        "8. bgm_cue = WHERE the music sits in the beat: under (whole beat) | intro (start only) | "
         "outro (end only) | none (silence). Use intro on a scene's FIRST beat, outro on its LAST, "
         "none for a quiet beat; under otherwise. bgm_intensity = low|med|high. LABELS only, never seconds.\n"
-        "10. char_anchor = where the SPEAKING character stands: none|left|center|right — set none when "
+        "9. char_anchor = where the SPEAKING character stands: none|left|center|right — set none when "
         "speaker_id is '' (narrator). char_scale = small|medium|large; char_motion = static|fade|slide|float. "
         "emotion = the SPEAKER's feeling THIS beat: normal|happy|angry|sad|surprised — match the beat's tone "
         "(use normal when neutral). pose = the speaker's gesture THIS beat: stand (neutral) | wave (greeting) | "
         "cheer (excited) | point (accusing/indicating) | hip (defiant) — use stand unless the action clearly "
         "calls for one. source_audio = mute|duck|keep (how a base video's own audio is treated).\n"
-        "11. text_anchor = where on-screen text sits: auto|top|bottom|left|right. Use auto normally; pick a "
+        "10. text_anchor = where on-screen text sits: auto|top|bottom|left|right. Use auto normally; pick a "
         "side OPPOSITE char_anchor so text never covers the character.\n"
-        "12. region/genre_key/archetype/scene_kind are OPTIONAL asset-library hints: lowercase English "
+        "11. region/genre_key/archetype/scene_kind are OPTIONAL asset-library hints: lowercase English "
         "tokens only; leave \"\" when unsure (never invent). They do NOT change the story.\n"
-        "13. \"asset\" (character/setting) = an exact SLUG copied from the ASSET LIBRARY section when one "
+        "12. \"asset\" (character/setting) = an exact SLUG copied from the ASSET LIBRARY section when one "
         "fits, else \"\". Never a path; never a slug that is not listed. Absent library → \"\".\n"
-        "14. DO NOT output any render/path/timestamp/duration/seconds field.\n"
+        "13. DO NOT output any render/path/timestamp/duration/seconds field, nor an image prompt.\n"
         "═══ SELF-CHECK before answering ═══\n"
         "Verify every visual_id / speaker_id / character_ids exists in the arrays above; if not, fix it.\n"
         "═══ OUTPUT JSON ═══"

@@ -40,7 +40,7 @@ def build_story_plan_schema() -> dict:
     """Return the strict JSON Schema for the AI-produced StoryPlan contract.
     Pure; imports domain enums lazily so a partial hot-reload never breaks import."""
     from app.domain.story_plan_v2 import (
-        FOCUS, MOTION, TRANSITION, TIER, GENDER, REGION, GENRE_KEY, BGM_MOODS,
+        FOCUS, MOTION, TRANSITION, GENDER, REGION, GENRE_KEY, BGM_MOODS,
         BGM_CUE, BGM_INTENSITY, SOURCE_AUDIO, CHAR_ANCHOR, CHAR_SCALE, CHAR_MOTION,
         EMOTION, POSE, TEXT_ANCHOR,
     )
@@ -57,7 +57,6 @@ def build_story_plan_schema() -> dict:
         "age": {"type": "string"},
         "gender": _enum(GENDER),
         "voice_gender": _enum(GENDER),
-        "voice_style": {"type": "string"},
     })
     setting = _obj({
         "id": {"type": "string"},
@@ -69,9 +68,7 @@ def build_story_plan_schema() -> dict:
     visual = _obj({
         "id": {"type": "string"},
         "setting_id": {"type": "string"},
-        "prompt": {"type": "string"},
         "character_ids": {"type": "array", "items": {"type": "string"}},
-        "tier": _enum(TIER),
     })
     beat = _obj({
         "id": {"type": "string"},

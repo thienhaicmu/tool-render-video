@@ -40,7 +40,7 @@ def test_schema_is_strict_and_supported():
 
 
 def test_schema_enums_derived_from_domain():
-    from app.domain.story_plan_v2 import FOCUS, MOTION, EMOTION, POSE, TIER, BGM_MOODS
+    from app.domain.story_plan_v2 import FOCUS, MOTION, EMOTION, POSE, BGM_MOODS
     beat = build_story_plan_schema()["properties"]["timeline"]["items"]["properties"]
     assert beat["focus"]["enum"] == list(FOCUS)
     assert beat["motion"]["enum"] == list(MOTION)
@@ -50,9 +50,12 @@ def test_schema_enums_derived_from_domain():
     assert "default" not in beat["bgm_mood"]["enum"]
     assert set(beat["bgm_mood"]["enum"]) == {m for m in BGM_MOODS if m != "default"}
     vis = build_story_plan_schema()["properties"]["visuals"]["items"]["properties"]
-    assert vis["tier"]["enum"] == list(TIER)
-    # Pipeline-derived fields are NOT exposed to the model.
-    assert "reading_speed" not in beat and "hold_sec" not in beat and "negative_prompt" not in vis
+    chars = build_story_plan_schema()["properties"]["characters"]["items"]["properties"]
+    # P-A (s11): dead image-gen fields are NOT exposed to the model (SVG-only).
+    assert "prompt" not in vis and "tier" not in vis and "negative_prompt" not in vis
+    assert "voice_style" not in chars
+    # Pipeline-derived timing fields are never exposed either.
+    assert "reading_speed" not in beat and "hold_sec" not in beat
 
 
 def test_once_uses_json_schema_when_enabled(monkeypatch):

@@ -14,7 +14,8 @@ def test_story_prompt_shape_and_params():
     assert "DIRECTOR" in sysm
     assert "OUTPUT SCHEMA" in user and '"timeline"' in user and '"visuals"' in user
     assert "AT MOST 12" in user                       # ceiling
-    assert "16:9" in user
+    # (aspect is no longer surfaced in the prompt — SVG gets it from the plan, and
+    #  s11 removed the image-prompt rule that was its only mention.)
     assert "Vietnamese" in user                       # lang name
     assert "adapt THIS" in user.lower() or "adapt this" in user.lower()
     # Phase 0.5 — asset-library hint keys present in the schema
@@ -80,4 +81,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s10"  # s10: idea-mode length enforcement + quantified reuse; s9: drop negative_prompt (F-12)
+    assert SUPER_PROMPT_VERSION == "s11"  # s11: short visual caption (P-A); s10: idea-mode length + reuse; s9: drop negative_prompt

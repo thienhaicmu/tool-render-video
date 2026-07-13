@@ -261,7 +261,11 @@ def run_super_plan(
             return None
 
         # ── Deterministic post-passes ────────────────────────────────────────
-        inject_character_canon(plan)
+        # (No inject_character_canon: it appended a character's look to visual.prompt
+        # for an IMAGE-GEN provider. Story is SVG-only — visual.prompt was removed
+        # from the schema (s11) and the render composes from setting/archetype/asset —
+        # so there is nothing to inject into. Character continuity lives in
+        # canonical_desc via the series-memory block, not the visual prompt.)
         plan.cap_visuals(ceiling)
         plan.validate_refs()
         plan.reindex()
