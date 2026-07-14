@@ -256,8 +256,49 @@ def _courtyard(**k):
     return inner
 
 
+def _station(**k):
+    # Rainy commuter-station front: platform canopy, a train car, platform edge, drizzle.
+    inner = _grad("stn", "#39435c", "#20283a")
+    inner += '<rect x="0" y="170" width="1536" height="54" fill="#2a3346"/>'                        # canopy
+    inner += "".join(f'<rect x="{x-12}" y="224" width="24" height="470" fill="#333d52"/>' for x in range(200, 1500, 320))
+    inner += '<rect x="120" y="470" width="1000" height="230" rx="20" fill="#6b7788"/>'              # train car
+    inner += '<rect x="150" y="500" width="940" height="86" rx="10" fill="#a9cbe0" opacity="0.7"/>'  # window band
+    inner += "".join(f'<rect x="{x}" y="600" width="120" height="80" fill="#39435c"/>' for x in range(190, 1050, 210))
+    inner += '<rect y="700" width="1536" height="324" fill="#454d5e"/>'                              # platform
+    inner += '<rect y="700" width="1536" height="14" fill="#f2c94a" opacity="0.55"/>'               # edge line
+    inner += "".join(f'<line x1="{x}" y1="200" x2="{x-40}" y2="700" stroke="#aeb8cc" stroke-width="2" opacity="0.22"/>' for x in range(60, 1536, 90))  # rain
+    return inner
+
+
+def _pachinko(**k):
+    # Pachinko-parlor interior: dark hall, rows of glowing machines, a neon strip.
+    inner = _grad("pk", "#2a1836", "#140b1e")
+    inner += '<rect x="0" y="90" width="1536" height="40" fill="#f24a7a" opacity="0.5"/>'           # neon strip
+    cols = ((120, "#f24a7a"), (360, "#4ad0f2"), (600, "#f2c94a"), (840, "#7af24a"), (1080, "#f28a4a"), (1300, "#c06af2"))
+    inner += "".join(
+        f'<rect x="{x}" y="{y}" width="150" height="210" rx="8" fill="#3a2450"/>'
+        f'<rect x="{x+22}" y="{y+26}" width="106" height="96" rx="6" fill="{c}" opacity="0.9"/>'
+        for y in (170, 430) for x, c in cols)
+    return inner + _floor(720, "#2a2038", "#160e22")
+
+
+def _hotel(**k):
+    # Upscale hotel lobby / ballroom: marble, gold-capped columns, chandelier, reception.
+    inner = _grad("htl", "#efe6d2", "#cdbfa0")
+    inner += "".join(f'<rect x="{x-26}" y="110" width="52" height="640" fill="#e7dcc2"/>'
+                     f'<rect x="{x-34}" y="110" width="68" height="26" fill="#c9a24a"/>' for x in (240, 560, 976, 1296))
+    inner += '<ellipse cx="768" cy="150" rx="130" ry="36" fill="#f4dc90" opacity="0.85"/>'          # chandelier glow
+    inner += '<rect x="560" y="560" width="416" height="190" rx="10" fill="#b89a5a"/>'              # reception desk
+    inner += '<rect x="60" y="300" width="300" height="240" fill="#dcccaa" opacity="0.6"/>'         # wall art / window
+    return inner + _floor(760, "#d8c9a8", "#b09868")
+
+
 _SCENES = {
     "cafe": _cafe, "coffee_shop": _cafe, "classroom": _classroom, "school": _classroom,
+    # modern-drama scenes (offline procedural) — add new scene_kind tokens here
+    "station": _station, "train_station": _station,
+    "pachinko": _pachinko, "arcade": _pachinko, "game_center": _pachinko,
+    "hotel": _hotel, "hotel_lobby": _hotel, "lobby": _hotel, "ballroom": _hotel,
     "forest": _forest, "bamboo_forest": _forest, "woods": _forest, "mountain": _mountain,
     "peak": _mountain, "cliff": _mountain, "throne_room": _throne, "palace": _throne,
     "imperial_hall": _throne, "bedroom": _bedroom, "living_room": _living, "home": _living,

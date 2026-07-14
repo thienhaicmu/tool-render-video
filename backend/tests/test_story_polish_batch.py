@@ -19,9 +19,9 @@ def test_korean_lang_name_resolved():
     assert _lang_name("ko-KR").startswith("Korean")
 
 
-def test_korean_routes_gemini_with_voices():
+def test_korean_routes_elevenlabs_with_voices():
     v = list_voices("ko")
-    assert v["engine"] == "gemini"          # KO → gemini fallback (multilingual)
+    assert v["engine"] == "elevenlabs"      # KO → ElevenLabs (multilingual_v2 covers Korean)
     assert v["female"] and v["male"]        # non-empty pools → picker has options
 
 
@@ -31,7 +31,7 @@ def test_korean_voice_cast_fills_plan():
         CharacterDef(id="b", name="B", voice_gender="male"),
     ])
     apply_voice_cast_v2(p, "ko")
-    assert p.render.voices["a"][0] == "gemini" and p.render.voices["a"][1]
+    assert p.render.voices["a"][0] == "elevenlabs" and p.render.voices["a"][1]
     assert p.render.voices["b"][1] != p.render.voices["a"][1]   # distinct genders/voices
 
 

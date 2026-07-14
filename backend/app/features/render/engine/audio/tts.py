@@ -525,17 +525,17 @@ def generate_narration_mp3(
 
 
 def resolve_story_tts_engine(language: str) -> str:
-    """Story Mode TTS engine routing by language (§ P4 decision C):
-      Vietnamese → 'gemini' (native, cheap); English/Japanese → 'elevenlabs'
-      (audiobook-grade); anything else → 'gemini'. STORY_TTS_ENGINE_OVERRIDE forces
-      a single engine (kill-switch). All engines fall back to the free edge chain
-      inside generate_narration_audio, so this only picks the PREFERRED engine.
-      Never raises."""
+    """Story Mode TTS engine routing by language:
+      Vietnamese → 'gemini' (native, cheap); English/Japanese/Korean → 'elevenlabs'
+      (audiobook-grade — multilingual_v2 covers EN/JA/KO); anything else → 'gemini'.
+      STORY_TTS_ENGINE_OVERRIDE forces a single engine (kill-switch). All engines
+      fall back to the free edge chain inside generate_narration_audio, so this only
+      picks the PREFERRED engine. Never raises."""
     force = (os.environ.get("STORY_TTS_ENGINE_OVERRIDE", "") or "").strip().lower()
     if force:
         return force
     lang = (language or "").strip().lower()
-    if lang.startswith("en") or lang.startswith("ja"):
+    if lang.startswith("en") or lang.startswith("ja") or lang.startswith("ko"):
         return "elevenlabs"
     return "gemini"
 

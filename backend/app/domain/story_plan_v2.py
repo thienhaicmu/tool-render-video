@@ -117,6 +117,11 @@ class SettingDef:
     canonical_desc: str = ""
     scene_kind: str = ""      # Phase 0.5: library scene token (English, e.g. "cafe"); "" = none
     asset: str = ""           # Library-pick: AI-chosen library background slug (exact); "" = none
+    # PASTE-JSON only: a hand-authored declarative SCENE SPEC (bg / floor / elements) that
+    # svg_scene_spec renders → banks into the library as a background asset. Lets a NEW scene
+    # be DESCRIBED by parameters (no hardcoded generator). {} = not used → old asset/scene_kind
+    # flow is untouched. The AI never emits this (not in the AI schema).
+    scene_spec: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -434,16 +439,23 @@ class StoryPlan:
         return self
 
     def normalize_for_render(self, ceiling: int = 15) -> "StoryPlan":
-        """Prepare a HAND-PASTED / imported plan for rendering (paste-JSON feature):
-        scrub dangling refs, cap the image count, dense-reindex, and DROP any stale
-        render state — so a plan exported from another job can't reuse its cues /
-        masters / asset paths (which would composite the WRONG images). Mirrors the
-        defensive post-passes the AI path runs in run_super_plan. Pure; never raises."""
+        """Prepare a HAND-PASTED / imported / EDITED plan for rendering (paste-JSON +
+        Review edits): scrub dangling refs, cap the image count, dense-reindex, and clear
+        only the DERIVED render state that is regenerated every render (cue sheet + timed
+        audio). It deliberately PRESERVES the user's Review picks — ``render.voices``
+        (per-character voice override), ``render.masters`` (pinned character image) and
+        ``render.visual_assets`` (pinned background) — which live in render state; the
+        render layer re-validates each path's existence (``_ready`` / master pick), so a
+        stale cross-job path simply regenerates. (Was: reset ALL render → wiped the picks.)
+        Pure; never raises."""
         try:
             self.cap_visuals(ceiling)      # cap_visuals also reindexes
             self.validate_refs()
             self.reindex()
-            self.render = RenderState()    # stale cues/masters/beat_audio → regenerated at render
+            self.render.cues = []          # rebuilt by build_cues every render
+            self.render.beat_audio = {}    # re-synthesized by synthesize_timeline
+            self.render.refs = {}          # regenerated character reference images
+            self.render.total_sec = 0.0
         except Exception:
             pass
         return self
@@ -769,8 +781,10 @@ def _character_from(x) -> CharacterDef:
 def _setting_from(x) -> SettingDef:
     if not isinstance(x, dict): return SettingDef()
     name = _str(x.get("name")); sid = _str(x.get("id")) or name
+    _spec = x.get("scene_spec")
     return SettingDef(id=sid, name=(name or sid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")),
-                      scene_kind=_str(x.get("scene_kind")), asset=_str(x.get("asset")))
+                      scene_kind=_str(x.get("scene_kind")), asset=_str(x.get("asset")),
+                      scene_spec=(_spec if isinstance(_spec, dict) else {}))
 def _visual_from(x) -> Visual:
     if not isinstance(x, dict): return Visual()
     return Visual(id=_str(x.get("id")), setting_id=_str(x.get("setting_id")),

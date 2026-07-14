@@ -48,10 +48,19 @@ def test_normalize_scrubs_refs_and_resets_render():
         visuals=[Visual(id="v1", setting_id="s1", character_ids=["a", "ghost"])],
         timeline=[Beat(id="b1", visual_id="v1", lines=[Line("a", "hi"), Line("ghost", "bad")])],
     )
-    p.render.beat_audio["b1"] = BeatAudio("stale.mp3", 5.0, [], [])   # stale render state
-    p.render.masters["ghost"] = "/other/job/master.png"
+    p.render.beat_audio["b1"] = BeatAudio("stale.mp3", 5.0, [], [])   # DERIVED — cleared
+    # Review picks live in render state — MUST survive normalize (the Bug-2 fix).
+    p.render.voices["a"] = ["elevenlabs", "VOICE1"]
+    p.render.masters["a"] = "/lib/a.png"
+    p.render.visual_assets["v1"] = "/lib/bg.png"
     p.normalize_for_render(15)
-    assert p.render.beat_audio == {} and p.render.masters == {} and p.render.cues == []
+    # derived state cleared (regenerated every render)
+    assert p.render.beat_audio == {} and p.render.cues == []
+    # user picks PRESERVED
+    assert p.render.voices["a"] == ["elevenlabs", "VOICE1"]
+    assert p.render.masters["a"] == "/lib/a.png"
+    assert p.render.visual_assets["v1"] == "/lib/bg.png"
+    # dangling refs still scrubbed
     assert "ghost" not in (p.visuals[0].character_ids or [])
     assert p.timeline[0].lines[1].speaker_id == ""   # unknown speaker → narrator
 

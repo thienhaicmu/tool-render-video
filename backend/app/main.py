@@ -275,7 +275,7 @@ def _run_periodic_cleanup():
             # O-2 (2026-07-02): Gemini TTS synthesis cache — same unbounded-
             # growth class as xtts_cache, same 30d TTL.
             prune_gemini_tts_cache(TEMP_DIR, max_age_days=30)
-            from app.services.text_overlay import get_text_overlay_temp_dir
+            from app.features.render.engine.overlay.text_overlay import get_text_overlay_temp_dir
             result_overlay = prune_text_overlay_dir(get_text_overlay_temp_dir(), max_age_days=7)
             # Sprint 6 P1 (closure of CLAUDE.md Issue 3): render cache prune
             # was startup-only since Sprint 5.2 — long-running servers never

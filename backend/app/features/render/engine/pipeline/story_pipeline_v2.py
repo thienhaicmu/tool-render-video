@@ -305,6 +305,25 @@ def run_story_v2(
         # cue build both read them. Fill-only, so a plan that DID carry them (P2 / legacy /
         # approved override) is unchanged. Never raises.
         plan.derive_beat_styling()
+
+        # PASTE-JSON only: a setting may carry a hand-authored scene_spec (declarative
+        # drawing). Render + BANK it into the library as a background asset (user-named
+        # slug), then point setting.asset at it → the existing library/_bg_layer flow
+        # renders it unchanged. Isolated: no scene_spec (or other sources) → untouched.
+        if source == "paste_json":
+            try:
+                from app.features.render.engine.visual.svg_scene_spec import bank_scene_spec
+                for _s in plan.settings:
+                    _spec = getattr(_s, "scene_spec", None)
+                    if isinstance(_spec, dict) and _spec:
+                        _slug = (str(_spec.get("slug") or "").strip()) or _s.asset or _s.id
+                        _banked = bank_scene_spec(_spec, region=plan.region, genre=plan.genre_key,
+                                                  slug=_slug, name=_s.name)
+                        if _banked:
+                            _s.asset = _banked
+            except Exception as _spec_exc:
+                logger.warning("story v2: scene_spec banking skipped (non-fatal): %s", _spec_exc)
+
         update_story_plan(job_id, plan.to_json())
 
         # P3: soft semantic lint (non-mutating) — surface weak-plan signals in the
@@ -336,7 +355,12 @@ def run_story_v2(
                 pass
 
         # ── 2. Voice cast (AI-decided; fills render.voices) ─────────────────
-        apply_voice_cast_v2(plan, language, narrator_gender=narrator_gender)
+        # Cast from plan.language — the plan is the source of truth for the render's
+        # language (esp. a pasted plan whose language may differ from the request's
+        # voice_language). Casting from the request language mis-picked the TTS engine:
+        # a JA plan submitted with the default VI config resolved to Gemini (VI's engine)
+        # and synthesized Japanese on a PAID engine. plan.language is always set (line 188).
+        apply_voice_cast_v2(plan, plan.language or language, narrator_gender=narrator_gender)
 
         # ── 3. Images (≤ceiling; per Visual) ────────────────────────────────
         _set_stage(JobStage.SEGMENT_BUILDING, 30,

@@ -198,10 +198,23 @@ def _fontfile_for_family(font_family: str, bold: bool = False) -> str | None:
             "Segoe UI":       "segoeui.ttf",
             "Segoe UI Black": "seguibl.ttf",
             "Impact":         "impact.ttf",
+            # CJK families — Latin display fonts have NO Japanese/Korean/Chinese glyphs,
+            # so a CJK hook/subtitle rendered with them comes out as tofu (□□□). Map to
+            # the Windows system CJK fonts (glyph coverage verified with fontTools).
+            # NOTE: "GOTHIC.TTF" is Century Gothic (Latin!) — the real MS Gothic is
+            # "msgothic.ttc". Yu Gothic (YuGoth*.ttc) is the modern JP default.
+            "Yu Gothic":        "YuGothR.ttc",    # Japanese (JP+ZH glyphs)
+            "MS Gothic":        "msgothic.ttc",   # Japanese (fallback)
+            "Malgun Gothic":    "malgun.ttf",     # Korean (JP+KO+ZH — widest coverage)
+            "Microsoft YaHei":  "msyh.ttc",       # Simplified Chinese
         }
         win_bold_map = {
             "Arial":    "arialbd.ttf",
             "Segoe UI": "segoeuib.ttf",
+            "Yu Gothic":       "YuGothB.ttc",
+            "MS Gothic":       "msgothic.ttc",
+            "Malgun Gothic":   "malgunbd.ttf",
+            "Microsoft YaHei": "msyhbd.ttc",
         }
         fname = (win_bold_map.get(ff, "") or win_regular_map.get(ff, "")) if bold else win_regular_map.get(ff, "")
         if fname:

@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react'
 import { useRenderSocket } from '../../hooks/useRenderSocket'
 import { BASE_URL } from '../../api/client'
-import { fetchJobStoryPlan, type StoryPlanV2 } from '../../api/story'
+import { fetchJobStoryPlan, beatLines, type StoryPlanV2 } from '../../api/story'
 import { visualColorMap } from './PlanReview/helpers'
 
 const PHASES_VI = ['Phân tích', 'Dựng hình', 'Lời kể', 'Render', 'Xong']
@@ -27,6 +27,11 @@ function phaseIdx(stage: string | null, pct: number, terminal: boolean, ok: bool
 
 function visualUrl(jobId: string, vid: string): string {
   return `${BASE_URL}/api/jobs/${encodeURIComponent(jobId)}/story-visual/${encodeURIComponent(vid)}`
+}
+
+// Human-friendly activity label — strip the internal enum jargon (JobStage.RENDERING …).
+function prettyStep(s: string): string {
+  return (s || '').replace(/^job(part)?stage\./i, '').replace(/_/g, ' ').trim().toLowerCase()
 }
 
 /** A key-visual image (real thumbnail); falls back to a colour badge if the image
@@ -75,6 +80,12 @@ export function StoryMonitor({ vi, jobId, onDone, onNew }: {
   const current = cues.find((p) => p.status === 'rendering') || (isTerminal ? undefined : cues.find((p) => p.status !== 'done' && p.status !== 'failed'))
   const curBeat = current && plan ? plan.timeline[current.part_no - 1] : undefined
   const curVisual = curBeat?.visual_id || current?.message || ''
+  // Live preview of the cue being built: its narration + who is speaking.
+  const curLines = curBeat ? beatLines(curBeat) : []
+  const narrText = curLines.map((l) => l.text).join('  ')
+  const spkId = curLines.find((l) => l.speaker_id)?.speaker_id || ''
+  const spkName = spkId ? (plan?.characters.find((c) => c.id === spkId)?.name || spkId) : ''
+  const totalCues = cues.length || plan?.timeline.length || 0
 
   const outputPart = liveParts.find((p) => p.output_file)
   const streamUrl = outputPart ? `${BASE_URL}/api/jobs/${jobId}/parts/${outputPart.part_no}/stream` : ''
@@ -128,24 +139,25 @@ export function StoryMonitor({ vi, jobId, onDone, onNew }: {
         </div>
       )}
 
-      {/* Now rendering (live) */}
+      {/* Now rendering (live) — a hero "preview" of the cue being assembled: the
+          key-visual, the narration as a caption, and who is speaking. */}
       {!isTerminal && (
-        <div className="st-card st-mon-now">
-          {curVisual && (
-            <span className="st-tl-badge" style={{ background: colors[curVisual] || 'var(--border)' }}>
-              {jobId && plan?.render?.visual_assets?.[curVisual]
-                ? <img src={visualUrl(jobId, curVisual)} alt={curVisual} />
-                : <span>{current?.part_no || ''}</span>}
+        <div className="st-card st-mon-hero">
+          <div className="st-mon-hero-stage" style={{ background: colors[curVisual] || 'var(--surface-card)' }}>
+            {jobId && curVisual && plan?.render?.visual_assets?.[curVisual]
+              ? <img className="st-mon-hero-img" src={visualUrl(jobId, curVisual)} alt={curVisual} />
+              : <div className="st-mon-hero-ph"><span className="st-visual-spin" aria-hidden /></div>}
+            {spkName && <span className="st-mon-hero-spk">🎭 {spkName}</span>}
+            {narrText && <div className="st-mon-hero-cap">{narrText}</div>}
+          </div>
+          <div className="st-mon-hero-meta">
+            <strong>{vi ? 'Cảnh' : 'Cue'} {current?.part_no || 0}/{totalCues}</strong>
+            <span className="st-muted">
+              {pi === 1 ? (vi ? '🖼 đang vẽ hình' : '🖼 drawing visuals')
+                : pi === 2 ? (vi ? '🎙 đang lồng tiếng' : '🎙 recording narration')
+                  : pi === 3 ? (vi ? '🎬 đang ghép cảnh' : '🎬 composing scenes')
+                    : (vi ? '⏳ chuẩn bị' : '⏳ preparing')}
             </span>
-          )}
-          <div className="st-mon-now-body">
-            <div className="st-muted">
-              {vi ? `Cue ${current?.part_no || 0}/${cues.length || plan?.timeline.length || 0}` : `Cue ${current?.part_no || 0}/${cues.length || plan?.timeline.length || 0}`}
-              {pi === 1 && ` · 🖼 ${vi ? 'sinh hình' : 'visuals'}`}
-              {pi === 2 && ` · 🎙 ${vi ? 'lời kể' : 'narration'}`}
-              {pi === 3 && ` · 🎬 ${vi ? 'ghép cue' : 'compose'}`}
-            </div>
-            {curBeat && <div className="st-mon-now-narr">{curBeat.narration}</div>}
           </div>
         </div>
       )}
@@ -163,10 +175,28 @@ export function StoryMonitor({ vi, jobId, onDone, onNew }: {
         </div>
       )}
 
-      {/* Finished video */}
-      {isTerminal && ok && streamUrl && (
+      {/* Done — summary + finished video (or a graceful note when the stream isn't ready) */}
+      {isTerminal && ok && (
+        <div className="st-card st-mon-done">
+          <div className="st-mon-done-hd">
+            ✅ {vi ? 'Hoàn tất' : 'Done'}{partial ? (vi ? ' · một phần' : ' · partial') : ''}
+          </div>
+          <div className="st-mon-done-stats">
+            {plan?.render?.total_sec ? <span>⏱ {Math.round(plan.render.total_sec)}s</span> : null}
+            <span>🎬 {totalCues} {vi ? 'cảnh' : 'cues'}</span>
+            <span>🎭 {plan?.characters.length ?? 0} {vi ? 'nhân vật' : 'characters'}</span>
+          </div>
+          {streamUrl
+            ? <video className="st-mon-video" src={streamUrl} controls />
+            : <div className="st-muted">{vi ? 'Video đã lưu vào thư mục xuất — mở Lịch sử để xem lại.'
+                                            : 'Video saved to the output folder — open History to review.'}</div>}
+        </div>
+      )}
+      {isTerminal && failed && (
         <div className="st-card">
-          <video className="st-mon-video" src={streamUrl} controls />
+          <div className="st-mon-done-hd" style={{ color: 'var(--fail)' }}>
+            ✖ {vi ? 'Render thất bại' : 'Render failed'}
+          </div>
         </div>
       )}
 
@@ -177,7 +207,7 @@ export function StoryMonitor({ vi, jobId, onDone, onNew }: {
           <ul className="st-feed">
             {liveEvents.slice(-8).map((e, i) => (
               <li key={i} className={`st-feed-row st-feed--${(e.level || 'info').toLowerCase()}`}>
-                <span className="st-feed-ev">{e.step || e.event}</span>
+                <span className="st-feed-ev">{prettyStep(e.step || e.event)}</span>
                 <span>{e.message || ''}</span>
               </li>
             ))}

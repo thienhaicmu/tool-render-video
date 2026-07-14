@@ -83,6 +83,10 @@ export interface UIStore {
    *  content-mode render to the Content Studio monitor (a content job must
    *  NOT open in the Clip Studio). Set by the shared openRenderMonitor. */
   contentMonitorJobId: string | null
+  /** Story Studio's equivalent — reattach an active story-mode render to the
+   *  Story Studio monitor (a story job must NOT open in the Clip Studio).
+   *  Set by the shared openRenderMonitor; StoryStudio consumes + clears it. */
+  storyMonitorJobId: string | null
   /** S3.2/S3.5 — monotonic counter incremented every time the user
    *  asks for a fresh render (⌘N, palette action, or future "+ New"
    *  button). RenderWorkflow watches this counter and force-resets to
@@ -101,6 +105,7 @@ export interface UIStore {
   setSendToRenderSourcePath: (path: string | null) => void
   setMonitorJobId: (jobId: string | null) => void
   setContentMonitorJobId: (jobId: string | null) => void
+  setStoryMonitorJobId: (jobId: string | null) => void
   requestNewRender: () => void
   /** S4.7 — mark a single history entry as read. */
   markNotificationRead: (id: string) => void
@@ -146,6 +151,7 @@ export const useUIStore = create<UIStore>((set) => ({
   sendToRenderSourcePath: null,
   monitorJobId: null,
   contentMonitorJobId: null,
+  storyMonitorJobId: null,
   newRenderRequest: 0,
 
   toggleSidebar: () => {
@@ -204,6 +210,7 @@ export const useUIStore = create<UIStore>((set) => ({
 
   setMonitorJobId: (jobId: string | null) => set({ monitorJobId: jobId }),
   setContentMonitorJobId: (jobId: string | null) => set({ contentMonitorJobId: jobId }),
+  setStoryMonitorJobId: (jobId: string | null) => set({ storyMonitorJobId: jobId }),
 
   requestNewRender: () => set((s) => ({ newRenderRequest: s.newRenderRequest + 1 })),
 

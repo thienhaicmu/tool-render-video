@@ -24,9 +24,15 @@ export function openRenderMonitor(jobOrId: string | JobLike): void {
     const found = useJobsStore.getState().items.find((j) => j.job_id === jobId) as JobLike | undefined
     rf = found?.render_format
   }
-  if ((rf || 'clips') === 'content') {
+  const fmt = rf || 'clips'
+  if (fmt === 'content') {
     ui.setContentMonitorJobId(jobId)
     ui.setActivePanel('content-studio')
+  } else if (fmt === 'story') {
+    // A story render must open in the Story Studio monitor, NOT the Clip Studio
+    // (clicking it in the dock used to jump to Clip Studio — wrong studio).
+    ui.setStoryMonitorJobId(jobId)
+    ui.setActivePanel('story-studio')
   } else {
     ui.setMonitorJobId(jobId)
     ui.setActivePanel('clip-studio')

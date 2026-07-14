@@ -56,6 +56,18 @@ def test_text_anchor_bottom_and_side():
     assert "x=w*0.06" in br._overlay_suffix(c2, 1920, 1080)
 
 
+def test_hook_font_is_cjk_aware():
+    # A Japanese/Korean/Chinese hook must use a CJK-glyph font — the Latin display
+    # font (Anton) renders CJK as tofu (□□□). Latin languages keep Anton.
+    assert br._hook_family_for_lang("ja") == "Yu Gothic"
+    assert br._hook_family_for_lang("ja-JP") == "Yu Gothic"
+    assert br._hook_family_for_lang("ko") == "Malgun Gothic"
+    assert br._hook_family_for_lang("zh") == "Microsoft YaHei"
+    assert br._hook_family_for_lang("en") == "Anton"
+    assert br._hook_family_for_lang("vi") == "Anton"
+    assert br._hook_family_for_lang("") == "Anton"
+
+
 def test_anchor_xy_helper():
     assert br._anchor_xy("auto") == ("(w-text_w)/2", "h*0.10")
     assert br._anchor_xy("top")[1] == "h*0.08"

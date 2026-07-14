@@ -15,7 +15,9 @@ def test_routing_by_language(monkeypatch):
     assert tts.resolve_story_tts_engine("en") == "elevenlabs"
     assert tts.resolve_story_tts_engine("en-US") == "elevenlabs"
     assert tts.resolve_story_tts_engine("ja") == "elevenlabs"
-    assert tts.resolve_story_tts_engine("ko") == "gemini"  # other → gemini
+    assert tts.resolve_story_tts_engine("ko") == "elevenlabs"      # KO → ElevenLabs (multilingual_v2)
+    assert tts.resolve_story_tts_engine("ko-KR") == "elevenlabs"
+    assert tts.resolve_story_tts_engine("th") == "gemini"          # other → gemini
 
 
 def test_routing_override(monkeypatch):

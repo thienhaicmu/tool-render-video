@@ -43,6 +43,8 @@ export function StoryStudio() {
   const vi = lang === 'vi'
   const { submitRender } = useRenderStore()
   const setActivePanel = useUIStore((s) => s.setActivePanel)
+  const storyMonitorJobId = useUIStore((s) => s.storyMonitorJobId)
+  const setStoryMonitorJobId = useUIStore((s) => s.setStoryMonitorJobId)
 
   const [phase, setPhase] = useState<StoryPhase>('input')
   const [cfg, setCfg] = useState<StoryConfig>(DEFAULT_STORY_CFG)
@@ -95,6 +97,16 @@ export function StoryStudio() {
   // ── SP2: project list + autosave + open/new/delete ──────────────────────────
   const refreshProjects = () => void listStoryProjects().then((r) => setProjects(r.projects || [])).catch(() => {})
   useEffect(() => { refreshProjects() }, [])
+
+  // Reattach a story render opened from the active-jobs dock / notification
+  // (openRenderMonitor sets storyMonitorJobId). Consume it once → go to monitor.
+  useEffect(() => {
+    if (storyMonitorJobId) {
+      setJobId(storyMonitorJobId)
+      setPhase('monitor')
+      setStoryMonitorJobId(null)
+    }
+  }, [storyMonitorJobId, setStoryMonitorJobId])
 
   const hasContent = !!(cfg.chapterText.trim() || cfg.idea.trim() || plan)
   useEffect(() => {

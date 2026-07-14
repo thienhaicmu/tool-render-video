@@ -161,20 +161,28 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
       </StudioCard>
 
       <StudioCard icon="⚙️" title={vi ? 'Cấu hình' : 'Config'}>
-        <div className="st-grid-2">
-          <StudioField label={vi ? 'Ngôn ngữ' : 'Language'}
-            hint={vi ? 'Quyết định giọng đọc (vi/ko→Gemini, en/ja→ElevenLabs).' : 'Drives the TTS engine (vi/ko→Gemini, en/ja→ElevenLabs).'}>
-            <SegRow<StoryLang>
-              value={cfg.language} onChange={(v) => setKey('language', v)}
-              options={STORY_LANGS.map((l) => ({ value: l.code, label: l.label }))}
-            />
-          </StudioField>
-          <StudioField label={vi ? 'Tỉ lệ khung' : 'Aspect ratio'}>
-            <RatioPicker value={cfg.aspect}
-              onChange={(r) => setKey('aspect', r as Aspect)}
-              options={ASPECTS.map((a) => ({ value: a, label: a }))} />
-          </StudioField>
-        </div>
+        {cfg.source === 'paste_json' && (
+          <div className="st-muted" style={{ marginBottom: 8, fontSize: 12 }}>
+            {vi ? 'Ngôn ngữ · tỉ lệ khung · phong cách lấy TỪ JSON đã dán — chỉ cần chọn giọng, thư mục lưu, và (tùy chọn) video nền.'
+                : 'Language · aspect · art style come FROM the pasted JSON — you only pick the voice, the output folder, and (optionally) a base video.'}
+          </div>
+        )}
+        {cfg.source !== 'paste_json' && (
+          <div className="st-grid-2">
+            <StudioField label={vi ? 'Ngôn ngữ' : 'Language'}
+              hint={vi ? 'Quyết định giọng đọc (vi/ko→Gemini, en/ja→ElevenLabs).' : 'Drives the TTS engine (vi/ko→Gemini, en/ja→ElevenLabs).'}>
+              <SegRow<StoryLang>
+                value={cfg.language} onChange={(v) => setKey('language', v)}
+                options={STORY_LANGS.map((l) => ({ value: l.code, label: l.label }))}
+              />
+            </StudioField>
+            <StudioField label={vi ? 'Tỉ lệ khung' : 'Aspect ratio'}>
+              <RatioPicker value={cfg.aspect}
+                onChange={(r) => setKey('aspect', r as Aspect)}
+                options={ASPECTS.map((a) => ({ value: a, label: a }))} />
+            </StudioField>
+          </div>
+        )}
         <StudioField label={vi ? 'Chế độ giọng' : 'Voice mode'}
           hint={vi ? 'Kể chuyện = một giọng đọc hết. Hội thoại = mỗi nhân vật một giọng riêng khi beat có nhiều lượt thoại.'
                    : 'Narrator = one voice reads all. Dialogue = a distinct voice per character when a beat has multiple turns.'}>
@@ -186,16 +194,18 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
             ]}
           />
         </StudioField>
-        <StudioField label={vi ? 'Phong cách hình (tùy chọn)' : 'Art style (optional)'}
-          hint={vi ? 'Ảnh là chibi vẽ trong máy (SVG) — phong cách chỉ tác động nhẹ tới màu/khớp kho.'
-                   : 'Images are locally-drawn chibi (SVG) — style only lightly affects palette/library match.'}>
-          <input className="st-input" list="story-art-styles" value={cfg.artStyle}
-            placeholder={vi ? '— AI tự chọn —' : '— AI decides —'}
-            onChange={(e) => setKey('artStyle', e.target.value)} />
-          <datalist id="story-art-styles">
-            {ART_STYLE_PRESETS.map((s) => <option key={s} value={s} />)}
-          </datalist>
-        </StudioField>
+        {cfg.source !== 'paste_json' && (
+          <StudioField label={vi ? 'Phong cách hình (tùy chọn)' : 'Art style (optional)'}
+            hint={vi ? 'Ảnh là chibi vẽ trong máy (SVG) — phong cách chỉ tác động nhẹ tới màu/khớp kho.'
+                     : 'Images are locally-drawn chibi (SVG) — style only lightly affects palette/library match.'}>
+            <input className="st-input" list="story-art-styles" value={cfg.artStyle}
+              placeholder={vi ? '— AI tự chọn —' : '— AI decides —'}
+              onChange={(e) => setKey('artStyle', e.target.value)} />
+            <datalist id="story-art-styles">
+              {ART_STYLE_PRESETS.map((s) => <option key={s} value={s} />)}
+            </datalist>
+          </StudioField>
+        )}
         <StudioField label={vi ? 'Thư mục lưu' : 'Output folder'}>
           <div className="st-row">
             <input className={`st-input${issues.includes(vi ? 'thư mục lưu' : 'an output folder') ? ' st-input--invalid' : ''}`}

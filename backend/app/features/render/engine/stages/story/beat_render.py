@@ -152,7 +152,18 @@ def _drawtext(text: str, width: int, height: int, *, fs: int, family: str, bold:
         return ""
 
 
-def _overlay_suffix(cue, width: int, height: int, part_no: int = 0, text_anchor: str = "") -> str:
+# CJK languages need a font WITH Japanese/Korean/Chinese glyphs — the default display
+# font (Anton) is Latin-only, so a CJK hook burns as tofu (□□□). Map lang → a system
+# CJK family (resolved to a file by text_overlay._fontfile_for_family).
+_CJK_HOOK_FAMILY = {"ja": "Yu Gothic", "ko": "Malgun Gothic", "zh": "Microsoft YaHei"}
+
+
+def _hook_family_for_lang(lang: str) -> str:
+    return _CJK_HOOK_FAMILY.get((lang or "").strip().lower()[:2], "Anton")
+
+
+def _overlay_suffix(cue, width: int, height: int, part_no: int = 0, text_anchor: str = "",
+                    lang: str = "") -> str:
     """Filtergraph suffix (leading comma) that burns the cue's hook title at its
     ``text_anchor`` (s4; default auto = upper third). ``text_anchor`` overrides the
     cue's own (composition-QA: keep the hook clear of a character overlay). On-screen
@@ -165,7 +176,8 @@ def _overlay_suffix(cue, width: int, height: int, part_no: int = 0, text_anchor:
             _x, _y = _anchor_xy(text_anchor or getattr(cue, "text_anchor", "auto"))
             parts.append(_drawtext(
                 cue.hook_text, width, height, fs=max(28, int(height * 0.060)),
-                family="Anton", bold=True, y=_y, x=_x, box_alpha=0.55, uniq=_u + "h"))
+                family=_hook_family_for_lang(lang), bold=True, y=_y, x=_x,
+                box_alpha=0.55, uniq=_u + "h"))
         parts = [p for p in parts if p]
         return ("," + ",".join(parts)) if parts else ""
     except Exception:
@@ -292,7 +304,8 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         # bottom hook at the TOP so the character never covers it. Only affects the
         # overlay path — the image/no-overlay hook position is unchanged.
         _ta_qa = "top" if ((overlay_master or multi_overlays) and (getattr(cue, "text_anchor", "auto") in ("auto", "bottom"))) else ""
-        vf += _overlay_suffix(cue, width, height, part_no, text_anchor=_ta_qa)   # burn hook title
+        vf += _overlay_suffix(cue, width, height, part_no, text_anchor=_ta_qa,
+                              lang=getattr(plan, "language", ""))   # burn hook title (CJK-aware font)
         if have_audio:
             cmd += ["-i", str(cue.audio_path)]
         else:
