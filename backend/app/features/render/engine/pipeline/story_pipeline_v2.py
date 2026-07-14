@@ -112,11 +112,27 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
     plan was obtained (plan_source/provider/model) for result_json reproducibility.
     Raises RuntimeError when no usable plan is available."""
     override = (getattr(payload, "story_plan_override", "") or "").strip()
+    # paste-JSON source (feature): the plan is HAND-AUTHORED and MUST render verbatim —
+    # never silently fall back to an AI call (that would cost money + ignore the paste).
+    _strict = (source or "").strip().lower() == "paste_json"
     if override:
         plan = StoryPlan.from_json(override)
+        if plan is not None:
+            # Scrub dangling refs + DROP any stale render state so a pasted/exported plan
+            # can't reuse another job's cues/masters/asset paths. Generous ceiling so a
+            # legit hand-authored visual set is not trimmed. Never raises.
+            plan.normalize_for_render(max(15, plan.image_count()))
         if plan is not None and plan.schema_version == 2 and not plan.is_empty() and plan.image_count() > 0:
-            logger.info("story v2: using approved story_plan_override (%d visuals)", plan.image_count())
+            logger.info("story v2: using story_plan_override (%d visuals, strict=%s)",
+                        plan.image_count(), _strict)
             return plan, {"plan_source": "override", "provider": "", "model": ""}
+        if _strict:
+            raise RuntimeError(
+                "paste_json: the pasted StoryPlan is invalid — it needs schema_version=2, "
+                "at least 1 visual and 1 beat with text. Fix the JSON (AI planning is NOT "
+                "used for this source).")
+    elif _strict:
+        raise RuntimeError("paste_json: story_plan_override is empty — paste a StoryPlan JSON to render.")
 
     if resume_mode:
         persisted = get_story_plan(job_id)
@@ -268,6 +284,10 @@ def run_story_v2(
         if source == "idea":
             if not idea:
                 raise RuntimeError("Story v2: source=idea but story_idea is empty")
+        elif source == "paste_json":
+            # paste-JSON renders from story_plan_override (no chapter/idea). The override's
+            # presence + validity is enforced in _resolve_story_plan_v2 (strict) below.
+            pass
         elif not chapter:
             raise RuntimeError("Story v2: empty content_script — nothing to render")
 

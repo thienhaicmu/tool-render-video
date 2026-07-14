@@ -60,7 +60,30 @@ def lint_story_plan(plan) -> list:
         visuals = list(getattr(plan, "visuals", []) or [])
         timeline = list(getattr(plan, "timeline", []) or [])
         by_id = {c.id: c for c in chars}
-        spoken = {(b.speaker_id or "") for b in timeline if (b.speaker_id or "")}
+        # multiline-aware: the on-screen speaker is the beat's legacy speaker_id OR the
+        # first line's speaker (primary_speaker); the beat text is narration OR joined lines.
+        def _primary(b) -> str:
+            try:
+                return b.primary_speaker() or ""
+            except Exception:
+                return (getattr(b, "speaker_id", "") or "")
+
+        def _beat_text(b) -> str:
+            t = (getattr(b, "narration", "") or "").strip()
+            if t:
+                return t
+            try:
+                return " ".join((ln.text or "").strip() for ln in b.effective_lines()).strip()
+            except Exception:
+                return ""
+        spoken = {_primary(b) for b in timeline if _primary(b)}
+        # 0. Characters defined but NONE ever speaks/anchors → the render overlays a
+        #    character only for a beat with a speaking character, so the video comes out
+        #    BACKGROUND-ONLY (no character on screen). Directly predicts that failure.
+        if chars and timeline and not spoken:
+            warnings.append(
+                f"{len(chars)} character(s) defined but none speaks on any beat — the video "
+                "will render background-only (no character on screen)")
         # 1. A speaking character with no canonical look → generic overlay/voice.
         for cid in sorted(spoken):
             c = by_id.get(cid)
@@ -78,12 +101,12 @@ def lint_story_plan(plan) -> list:
                 warnings.append(f"character '{c.id}' is defined but never speaks or appears")
         # 4. Degenerate repeated narration (possible looping output).
         from collections import Counter
-        counts = Counter((b.narration or "").strip() for b in timeline if (b.narration or "").strip())
+        counts = Counter(_beat_text(b) for b in timeline if _beat_text(b))
         for txt, n in counts.items():
             if n >= 3:
                 warnings.append(f"narration repeated {n}× (possible loop): {txt[:40]!r}")
         # 5. No narration at all → a silent video.
-        if timeline and not any((b.narration or "").strip() for b in timeline):
+        if timeline and not any(_beat_text(b) for b in timeline):
             warnings.append("no beat has narration (silent video)")
     except Exception:
         return warnings
@@ -218,6 +241,74 @@ def _plan_long_chapter(call_fn, chapter, language, art_style, aspect_ratio, subt
     return merged
 
 
+def _idea_expand_env() -> "tuple[int, float, float, float]":
+    """(tries, floor_ratio, factor_step, base_factor) for the idea length-expand loop.
+    Env-tunable; STORY_IDEA_EXPAND_TRIES=0 disables the loop (pre-s21 behaviour)."""
+    def _f(name, default):
+        try:
+            return float(os.getenv(name, str(default)) or default)
+        except (TypeError, ValueError):
+            return default
+    try:
+        tries = max(0, int(os.getenv("STORY_IDEA_EXPAND_TRIES", "1") or 1))
+    except (TypeError, ValueError):
+        tries = 1
+    return (tries, _f("STORY_IDEA_EXPAND_FLOOR", 0.7),
+            max(1.0, _f("STORY_IDEA_EXPAND_FACTOR_STEP", 1.7)),
+            max(1.0, _f("STORY_IDEA_LENGTH_FACTOR", 1.8)))
+
+
+def _plan_idea_with_expand(call_fn: SuperCall, idea: str, duration_sec: int, genre: str,
+                           language: str, art_style: str, aspect_ratio: str, subtitle_mode: str,
+                           ceiling: int, prior_context: str, library_catalog: str,
+                           provider_label: str) -> Optional[StoryPlan]:
+    """Idea→StoryPlan with a bounded 'too short → regenerate at a higher length factor'
+    loop (escalate-and-regenerate). Keeps the plan CLOSEST to the target (short is a
+    failure, mild overshoot is fine). Never raises — falls back to the first/best plan."""
+    def _make(factor: float) -> Optional[StoryPlan]:
+        sysm, user = build_super_idea_prompt(
+            idea, duration_sec, genre, language, art_style, aspect_ratio,
+            subtitle_mode, ceiling, prior_context, library_catalog, length_factor=factor)
+        p = _call_and_parse(call_fn, sysm, user, ceiling)
+        if p is not None and language:
+            p.language = language  # accurate cps for estimated_total_sec() below
+        return p
+
+    best = _make(0.0)  # 0.0 → build_super_idea_prompt uses the env/default factor
+    if best is None or not duration_sec or duration_sec <= 0:
+        return best
+    tries, floor, step, base = _idea_expand_env()
+    if tries <= 0:
+        return best
+    floor_sec = duration_sec * floor
+    best_est = best.estimated_total_sec()
+    if best_est >= floor_sec:
+        return best  # first plan already long enough — no extra LLM calls
+
+    def _better(cand_est: float, cur_est: float) -> bool:
+        cand_ok, cur_ok = cand_est >= floor_sec, cur_est >= floor_sec
+        if cand_ok != cur_ok:
+            return cand_ok  # reaching the floor beats a short plan
+        if cand_ok:  # both acceptable → closest to target (mild overshoot ok)
+            return abs(cand_est - duration_sec) < abs(cur_est - duration_sec)
+        return cand_est > cur_est  # both short → the longer one wins
+
+    factor = base
+    for i in range(tries):
+        factor *= step
+        cand = _make(factor)
+        if cand is None:
+            continue
+        cand_est = cand.estimated_total_sec()
+        logger.info("story_director_v2[%s]: idea-expand try=%d factor=%.2f est=%.0fs (target=%ds best=%.0fs)",
+                    provider_label, i + 1, factor, cand_est, duration_sec, best_est)
+        if _better(cand_est, best_est):
+            best, best_est = cand, cand_est
+        if best_est >= floor_sec:
+            break
+    return best
+
+
 def run_super_plan(
     *,
     call_fn: SuperCall,
@@ -251,11 +342,11 @@ def run_super_plan(
             idea = (idea or "").strip()
             if not idea:
                 return None
-            sysm, user = build_super_idea_prompt(idea, duration_sec, genre, language, art_style,
-                                                 aspect_ratio, subtitle_mode, ceiling, prior_context, library_catalog)
             logger.info("story_director_v2[%s]: super=%s IDEA len=%d dur=%ds ceiling=%d",
                         _p, SUPER_PROMPT_VERSION, len(idea), duration_sec, ceiling)
-            plan = _call_and_parse(call_fn, sysm, user, ceiling)
+            plan = _plan_idea_with_expand(call_fn, idea, duration_sec, genre, language, art_style,
+                                          aspect_ratio, subtitle_mode, ceiling, prior_context,
+                                          library_catalog, _p)
             _seed_src = idea
         else:
             chapter = (chapter or "").strip()

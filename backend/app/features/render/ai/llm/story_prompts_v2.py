@@ -24,7 +24,11 @@ import os as _os
 from app.domain.story_plan_v2 import BGM_MOODS
 
 MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
-SUPER_PROMPT_VERSION = "s20"  # s20: P1 MULTI-LINE beats — STORY_MULTILINE_BEATS=1 makes a beat carry a lines[] dialogue array (each turn its own speaker/text/emotion/pose); one shot may hold 1-4 turns. Default off = pre-P1, bit-identical. s19: Phase-3 LEAN CONTRACT — SVG prompts (P1/P3) ask only for the CREATIVE per-beat fields (narration/speaker/visual/focus/bgm_mood/emotion/pose/hook); the 9 mechanical style labels are derived by StoryPlan.derive_beat_styling (cuts OpenAI strict-mode truncation). P2 keeps the full schema. Toggle STORY_LEAN_CONTRACT=0 to restore the 19-field ask. s18: Phase-1 hygiene — rule-5 self-contradiction fixed (RICH beats no longer told "no paragraph-long beats"); OUTPUT FRAME/aspect now injected in-prompt (was a dead param); STORY_IDEA_DEFAULT_SEC fallback when the FE omits a target length. s17: P3 length compensation (aim ~1.8× since gpt-4o delivers ~55% of a requested length from a thin idea in one call; STORY_IDEA_LENGTH_FACTOR). s16: five-act beat QUOTA (mandate beats per stage → model can't compress a 3-min story into too few beats). s15: P3 RICH-beat length lever — beats are full ~10s paragraphs (~cps*10 chars), count+length derived from target with explicit arithmetic (fixes the terse-beat cap that held a 3-min idea at ~70s). s14: THREE specialised super-prompts by use-case — P1 adapt→SVG, P2 adapt→over-video (new, overlay/source_audio focus), P3 idea→length-as-brief scene scaffold. Full schema kept. s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A); s10: idea length; s9: drop negative_prompt (F-12); s8: emotion+vocab; s7: pose; s6: library-pick; s5: asset hints; s4: bgm_cue/char_*
+# Idea-mode source cap — was a hardcoded 8000 that silently truncated the TAIL of a
+# detailed outline (losing the ending/message). Env-tunable; generous default so a full
+# multi-act brief survives, still bounded for prompt context.
+MAX_IDEA_CHARS = int(_os.getenv("STORY_MAX_IDEA_CHARS", "20000"))
+SUPER_PROMPT_VERSION = "s23"  # s23: master-data sync — TOKEN VOCAB block also teaches genre_key + region (derived from domain GENRE_KEY/REGION, incl. new xianxia) so the AI library-picks a reachable asset scope. s22: multiline rule-5 now threads the per-beat length hint (beat_char_hint) + drops the "SHORT SCENE / 1-4 turns" cap, so a beat's lines total a SUBSTANTIAL mini-scene — fixes multiline beats coming out as 1-word stubs (10-min request → ~78s). s21: P3 idea — STORY IDEA treated as a SKELETON to DRAMATIZE (never compress at input granularity) + build_super_idea_prompt gains a length_factor override so the director can ESCALATE-AND-REGENERATE when the first plan lands short (STORY_IDEA_EXPAND_*). s20: P1 MULTI-LINE beats — STORY_MULTILINE_BEATS=1 makes a beat carry a lines[] dialogue array (each turn its own speaker/text/emotion/pose); one shot may hold 1-4 turns. Default off = pre-P1, bit-identical. s19: Phase-3 LEAN CONTRACT — SVG prompts (P1/P3) ask only for the CREATIVE per-beat fields (narration/speaker/visual/focus/bgm_mood/emotion/pose/hook); the 9 mechanical style labels are derived by StoryPlan.derive_beat_styling (cuts OpenAI strict-mode truncation). P2 keeps the full schema. Toggle STORY_LEAN_CONTRACT=0 to restore the 19-field ask. s18: Phase-1 hygiene — rule-5 self-contradiction fixed (RICH beats no longer told "no paragraph-long beats"); OUTPUT FRAME/aspect now injected in-prompt (was a dead param); STORY_IDEA_DEFAULT_SEC fallback when the FE omits a target length. s17: P3 length compensation (aim ~1.8× since gpt-4o delivers ~55% of a requested length from a thin idea in one call; STORY_IDEA_LENGTH_FACTOR). s16: five-act beat QUOTA (mandate beats per stage → model can't compress a 3-min story into too few beats). s15: P3 RICH-beat length lever — beats are full ~10s paragraphs (~cps*10 chars), count+length derived from target with explicit arithmetic (fixes the terse-beat cap that held a 3-min idea at ~70s). s14: THREE specialised super-prompts by use-case — P1 adapt→SVG, P2 adapt→over-video (new, overlay/source_audio focus), P3 idea→length-as-brief scene scaffold. Full schema kept. s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A); s10: idea length; s9: drop negative_prompt (F-12); s8: emotion+vocab; s7: pose; s6: library-pick; s5: asset hints; s4: bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -273,9 +277,12 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_c
     # A3: rule 5 must not self-contradict. For RICH beats (idea/long-adapt paragraphs)
     # the "no paragraph-long beats" clause is dropped; terse beats keep it.
     if multiline:
-        _r5 = (f"5. narration in {lang_name}; each beat = ONE SHOT (one image) holding a SHORT SCENE as a "
-               "\"lines\" array of 1-4 spoken turns. Each line = {speaker_id, text, emotion, pose}; "
-               "speaker_id \"\" = narrator. A pure-narration beat has ONE narrator line; a dialogue beat "
+        _r5 = (f"5. narration in {lang_name}; each beat = ONE SHOT (one image) holding a self-contained "
+               f"MINI-SCENE{beat_char_hint} told as a "
+               "\"lines\" array of spoken turns. Each line = {speaker_id, text, emotion, pose}; "
+               "speaker_id \"\" = narrator. Make the turns SUBSTANTIAL — full sentences with dialogue + "
+               "action + feeling so the beat REACHES that length; NEVER emit a single short line or a "
+               "one-word beat. A pure-narration beat may hold one or more narrator lines; a dialogue beat "
                "interleaves narrator + characters. Keep ALL lines of a beat in the SAME place/visual — start "
                "a NEW beat when the scene/image changes. The lines in order narrate the whole story "
                "faithfully (preserve names/facts, never invent).\n")
@@ -403,15 +410,20 @@ def _vocab_block() -> str:
     try:
         from app.features.render.engine.visual.svg_presets import _ARCH
         from app.features.render.engine.visual.svg_scene import _SCENES
+        from app.domain.story_plan_v2 import GENRE_KEY as _GK, REGION as _RG
         archetypes = ", ".join(sorted(_ARCH))
         seen: dict = {}                                   # one representative alias per scene fn
         for alias, fn in _SCENES.items():
             seen.setdefault(fn, alias)
         scenes = ", ".join(sorted(seen.values()))
+        genres = ", ".join(g for g in _GK if g)
+        regions = ", ".join(r for r in _RG if r)
         return (
             "\n═══ TOKEN VOCAB (for the OPTIONAL hint fields — pick the CLOSEST, else \"\") ═══\n"
             f"archetype ∈ {{ {archetypes} }}\n"
             f"scene_kind ∈ {{ {scenes} }}\n"
+            f"genre_key ∈ {{ {genres} }}  (story-level asset-library GENRE scope)\n"
+            f"region ∈ {{ {regions} }}  (story-level asset-library MARKET scope)\n"
             "emotion ∈ { normal, happy, angry, sad, surprised }  (per beat — the speaker's feeling)\n"
             "pose ∈ { stand, wave, cheer, point, hip }           (per beat — the speaker's gesture)\n"
         )
@@ -505,7 +517,8 @@ def build_super_video_prompt(chapter: str, language: str = "vi", art_style: str 
 def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
                             language: str = "vi", art_style: str = "", aspect_ratio: str = "16:9",
                             subtitle_mode: str = "hook_only", ceiling: int = 15,
-                            prior_context: str = "", library_catalog: str = "") -> "tuple[str, str]":
+                            prior_context: str = "", library_catalog: str = "",
+                            length_factor: float = 0.0) -> "tuple[str, str]":
     """P3 — (system, user) to WRITE a story OF A TARGET LENGTH from an idea, then
     storyboard it (SVG). The length is baked into the creative BRIEF (not a constraint
     tacked on after), broken into a scene scaffold the model fills. ``prior_context``
@@ -527,6 +540,10 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
         _factor = max(1.0, float(_os.getenv("STORY_IDEA_LENGTH_FACTOR", "1.8") or 1.8))
     except (TypeError, ValueError):
         _factor = 1.8
+    # Escalate-and-regenerate: the director passes a higher length_factor on a retry
+    # when the first plan landed short. >0 overrides the env/default; 0 keeps it.
+    if length_factor and length_factor > 0:
+        _factor = max(1.0, float(length_factor))
     _eff_sec = int(round(duration_sec * _factor)) if (duration_sec and duration_sec > 0) else 0
     budget = int(_eff_sec * cps) if _eff_sec else 0
     _mins = round(duration_sec / 60.0, 1) if duration_sec else 0
@@ -551,7 +568,10 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
         f"narration must TOTAL about {budget} CHARACTERS of spoken text (roughly {_target_beats} full "
         "paragraphs) — that total is the DEFINITION of the task, not a limit. Aim for the FULL length; a "
         "little OVER is fine, SHORT is a FAILURE. Write the ENTIRE story out, scene by scene, in RICH "
-        "detail (dialogue, action, inner feeling).\n"
+        "detail (dialogue, action, inner feeling). The STORY IDEA below may ALREADY be a complete "
+        "outline/summary — treat it as a SKELETON, never the script: DRAMATIZE every line into a full "
+        "2-4 sentence scene. The idea's OWN length is NOT the output's length; reach the target REGARDLESS "
+        "of how terse the idea is.\n"
     ) if budget else "TARGET LENGTH: model decides.\n"
     genre_line = f"GENRE: {genre.strip()}\n" if (genre or "").strip() else ""
     style_line = f"ART STYLE HINT: {art_style.strip()}\n" if (art_style or "").strip() else ""
@@ -595,7 +615,7 @@ def build_super_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
         + _series_memory_block(prior_context)
         + _library_block(library_catalog)
         + _vocab_block()
-        + "\n═══ STORY IDEA (create FROM this) ═══\n" + _fit(idea, 8000) + "\n\n"
+        + "\n═══ STORY IDEA (a SKELETON to DRAMATIZE & EXPAND — never compress) ═══\n" + _fit(idea, MAX_IDEA_CHARS) + "\n\n"
         + _schema(_lean_contract()).replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
         + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _idea_beat_hint, "svg",
                  rich_beats=bool(_per_beat), lean=_lean_contract(), multiline=_multiline())

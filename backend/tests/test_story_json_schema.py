@@ -39,8 +39,13 @@ def test_schema_is_strict_and_supported():
     _walk_objects(s, _check)
 
 
-def test_schema_enums_derived_from_domain():
+def test_schema_enums_derived_from_domain(monkeypatch):
     from app.domain.story_plan_v2 import FOCUS, EMOTION, POSE, BGM_MOODS
+    # Hermetic: a dev .env may set STORY_MULTILINE_BEATS=1 (injected session-wide by
+    # config.load_dotenv), whose lines[] branch removes emotion/pose from the beat.
+    # Pin the code defaults (multiline off, lean on) so this asserts the lean beat.
+    monkeypatch.delenv("STORY_MULTILINE_BEATS", raising=False)
+    monkeypatch.delenv("STORY_LEAN_CONTRACT", raising=False)
     # Default = LEAN contract (Phase 3): the model emits only the CREATIVE per-beat
     # fields; the mechanical style labels are derived by StoryPlan.derive_beat_styling.
     beat = build_story_plan_schema()["properties"]["timeline"]["items"]["properties"]
@@ -65,6 +70,9 @@ def test_schema_enums_derived_from_domain():
 
 def test_lean_contract_toggle(monkeypatch):
     from app.domain.story_plan_v2 import MOTION
+    # Multiline (dev .env) takes precedence over lean in build_story_plan_schema —
+    # pin it off so LEAN=0 actually yields the full 19-field beat under test.
+    monkeypatch.delenv("STORY_MULTILINE_BEATS", raising=False)
     # Kill-switch: STORY_LEAN_CONTRACT=0 restores the full 19-field beat (pre-Phase-3).
     monkeypatch.setenv("STORY_LEAN_CONTRACT", "0")
     beat = build_story_plan_schema()["properties"]["timeline"]["items"]["properties"]

@@ -20,7 +20,7 @@ import { useI18n } from '../../i18n/useI18n'
 import { useRenderStore } from '../../stores/renderStore'
 import { useUIStore } from '../../stores/uiStore'
 import { getDefaultOutputDir } from '../../api/outputDir'
-import { planStory, type StoryPlanV2 } from '../../api/story'
+import { planStory, validateStoryPlan, type StoryPlanV2 } from '../../api/story'
 import {
   listStoryProjects, saveStoryProject, getStoryProject, deleteStoryProject,
   listTrashedStoryProjects, restoreStoryProject, purgeStoryProject,
@@ -212,10 +212,30 @@ export function StoryStudio() {
 
   function fail(e: unknown) { setError(e instanceof Error ? e.message : String(e)) }
 
-  const inputReady = cfg.source === 'paste' ? !!cfg.chapterText.trim() : !!cfg.idea.trim()
+  const inputReady = cfg.source === 'paste' ? !!cfg.chapterText.trim()
+    : cfg.source === 'idea' ? !!cfg.idea.trim()
+    : !!cfg.pastedJson.trim()
+
+  // paste_json — preflight the pasted StoryPlan (no AI), then reuse the Review screen.
+  async function onValidatePaste() {
+    setBusy(true); setError(null); setNotice(null)
+    try {
+      const r = await validateStoryPlan(cfg.pastedJson.trim(), !!cfg.baseVideoPath.trim())
+      if (!r.ok || !r.plan_normalized) {
+        setError((vi ? 'JSON không hợp lệ: ' : 'Invalid JSON: ')
+          + (r.errors.join('; ') || (vi ? 'không rõ lý do' : 'unknown')))
+        return
+      }
+      setPlan(r.plan_normalized); resetHistory()
+      setEstTotal(r.estimated_total_sec || 0)
+      if (r.warnings.length) setNotice((vi ? 'Cảnh báo: ' : 'Warnings: ') + r.warnings.join(' · '))
+      setPhase('review')
+    } catch (e) { fail(e) } finally { setBusy(false) }
+  }
 
   async function onGenerate() {
     if (!inputReady || busy) return
+    if (cfg.source === 'paste_json') { void onValidatePaste(); return }
     setBusy(true); setError(null); setNotice(null)
     try {
       const r = await planStory({
@@ -313,7 +333,7 @@ export function StoryStudio() {
       )}
       {error && <div className="st-alert st-alert--fail" role="alert">{error}</div>}
       {notice && <div className="st-alert st-alert--warn" role="status">{notice}</div>}
-      {busy && phase === 'input' && <StoryDirectorConsole vi={vi} source={cfg.source} />}
+      {busy && phase === 'input' && cfg.source !== 'paste_json' && <StoryDirectorConsole vi={vi} source={cfg.source} />}
       {phase === 'input' && (
         <InputScreen
           vi={vi} cfg={cfg} setKey={setKey} busy={busy} ready={inputReady}

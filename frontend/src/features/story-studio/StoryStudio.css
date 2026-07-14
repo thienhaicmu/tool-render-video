@@ -8,6 +8,8 @@
 
 /* Small control variants (used across the review panels). */
 .st-textarea--sm { min-height: 0; font-size: var(--text-sm); }
+/* Monospace variant — paste-JSON input (source=paste_json). */
+.st-textarea--mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: var(--text-sm); white-space: pre; }
 .st-select--sm,
 .st-input--sm { padding: 4px var(--space-2); font-size: var(--text-xs); }
 .st-btn--sm { padding: 4px var(--space-3); font-size: var(--text-xs); }

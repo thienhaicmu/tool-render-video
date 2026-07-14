@@ -146,6 +146,18 @@ export interface StoryPlanResponse {
   warnings?: string[]
 }
 
+// Paste-JSON feature: preflight a hand-pasted StoryPlan before render (no AI).
+export interface StoryValidateResponse {
+  ok: boolean
+  errors: string[]
+  warnings: string[]
+  estimated_total_sec: number
+  beat_count: number
+  character_count: number
+  image_count: number
+  plan_normalized: StoryPlanV2 | null   // scrubbed + reset — render THIS
+}
+
 // Story Mode is SVG-only: the Review composes procedural SVG key-visuals server-side
 // (offline, $0, WYSIWYG) from the plan being edited.
 export interface SvgPreviewRequest {
@@ -214,6 +226,10 @@ function post<T>(path: string, body: unknown): Promise<T> {
 /** One super plan call → StoryPlan v2 (source A=paste chapter / B=idea). */
 export const planStory = (req: StoryPlanRequest) =>
   post<StoryPlanResponse>('/api/story/plan', req)
+
+/** Preflight a hand-pasted StoryPlan JSON (paste-JSON feature) before render — no AI. */
+export const validateStoryPlan = (plan: string | StoryPlanV2, has_base_video = false) =>
+  post<StoryValidateResponse>('/api/story/validate', { plan, has_base_video })
 
 /** Compose the procedural SVG key-visual(s) for a plan (Review preview, offline $0). */
 export const svgPreview = (req: SvgPreviewRequest) =>

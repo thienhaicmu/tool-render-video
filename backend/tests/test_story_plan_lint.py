@@ -59,6 +59,36 @@ def test_lint_clean_plan_no_warnings():
     assert lint_story_plan(p) == []
 
 
+def test_lint_multiline_no_false_silent_and_detects_speaker():
+    # Multiline beats keep their text in lines[] (beat.narration is ""). The lint must
+    # read effective_lines() — else it falsely warns "silent video" and misses the speaker.
+    from app.domain.story_plan_v2 import Line
+    p = StoryPlan(
+        language="vi",
+        characters=[CharacterDef(id="a", name="A", canonical_desc="a hero")],
+        visuals=[Visual(id="v1", setting_id="", character_ids=["a"])],
+        timeline=[
+            Beat(id="b1", visual_id="v1", lines=[Line("", "Ngày xưa...")]),         # narrator
+            Beat(id="b2", visual_id="v1", lines=[Line("a", "Ta là A", "happy")]),   # speaks
+        ],
+    )
+    w = " | ".join(lint_story_plan(p))
+    assert "silent" not in w             # text lives in lines[], not a silent video
+    assert "background-only" not in w    # a beat has a speaking character on screen
+
+
+def test_lint_warns_when_characters_never_on_screen():
+    # Characters defined but every beat is narrator-only → the render is background-only.
+    from app.domain.story_plan_v2 import Line
+    p = StoryPlan(
+        language="vi",
+        characters=[CharacterDef(id="a", name="A", canonical_desc="a hero")],
+        visuals=[Visual(id="v1", setting_id="", character_ids=["a"])],
+        timeline=[Beat(id="b1", visual_id="v1", lines=[Line("", "Chỉ có người kể.")])],
+    )
+    assert any("background-only" in x for x in lint_story_plan(p))
+
+
 def test_lint_never_raises_on_junk():
     assert lint_story_plan(None) == []
     assert lint_story_plan(object()) == []

@@ -93,6 +93,9 @@ def test_derive_char_anchor_uses_primary_line_speaker():
 
 def test_strict_schema_multiline_toggle(monkeypatch):
     from app.features.render.ai.llm.story_schema_v2 import build_story_plan_schema
+    # Hermetic: the dev .env sets STORY_MULTILINE_BEATS=1 (injected session-wide by
+    # config.load_dotenv); clear it so the "OFF (default)" branch is what we assert.
+    monkeypatch.delenv("STORY_MULTILINE_BEATS", raising=False)
     # OFF (default) → single-line beat (narration on the beat, no lines).
     beat = build_story_plan_schema()["properties"]["timeline"]["items"]["properties"]
     assert "lines" not in beat and "narration" in beat
@@ -109,6 +112,8 @@ def test_strict_schema_multiline_toggle(monkeypatch):
 
 def test_prose_prompt_multiline_toggle(monkeypatch):
     from app.features.render.ai.llm.story_prompts_v2 import build_super_idea_prompt
+    # Hermetic: clear the dev .env's STORY_MULTILINE_BEATS=1 so "off" is the default.
+    monkeypatch.delenv("STORY_MULTILINE_BEATS", raising=False)
     _, off = build_super_idea_prompt("x", duration_sec=60, language="vi")
     assert '"lines"' not in off and "narration" in off
     monkeypatch.setenv("STORY_MULTILINE_BEATS", "1")
@@ -130,6 +135,42 @@ def test_build_cues_fills_line_overlays_from_spans():
     # first character → center, second → left (stable per-character slot); windows preserved
     assert (ov[0].speaker_id, ov[0].anchor, ov[0].start, ov[0].end) == ("a", "center", 0.0, 2.0)
     assert (ov[1].speaker_id, ov[1].anchor, ov[1].start, ov[1].end) == ("b", "left", 2.0, 4.0)
+
+
+def test_multiline_idea_beat_carries_length_lever(monkeypatch):
+    # s22 regression: in multiline mode the per-beat length hint must reach rule 5 so a
+    # beat's lines total a SUBSTANTIAL mini-scene. Without this the model emitted 1-word
+    # beats and a 10-min request rendered ~78s of speech.
+    from app.features.render.ai.llm.story_prompts_v2 import build_super_idea_prompt
+    monkeypatch.setenv("STORY_MULTILINE_BEATS", "1")
+    _, u = build_super_idea_prompt("an idea", duration_sec=600, language="vi")
+    assert "SUBSTANTIAL" in u                      # beats must be substantial
+    assert "SHORT SCENE" not in u                  # old length-killer cap is gone
+    assert "FULL 2-4 sentence paragraph" in u      # per-beat paragraph budget threaded into rule 5
+
+
+def test_build_cues_single_speaker_beat_still_overlays():
+    # Regression: a SINGLE-speaker beat takes the one-voice TTS path → BeatAudio has NO
+    # per-line spans. build_cues must still derive ONE whole-beat overlay from the
+    # primary speaking line, else the character renders background-only (multi-line regr).
+    from app.domain.story_plan_v2 import BeatAudio
+    p = _plan(Beat(id="b1", visual_id="v1", lines=[Line("a", "Xin chào", "happy", "wave")]))
+    p.render.beat_audio["b1"] = BeatAudio("a.mp3", 4.0, [], [])   # no spans (one-voice path)
+    p.derive_beat_styling()
+    p.build_cues()
+    ov = p.render.cues[0].line_overlays
+    assert len(ov) == 1
+    assert ov[0].speaker_id == "a" and ov[0].emotion == "happy" and ov[0].pose == "wave"
+    assert ov[0].start == 0.0 and ov[0].end == 4.0 and ov[0].anchor != "none"
+
+
+def test_build_cues_narrator_only_beat_has_no_overlay():
+    # A narrator-only beat (no line has a speaker) must stay overlay-less.
+    from app.domain.story_plan_v2 import BeatAudio
+    p = _plan(Beat(id="b1", visual_id="v1", lines=[Line("", "Ngày xưa...", "normal")]))
+    p.render.beat_audio["b1"] = BeatAudio("n.mp3", 3.0, [], [])
+    p.build_cues()
+    assert p.render.cues[0].line_overlays == []
 
 
 def test_beat_audio_spans_round_trip():

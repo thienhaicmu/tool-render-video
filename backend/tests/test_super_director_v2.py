@@ -27,7 +27,7 @@ _CHAPTER = "Chương 1. " + ("Hàn Phong bước đi trong đêm. " * 20)
 def test_mode_a_paste_builds_plan():
     seen = {}
     def fake(system, user):
-        seen["mode"] = "idea" if "create FROM this" in user else "story"
+        seen["mode"] = "idea" if "DRAMATIZE" in user else "story"   # s21 idea marker (was "create FROM this")
         return _super_json()
     p = run_super_plan(call_fn=fake, source="paste", chapter=_CHAPTER, language="vi",
                        art_style="wuxia", series_id="s", chapter_no=5)
@@ -39,7 +39,7 @@ def test_mode_a_paste_builds_plan():
 def test_mode_b_idea_uses_idea_builder():
     seen = {}
     def fake(system, user):
-        seen["mode"] = "idea" if "create FROM this" in user else "story"
+        seen["mode"] = "idea" if "DRAMATIZE" in user else "story"   # s21 idea marker (was "create FROM this")
         return _super_json()
     p = run_super_plan(call_fn=fake, source="idea", idea="A fallen disciple rises.",
                        duration_sec=120, genre="wuxia", language="vi")

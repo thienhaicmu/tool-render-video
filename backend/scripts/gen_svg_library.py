@@ -64,21 +64,47 @@ HOMES: dict = {
     "detective":    [("us", "hiendai", ["male"]), ("eu", "hiendai", ["male"])],
     "maid":         [("jp", "hiendai", ["female"]), ("eu", "codai", ["female"])],
     "robot":        [("us", "hiendai", ["male"]), ("jp", "hiendai", ["male"])],
+    # modern-day family / office (idea + paste family dramas — jp/vi/ko/us hiendai)
+    "office_worker": [("jp", "hiendai", ["male", "female"]), ("ko", "hiendai", ["male"]), ("us", "hiendai", ["male", "female"])],
+    "salaryman":     [("jp", "hiendai", ["male"])],
+    "businessman":   [("jp", "hiendai", ["male"]), ("us", "hiendai", ["male"])],
+    "ceo":           [("jp", "hiendai", ["male"]), ("us", "hiendai", ["male"])],
+    "student":       [("jp", "hiendai", ["male", "female"]), ("vi", "hiendai", ["male", "female"]), ("ko", "hiendai", ["female"]),
+                      ("cn", "ngontinh", ["male", "female"])],
+    "child":         [("jp", "hiendai", ["male", "female"]), ("vi", "hiendai", ["male", "female"])],
+    "grandpa":       [("jp", "hiendai", ["male"]), ("vi", "hiendai", ["male"]), ("cn", "codai", ["male"])],
+    "grandma":       [("jp", "hiendai", ["female"]), ("vi", "hiendai", ["female"]), ("cn", "codai", ["female"])],
+    "chef":          [("jp", "hiendai", ["male"]), ("us", "hiendai", ["male"])],
+    "waiter":        [("jp", "hiendai", ["male", "female"])],
+    "cafe_staff":    [("jp", "hiendai", ["female"]), ("ko", "hiendai", ["female"])],
+    # Asian period / palace casts (codai / wuxia / xianxia)
+    "noblewoman":    [("cn", "codai", ["female"]), ("ko", "codai", ["female"]), ("jp", "codai", ["female"]),
+                      ("cn", "ngontinh", ["female"]), ("ko", "ngontinh", ["female"])],
+    "princess":      [("cn", "codai", ["female"]), ("ko", "codai", ["female"]), ("cn", "ngontinh", ["female"])],
+    "emperor":       [("cn", "codai", ["male"])],
+    "king":          [("cn", "codai", ["male"]), ("ko", "codai", ["male"])],
+    "samurai":       [("jp", "codai", ["male"])],
+    "geisha":        [("jp", "codai", ["female"])],
+    "soldier":       [("us", "hiendai", ["male"]), ("cn", "codai", ["male"])],
+    "villain":       [("cn", "wuxia", ["male"]), ("eu", "fantasy", ["male"])],
+    "immortal":      [("cn", "xianxia", ["male", "female"])],
     # gap-fills for existing archetypes in under-covered contexts
     "swordsman":    [("cn", "wuxia", ["female"]), ("jp", "codai", ["male"])],
-    "heroine":      [("cn", "xianxia", ["female"])],
-    "scholar":      [("cn", "codai", ["male"]), ("vi", "codai", ["male"])],
+    "heroine":      [("cn", "xianxia", ["female"]), ("cn", "ngontinh", ["female"]), ("vi", "ngontinh", ["female"])],
+    "scholar":      [("cn", "codai", ["male"]), ("vi", "codai", ["male"]), ("cn", "ngontinh", ["male"]), ("ko", "ngontinh", ["male"])],
     "general":      [("cn", "codai", ["male"]), ("ko", "codai", ["male"])],
     "knight":       [("eu", "codai", ["male", "female"])],
     "mage":         [("eu", "fantasy", ["male", "female"])],
     "witch":        [("eu", "horror", ["female"])],
     "teacher":      [("vi", "hiendai", ["female"]), ("cn", "hiendai", ["male"])],
     "nurse":        [("jp", "hiendai", ["female"])],
-    "idol":         [("ko", "hiendai", ["female"]), ("jp", "hiendai", ["female"])],
+    "idol":         [("ko", "hiendai", ["female"]), ("jp", "hiendai", ["female"]), ("ko", "ngontinh", ["female", "male"])],
 }
 # archetypes that get the full emotion + pose variant set (protagonist-class)
 VARIANT_ARCHETYPES = {"swordsman", "heroine", "knight", "mage", "archer", "demon",
-                      "angel", "assassin", "detective", "idol"}
+                      "angel", "assassin", "detective", "idol",
+                      # family-drama leads that emote (sad/happy) — give them the full set
+                      "grandpa", "grandma", "office_worker", "student", "child", "noblewoman"}
 
 
 def _desc(archetype: str, region: str, genre: str, gender: str) -> str:
@@ -149,7 +175,11 @@ SCENE_HOMES: dict = {
     "graveyard":   [("eu", "horror"), ("us", "horror")],
     "ruins":       [("eu", "fantasy"), ("cn", "xianxia")],
     "waterfall":   [("cn", "xianxia"), ("vi", "fantasy")],
-    "courtyard":   [("cn", "codai"), ("ko", "codai")],
+    "courtyard":   [("cn", "codai"), ("ko", "codai"), ("cn", "ngontinh")],
+    # romance (ngontinh) backdrops
+    "garden":      [("cn", "ngontinh"), ("ko", "ngontinh")],
+    "cafe":        [("ko", "ngontinh"), ("jp", "hiendai")],
+    "park":        [("ko", "ngontinh"), ("vi", "hiendai")],
 }
 # exterior kinds that get a night variant too (interiors/dark kinds stay day-only)
 NIGHT_OK = {"temple", "shrine", "market", "battlefield", "beach", "snow", "desert",

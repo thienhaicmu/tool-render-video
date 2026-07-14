@@ -37,7 +37,7 @@ SUBTITLE_MODE = ("hook_only", "full", "off")
 # asset_library/{kind}/{region}/{genre}/ folders so the pipeline can match a stock asset
 # instead of calling AI image gen. All optional — "" = no hint (AI decides / no match).
 REGION = ("cn", "jp", "ko", "vi", "eu", "us", "")
-GENRE_KEY = ("wuxia", "ngontinh", "horror", "fantasy", "codai", "hiendai", "")
+GENRE_KEY = ("wuxia", "xianxia", "ngontinh", "horror", "fantasy", "codai", "hiendai", "")
 # Background-music moods the AI may tag a Visual with. Each maps to a folder under
 # BGM_DIR/{mood}/ (see core.config._pick_bgm_file); "" / unknown → "default" folder.
 # Kept in sync with story_prompts_v2 (the AI vocab) and scripts/fetch_free_bgm.py.
@@ -433,6 +433,21 @@ class StoryPlan:
             pass
         return self
 
+    def normalize_for_render(self, ceiling: int = 15) -> "StoryPlan":
+        """Prepare a HAND-PASTED / imported plan for rendering (paste-JSON feature):
+        scrub dangling refs, cap the image count, dense-reindex, and DROP any stale
+        render state — so a plan exported from another job can't reuse its cues /
+        masters / asset paths (which would composite the WRONG images). Mirrors the
+        defensive post-passes the AI path runs in run_super_plan. Pure; never raises."""
+        try:
+            self.cap_visuals(ceiling)      # cap_visuals also reindexes
+            self.validate_refs()
+            self.reindex()
+            self.render = RenderState()    # stale cues/masters/beat_audio → regenerated at render
+        except Exception:
+            pass
+        return self
+
     def _char_positions(self) -> dict:
         """Stable screen slot per character by first appearance (center → left → right → …).
         Shared by derive_beat_styling (beat.char_anchor) and build_cues (per-line overlays)
@@ -520,6 +535,23 @@ class StoryPlan:
                 crop_to = ct_motion
                 start = t - (0.0 if same else tsec)
                 end = start + dur + max(0.0, float(b.pause_after or 0.0))
+                # Per-line overlay spans: prefer the TTS-produced per-line windows (a
+                # dialogue beat with 2+ speakers). When ABSENT — a single-speaker beat
+                # takes the one-voice TTS path which emits no spans — derive ONE
+                # whole-beat span from the primary speaking line so that character is
+                # still overlaid. Without this, the common single-speaker beat renders
+                # BACKGROUND-ONLY (the multi-line-beats regression). primary_speaker()
+                # returns "" for a narrator-only beat, so those stay overlay-less.
+                _ov_spans = list(getattr(ba, "spans", []) or []) if ba else []
+                if not _ov_spans:
+                    _psp = b.primary_speaker()
+                    if _psp:
+                        _pl = next((ln for ln in b.effective_lines()
+                                    if (ln.speaker_id or "") == _psp), None)
+                        _ov_spans = [LineSpan(
+                            start=0.0, end=round(dur, 3), speaker_id=_psp,
+                            emotion=((_pl.emotion if _pl else b.emotion) or "normal"),
+                            pose=((_pl.pose if _pl else b.pose) or "stand"))]
                 cues.append(Cue(
                     beat_id=b.id, visual_id=b.visual_id, start_sec=round(start, 3), end_sec=round(end, 3),
                     crop_from=tuple(round(x, 4) for x in crop_from),
@@ -537,7 +569,7 @@ class StoryPlan:
                         LineSpan(start=s.start, end=s.end, speaker_id=s.speaker_id,
                                  emotion=s.emotion, pose=s.pose,
                                  anchor=(char_pos.get(s.speaker_id, "center") if (s.speaker_id or "") else "none"))
-                        for s in (list(getattr(ba, "spans", []) or []) if ba else [])
+                        for s in _ov_spans
                     ],
                 ))
                 t = end

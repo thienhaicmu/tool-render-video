@@ -60,6 +60,7 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
   const issues: string[] = []
   if (cfg.source === 'paste' && chapterChars === 0) issues.push(vi ? 'nội dung truyện' : 'chapter text')
   if (cfg.source === 'idea' && ideaChars === 0) issues.push(vi ? 'ý tưởng' : 'an idea')
+  if (cfg.source === 'paste_json' && cfg.pastedJson.trim().length === 0) issues.push(vi ? 'JSON kế hoạch' : 'a StoryPlan JSON')
   if (!cfg.outputDir.trim()) issues.push(vi ? 'thư mục lưu' : 'an output folder')
   const shortChapter = cfg.source === 'paste' && chapterChars > 0 && chapterChars < MIN_CHAPTER_CHARS
   const canGenerate = ready && !!cfg.outputDir.trim() && !busy
@@ -74,6 +75,7 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
           options={[
             { value: 'paste', label: vi ? 'Truyện có sẵn' : 'Paste chapter', icon: '📄' },
             { value: 'idea', label: vi ? 'Sáng tác từ ý tưởng' : 'From an idea', icon: '💡' },
+            { value: 'paste_json', label: vi ? 'Dán JSON (không AI)' : 'Paste JSON (no AI)', icon: '🧩' },
           ]}
         />
 
@@ -101,7 +103,7 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
               </span>
             </div>
           </StudioField>
-        ) : (
+        ) : cfg.source === 'idea' ? (
           <>
             <StudioField label={vi ? 'Ý tưởng' : 'Idea'}
               hint={vi ? 'Mô tả ngắn — AI sẽ tự sáng tác truyện theo thời lượng bên dưới.'
@@ -137,6 +139,24 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
               </StudioField>
             </div>
           </>
+        ) : (
+          <StudioField label={vi ? 'StoryPlan JSON' : 'StoryPlan JSON'}
+            hint={vi ? 'Dán JSON kế hoạch có sẵn — render THẲNG, KHÔNG dùng AI. Đính "Video nền" bên dưới để overlay nhân vật lên video; để trống = storyboard vẽ trong máy.'
+                     : 'Paste a ready StoryPlan JSON — renders VERBATIM, NO AI. Attach a "Base video" below to overlay characters onto it; empty = locally-drawn storyboard.'}>
+            <textarea className="st-textarea st-textarea--mono" rows={14} spellCheck={false}
+              placeholder={vi ? 'Dán StoryPlan JSON ở đây… (khuôn ở docs/STORY_MODE_OUTPUT_TEMPLATES.md)' : 'Paste StoryPlan JSON here… (template in docs/STORY_MODE_OUTPUT_TEMPLATES.md)'}
+              value={cfg.pastedJson} onChange={(e) => setKey('pastedJson', e.target.value)} />
+            <div className="st-field-foot">
+              <span>{cfg.pastedJson.trim().length.toLocaleString()} {vi ? 'ký tự' : 'chars'}</span>
+              {cfg.pastedJson.trim().length > 0 && (
+                <span className="st-foot-actions">
+                  <button type="button" className="st-link" onClick={() => setKey('pastedJson', '')}>
+                    {vi ? 'Xoá' : 'Clear'}
+                  </button>
+                </span>
+              )}
+            </div>
+          </StudioField>
         )}
       </StudioCard>
 
@@ -213,7 +233,9 @@ export function InputScreen({ vi, cfg, setKey, busy, ready, hasPicker, pickOutpu
       <div className="st-actions st-actions--col">
         <button type="button" className="st-btn st-btn--primary st-btn--lg"
           disabled={!canGenerate} onClick={onGenerate}>
-          {busy ? (vi ? 'Đang tạo…' : 'Generating…') : (vi ? '✨ Tạo kế hoạch' : '✨ Generate plan')}
+          {cfg.source === 'paste_json'
+            ? (busy ? (vi ? 'Đang kiểm…' : 'Validating…') : (vi ? '🧩 Kiểm tra & Duyệt' : '🧩 Validate & Review'))
+            : (busy ? (vi ? 'Đang tạo…' : 'Generating…') : (vi ? '✨ Tạo kế hoạch' : '✨ Generate plan'))}
         </button>
         {issues.length > 0 && (
           <span className="st-muted st-actions-hint">

@@ -560,9 +560,10 @@ class RenderRequest(BaseModel):
     def _validate_story_source(cls, v) -> str:
         # Coerce (never raise) — Sacred Contract #2: "" (default) = the paste path,
         # so a stored payload without it behaves exactly as before. Unknown/None →
-        # "" (paste). Only "idea" activates the AI-authored path.
+        # "" (paste). "idea" activates the AI-authored path; "paste_json" renders a
+        # HAND-PASTED StoryPlan verbatim (no AI — story_plan_override required).
         v = str(v or "").strip().lower()
-        return v if v in {"paste", "idea"} else ""
+        return v if v in {"paste", "idea", "paste_json"} else ""
 
     @field_validator("story_voice_mode", mode="before")
     @classmethod

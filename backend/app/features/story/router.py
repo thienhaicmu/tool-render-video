@@ -128,13 +128,12 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         raise HTTPException(status_code=502, detail="Story planning returned no usable plan")
 
     _visual_count = plan.image_count()
-    # Source-truncation transparency: the super-prompt fits the chapter to
-    # MAX_SOURCE_CHARS (idea path to 8000) — surface when we cut so the FE can warn
-    # the user to split a very long chapter instead of silently dropping the tail.
-    from app.features.render.ai.llm.story_prompts_v2 import MAX_SOURCE_CHARS
-    _IDEA_MAX = 8000
+    # Source-truncation transparency: the super-prompt fits the chapter/idea to its cap —
+    # surface when we cut so the FE can warn the user to split a very long chapter instead
+    # of silently dropping the tail. (Idea cap is now env-tunable, no longer a hard 8000.)
+    from app.features.render.ai.llm.story_prompts_v2 import MAX_SOURCE_CHARS, MAX_IDEA_CHARS
     _src_len = len(chapter) if source == "paste" else len(idea)
-    _src_limit = MAX_SOURCE_CHARS if source == "paste" else _IDEA_MAX
+    _src_limit = MAX_SOURCE_CHARS if source == "paste" else MAX_IDEA_CHARS
     # F-08: Story imagery is procedural SVG ($0), but the planning LLM is NOT free.
     # Surface an ESTIMATE so the pre-flight no longer reports a misleading $0 total.
     from app.features.render.ai.llm.story_director_v2 import estimate_super_plan_cost, lint_story_plan
@@ -143,6 +142,16 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     # P3: soft semantic lint (non-mutating) so the FE Review can flag weak-plan
     # signals (orphan visuals, generic-look speakers, looping narration).
     _lint = lint_story_plan(plan)
+    # Length-shortfall visibility: when the user set a target and the AI's plan lands well
+    # under it, surface it in warnings too (the FE already compares — this makes the
+    # backend/monitor honest as well). 0.7 mirrors the escalate-and-regenerate floor.
+    _tgt = int(req.duration_sec or 0)
+    if _tgt > 0:
+        _est = plan.estimated_total_sec()
+        if _est < _tgt * 0.7:
+            _lint = list(_lint) + [
+                f"length is ~{_est:.0f}s vs target ~{_tgt}s ({_est / _tgt * 100:.0f}% of "
+                "requested) — edit the timeline or regenerate to reach the length"]
     return {
         "plan": json.loads(plan.to_json()),
         "image_count": _visual_count,
@@ -163,6 +172,93 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
             "estimated_llm_cost_usd": _llm_cost["cost_usd"],
             "estimated_cost_usd": _llm_cost["cost_usd"],   # total = image($0) + LLM
         },
+    }
+
+
+# ── Paste-JSON validate (feature: paste a StoryPlan → render, no AI) ──────────
+
+class StoryValidateRequest(BaseModel):
+    plan: object = Field(default="", description="StoryPlan JSON (object or string)")
+    has_base_video: bool = Field(default=False, description="True if a base video will be attached (Template-2 over-video)")
+
+
+@router.post("/validate")
+def validate_story_plan(req: StoryValidateRequest) -> dict:
+    """Preflight a HAND-PASTED StoryPlan (paste-JSON feature) BEFORE render. Parses +
+    normalizes (validate_refs / cap / drop stale render state), then returns hard
+    ``errors`` (block render) + soft ``warnings`` (lint) + the length/counts + the
+    normalized plan. Never raises (Sacred Contract #3) — a bad paste is a clean 200
+    with ``ok=false`` + reasons, not a 500."""
+    from app.domain.story_plan_v2 import StoryPlan
+    from app.features.render.ai.llm.story_director_v2 import lint_story_plan
+
+    raw = req.plan if isinstance(req.plan, str) else json.dumps(req.plan or {}, ensure_ascii=False)
+    plan = StoryPlan.from_json(raw)
+    errors: list = []
+    warnings: list = []
+    if plan is None:
+        return {"ok": False, "errors": ["JSON không đọc được — không phải StoryPlan hợp lệ"],
+                "warnings": [], "estimated_total_sec": 0.0, "beat_count": 0,
+                "character_count": 0, "image_count": 0, "plan_normalized": None}
+
+    # Dangling refs are AUTO-scrubbed by normalize — collect them as warnings BEFORE that.
+    try:
+        char_ids = {c.id for c in plan.characters}
+        vis_ids = {v.id for v in plan.visuals}
+        for b in plan.timeline:
+            if b.visual_id and b.visual_id not in vis_ids:
+                warnings.append(f"beat {b.id}: visual_id '{b.visual_id}' không tồn tại (sẽ được remap)")
+            for ln in b.effective_lines():
+                if ln.speaker_id and ln.speaker_id not in char_ids:
+                    warnings.append(f"beat {b.id}: speaker '{ln.speaker_id}' không có trong characters (→ narrator)")
+        for v in plan.visuals:
+            for cid in (v.character_ids or []):
+                if cid not in char_ids:
+                    warnings.append(f"visual {v.id}: character '{cid}' không tồn tại (bỏ qua)")
+    except Exception:
+        pass
+
+    # Template-2 (over-video) fields present but no base video attached → they're ignored.
+    try:
+        has_t2 = any((getattr(b, "source_audio", "mute") or "mute") != "mute"
+                     or (getattr(b, "char_anchor", "none") or "none") != "none"
+                     for b in plan.timeline)
+        if has_t2 and not req.has_base_video:
+            warnings.append("plan có source_audio/char_anchor (Template-2) nhưng KHÔNG đính video nền — "
+                            "các field đó sẽ bị bỏ qua (render như storyboard)")
+    except Exception:
+        pass
+
+    # Normalize + derive so the estimate / lint reflect what will actually render.
+    plan.normalize_for_render(max(15, plan.image_count()))
+    try:
+        plan.derive_beat_styling()
+    except Exception:
+        pass
+
+    # Hard errors — mirror the pipeline's own acceptance gate.
+    if plan.schema_version != 2:
+        errors.append("schema_version phải = 2")
+    if plan.image_count() <= 0:
+        errors.append("cần ít nhất 1 visual")
+    if plan.is_empty():
+        errors.append("timeline rỗng — cần ít nhất 1 beat có lời (lines[].text hoặc narration)")
+
+    try:
+        warnings += list(lint_story_plan(plan))
+    except Exception:
+        pass
+
+    ok = not errors
+    return {
+        "ok": ok,
+        "errors": errors,
+        "warnings": warnings[:30],
+        "estimated_total_sec": round(plan.estimated_total_sec(), 1),
+        "beat_count": plan.beat_count(),
+        "character_count": len(plan.characters),
+        "image_count": plan.image_count(),
+        "plan_normalized": (json.loads(plan.to_json()) if ok else None),
     }
 
 

@@ -54,7 +54,18 @@ def test_idea_prompt_budget_and_genre(monkeypatch):
     assert "4500" in user
     assert "INVENT the story" in user             # s14+: P3 screenwriter/act brief
     assert "never pad" not in user.lower()        # s10: the length-killer is gone
-    assert "create FROM this".lower() in user.lower()
+    # s21: the STORY IDEA is framed as a SKELETON to dramatize/expand (was "create FROM this").
+    assert "DRAMATIZE" in user and "never compress" in user
+
+
+def test_idea_source_not_truncated_at_old_8000():
+    # Regression: the idea cap was a hardcoded 8000 that silently cut the TAIL of a
+    # detailed outline. It is now env-tunable with a generous default.
+    from app.features.render.ai.llm.story_prompts_v2 import MAX_IDEA_CHARS
+    assert MAX_IDEA_CHARS >= 20000
+    long_idea = "A" * 9000                       # would have been cut at 8000 before
+    _, user = build_super_idea_prompt(long_idea, duration_sec=60, language="vi")
+    assert ("A" * 9000) in user                  # full 9000-char idea survives
 
 
 def test_idea_prompt_no_duration_lets_model_decide():
@@ -82,4 +93,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s20"  # s20: P1 multi-line beats; s19: Phase-3 lean contract; s18: rule-5 fix + OUTPUT FRAME + idea default-sec; s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A)
+    assert SUPER_PROMPT_VERSION == "s23"  # s23: TOKEN VOCAB teaches genre_key+region (master-data sync); s22: multiline rule-5 threads per-beat length hint (substantial beats); s21: idea SKELETON/DRAMATIZE + length_factor escalate-and-regenerate; s20: P1 multi-line beats; s19: Phase-3 lean contract; s18: rule-5 fix + OUTPUT FRAME + idea default-sec; s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A)

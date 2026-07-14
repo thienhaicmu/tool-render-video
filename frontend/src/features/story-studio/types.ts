@@ -7,7 +7,9 @@
  */
 
 export type StoryPhase = 'input' | 'review' | 'monitor'
-export type StorySource = 'paste' | 'idea'
+// paste_json = paste a ready StoryPlan JSON → render verbatim (no AI). Base video
+// (baseVideoPath) decides Template-1 SVG vs Template-2 over-video, same as paste.
+export type StorySource = 'paste' | 'idea' | 'paste_json'
 export type Aspect = '16:9' | '9:16' | '1:1'
 
 export const STORY_LANGS = [
@@ -52,6 +54,7 @@ export interface StoryConfig {
   source: StorySource
   chapterText: string
   idea: string
+  pastedJson: string       // source=paste_json — a ready StoryPlan JSON to render verbatim
   durationSec: number      // source=idea target length (UI edits in minutes)
   genre: string
   language: StoryLang
@@ -69,6 +72,7 @@ export const DEFAULT_STORY_CFG: StoryConfig = {
   source: 'paste',
   chapterText: '',
   idea: '',
+  pastedJson: '',
   durationSec: 90,
   genre: '',
   language: 'vi',
