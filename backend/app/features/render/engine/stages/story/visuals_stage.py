@@ -206,9 +206,17 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
             path = None
             if v3_only:
                 try:
-                    from app.features.render.engine.visual.library_v3 import resolve_character_preview
+                    from app.features.render.engine.visual.library_v3 import (
+                        render_planner_character_png, resolve_character_preview,
+                    )
+                    from app.features.render.engine.visual.library_v3.style_aliases import normalize_v3_style
+                    from app.core.config import APP_DATA_DIR
                     path = resolve_character_preview(
                         getattr(c, "visual_identity_id", "") or "", framing="full_body")
+                    if not path:
+                        path = render_planner_character_png(
+                            c, Path(APP_DATA_DIR) / "content_assets" / f"v3_master_{cid}.png",
+                            style_id=normalize_v3_style(art_style))
                 except Exception:
                     path = None
             elif library_first:
@@ -267,19 +275,26 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
         if not used:
             return
         if os.getenv("STORY_V3_ONLY", "1") == "1":
-            from app.features.render.engine.visual.library_v3 import resolve_character_preview
+            from app.features.render.engine.visual.library_v3 import (
+                render_planner_character_png, resolve_character_preview,
+            )
+            from app.features.render.engine.visual.library_v3.style_aliases import normalize_v3_style
+            _out = Path(out_dir)
+            _style_id = normalize_v3_style(getattr(plan, "art_style", "") or "")
             for cid, pairs in used.items():
                 c = plan.character(cid)
                 if c is None:
                     continue
                 path = resolve_character_preview(
                     getattr(c, "visual_identity_id", "") or "", framing="full_body")
-                if not path:
-                    continue
                 for emo, pose in pairs:
                     key = f"{cid}:{emo}:{pose}"
                     if not plan.render.masters.get(key):
-                        plan.render.masters[key] = path
+                        _path = path or render_planner_character_png(
+                            c, _out / f"master_{cid}_{emo}_{pose}.png",
+                            emotion=emo, pose=pose, style_id=_style_id)
+                        if _path:
+                            plan.render.masters[key] = _path
             try:
                 update_story_plan(job_id, plan.to_json())
             except Exception:

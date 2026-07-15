@@ -15,9 +15,16 @@ from .contracts import (
     VisualLibraryManifest,
 )
 from .registry import ManifestValidationError, load_manifest, validate_manifest, write_manifest
-from .character_renderer import build_character_master, render_identity_master
+from .character_renderer import (
+    build_character_master,
+    build_planner_character_inner,
+    build_planner_character_master,
+    planner_character_look,
+    render_identity_master,
+    render_planner_character_png,
+)
 from .active_catalog import ActiveCatalog, load_active_catalog
-from .planner_matcher import configured_manifest_path, match_characters
+from .planner_matcher import PROCEDURAL, configured_manifest_path, match_characters
 from .artifact_bridge import resolve_character_preview
 from .scene_artifact_bridge import resolve_scene_preview
 from .scene_matcher import match_scenes
@@ -29,8 +36,11 @@ __all__ = [
     "CharacterMasterSpec",
     "CharacterTemplateSpec",
     "build_character_master",
+    "build_planner_character_inner",
+    "build_planner_character_master",
     "ManifestValidationError",
     "ProvenanceSpec",
+    "PROCEDURAL",
     "SceneIdentitySpec",
     "SceneTemplateSpec",
     "VisualLibraryManifest",
@@ -44,4 +54,6 @@ __all__ = [
     "validate_manifest",
     "write_manifest",
     "render_identity_master",
+    "render_planner_character_png",
+    "planner_character_look",
 ]

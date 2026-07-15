@@ -7,6 +7,7 @@ the full-body PNG.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from xml.sax.saxutils import escape
 
 from app.features.render.engine.visual.v2.anime_char import (
@@ -18,6 +19,65 @@ from app.features.render.engine.visual.v2.look_spec import CharacterLook, derive
 
 MASTER_WIDTH = 1024
 MASTER_HEIGHT = 1536
+
+
+_PLANNER_OUTFIT_RULES = (
+    (("doctor", "physician", "medical", "nurse"), "doctor_coat"),
+    (("police", "officer"), "police_uniform"),
+    (("engineer", "technician", "laboratory"), "engineer_workwear"),
+    (("student", "school", "child", "kid", "pupil"), "school_uniform"),
+    (("office", "business", "manager", "executive", "ceo", "worker", "professional"), "office_suit"),
+    (("cafe", "barista", "clerk", "staff", "innkeeper"), "apron_staff"),
+    (("samurai", "miko", "geisha", "ninja", "shrine", "kimono"), "kimono"),
+)
+
+
+def _planner_age(value: str) -> str:
+    text = (value or "").strip().lower()
+    if any(token in text for token in ("child", "kid", "boy", "girl", "young")):
+        return "child"
+    if any(token in text for token in ("elder", "senior", "middle-aged", "middle aged", "old")):
+        return "elder"
+    try:
+        number = int("".join(ch for ch in text if ch.isdigit()))
+        if number <= 12:
+            return "child"
+        if number >= 55:
+            return "elder"
+    except (TypeError, ValueError):
+        pass
+    return "adult"
+
+
+def _planner_outfit(character) -> str:
+    text = " ".join(
+        str(getattr(character, key, "") or "").strip().lower()
+        for key in ("archetype", "name", "canonical_desc")
+    )
+    for tokens, outfit in _PLANNER_OUTFIT_RULES:
+        if any(token in text for token in tokens):
+            return outfit
+    return "tee_casual"
+
+
+def planner_character_look(character):
+    """Derive a deterministic V3 look from a Planner character without an ID.
+
+    This is a procedural V3 identity, not a legacy-library lookup. Explicit Planner
+    gender/age/archetype signals win; missing dimensions are filled by ``derive_look``
+    from a stable character seed so repeated renders keep the same appearance.
+    """
+    seed = "|".join(
+        str(getattr(character, key, "") or "")
+        for key in ("id", "name", "canonical_desc", "archetype", "gender", "age")
+    )
+    gender = (getattr(character, "gender", "") or getattr(character, "voice_gender", "") or "").strip().lower()
+    return derive_look(
+        seed or "planner-character",
+        gender=gender,
+        age=_planner_age(getattr(character, "age", "") or getattr(character, "canonical_desc", "")),
+        outfit=_planner_outfit(character),
+    )
 
 
 def build_character_master(
@@ -76,4 +136,38 @@ def render_identity_master(identity, *, framing: str = "full_body", emotion: str
     )
 
 
-__all__ = ["MASTER_HEIGHT", "MASTER_WIDTH", "build_character_master", "render_identity_master"]
+def build_planner_character_inner(character, *, emotion: str = "neutral",
+                                  pose: str = "stand", facing: str = "front",
+                                  style_id: str | None = None) -> str:
+    """Build V3 character content for a Planner character with no identity ID."""
+    look = planner_character_look(character)
+    return anime_char_inner(look, emotion=emotion, pose=pose, facing=facing,
+                            style_id=style_id)
+
+
+def build_planner_character_master(character, *, emotion: str = "neutral",
+                                   pose: str = "stand", facing: str = "front",
+                                   style_id: str | None = None) -> str:
+    """Build a complete V3 procedural character SVG for a Planner character."""
+    return build_character_master(
+        planner_character_look(character), emotion=emotion, pose=pose,
+        facing=facing, style_id=style_id,
+        identity_id=(getattr(character, "id", "") or getattr(character, "name", "") or "planner-character"),
+    )
+
+
+def render_planner_character_png(character, out_path: str | Path, *, emotion: str = "neutral",
+                                pose: str = "stand", facing: str = "front",
+                                style_id: str | None = None) -> str | None:
+    """Rasterize a procedural V3 Planner character master to a transparent PNG."""
+    from app.features.render.engine.visual.svg_raster import save_svg_png
+    svg = build_planner_character_master(
+        character, emotion=emotion, pose=pose, facing=facing, style_id=style_id)
+    return save_svg_png(svg, out_path, MASTER_WIDTH, MASTER_HEIGHT) if svg else None
+
+
+__all__ = [
+    "MASTER_HEIGHT", "MASTER_WIDTH", "build_character_master", "build_planner_character_inner",
+    "build_planner_character_master", "planner_character_look", "render_identity_master",
+    "render_planner_character_png",
+]

@@ -146,7 +146,9 @@ def test_v3_only_missing_reports_required_visual_layers():
         {"assigned": {"a": "v3_a"}, "statuses": {"a": "matched"}},
         {"assigned": {"s1": "v3_s1"}, "statuses": {"s1": "matched_exact"}},
     )
-    assert missing == {"characters": ["b"], "settings": ["s2"]}
+    assert missing == {
+        "characters": [], "procedural_characters": ["b"], "settings": ["s2"],
+    }
     assert _v3_only_missing(p, None, None, skip_scenes=True)["settings"] == []
 
 

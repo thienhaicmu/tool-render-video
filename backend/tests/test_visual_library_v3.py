@@ -14,12 +14,14 @@ from app.features.render.engine.visual.library_v3 import (
     ProvenanceSpec,
     VisualLibraryManifest,
     build_character_master,
+    build_planner_character_master,
     load_manifest,
     validate_manifest,
     write_manifest,
     load_active_catalog,
     configured_manifest_path,
     match_characters,
+    PROCEDURAL,
     resolve_character_preview,
 )
 from app.features.render.engine.visual.library_v3.style_aliases import normalize_v3_style
@@ -208,6 +210,31 @@ def test_planner_matcher_rejects_review_identity_and_mismatched_gender(tmp_path)
 
     assert report["assigned"] == {}
     assert report["missing"] == ["planner_man"]
+
+
+def test_v3_matcher_marks_unresolved_character_as_procedural(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path, state="active")
+    catalog = ActiveCatalog.from_manifest(manifest)
+    plan = StoryPlan(characters=[CharacterDef(
+        id="planner_man", name="Unknown", gender="male", age="adult",
+        canonical_desc="unknown character",
+    )])
+    monkeypatch.setenv("STORY_V3_ONLY", "1")
+    report = match_characters(plan, catalog)
+    assert report["statuses"]["planner_man"] == PROCEDURAL
+    assert report["missing"] == []
+    monkeypatch.setenv("STORY_V3_ONLY", "0")
+
+
+def test_planner_character_fallback_uses_v3_template():
+    character = CharacterDef(
+        id="mika", name="Mika", archetype="office_worker", gender="female",
+        age="mid-30s", canonical_desc="black hair office worker",
+    )
+    svg = build_planner_character_master(character, style_id="jp_anime_cinematic_v1")
+    assert svg.startswith("<svg")
+    assert 'data-character-id="mika"' in svg
+    assert "<path" in svg
 
 
 def test_artifact_bridge_resolves_only_active_identity(tmp_path):

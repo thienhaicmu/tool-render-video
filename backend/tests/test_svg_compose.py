@@ -42,13 +42,15 @@ def test_compose_never_raises_on_bad_input():
     assert isinstance(compose_visual(_plan(), Visual(id="v1")), str)
 
 
-def test_v3_only_never_returns_an_empty_layer_svg(monkeypatch):
+def test_v3_only_uses_v3_procedural_character_without_identity(monkeypatch):
     monkeypatch.setenv("STORY_V3_ONLY", "1")
     plan = StoryPlan(
         characters=[CharacterDef(id="a", archetype="unknown")],
         settings=[SettingDef(id="s", scene_kind="unknown")],
     )
-    assert compose_visual(plan, Visual(id="v1", setting_id="s", character_ids=["a"])) == ""
+    svg = compose_visual(plan, Visual(id="v1", setting_id="s", character_ids=["a"]))
+    assert svg.startswith("<svg") and "data-character" not in svg
+    assert "<g transform=" in svg
 
 
 def test_compose_uses_ai_chosen_library_asset(tmp_path):

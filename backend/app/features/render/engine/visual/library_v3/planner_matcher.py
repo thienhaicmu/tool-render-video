@@ -24,6 +24,7 @@ from .style_aliases import normalize_v3_style
 
 MATCH_MIN = 5.0
 ASSIGN_MIN = 2.0
+PROCEDURAL = "procedural"
 DEFAULT_CHARACTER_MANIFEST = (
     Path(__file__).resolve().parents[7] / "data" / "visual_library_v3_legacy_characters_approved_pilot.json"
 )
@@ -160,7 +161,8 @@ def match_characters(
         if target is None and honor_existing and (
             locked.get(cid) or getattr(char, "asset", "")
         ):
-            continue
+            if os.getenv("STORY_V3_ONLY", "1") != "1":
+                continue
         if target is not None and target.id not in used:
             assign(char, target, MATCHED_EXACT)
         else:
@@ -186,8 +188,11 @@ def match_characters(
             if score > best_score:
                 best, best_score = identity, score
         if best is None or best_score < ASSIGN_MIN:
-            report["statuses"][cid] = MISSING
-            report["missing"].append(cid)
+            if os.getenv("STORY_V3_ONLY", "1") == "1":
+                report["statuses"][cid] = PROCEDURAL
+            else:
+                report["statuses"][cid] = MISSING
+                report["missing"].append(cid)
             if apply:
                 char.visual_identity_id = ""
             continue
@@ -219,5 +224,5 @@ def configured_manifest_path() -> str:
 __all__ = [
     "ASSIGN_MIN", "DEFAULT_CHARACTER_MANIFEST", "MATCH_MIN", "configured_manifest_path",
     "matcher_enabled", "match_characters",
-    "MATCHED", "MATCHED_EXACT", "MISSING", "NEEDS_APPROVAL",
+    "MATCHED", "MATCHED_EXACT", "MISSING", "NEEDS_APPROVAL", "PROCEDURAL",
 ]

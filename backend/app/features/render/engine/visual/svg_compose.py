@@ -113,10 +113,16 @@ def _char_layer(ch, plan) -> str:
                 return _embed(v3_path, w=_CHAR_W, h=_CHAR_H)
         except Exception:
             pass
-        return ""
+        # An ID with a missing artifact falls through to the deterministic V3 renderer.
     if os.getenv("STORY_V3_ONLY", "1") == "1":
-        # An unresolved character must be selected from the approved V3 catalog.
-        return ""
+        try:
+            from app.features.render.engine.visual.library_v3 import build_planner_character_inner
+            from app.features.render.engine.visual.library_v3.style_aliases import normalize_v3_style
+            return build_planner_character_inner(
+                ch, style_id=normalize_v3_style(getattr(plan, "art_style", "") or ""))
+        except Exception as exc:
+            logger.warning("svg_compose: V3 procedural character failed: %s", exc)
+            return ""
     try:
         if os.getenv("STORY_V3_ONLY", "1") == "1":
             raise RuntimeError("legacy character library disabled by STORY_V3_ONLY")

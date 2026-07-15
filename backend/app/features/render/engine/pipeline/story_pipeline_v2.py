@@ -106,11 +106,11 @@ def _genre_group(genre: str) -> tuple:
 
 def _v3_only_missing(plan, character_report: dict | None, scene_report: dict | None,
                      *, skip_scenes: bool = False) -> dict[str, list[str]]:
-    """Return required Story visuals that have no approved V3 assignment.
+    """Return required Story scene layers that have no usable V3 assignment.
 
-    V3-only renders must never turn an unresolved identity into an opaque blank PNG.
-    The reports are intentionally checked against every visual in the plan because
-    the image stage generates the whole visual set before cue rendering.
+    A character without an identity ID is intentionally reported as a procedural V3
+    fallback, not as a render blocker. Scenes remain strict because this codebase has
+    no equivalent procedural V3 scene renderer.
     """
     required_chars = sorted({
         str(cid).strip()
@@ -122,7 +122,7 @@ def _v3_only_missing(plan, character_report: dict | None, scene_report: dict | N
         cid for cid, status in ((character_report or {}).get("statuses", {}) or {}).items()
         if status in {"matched", "matched_exact"}
     }
-    missing_chars = [cid for cid in required_chars if cid not in assigned_chars]
+    procedural_chars = [cid for cid in required_chars if cid not in assigned_chars]
 
     required_settings = sorted({
         str(getattr(visual, "setting_id", "") or "").strip()
@@ -137,7 +137,11 @@ def _v3_only_missing(plan, character_report: dict | None, scene_report: dict | N
         [] if skip_scenes
         else [sid for sid in required_settings if sid not in assigned_settings]
     )
-    return {"characters": missing_chars, "settings": missing_settings}
+    return {
+        "characters": [],
+        "procedural_characters": procedural_chars,
+        "settings": missing_settings,
+    }
 
 
 def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, idea,
@@ -469,6 +473,15 @@ def run_story_v2(
             _v3_missing = _v3_only_missing(
                 plan, _v3_match, _v3_scene_match, skip_scenes=bool(base_video_path),
             )
+            if _v3_missing.get("procedural_characters"):
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.v3_identity.procedural", level="INFO",
+                    message=("V3 procedural character fallback: "
+                             + ", ".join(_v3_missing["procedural_characters"][:8])),
+                    step="render.story",
+                    context={"characters": _v3_missing["procedural_characters"]},
+                )
             if _v3_missing["characters"] or _v3_missing["settings"]:
                 _missing_bits = []
                 if _v3_missing["characters"]:
