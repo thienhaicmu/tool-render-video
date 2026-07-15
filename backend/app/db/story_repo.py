@@ -119,16 +119,19 @@ def upsert_character(
     voice_id: str = "",
     age: str = "",
     gender: str = "",
+    asset_slug: str = "",
 ) -> bool:
-    """Create or update a canonical character. Returns True on success. Never raises."""
+    """Create or update a canonical character. ``asset_slug`` (GĐ3 identity lock) is
+    the resolved library asset the character keeps across chapters. Returns True on
+    success. Never raises."""
     try:
         with db_conn() as conn:
             conn.execute(
                 """
                 INSERT INTO characters
                     (id, series_id, name, canonical_desc, reference_image_path,
-                     voice_engine, voice_id, age, gender, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+                     voice_engine, voice_id, age, gender, asset_slug, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
                 ON CONFLICT(id) DO UPDATE SET
                     series_id=excluded.series_id,
                     name=excluded.name,
@@ -138,10 +141,11 @@ def upsert_character(
                     voice_id=excluded.voice_id,
                     age=excluded.age,
                     gender=excluded.gender,
+                    asset_slug=excluded.asset_slug,
                     updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
                 """,
                 (char_id, series_id, name, canonical_desc, reference_image_path,
-                 voice_engine, voice_id, age, gender),
+                 voice_engine, voice_id, age, gender, asset_slug),
             )
             conn.commit()
         return True
@@ -152,12 +156,13 @@ def upsert_character(
 
 def _character_row(row: Any) -> dict:
     keys = ("id", "series_id", "name", "canonical_desc", "reference_image_path",
-            "voice_engine", "voice_id", "age", "gender", "created_at", "updated_at")
+            "voice_engine", "voice_id", "age", "gender", "asset_slug",
+            "created_at", "updated_at")
     return dict(zip(keys, row)) if isinstance(row, tuple) else {k: row[k] for k in keys}
 
 
 _CHARACTER_COLS = ("id, series_id, name, canonical_desc, reference_image_path, "
-                   "voice_engine, voice_id, age, gender, created_at, updated_at")
+                   "voice_engine, voice_id, age, gender, asset_slug, created_at, updated_at")
 
 
 def list_characters(series_id: str) -> list[dict]:

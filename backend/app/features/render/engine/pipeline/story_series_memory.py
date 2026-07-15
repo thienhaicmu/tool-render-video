@@ -148,6 +148,9 @@ def persist_series_memory(plan, series_id: str, chapter_no: int) -> None:
             # Preserve an already-pinned reference sheet (upsert overwrites the column).
             existing = story_repo.get_character(cid) or {}
             ref = (existing.get("reference_image_path") or "").strip()
+            # GĐ3 identity lock: keep an ALREADY-locked asset over this render's pick
+            # (a lock only strengthens, never drifts); else persist the resolved one.
+            prev_slug = (existing.get("asset_slug") or "").strip()
             story_repo.upsert_character(
                 cid, series_id=series_id, name=(c.name or ""),
                 canonical_desc=(c.canonical_desc or ""), reference_image_path=ref,
@@ -155,6 +158,7 @@ def persist_series_memory(plan, series_id: str, chapter_no: int) -> None:
                 voice_id=(v[1] if len(v) > 1 else ""),
                 age=(getattr(c, "age", "") or ""),
                 gender=((getattr(c, "voice_gender", "") or getattr(c, "gender", "") or "")),
+                asset_slug=(prev_slug or (getattr(c, "asset", "") or "").strip()),
             )
         # G6: persist canonical settings too (preserve any pinned environment ref).
         for s in (getattr(plan, "settings", None) or []):
@@ -176,4 +180,25 @@ def persist_series_memory(plan, series_id: str, chapter_no: int) -> None:
         logger.warning("series_memory: persist failed series=%s: %s", series_id, exc)
 
 
-__all__ = ["build_prior_context", "rolling_summary_for", "persist_series_memory"]
+def locked_assets(series_id: str) -> dict:
+    """GĐ3 — ``{char_id: asset_slug}`` identity locks persisted for this series.
+    The character resolver treats these as MATCHED_EXACT (a returning character
+    keeps the same face across chapters). Empty on disable / no series / error.
+    Never raises."""
+    if not _enabled() or not (series_id or "").strip():
+        return {}
+    out: dict = {}
+    try:
+        for row in story_repo.list_characters(series_id):
+            cid = (row.get("id") or "").strip()
+            slug = (row.get("asset_slug") or "").strip()
+            if cid and slug:
+                out[cid] = slug
+    except Exception as exc:
+        logger.info("series_memory: locked_assets failed series=%s: %s", series_id, exc)
+        return {}
+    return out
+
+
+__all__ = ["build_prior_context", "rolling_summary_for", "persist_series_memory",
+           "locked_assets"]

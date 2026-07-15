@@ -91,8 +91,10 @@ def upsert_asset(
 
 
 def list_assets(kind: str = "", region: str = "", genre: str = "", q: str = "",
-                limit: int = 200) -> list[dict]:
+                limit: int = 200, style: "Optional[str]" = None) -> list[dict]:
     """List assets filtered by kind/region/genre and a free-text ``q`` (slug/name/tags).
+    ``style``: None = mọi style (mặc định, back-compat); "" = CHỈ asset không style;
+    "x" = asset của style x HOẶC không style (styleless dùng chung mọi style).
     Newest first. Empty list on error. Never raises."""
     try:
         _lim = max(1, min(1000, int(limit)))
@@ -103,6 +105,11 @@ def list_assets(kind: str = "", region: str = "", genre: str = "", q: str = "",
             where.append("region = ?"); args.append(region)
         if (genre or "").strip():
             where.append("genre = ?"); args.append(genre)
+        if style is not None:
+            if (style or "").strip():
+                where.append("(style = ? OR style = '')"); args.append(style.strip())
+            else:
+                where.append("style = ''")
         if (q or "").strip():
             like = f"%{q.strip()}%"
             where.append("(slug LIKE ? OR name LIKE ? OR tags LIKE ?)")
@@ -129,7 +136,7 @@ def _exists(path: str) -> bool:
 
 
 def best_asset(kind: str, name: str = "", region: str = "", genre: str = "",
-               *, transparent_only: bool = False) -> Optional[dict]:
+               *, transparent_only: bool = False, style: "Optional[str]" = None) -> Optional[dict]:
     """Best-matching library asset ROW (dict) for a fuzzy ``name`` lookup, or None.
     Shared core of :func:`match_asset` (which returns the path). Scoped by kind and,
     when a ``name`` signal exists, PROGRESSIVELY WIDENED (region+genre → region →
@@ -143,7 +150,7 @@ def best_asset(kind: str, name: str = "", region: str = "", genre: str = "",
     key = (name or "").strip().lower()
 
     def _cands(rg: str, gn: str) -> list:
-        cs = [a for a in list_assets(kind=kind, region=rg, genre=gn, limit=500)
+        cs = [a for a in list_assets(kind=kind, region=rg, genre=gn, limit=500, style=style)
               if _exists(a.get("path", ""))]
         if transparent_only:
             cs = [a for a in cs if a.get("transparent")]
@@ -183,12 +190,32 @@ def best_asset(kind: str, name: str = "", region: str = "", genre: str = "",
 
 
 def match_asset(kind: str, name: str = "", region: str = "", genre: str = "",
-                *, transparent_only: bool = False) -> Optional[str]:
+                *, transparent_only: bool = False, style: "Optional[str]" = None) -> Optional[str]:
     """Best-effort deterministic library lookup — returns the on-disk PATH of the best
     matching asset (see :func:`best_asset` for ranking + widening), or None. Only
     returns an asset whose file still exists on disk. Never raises."""
-    a = best_asset(kind, name, region, genre, transparent_only=transparent_only)
+    a = best_asset(kind, name, region, genre, transparent_only=transparent_only, style=style)
     return a["path"] if a else None
+
+
+def known_styles() -> "set[str]":
+    """Distinct non-empty style-pack ids present in the library (kiến trúc
+    style-aware). Empty set on error. Never raises."""
+    try:
+        with db_conn() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT style FROM story_assets WHERE style != ''").fetchall()
+        return {(r[0] if isinstance(r, tuple) else r["style"]) for r in rows}
+    except Exception as exc:
+        logger.warning("known_styles failed: %s", exc)
+        return set()
+
+
+def active_library_style(art_style: str) -> str:
+    """Chuẩn hoá ``story_art_style``/plan.art_style → style-pack id đã cài trong thư
+    viện ('' khi không khớp — mọi query rơi về asset không style). Never raises."""
+    s = (art_style or "").strip().lower().replace(" ", "_").replace("-", "_")
+    return s if s and s in known_styles() else ""
 
 
 # Variant suffixes appended to a base slug (emotion/pose for characters, tod for
@@ -211,10 +238,12 @@ def _split_variant(slug: str) -> "tuple[str, str]":
     return slug, ""
 
 
-def get_by_slug(slug: str, kind: str = "") -> Optional[str]:
+def get_by_slug(slug: str, kind: str = "", style: str = "") -> Optional[str]:
     """Exact-slug → on-disk PATH of a library asset the AI plan chose (library-pick).
-    Optionally scoped by ``kind`` (character|background|…). Returns the first candidate
-    whose file still exists, else None. Never raises."""
+    Optionally scoped by ``kind`` (character|background|…). ``style`` (kiến trúc
+    style-aware): ưu tiên biến thể của style đang hoạt động, rơi về bản không style,
+    cuối cùng mới tới style khác — nên một slug đa-style luôn trả đúng biến thể.
+    Returns the first candidate whose file still exists, else None. Never raises."""
     s = (slug or "").strip()
     if not s:
         return None
@@ -224,20 +253,35 @@ def get_by_slug(slug: str, kind: str = "") -> Optional[str]:
             where.append("kind = ?"); args.append(kind)
         with db_conn() as conn:
             rows = conn.execute(
-                f"SELECT path FROM story_assets WHERE {' AND '.join(where)}", tuple(args),
+                f"SELECT path, style FROM story_assets WHERE {' AND '.join(where)}",
+                tuple(args),
             ).fetchall()
+        want = (style or "").strip()
+
+        def _rank(row_style: str) -> int:
+            if want and row_style == want:
+                return 0
+            if row_style == "":
+                return 1
+            return 2 if not want else 3      # foreign style last (still usable)
+
+        cands = []
         for r in rows:
             p = r[0] if isinstance(r, tuple) else r["path"]
+            st = (r[1] if isinstance(r, tuple) else r["style"]) or ""
             if _exists(p):
-                return p
-        return None
+                cands.append((_rank(st), p))
+        cands.sort(key=lambda x: x[0])
+        return cands[0][1] if cands else None
     except Exception as exc:
         logger.warning("get_by_slug failed slug=%s: %s", slug, exc)
         return None
 
 
 def build_library_catalog(region: str = "", genre: str = "", cap: int = 300,
-                          genres: "tuple | list | None" = None) -> str:
+                          genres: "tuple | list | None" = None,
+                          kinds: "tuple | list" = ("character", "background"),
+                          style: "Optional[str]" = None) -> str:
     """Compact, described inventory of the library for the super-prompt so the AI can
     CHOOSE assets by slug (library-pick). Groups base + variants (one line per base slug):
     ``base_slug | region/genre | role-or-scene tokens | [emotions/poses | day,night]``.
@@ -253,7 +297,7 @@ def build_library_catalog(region: str = "", genre: str = "", cap: int = 300,
             fam: dict = {}
             rows: list = []
             for g in scope:                                     # gather across the genre group
-                rows += list_assets(kind=kind, region=region, genre=g, limit=1000)
+                rows += list_assets(kind=kind, region=region, genre=g, limit=1000, style=style)
             for a in rows:
                 base, var = _split_variant(a.get("slug", ""))
                 if not base:
@@ -289,7 +333,9 @@ def build_library_catalog(region: str = "", genre: str = "", cap: int = 300,
             return "/".join([x for x in (meta.get("region"), meta.get("genre"), meta.get("style")) if x])
 
         lines: list[str] = []
-        chars = _families("character")
+        # GĐ3: with the character RESOLVER on, characters are assigned by the engine —
+        # the prompt then carries only the BACKGROUNDS section (kinds=("background",)).
+        chars = _families("character") if "character" in (kinds or ()) else {}
         if chars:
             lines.append("CHARACTERS (transparent full-body; pick the closest, else asset=\"\"):")
             for base in sorted(chars)[:cap]:
@@ -301,7 +347,7 @@ def build_library_catalog(region: str = "", genre: str = "", cap: int = 300,
                     extra.append("poses:" + ",".join(sorted(m["poses"])))
                 suffix = (" | " + " ".join(extra)) if extra else ""
                 lines.append(f"  {base} | {_scope(m)} | {_desc(base, m)}{suffix}")
-        bgs = _families("background")
+        bgs = _families("background") if "background" in (kinds or ()) else {}
         if bgs:
             lines.append("BACKGROUNDS (wide 16:9 scenes; pick the closest, else asset=\"\"):")
             for base in sorted(bgs)[:cap]:
@@ -343,7 +389,14 @@ def delete_asset(asset_id: str) -> bool:
 
 def _parse_path(root: Path, path: Path) -> Optional[dict]:
     """Derive {kind, region, genre, style, slug} from the path convention. Returns None
-    for a file that doesn't match (unknown top-level kind / too shallow)."""
+    for a file that doesn't match (unknown top-level kind / too shallow).
+
+    Kiến trúc style-aware (JP three-style library): character/background chấp nhận một
+    tầng thứ 3 tuỳ chọn là STYLE PACK id —
+        {kind}/{region}/{genre}/{style}/{slug}.png
+    Cùng một slug vai diễn có thể tồn tại ở nhiều style; các query (get_by_slug /
+    best_asset / catalog / resolver) lọc theo style đang hoạt động. Path 2 tầng cũ
+    (GEE!ME, nền procedural) giữ nguyên với style ""."""
     try:
         parts = path.relative_to(root).parts
     except Exception:
@@ -361,6 +414,8 @@ def _parse_path(root: Path, path: Path) -> Optional[dict]:
             region = mid[0]
         if len(mid) >= 2:
             genre = mid[1]
+        if len(mid) >= 3:
+            style = mid[2]
     elif kind == "object":
         if len(mid) >= 1:
             region = mid[0]
