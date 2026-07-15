@@ -31,6 +31,22 @@ EMOTIONS = ("neutral", "happy", "joy", "angry", "sad", "cry",
 POSES = ("stand", "wave", "point", "cheer", "hands_hips", "cross_arms", "think",
          "bow", "fight", "hold", "run", "sit", "kneel")
 FACINGS = ("front", "left", "right")
+FRAMINGS = ("full_body", "three_quarter", "waist_up", "bust", "close_up", "profile")
+
+# All masters stay on a 2:3 portrait canvas, but each framing gets a native
+# vector viewBox. A close-up therefore re-rasterises vector detail instead of
+# enlarging pixels from the full-body PNG.
+_FRAMING_VIEWBOX = {
+    "full_body": (0, 0, 1024, 1536),
+    "three_quarter": (170, 260, 684, 1026),
+    "waist_up": (220, 220, 584, 876),
+    "bust": (262, 170, 500, 750),
+    "close_up": (312, 92, 400, 600),
+    "profile": (262, 170, 500, 750),
+}
+# Public read-only alias for V3 master generation. Geometry remains owned by this
+# renderer; callers only consume the crop contract.
+FRAMING_VIEWBOX = _FRAMING_VIEWBOX
 
 _INST = itertools.count(1)
 
@@ -83,7 +99,7 @@ def _geom(look: CharacterLook) -> dict:
         "sh_w": 150, "waist_w": 88, "hip_w": 104, "hip_dx": 52,
         "arm_l1": 195, "arm_l2": 180, "arm_w1": 54, "arm_w2": 40,
         "leg_l1": 300, "leg_l2": 296, "leg_w1": 76, "leg_w2": 52,
-        "scale": 1.0, "head_scale": 1.06, "stoop": 0,
+        "scale": 1.0, "height_scale": 1.0, "head_scale": 1.06, "stoop": 0,
     }
     if look.gender == "female":
         g.update(sh_w=126, waist_w=74, hip_w=118, hip_dx=50,
@@ -93,6 +109,30 @@ def _geom(look: CharacterLook) -> dict:
                  hip_w=g["hip_w"] * 0.85)
     elif look.age == "elder":
         g.update(stoop=7)
+    build = getattr(look, "body_build", "balanced")
+    if build == "slim":
+        for key in ("sh_w", "waist_w", "hip_w", "arm_w1", "arm_w2", "leg_w1", "leg_w2"):
+            g[key] *= 0.88
+    elif build == "athletic":
+        g["sh_w"] *= 1.12
+        g["waist_w"] *= 0.96
+        for key in ("arm_w1", "arm_w2", "leg_w1", "leg_w2"):
+            g[key] *= 1.08
+    elif build == "broad":
+        for key in ("sh_w", "waist_w", "hip_w"):
+            g[key] *= 1.16
+        for key in ("arm_w1", "arm_w2", "leg_w1", "leg_w2"):
+            g[key] *= 1.13
+    elif build == "soft":
+        g["sh_w"] *= 1.03
+        g["waist_w"] *= 1.17
+        g["hip_w"] *= 1.14
+        for key in ("arm_w1", "arm_w2", "leg_w1", "leg_w2"):
+            g[key] *= 1.07
+    if look.age != "child":
+        g["height_scale"] = {"short": 0.94, "tall": 1.05}.get(
+            getattr(look, "height", "average"), 1.0
+        )
     return g
 
 
@@ -416,19 +456,36 @@ def _outfit(ids: _Ids, look: CharacterLook, g: dict) -> dict:
 
 
 # ── head + face ───────────────────────────────────────────────────────────────
-def _face_d() -> str:
+def _face_d(shape: str = "oval") -> str:
+    if shape == "round":
+        return (f"M {CX - 98} 260 Q {CX - 98} 174 {CX} 166 Q {CX + 98} 174 {CX + 98} 260 "
+                f"Q {CX + 96} 340 {CX + 58} 378 Q {CX + 28} 404 {CX} 404 "
+                f"Q {CX - 28} 404 {CX - 58} 378 Q {CX - 96} 340 {CX - 98} 260 Z")
+    if shape == "angular":
+        return (f"M {CX - 94} 260 Q {CX - 92} 174 {CX} 166 Q {CX + 92} 174 {CX + 94} 260 "
+                f"L {CX + 82} 338 L {CX + 42} 382 L {CX} 408 L {CX - 42} 382 "
+                f"L {CX - 82} 338 Z")
+    if shape == "heart":
+        return (f"M {CX - 102} 256 Q {CX - 98} 170 {CX} 164 Q {CX + 98} 170 {CX + 102} 256 "
+                f"Q {CX + 88} 342 {CX + 48} 376 Q {CX + 18} 404 {CX} 414 "
+                f"Q {CX - 18} 404 {CX - 48} 376 Q {CX - 88} 342 {CX - 102} 256 Z")
+    if shape == "long":
+        return (f"M {CX - 86} 258 Q {CX - 86} 170 {CX} 164 Q {CX + 86} 170 {CX + 86} 258 "
+                f"Q {CX + 84} 352 {CX + 48} 392 Q {CX + 20} 422 {CX} 426 "
+                f"Q {CX - 20} 422 {CX - 48} 392 Q {CX - 84} 352 {CX - 86} 258 Z")
     return (f"M {CX - 92} 262 Q {CX - 94} 174 {CX} 166 Q {CX + 94} 174 {CX + 92} 262 "
             f"Q {CX + 92} 330 {CX + 54} 370 Q {CX + 24} 398 {CX} 400 Q {CX - 24} 398 {CX - 54} 370 "
             f"Q {CX - 92} 330 {CX - 92} 262 Z")
 
 
-def _head_base(ids: _Ids, skin: str) -> str:
+def _head_base(ids: _Ids, look: CharacterLook) -> str:
+    skin = look.skin
     ear = lambda ex, flip: (
         _cel(ids, f"M {ex - 14} 282 Q {ex - 20} 300 {ex - 12} 318 Q {ex - 2} 330 {ex + 8} 316 "
                   f"L {ex + 6} 286 Z", skin, sw=2.5)
         + f'<path d="M {ex - 8} 294 Q {ex - 10} 306 {ex - 2} 312" stroke="{shade(skin, 0.72)}" '
           f'stroke-width="3" fill="none"/>')
-    face = _cel(ids, _face_d(), skin,
+    face = _cel(ids, _face_d(getattr(look, "face_shape", "oval")), skin,
                 shadow=_sh(f"M {CX + 40} 190 Q {CX + 92} 240 {CX + 88} 300 Q {CX + 80} 348 {CX + 50} 374 "
                            f"L {CX + 38} 360 Q {CX + 64} 320 {CX + 62} 260 Q {CX + 58} 214 {CX + 34} 194 Z", 0.10),
                 sw=3)
@@ -436,16 +493,28 @@ def _head_base(ids: _Ids, skin: str) -> str:
     return ear(CX - 94, -1) + ear(CX + 94, 1) + face + jaw_ao
 
 
+def _eye_shape(content: str, cx: int, cy: int, shape: str) -> str:
+    sx, sy = {
+        "round": (0.90, 1.12),
+        "sharp": (1.12, 0.78),
+        "downturned": (1.04, 0.86),
+    }.get(shape, (1.0, 1.0))
+    return (f'<g data-eye-shape="{shape}" transform="translate({cx},{cy}) scale({sx},{sy}) '
+            f'translate({-cx},{-cy})">{content}</g>')
+
+
 def _eye(ids: _Ids, cx: int, cy: int, iris: str, *, mode: str = "open", dx: int = 0,
-         female: bool = False) -> str:
+         female: bool = False, shape: str = "almond") -> str:
     if mode == "closed_happy":
-        return (f'<path d="M {cx - 26} {cy + 6} Q {cx} {cy - 20} {cx + 26} {cy + 6}" '
-                f'stroke="{_LINE}" stroke-width="8" fill="none" stroke-linecap="round"/>'
-                f'<path d="M {cx - 20} {cy + 14} Q {cx} {cy + 4} {cx + 20} {cy + 14}" '
-                f'stroke="{shade("#e8b4a4", 0.9)}" stroke-width="3" fill="none" opacity="0.6"/>')
+        content = (f'<path d="M {cx - 26} {cy + 6} Q {cx} {cy - 20} {cx + 26} {cy + 6}" '
+                   f'stroke="{_LINE}" stroke-width="8" fill="none" stroke-linecap="round"/>'
+                   f'<path d="M {cx - 20} {cy + 14} Q {cx} {cy + 4} {cx + 20} {cy + 14}" '
+                   f'stroke="{shade("#e8b4a4", 0.9)}" stroke-width="3" fill="none" opacity="0.6"/>')
+        return _eye_shape(content, cx, cy, shape)
     if mode == "closed_sad":
-        return (f'<path d="M {cx - 26} {cy - 4} Q {cx} {cy + 18} {cx + 26} {cy - 4}" '
-                f'stroke="{_LINE}" stroke-width="8" fill="none" stroke-linecap="round"/>')
+        content = (f'<path d="M {cx - 26} {cy - 4} Q {cx} {cy + 18} {cx + 26} {cy - 4}" '
+                   f'stroke="{_LINE}" stroke-width="8" fill="none" stroke-linecap="round"/>')
+        return _eye_shape(content, cx, cy, shape)
     wide = mode == "wide"
     half = mode == "half"
     ir = 15 if wide else 19
@@ -487,13 +556,15 @@ def _eye(ids: _Ids, cx: int, cy: int, iris: str, *, mode: str = "open", dx: int 
               f'stroke="{shade("#d9a08a", 0.85)}" stroke-width="3" fill="none" opacity="0.55"/>') if not half else ""
     lower = (f'<path d="M {cx - 22} {cy + 20} Q {cx} {cy + 25} {cx + 22} {cy + 20}" '
              f'stroke="{_LINE}" stroke-width="3" fill="none" opacity="0.35"/>')
-    return iris_grad + sclera + lash + crease + lower
+    return _eye_shape(iris_grad + sclera + lash + crease + lower, cx, cy, shape)
 
 
-def _brow(x0: int, x1: int, y0: float, y1: float) -> str:
-    ym = min(y0, y1) - 6
+def _brow(x0: int, x1: int, y0: float, y1: float, shape: str = "soft") -> str:
+    ym = min(y0, y1) - (12 if shape == "arched" else 3 if shape == "straight" else 6)
+    thickness = 8 if shape == "strong" else 6
     return (f'<path d="M {x0} {y0:.0f} Q {(x0 + x1) // 2} {ym:.0f} {x1} {y1:.0f} '
-            f'L {x1} {y1 + 6:.0f} Q {(x0 + x1) // 2} {ym + 7:.0f} {x0} {y0 + 5:.0f} Z" fill="{_LINE}"/>')
+            f'L {x1} {y1 + thickness:.0f} Q {(x0 + x1) // 2} {ym + thickness + 1:.0f} '
+            f'{x0} {y0 + thickness - 1:.0f} Z" fill="{_LINE}" data-brow-shape="{shape}"/>')
 
 
 _MOUTHS = {
@@ -534,19 +605,38 @@ _EMOTIONS: dict = {
 def _face(ids: _Ids, look: CharacterLook, emotion: str, face_dx: int) -> str:
     eye_mode, (b_out, b_in), mouth, blush, idx, extra = _EMOTIONS.get(emotion, _EMOTIONS["neutral"])
     f = look.gender == "female"
-    exl, exr, ey, by = CX - 58, CX + 58, 302, 258
+    eye_gap = {"round": 56, "angular": 61, "heart": 60, "long": 54}.get(
+        getattr(look, "face_shape", "oval"), 58
+    )
+    exl, exr, ey, by = CX - eye_gap, CX + eye_gap, 302, 258
     skin_sh = shade(look.skin, 0.78)
+    eye_shape = getattr(look, "eye_shape", "almond")
+    brow_shape = getattr(look, "brow_shape", "soft")
+    nose_shape = getattr(look, "nose_shape", "small")
+    nose = {
+        "straight": f'<path d="M {CX + 1} 329 Q {CX + 7} 341 {CX + 2} 354" stroke="{skin_sh}" stroke-width="4.5" fill="none" stroke-linecap="round"/>',
+        "soft": f'<path d="M {CX - 1} 337 Q {CX + 8} 345 {CX} 353" stroke="{skin_sh}" stroke-width="4" fill="none" stroke-linecap="round"/>',
+        "wide": (f'<path d="M {CX - 8} 348 Q {CX} 356 {CX + 9} 348" stroke="{skin_sh}" '
+                 f'stroke-width="4.5" fill="none" stroke-linecap="round"/>'),
+    }.get(nose_shape, f'<path d="M {CX + 2} 338 Q {CX + 7} 346 {CX + 1} 351" stroke="{skin_sh}" stroke-width="4" fill="none" stroke-linecap="round"/>')
+    mouth_scale = {"full": 1.10, "thin": 0.88, "wide": 1.22}.get(
+        getattr(look, "mouth_shape", "soft"), 1.0
+    )
+    mouth_svg = _MOUTHS.get(mouth, _MOUTHS["neutral"])()
+    mouth_svg = (f'<g data-mouth-shape="{getattr(look, "mouth_shape", "soft")}" '
+                 f'transform="translate({CX},372) scale({mouth_scale},1) translate({-CX},-372)">'
+                 f'{mouth_svg}</g>')
     parts = [
         # under-fringe soft shadow on the forehead
         _sh(f"M {CX - 80} 236 Q {CX} 262 {CX + 80} 236 L {CX + 78} 252 Q {CX} 278 {CX - 78} 252 Z", 0.08),
-        _eye(ids, exl, ey, look.eye_color, mode=eye_mode, dx=idx + face_dx // 3, female=f),
-        _eye(ids, exr, ey, look.eye_color, mode=eye_mode, dx=idx + face_dx // 3, female=f),
-        _brow(exl - 26, exl + 26, by + b_out, by + b_in),
-        _brow(exr + 26, exr - 26, by + b_out, by + b_in),
+        _eye(ids, exl, ey, look.eye_color, mode=eye_mode, dx=idx + face_dx // 3, female=f, shape=eye_shape),
+        _eye(ids, exr, ey, look.eye_color, mode=eye_mode, dx=idx + face_dx // 3, female=f, shape=eye_shape),
+        _brow(exl - 26, exl + 26, by + b_out, by + b_in, brow_shape),
+        _brow(exr + 26, exr - 26, by + b_out, by + b_in, brow_shape),
         # nose: side shade + tip highlight
-        f'<path d="M {CX + 2} 334 Q {CX + 9} 344 {CX + 2} 352" stroke="{skin_sh}" stroke-width="4.5" fill="none" stroke-linecap="round"/>',
+        f'<g data-nose-shape="{nose_shape}">{nose}</g>',
         f'<circle cx="{CX - 2}" cy="349" r="2.5" fill="#ffffff" opacity="0.5"/>',
-        _MOUTHS.get(mouth, _MOUTHS["neutral"])(),
+        mouth_svg,
     ]
     if blush > 0:
         parts.append(
@@ -728,6 +818,65 @@ def _accessories(look: CharacterLook) -> str:
     return "".join(out)
 
 
+def _hair_texture_detail(color: str, texture: str) -> str:
+    """Small identity-visible surface treatment shared by all hair silhouettes."""
+    t = (texture or "straight").strip().lower()
+    if t == "wavy":
+        return (f'<g data-hair-texture="wavy" fill="none" stroke="{shade(color, 0.62)}" '
+                'stroke-width="3.5" opacity="0.62">'
+                f'<path d="M 448 188 Q 472 208 448 232 Q 424 254 448 276"/>'
+                f'<path d="M 492 176 Q 516 198 492 220 Q 468 242 492 264"/>'
+                f'<path d="M 536 176 Q 560 198 536 220 Q 512 242 536 264"/>'
+                f'<path d="M 580 188 Q 604 208 580 232 Q 556 254 580 276"/>'
+                '</g>')
+    if t == "curly":
+        dots = "".join(
+            f'<circle cx="{x}" cy="{y}" r="9" fill="none" stroke="{shade(color, 0.62)}" stroke-width="3"/>'
+            for x, y in ((438, 194), (470, 174), (504, 190), (538, 174), (572, 194), (456, 232), (540, 232))
+        )
+        return f'<g data-hair-texture="curly" opacity="0.68">{dots}</g>'
+    if t == "coily":
+        return (f'<g data-hair-texture="coily" fill="none" stroke="{shade(color, 0.58)}" '
+                'stroke-width="4" opacity="0.65">'
+                f'<path d="M 442 180 q 18 -16 36 0 t 36 0 t 36 0 t 36 0"/>'
+                f'<path d="M 448 214 q 18 -16 36 0 t 36 0 t 36 0 t 36 0"/>'
+                '</g>')
+    return f'<g data-hair-texture="straight" opacity="0.5">{_strands(color, (-54, -18, 18, 54), 182, 248)}</g>'
+
+
+def _outfit_surface_detail(look: CharacterLook, g: dict) -> str:
+    """Material/silhouette cues that make the identity contract visible on canvas."""
+    material = getattr(look, "outfit_material", "cotton") or "cotton"
+    silhouette = getattr(look, "outfit_silhouette", "fitted") or "fitted"
+    p = look.outfit_primary
+    detail = [f'<g data-outfit-material="{material}" data-outfit-silhouette="{silhouette}">']
+    if material == "silk":
+        detail.append(f'<path d="M {CX - g["sh_w"] + 20} 500 Q {CX - 20} 560 {CX - 34} 720" '
+                      f'stroke="{shade(p, 1.35)}" stroke-width="5" fill="none" opacity="0.42"/>')
+    elif material == "metal":
+        detail.append(f'<path d="M {CX - g["sh_w"] + 16} 520 H {CX + g["sh_w"] - 16}" '
+                      f'stroke="{shade(p, 1.35)}" stroke-width="4" opacity="0.5"/>')
+        detail.extend(f'<circle cx="{x}" cy="{y}" r="4" fill="{shade(p, 1.3)}" opacity="0.75"/>'
+                      for x, y in ((CX - 42, 560), (CX + 42, 560), (CX - 42, 646), (CX + 42, 646)))
+    elif material == "leather":
+        detail.append(f'<path d="M {CX - g["sh_w"] + 16} 536 Q {CX} 564 {CX + g["sh_w"] - 16} 536" '
+                      f'stroke="{shade(p, 0.55)}" stroke-width="4" fill="none" opacity="0.75"/>')
+    elif material == "wool":
+        detail.append(f'<path d="M {CX - 70} 640 q 18 -12 36 0 t 36 0 t 36 0" '
+                      f'stroke="{shade(p, 1.25)}" stroke-width="3" fill="none" opacity="0.35"/>')
+    else:
+        detail.append(f'<path d="M {CX - g["waist_w"]} 700 H {CX + g["waist_w"]}" '
+                      f'stroke="{shade(p, 0.68)}" stroke-width="3" opacity="0.32"/>')
+    if silhouette == "flowing":
+        detail.append(f'<path d="M {CX - g["hip_w"]} 796 Q {CX - g["hip_w"] - 18} 1000 {CX - g["hip_w"] - 28} 1180" '
+                      f'stroke="{shade(p, 1.22)}" stroke-width="4" fill="none" opacity="0.32"/>')
+    elif silhouette == "armored":
+        detail.append(f'<path d="M {CX - g["sh_w"]} 480 L {CX - g["waist_w"]} 700 M {CX + g["sh_w"]} 480 L {CX + g["waist_w"]} 700" '
+                      f'stroke="{shade(p, 0.55)}" stroke-width="4" opacity="0.6"/>')
+    detail.append('</g>')
+    return "".join(detail)
+
+
 # ── assembly ──────────────────────────────────────────────────────────────────
 def anime_char_inner(look, emotion: str = "neutral", pose: str = "stand",
                      facing: str = "front", style_id: str | None = None) -> str:
@@ -799,17 +948,19 @@ def anime_char_inner(look, emotion: str = "neutral", pose: str = "stand",
                     f'scale({g["head_scale"]})')
         hair_back_layer = (f'<g transform="{_head_tf}">'
                            + _hair_back(ids, lk.hair_back, lk.hair_color, lk.gender == "female")
+                           + _hair_texture_detail(lk.hair_color, getattr(lk, "hair_texture", "straight"))
                            + "</g>")
         headg = (
             f'<g transform="{_head_tf}">'
-            + _head_base(ids, skin)
+            + _head_base(ids, lk)
             + _face(ids, lk, emotion, face_dx)
             + _hair_front(ids, lk.hair_front, lk.hair_color, lk.gender == "female")
             + _accessories(lk)
             + "</g>"
         )
 
-        upper = hair_back_layer + neck + o["torso"] + shoulder_caps + arms + o.get("over", "") + headg
+        upper = (hair_back_layer + neck + o["torso"] + _outfit_surface_detail(lk, g)
+                 + shoulder_caps + arms + o.get("over", "") + headg)
         bow = p.get("bow", 0) + g.get("stoop", 0)
         if bow:
             upper = f'<g transform="rotate({bow} {CX} {g["hip_y"]})">{upper}</g>'
@@ -844,4 +995,5 @@ def build_anime_char(look, emotion: str = "neutral", pose: str = "stand",
             f'viewBox="0 0 {W} {H}">{inner}</svg>')
 
 
-__all__ = ["build_anime_char", "anime_char_inner", "EMOTIONS", "POSES", "FACINGS"]
+__all__ = ["build_anime_char", "anime_char_inner", "EMOTIONS", "POSES", "FACINGS",
+           "FRAMINGS", "FRAMING_VIEWBOX"]

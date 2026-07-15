@@ -50,6 +50,17 @@ def _bg_layer(plan, setting, w: int, h: int) -> str:
     scene_kind = (getattr(setting, "scene_kind", "") or (getattr(setting, "name", "") if setting else "") or "")
     region = getattr(plan, "region", "") or ""
     genre = getattr(plan, "genre_key", "") or ""
+    v3_identity = (getattr(setting, "visual_scene_identity_id", "") or "").strip()
+    if v3_identity:
+        try:
+            from app.features.render.engine.visual.library_v3 import resolve_scene_preview
+            v3_path = resolve_scene_preview(
+                v3_identity, style=(getattr(plan, "art_style", "") or "").strip()
+            )
+            if v3_path:
+                return _embed(v3_path, w=w, h=h, cover=True)
+        except Exception:
+            pass
     try:
         from app.db.story_asset_repo import get_by_slug, match_asset, active_library_style
         _st = active_library_style(getattr(plan, "art_style", "") or "")
@@ -85,6 +96,18 @@ def _char_layer(ch, plan) -> str:
     archetype/name library match → a procedural chibi from the preset. Never raises."""
     region = getattr(plan, "region", "") or ""
     genre = getattr(plan, "genre_key", "") or ""
+    # V3 is opt-in. An already matched identity takes precedence over legacy
+    # slug lookup, but an unavailable bridge never invents a replacement face.
+    v3_identity = (getattr(ch, "visual_identity_id", "") or "").strip()
+    if v3_identity:
+        try:
+            from app.features.render.engine.visual.library_v3 import resolve_character_preview
+            v3_path = resolve_character_preview(v3_identity, framing="full_body")
+            if v3_path:
+                return _embed(v3_path, w=_CHAR_W, h=_CHAR_H)
+        except Exception:
+            pass
+        return ""
     try:
         from app.db.story_asset_repo import get_by_slug, match_asset, active_library_style
         _st = active_library_style(getattr(plan, "art_style", "") or "")

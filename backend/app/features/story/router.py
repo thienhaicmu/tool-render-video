@@ -371,25 +371,73 @@ def _resolve_plan_assets(plan, *, series_id: str = "", genre: str = "") -> "Opti
     plan (mutates ``characters[].asset`` + ``render.asset_status``). Returns the
     report dict for the API response, or None when the resolver is off / fails."""
     try:
+        from app.features.render.engine.pipeline.story_series_memory import locked_assets
+        _locked = locked_assets((series_id or "").strip())
+        v3_rep = None
+        v3_scene_rep = None
+        try:
+            from app.features.render.engine.visual.library_v3 import (
+                configured_manifest_path, load_active_catalog, match_characters,
+            )
+            from app.features.render.engine.visual.library_v3.planner_matcher import matcher_enabled
+            if matcher_enabled():
+                v3_rep = match_characters(
+                    plan, load_active_catalog(configured_manifest_path()), locked=_locked,
+                    region=(getattr(plan, "region", "") or ""),
+                    style=(getattr(plan, "art_style", "") or ""), apply=True,
+                )
+            from app.features.render.engine.visual.library_v3 import load_active_catalog, match_scenes
+            from app.features.render.engine.visual.library_v3.scene_matcher import (
+                scene_manifest_path, scene_matcher_enabled,
+            )
+            if scene_matcher_enabled():
+                v3_scene_rep = match_scenes(
+                    plan, load_active_catalog(scene_manifest_path()),
+                    region=(getattr(plan, "region", "") or ""),
+                    style=(getattr(plan, "art_style", "") or ""), apply=True,
+                )
+        except Exception as exc:
+            logger.info("story: V3 identity matching skipped: %s", exc)
+
         from app.features.render.engine.visual.character_resolver import (
             resolve_characters, resolver_enabled,
         )
-        if not resolver_enabled():
+        if not resolver_enabled() and v3_rep is None:
             return None
         from app.features.render.engine.pipeline.story_pipeline_v2 import _genre_group
-        from app.features.render.engine.pipeline.story_series_memory import locked_assets
-        rep = resolve_characters(
-            plan, locked=locked_assets((series_id or "").strip()),
+        rep = (resolve_characters(
+            plan, locked=_locked,
             region=(getattr(plan, "region", "") or ""), genres=_genre_group(genre))
+               if resolver_enabled() else None)
+        statuses = dict(rep["statuses"] if rep else {})
+        if v3_rep:
+            for cid in v3_rep["assigned"]:
+                statuses[cid] = v3_rep["statuses"][cid]
+        if v3_rep:
+            for cid in v3_rep["missing"]:
+                statuses.setdefault(cid, v3_rep["statuses"][cid])
+        if v3_rep and v3_rep["assigned"]:
+            plan.render.asset_status = dict(statuses)
+        if v3_scene_rep and v3_scene_rep["assigned"]:
+            plan.render.scene_asset_status = dict(v3_scene_rep["statuses"])
+        needs_approval = sorted({cid for source in (rep, v3_rep) if source for cid in source["needs_approval"]})
+        missing = sorted(cid for cid, status in statuses.items() if status == "missing")
         by_id = {c.id: c for c in plan.characters}
         return {
-            "statuses": rep["statuses"],
-            "needs_approval": rep["needs_approval"],
-            "missing": rep["missing"],
+            "statuses": statuses,
+            "needs_approval": needs_approval,
+            "missing": missing,
             "characters": [
                 {"id": cid, "name": (getattr(by_id.get(cid), "name", "") or cid),
-                 "asset": rep["assigned"].get(cid, ""), "status": st}
-                for cid, st in rep["statuses"].items()
+                 "asset": (rep["assigned"].get(cid, "") if rep else ""),
+                 "visual_identity_id": (getattr(by_id.get(cid), "visual_identity_id", "") or ""),
+                 "status": st}
+                for cid, st in statuses.items()
+            ],
+            "scenes": [
+                {"id": sid, "asset": identity_id,
+                 "status": v3_scene_rep["statuses"].get(sid, "")}
+                for sid, identity_id in (v3_scene_rep["assigned"].items() if v3_scene_rep else [])
             ],
         }
     except Exception as exc:

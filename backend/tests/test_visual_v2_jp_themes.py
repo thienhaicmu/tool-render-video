@@ -12,6 +12,8 @@ from app.features.render.engine.visual.v2.jp_catalog import (
 )
 from app.features.render.engine.visual.v2.theme_pack import (
     JP_STYLE_PACKS, STYLE_CINEMATIC, STYLE_CLEAN, STYLE_SOFT_DRAMA,
+    STYLE_US_CINEMATIC, STYLE_US_EDITORIAL, STYLE_US_STORYBOOK,
+    resolve_style,
 )
 
 
@@ -48,6 +50,15 @@ def test_profession_outfits_render_in_every_theme():
         look = derive_look(outfit, gender="female", outfit=outfit)
         for sid in (STYLE_CLEAN, STYLE_CINEMATIC, STYLE_SOFT_DRAMA):
             assert _digest(build_anime_char(look, style_id=sid))
+
+
+def test_us_style_packs_preserve_identity_and_render_distinct_treatments():
+    look = derive_look("us-style-proof", gender="female", outfit="tee_casual")
+    styles = (STYLE_US_EDITORIAL, STYLE_US_CINEMATIC, STYLE_US_STORYBOOK)
+    svgs = [build_anime_char(look, style_id=sid) for sid in styles]
+    assert len({_digest(svg) for svg in svgs}) == len(styles)
+    assert all(f'data-style-id="{sid}"' in svg for sid, svg in zip(styles, svgs))
+    assert all(resolve_style(sid) == sid for sid in styles)
 
 
 def test_style_registry_exposes_three_japanese_styles():

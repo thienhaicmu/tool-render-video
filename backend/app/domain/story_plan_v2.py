@@ -124,6 +124,7 @@ class CharacterDef:
     voice_style: str = ""
     archetype: str = ""       # Phase 0.5: library role token (English, e.g. "swordsman"); "" = none
     asset: str = ""           # Library-pick: AI-chosen library character slug (exact); "" = none
+    visual_identity_id: str = ""  # V3 opt-in match; separate from legacy asset slug
 
 
 @dataclass
@@ -133,6 +134,7 @@ class SettingDef:
     canonical_desc: str = ""
     scene_kind: str = ""      # Phase 0.5: library scene token (English, e.g. "cafe"); "" = none
     asset: str = ""           # Library-pick: AI-chosen library background slug (exact); "" = none
+    visual_scene_identity_id: str = ""  # V3 opt-in/default scene identity
     # PASTE-JSON only: a hand-authored declarative SCENE SPEC (bg / floor / elements) that
     # svg_scene_spec renders → banks into the library as a background asset. Lets a NEW scene
     # be DESCRIBED by parameters (no hardcoded generator). {} = not used → old asset/scene_kind
@@ -341,6 +343,7 @@ class RenderState:
     # char_id → matched_exact | matched | needs_approval | missing. Additive; {} on
     # legacy plans. Review/monitor surface it; render never gates on it.
     asset_status: dict[str, str] = field(default_factory=dict)
+    scene_asset_status: dict[str, str] = field(default_factory=dict)
 
 
 # ── StoryPlan ────────────────────────────────────────────────────────────────
@@ -1053,13 +1056,15 @@ def _character_from(x) -> CharacterDef:
     return CharacterDef(id=cid, name=(name or cid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")),
                         age=_str(x.get("age")), gender=_norm(x.get("gender"), GENDER, ""),
                         voice_gender=_norm(x.get("voice_gender"), GENDER, ""), voice_style=_str(x.get("voice_style")),
-                        archetype=_str(x.get("archetype")), asset=_str(x.get("asset")))
+                        archetype=_str(x.get("archetype")), asset=_str(x.get("asset")),
+                        visual_identity_id=_str(x.get("visual_identity_id")))
 def _setting_from(x) -> SettingDef:
     if not isinstance(x, dict): return SettingDef()
     name = _str(x.get("name")); sid = _str(x.get("id")) or name
     _spec = x.get("scene_spec")
     return SettingDef(id=sid, name=(name or sid), canonical_desc=_str(x.get("canonical_desc") or x.get("description")),
                       scene_kind=_str(x.get("scene_kind")), asset=_str(x.get("asset")),
+                      visual_scene_identity_id=_str(x.get("visual_scene_identity_id")),
                       scene_spec=(_spec if isinstance(_spec, dict) else {}))
 def _visual_from(x) -> Visual:
     if not isinstance(x, dict): return Visual()
@@ -1183,6 +1188,9 @@ def _render_from(x) -> RenderState:
         st = x.get("asset_status")
         if isinstance(st, dict):
             rs.asset_status = {str(k): _str(v) for k, v in st.items() if _str(v)}
+        scene_st = x.get("scene_asset_status")
+        if isinstance(scene_st, dict):
+            rs.scene_asset_status = {str(k): _str(v) for k, v in scene_st.items() if _str(v)}
         rs.total_sec = _float(x.get("total_sec"))
     except Exception:
         pass

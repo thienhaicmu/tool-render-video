@@ -34,6 +34,16 @@ OUTFITS = ("school_uniform", "office_suit", "doctor_coat", "police_uniform",
 AGES = ("child", "adult", "elder")
 GENDERS = ("male", "female")
 ACCESSORIES = ("glasses", "beard", "hairband", "earrings")
+BODY_BUILDS = ("slim", "balanced", "athletic", "broad", "soft")
+HEIGHTS = ("short", "average", "tall")
+FACE_SHAPES = ("oval", "round", "angular", "heart", "long")
+EYE_SHAPES = ("almond", "round", "sharp", "downturned")
+BROW_SHAPES = ("soft", "straight", "arched", "strong")
+NOSE_SHAPES = ("small", "straight", "soft", "wide")
+MOUTH_SHAPES = ("soft", "full", "thin", "wide")
+HAIR_TEXTURES = ("straight", "wavy", "curly", "coily")
+OUTFIT_MATERIALS = ("cotton", "wool", "silk", "linen", "leather", "metal")
+OUTFIT_SILHOUETTES = ("fitted", "relaxed", "structured", "flowing", "armored")
 
 # Outfit → sensible primary/secondary palettes (seeded pick keeps combos coherent).
 _OUTFIT_PALETTES: "dict[str, tuple]" = {
@@ -67,6 +77,17 @@ class CharacterLook:
     outfit_secondary: str = ""
     accent: str = ""                # small pops: tie / ribbon / trim
     accessories: list = field(default_factory=list)
+    body_build: str = "balanced"    # body silhouette, independent from gender
+    height: str = "average"
+    face_shape: str = "oval"
+    eye_shape: str = "almond"
+    brow_shape: str = "soft"
+    nose_shape: str = "small"
+    mouth_shape: str = "soft"
+    hair_texture: str = "straight"
+    outfit_material: str = "cotton"
+    outfit_silhouette: str = "fitted"
+    signature_features: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -129,6 +150,38 @@ def derive_look(seed: "int | str" = 0, *, gender: str = "", age: str = "",
             pool = ("glasses", "hairband", "earrings") if g == "female" else ("glasses",)
             acc.append(_pick(rng, pool))
         look.accessories = [x for x in acc if x in ACCESSORIES]
+        # V3 identity dimensions are derived after every legacy field so adding
+        # them cannot perturb the deterministic colours/outfit of stored looks.
+        look.body_build = _norm(b.get("body_build", ""), BODY_BUILDS, _pick(rng, BODY_BUILDS[:3]))
+        look.height = _norm(b.get("height", ""), HEIGHTS, _pick(rng, HEIGHTS))
+        look.face_shape = _norm(b.get("face_shape", ""), FACE_SHAPES, _pick(rng, FACE_SHAPES))
+        look.eye_shape = _norm(b.get("eye_shape", ""), EYE_SHAPES, _pick(rng, EYE_SHAPES))
+        look.brow_shape = _norm(b.get("brow_shape", ""), BROW_SHAPES, _pick(rng, BROW_SHAPES))
+        look.nose_shape = _norm(b.get("nose_shape", ""), NOSE_SHAPES, _pick(rng, NOSE_SHAPES))
+        look.mouth_shape = _norm(b.get("mouth_shape", ""), MOUTH_SHAPES, _pick(rng, MOUTH_SHAPES))
+        look.hair_texture = _norm(b.get("hair_texture", ""), HAIR_TEXTURES, _pick(rng, HAIR_TEXTURES[:3]))
+        material_by_outfit = {
+            "kimono": "silk", "hanfu_robe": "silk", "armor_light": "metal",
+            "coat_long": "wool", "office_suit": "wool", "doctor_coat": "cotton",
+            "police_uniform": "wool", "engineer_workwear": "cotton",
+        }
+        silhouette_by_outfit = {
+            "kimono": "flowing", "hanfu_robe": "flowing", "dress": "flowing",
+            "armor_light": "armored", "office_suit": "structured",
+            "police_uniform": "structured", "coat_long": "structured",
+            "hoodie": "relaxed", "tee_casual": "relaxed",
+        }
+        look.outfit_material = _norm(
+            b.get("outfit_material", ""), OUTFIT_MATERIALS,
+            material_by_outfit.get(look.outfit, "cotton"),
+        )
+        look.outfit_silhouette = _norm(
+            b.get("outfit_silhouette", ""), OUTFIT_SILHOUETTES,
+            silhouette_by_outfit.get(look.outfit, "fitted"),
+        )
+        look.signature_features = [
+            str(x).strip() for x in (b.get("signature_features") or []) if str(x).strip()
+        ]
         return look
     except Exception:
         return CharacterLook(skin=SKIN_TONES[1], hair_color=HAIR_COLORS[0], eye_color=EYE_COLORS[0],
@@ -154,4 +207,6 @@ def shade(hex_color: str, f: float = 0.78) -> str:
 
 __all__ = ["CharacterLook", "derive_look", "shade", "stable_seed",
            "SKIN_TONES", "HAIR_COLORS", "EYE_COLORS", "HAIR_BACK", "HAIR_FRONT",
-           "OUTFITS", "AGES", "GENDERS", "ACCESSORIES"]
+           "OUTFITS", "AGES", "GENDERS", "ACCESSORIES", "BODY_BUILDS", "HEIGHTS",
+           "FACE_SHAPES", "EYE_SHAPES", "BROW_SHAPES", "NOSE_SHAPES", "MOUTH_SHAPES",
+           "HAIR_TEXTURES", "OUTFIT_MATERIALS", "OUTFIT_SILHOUETTES"]

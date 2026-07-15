@@ -350,14 +350,58 @@ def run_story_v2(
         # Runs BEFORE persist + overlay-master gen (both read CharacterDef.asset).
         # Locks from the series Character DB win; Review/paste picks are honored;
         # everyone else gets a unique best-match from the real library inventory.
+        from app.features.render.engine.pipeline.story_series_memory import locked_assets
+        _series_for_lock = (getattr(payload, "story_series_id", "") or "").strip()
+        _locked_assets = locked_assets(_series_for_lock)
+
+        # V3 identity matching is explicitly opt-in and writes only
+        # visual_identity_id. The legacy resolver remains the compatibility path
+        # for existing slugs and persistence locks.
+        _v3_match = None
+        _v3_scene_match = None
+        try:
+            from app.features.render.engine.visual.library_v3 import (
+                configured_manifest_path, load_active_catalog, match_characters,
+            )
+            from app.features.render.engine.visual.library_v3.planner_matcher import matcher_enabled
+            if matcher_enabled():
+                _v3_catalog = load_active_catalog(configured_manifest_path())
+                _v3_match = match_characters(
+                    plan, _v3_catalog, locked=_locked_assets,
+                    region=(plan.region or ""), style=(plan.art_style or ""), apply=True,
+                )
+                if _v3_match["needs_approval"] or _v3_match["missing"]:
+                    _emit_render_event(
+                        channel_code=effective_channel, job_id=job_id,
+                        event="story.v3_identity.match", level="WARNING",
+                        message=(f"V3 identities: {len(_v3_match['needs_approval'])} need approval, "
+                                 f"{len(_v3_match['missing'])} missing"),
+                        step="render.story", context={
+                            "needs_approval": _v3_match["needs_approval"],
+                            "missing": _v3_match["missing"],
+                            "statuses": _v3_match["statuses"],
+                        },
+                    )
+            from app.features.render.engine.visual.library_v3 import (
+                load_active_catalog as load_v3_catalog, match_scenes,
+            )
+            from app.features.render.engine.visual.library_v3.scene_matcher import (
+                scene_manifest_path, scene_matcher_enabled,
+            )
+            if scene_matcher_enabled():
+                _v3_scene_match = match_scenes(
+                    plan, load_v3_catalog(scene_manifest_path()),
+                    region=(plan.region or ""), style=(plan.art_style or ""), apply=True,
+                )
+        except Exception as _v3_exc:
+            logger.info("story v3 identity matching skipped: %s", _v3_exc)
+
         from app.features.render.engine.visual.character_resolver import (
             resolve_characters, resolver_enabled,
         )
         if resolver_enabled():
-            from app.features.render.engine.pipeline.story_series_memory import locked_assets
-            _series_for_lock = (getattr(payload, "story_series_id", "") or "").strip()
             _res = resolve_characters(
-                plan, locked=locked_assets(_series_for_lock),
+                plan, locked=_locked_assets,
                 region=(plan.region or ""), genres=_genre_group(genre))
             if _res["needs_approval"] or _res["missing"]:
                 _emit_render_event(
@@ -370,6 +414,18 @@ def run_story_v2(
                     context={"needs_approval": _res["needs_approval"],
                              "missing": _res["missing"], "statuses": _res["statuses"]},
                 )
+
+        # The legacy resolver may have filled a compatibility slug after V3.
+        # Keep the V3 status for identities that actually won V3 matching so
+        # readiness and the Review response describe the rendered identity.
+        if _v3_match and _v3_match["assigned"]:
+            try:
+                merged_status = dict(getattr(plan.render, "asset_status", None) or {})
+                for _cid in _v3_match["assigned"]:
+                    merged_status[_cid] = _v3_match["statuses"][_cid]
+                plan.render.asset_status = merged_status
+            except Exception:
+                pass
 
         update_story_plan(job_id, plan.to_json())
 

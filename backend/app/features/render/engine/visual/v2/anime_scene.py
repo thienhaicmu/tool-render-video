@@ -27,7 +27,9 @@ _cur_uid = "0"
 SCENES = ("street", "classroom", "office", "cafe", "bedroom", "forest",
           "shrine", "castle_hall", "rooftop", "beach", "hospital",
           "police_office", "laboratory", "living_room", "executive_office",
-          "train_station", "convenience_store", "traditional_house")
+          "train_station", "convenience_store", "traditional_house", "courtyard",
+          "market", "library", "cave", "ruins", "waterfall", "desert", "graveyard",
+          "park", "garden", "snow", "temple", "battlefield", "inn")
 TODS = ("day", "sunset", "night")
 
 # tod → (sky_top, sky_bottom, sun/moon, far_mul, tint, tint_op, window_glow)
@@ -445,6 +447,142 @@ def _traditional_house(tod: str) -> str:
     return wall + shoji + alcove + tatami + table + beams
 
 
+def _courtyard(tod: str) -> str:
+    wall = _grad("cwy", "#d8e5e8", "#aab8b2")
+    sky = _sky(tod)
+    gate = ('<path d="M480 660 V270 Q768 90 1056 270 V660" fill="#8a4a3a" stroke="#5c3029" stroke-width="18"/>'
+            '<path d="M430 270 Q768 40 1106 270" fill="none" stroke="#6e3b30" stroke-width="46"/>'
+            '<rect x="620" y="360" width="296" height="300" fill="#4b3330"/>')
+    trees = ''.join(f'<rect x="{x}" y="390" width="42" height="300" fill="#654532"/>'
+                    f'<ellipse cx="{x + 20}" cy="340" rx="150" ry="120" fill="{shade("#4f7e59", 0.84 + i * .06)}"/>'
+                    for i, x in enumerate((90, 1280)))
+    floor = '<rect y="660" width="1536" height="364" fill="#b1a177"/><path d="M0 1024 L540 660 H996 L1536 1024" fill="#c5b88b" opacity="0.85"/>'
+    stones = ''.join(f'<ellipse cx="{x}" cy="{y}" rx="42" ry="16" fill="#7f846f" opacity="0.8"/>' for x, y in ((240, 820), (360, 900), (1210, 820), (1330, 910)))
+    return sky + wall + trees + gate + floor + stones
+
+
+def _market(tod: str) -> str:
+    sky = _sky(tod)
+    ground = '<rect y="650" width="1536" height="374" fill="#8f735d"/><path d="M0 1024 L580 650 H960 L1536 1024" fill="#b28c69"/>'
+    stalls = []
+    for i, x in enumerate((80, 500, 920, 1340)):
+        color = ("#c95745", "#3d7180", "#d7a33c", "#7a4f82")[i]
+        stalls.append(f'<rect x="{x}" y="330" width="300" height="330" fill="#8b5a3b" stroke="#513528" stroke-width="10"/>'
+                      f'<path d="M{x - 24} 330 Q{x + 150} 215 {x + 324} 330 Z" fill="{color}" stroke="#513528" stroke-width="10"/>'
+                      f'<rect x="{x + 22}" y="480" width="256" height="80" rx="12" fill="#d6b27a"/>'
+                      f'<circle cx="{x + 80}" cy="520" r="26" fill="#e2b84f"/><circle cx="{x + 150}" cy="520" r="26" fill="#78a764"/><circle cx="{x + 220}" cy="520" r="26" fill="#bf6650"/>')
+    lanterns = ''.join(f'<path d="M{x} 0 V170" stroke="#45352f" stroke-width="8"/><path d="M{x - 34} 190 H{x + 34} L{x + 22} 250 H{x - 22} Z" fill="#e6b64d"/>' for x in (210, 760, 1310))
+    return sky + ground + ''.join(stalls) + lanterns
+
+
+def _library(tod: str) -> str:
+    wall = _grad("liw", "#d7d4c7", "#9c8c78")
+    shelves = ''.join(f'<rect x="{x}" y="150" width="250" height="480" fill="#684b37" stroke="#392d25" stroke-width="12"/>'
+                      f'<path d="M{x + 24} {260 + j * 92} H{x + 226}" stroke="#b28b59" stroke-width="16"/>'
+                      for x in (90, 390, 690, 990, 1290) for j in range(4))
+    books = ''.join(f'<rect x="{x + 32 + (j % 5) * 38}" y="{260 + (j // 5) * 92}" width="25" height="58" fill="{c}"/>'
+                    for x in (90, 390, 690, 990, 1290) for j, c in enumerate(("#b85b4a", "#668e8e", "#d1a34d", "#7b6a9b", "#8b5f43") * 4))
+    table = '<rect y="710" width="1536" height="314" fill="#8e7358"/><ellipse cx="768" cy="790" rx="320" ry="48" fill="#654732"/><rect x="744" y="800" width="48" height="180" fill="#543a2b"/><circle cx="768" cy="746" r="24" fill="#e7ca83"/>'
+    return wall + shelves + books + table
+
+
+def _cave(tod: str) -> str:
+    wall = _grad("cav", "#263346", "#10141f")
+    rocks = '<path d="M0 0 L240 0 L390 190 L290 460 L0 560 Z" fill="#394456"/><path d="M1536 0 L1290 0 L1150 200 L1240 500 L1536 580 Z" fill="#2e394d"/>'
+    opening = '<path d="M410 1024 Q420 280 768 160 Q1116 280 1126 1024 Z" fill="#080d17" stroke="#53647a" stroke-width="18"/>'
+    crystals = ''.join(f'<path d="M{x} 860 L{x + 30} {y} L{x + 65} 860 Z" fill="{c}" opacity="0.82"/>' for x, y, c in ((500, 620, "#6fc4d1"), (610, 720, "#91a9e8"), (920, 650, "#bd83df"), (1010, 760, "#6fc4d1")))
+    ground = '<path d="M0 1024 L0 850 Q420 780 768 890 Q1110 780 1536 850 V1024 Z" fill="#2b3442"/>'
+    return wall + rocks + opening + crystals + ground
+
+
+def _ruins(tod: str) -> str:
+    sky = _sky(tod)
+    ground = '<rect y="700" width="1536" height="324" fill="#776c5d"/><path d="M0 1024 L420 700 H1110 L1536 1024" fill="#91806a"/>'
+    columns = ''.join(f'<path d="M{x} 180 L{x + 70} 210 V720 H{x - 4} Z" fill="#827c73" stroke="#4f504f" stroke-width="12"/>' for x in (180, 480, 1040, 1320))
+    arch = '<path d="M300 460 Q768 20 1236 460" fill="none" stroke="#696860" stroke-width="70"/><path d="M310 460 Q768 80 1226 460" fill="none" stroke="#a59a87" stroke-width="20"/>'
+    rubble = ''.join(f'<path d="M{x} {y} l60 -35 l55 40 l-68 42 Z" fill="#5f5b53"/>' for x, y in ((90, 820), (300, 900), (1140, 840), (1380, 920)))
+    return sky + ground + arch + columns + rubble
+
+
+def _waterfall(tod: str) -> str:
+    sky = _sky(tod)
+    trees = ''.join(f'<ellipse cx="{x}" cy="{y}" rx="{r}" ry="{int(r * .72)}" fill="{shade("#3e6e4a", 0.88 + i * .05)}"/>' for i, (x, y, r) in enumerate(((130, 250, 220), (380, 220, 240), (1170, 230, 250), (1430, 270, 190))))
+    cliff = '<path d="M0 590 L430 500 L600 560 V860 H0 Z" fill="#6f7c6c"/><path d="M1536 590 L1110 500 L940 560 V860 H1536 Z" fill="#637463"/>'
+    fall = '<path d="M650 90 Q768 40 886 90 L850 720 Q768 800 686 720 Z" fill="#b8e6ee" opacity="0.82"/><path d="M720 120 Q768 80 816 120 L800 690 Q768 730 736 690 Z" fill="#e3f6f3" opacity="0.5"/>'
+    pool = '<ellipse cx="768" cy="850" rx="450" ry="110" fill="#518ca0"/><ellipse cx="768" cy="830" rx="260" ry="45" fill="#9bdae0" opacity="0.5"/>'
+    return sky + trees + cliff + fall + pool
+
+
+def _desert(tod: str) -> str:
+    sky = _sky(tod)
+    dunes = '<path d="M0 690 Q330 510 680 700 Q1050 470 1536 690 V1024 H0 Z" fill="#c99557"/><path d="M0 780 Q420 620 800 800 Q1140 650 1536 800 V1024 H0 Z" fill="#e0b46d"/>'
+    ruins = '<path d="M560 690 V410 H640 V690 M900 690 V350 H980 V690" stroke="#75523a" stroke-width="60"/><path d="M500 430 H1040" stroke="#75523a" stroke-width="50"/>'
+    return sky + dunes + ruins
+
+
+def _graveyard(tod: str) -> str:
+    sky = _sky(tod)
+    hill = '<path d="M0 650 Q360 430 720 650 Q1100 390 1536 650 V1024 H0 Z" fill="#4b5b59"/>'
+    stones = ''.join(f'<path d="M{x} 790 V{y} Q{x + 42} {y - 44} {x + 84} {y} V790 Z" fill="#a8aaa0" stroke="#4a514e" stroke-width="8"/>' for x, y in ((140, 560), (380, 610), (680, 500), (980, 600), (1250, 530)))
+    trees = '<path d="M90 820 V350 M90 480 L0 390 M90 560 L190 440 M1400 820 V300 M1400 470 L1300 370 M1400 560 L1500 440" stroke="#292f2d" stroke-width="44"/>'
+    return sky + hill + trees + stones
+
+
+def _park(tod: str) -> str:
+    sky = _sky(tod)
+    lawn = '<rect y="650" width="1536" height="374" fill="#72a46c"/><path d="M650 1024 Q690 780 768 650 Q846 780 886 1024" fill="#d7bd8f"/>'
+    trees = ''.join(f'<rect x="{x}" y="{y}" width="35" height="260" fill="#694a34"/><ellipse cx="{x + 18}" cy="{y - 20}" rx="130" ry="100" fill="#4f895a"/>' for x, y in ((140, 430), (1230, 400)))
+    bench = '<rect x="570" y="790" width="390" height="28" rx="8" fill="#765037"/><rect x="600" y="820" width="24" height="120" fill="#5a3e2e"/><rect x="906" y="820" width="24" height="120" fill="#5a3e2e"/>'
+    return sky + lawn + trees + bench
+
+
+def _garden(tod: str) -> str:
+    sky = _sky(tod)
+    lawn = '<rect y="650" width="1536" height="374" fill="#78a36e"/><ellipse cx="760" cy="850" rx="340" ry="110" fill="#4f8b9c"/><ellipse cx="760" cy="830" rx="230" ry="45" fill="#8ec9c4" opacity="0.55"/>'
+    trees = ''.join(f'<path d="M{x} 740 V380" stroke="#654832" stroke-width="38"/><ellipse cx="{x}" cy="330" rx="150" ry="115" fill="#4d8858"/>' for x in (150, 1370))
+    flowers = ''.join(f'<circle cx="{x}" cy="{y}" r="10" fill="{c}"/>' for x, y, c in ((280, 760, "#e26d6d"), (360, 820, "#e7c34f"), (1120, 770, "#d77ab0"), (1230, 840, "#f1d05b")))
+    return sky + lawn + trees + flowers
+
+
+def _snow(tod: str) -> str:
+    sky = _sky(tod)
+    ground = '<path d="M0 650 Q360 560 720 680 Q1110 540 1536 660 V1024 H0 Z" fill="#e8f0f2"/>'
+    pines = ''.join(f'<path d="M{x} 700 L{x + 90} 250 L{x + 180} 700 Z" fill="#3d5f62"/><path d="M{x + 40} 560 L{x + 90} 380 L{x + 140} 560 Z" fill="#f1f5f4"/>' for x in (80, 330, 1120, 1370))
+    cabin = '<path d="M590 690 V470 L770 330 L950 470 V690 Z" fill="#85563e" stroke="#50382d" stroke-width="12"/><path d="M540 470 L770 270 L1000 470" fill="none" stroke="#dce8e8" stroke-width="48"/><rect x="720" y="540" width="100" height="150" fill="#50382d"/><rect x="620" y="500" width="80" height="70" fill="#f2c94a"/>'
+    return sky + ground + pines + cabin
+
+
+def _temple(tod: str) -> str:
+    sky = _sky(tod)
+    ground = '<rect y="690" width="1536" height="334" fill="#9c8264"/><path d="M0 1024 L520 690 H1016 L1536 1024" fill="#c0a07a"/>'
+    hall = ('<rect x="480" y="390" width="576" height="330" fill="#b84e36" stroke="#5b3028" stroke-width="14"/>'
+            '<path d="M390 400 Q768 210 1146 400 L1090 450 Q768 320 446 450 Z" fill="#304a63" stroke="#1d2c42" stroke-width="14"/>'
+            '<path d="M330 340 Q768 120 1206 340 L1146 385 Q768 240 390 385 Z" fill="#3b5d78" stroke="#1d2c42" stroke-width="14"/>'
+            '<rect x="700" y="505" width="136" height="215" fill="#49322b"/>'
+            '<rect x="560" y="500" width="82" height="100" fill="#e9b85b"/><rect x="894" y="500" width="82" height="100" fill="#e9b85b"/>')
+    lanterns = ''.join(f'<path d="M{x} 120 V300" stroke="#402c29" stroke-width="8"/><path d="M{x - 30} 310 H{x + 30} L{x + 18} 380 H{x - 18} Z" fill="#d66b43"/>' for x in (240, 1296))
+    steps = '<rect x="420" y="720" width="696" height="32" fill="#6f5544"/><rect x="360" y="752" width="816" height="32" fill="#775a47"/><rect x="300" y="784" width="936" height="32" fill="#85644d"/>'
+    return sky + ground + hall + lanterns + steps
+
+
+def _battlefield(tod: str) -> str:
+    sky = _sky(tod)
+    hills = '<path d="M0 620 Q240 420 480 620 Q780 380 1080 620 Q1320 450 1536 620 V1024 H0 Z" fill="#65735f"/>'
+    ground = '<path d="M0 760 Q400 650 780 770 Q1140 640 1536 760 V1024 H0 Z" fill="#75614d"/>'
+    flags = ''.join(f'<path d="M{x} 230 V850" stroke="#3f3937" stroke-width="14"/><path d="M{x} 250 L{x + 170} 300 L{x} 360 Z" fill="{c}"/>' for x, c in ((260, "#b7473b"), (560, "#4c6f8f"), (1030, "#c49342"), (1320, "#8c4f71")))
+    rocks = ''.join(f'<path d="M{x} 850 l55 -90 l70 90 Z" fill="#4e4e4a"/>' for x in (120, 720, 1260))
+    return sky + hills + ground + flags + rocks
+
+
+def _inn(tod: str) -> str:
+    wall = _grad("inw", "#77513d", "#3b2a25")
+    beams = '<rect y="90" width="1536" height="42" fill="#32251f"/><rect x="100" y="130" width="38" height="540" fill="#432e26"/><rect x="1398" y="130" width="38" height="540" fill="#432e26"/>'
+    tables = ''.join(f'<ellipse cx="{x}" cy="{y}" rx="180" ry="36" fill="#9d6d43"/><rect x="{x - 14}" y="{y}" width="28" height="170" fill="#553a2c"/>' for x, y in ((300, 760), (760, 850), (1230, 740)))
+    shelves = '<rect x="930" y="220" width="430" height="370" fill="#5a3c2f" stroke="#2e211e" stroke-width="12"/>' + ''.join(f'<rect x="{970 + i * 90}" y="{290 + (i % 2) * 120}" width="55" height="75" rx="8" fill="{c}"/>' for i, c in enumerate(("#c95b43", "#d4aa4e", "#638e78", "#7d6ca0", "#b86e48", "#6e8ba1")))
+    lamps = ''.join(f'<path d="M{x} 0 V170" stroke="#271d1a" stroke-width="8"/><path d="M{x - 42} 190 H{x + 42} L{x + 24} 250 H{x - 24} Z" fill="#d79f4c"/>' for x in (320, 780, 1240))
+    return wall + beams + shelves + tables + lamps
+
+
 _RECIPES = {
     "street": _street, "classroom": _classroom, "office": _office, "cafe": _cafe,
     "bedroom": _bedroom, "forest": _forest, "shrine": _shrine,
@@ -452,11 +590,16 @@ _RECIPES = {
     "hospital": _hospital, "police_office": _police_office, "laboratory": _laboratory,
     "living_room": _living_room, "executive_office": _executive_office,
     "train_station": _train_station, "convenience_store": _convenience_store,
-    "traditional_house": _traditional_house,
+    "traditional_house": _traditional_house, "courtyard": _courtyard, "market": _market,
+    "library": _library, "cave": _cave, "ruins": _ruins, "waterfall": _waterfall,
+    "desert": _desert, "graveyard": _graveyard, "park": _park, "garden": _garden,
+    "snow": _snow, "temple": _temple, "battlefield": _battlefield, "inn": _inn,
 }
 _INDOOR = {"classroom", "office", "cafe", "bedroom", "castle_hall", "hospital",
            "police_office", "laboratory", "living_room", "executive_office",
-           "convenience_store", "traditional_house"}
+    "convenience_store", "traditional_house", "courtyard", "market", "library", "cave",
+    "ruins", "waterfall", "desert", "graveyard", "park", "garden", "snow",
+    "temple", "battlefield", "inn"}
 
 # aliases → recipe (mirrors svg_scene token families)
 _ALIASES = {
