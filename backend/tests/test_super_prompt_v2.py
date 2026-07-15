@@ -93,4 +93,4 @@ def test_repair_prompt():
 
 
 def test_version_tag():
-    assert SUPER_PROMPT_VERSION == "s24"  # s23: TOKEN VOCAB teaches genre_key+region (master-data sync); s22: multiline rule-5 threads per-beat length hint (substantial beats); s21: idea SKELETON/DRAMATIZE + length_factor escalate-and-regenerate; s20: P1 multi-line beats; s19: Phase-3 lean contract; s18: rule-5 fix + OUTPUT FRAME + idea default-sec; s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A)
+    assert SUPER_PROMPT_VERSION == "s25"  # s25: GĐ1 Story Compiler (Understanding → Writer prose → Structure, pace/pause labels, multiline auto-on under the compiler); s23: TOKEN VOCAB teaches genre_key+region (master-data sync); s22: multiline rule-5 threads per-beat length hint (substantial beats); s21: idea SKELETON/DRAMATIZE + length_factor escalate-and-regenerate; s20: P1 multi-line beats; s19: Phase-3 lean contract; s18: rule-5 fix + OUTPUT FRAME + idea default-sec; s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A)

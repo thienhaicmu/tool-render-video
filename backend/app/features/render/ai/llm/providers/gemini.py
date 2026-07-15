@@ -950,3 +950,52 @@ def _call_gemini_story(api_key: str, model: str, system_prompt: str, user_prompt
     if result is not None:
         llm_cache_put("gemini-story", model, system_prompt, user_prompt, result)
     return result
+
+
+# ── GĐ1 Story Compiler: WRITER call (prose — NO response_mime_type=json). The
+# Script pass needs free prose (JSON forcing flattens narration). Creative
+# temperature; big output budget; thinking capped below it (same starvation
+# guard as the StoryModel call above). Cache namespace versioned by the Story
+# super-prompt version so a prompt bump invalidates by construction.
+_STORY_WRITER_MAX_TOKENS = int(os.getenv("GEMINI_STORY_WRITER_MAX_TOKENS", "16384"))
+_STORY_WRITER_TEMPERATURE = float(os.getenv("GEMINI_STORY_WRITER_TEMPERATURE", "0.8"))
+_STORY_WRITER_THINKING_BUDGET = int(os.getenv("GEMINI_STORY_WRITER_THINKING_BUDGET", "1024"))
+
+
+def _writer_cache_namespace() -> str:
+    try:
+        from app.features.render.ai.llm.story_prompts_v2 import SUPER_PROMPT_VERSION
+        return f"gemini-story-writer|{SUPER_PROMPT_VERSION}"
+    except Exception:
+        return "gemini-story-writer"
+
+
+def _call_gemini_writer_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _genai.Client(api_key=api_key, http_options={"timeout": _REQUEST_TIMEOUT_SEC * 1000})
+    resp = client.models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "temperature": _STORY_WRITER_TEMPERATURE,
+            "max_output_tokens": _STORY_WRITER_MAX_TOKENS,
+            "thinking_config": {"thinking_budget": _STORY_WRITER_THINKING_BUDGET},
+        },
+    )
+    return resp.text
+
+
+def _call_gemini_writer(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Story Writer (prose) call with cache + key/model rotation. Never raises."""
+    _ns = _writer_cache_namespace()
+    cached = llm_cache_get(_ns, model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("gemini_client: story-writer cache HIT model=%s", model)
+        return cached
+    result = call_gemini_with_model_rotation(
+        lambda _k, _m: _call_gemini_writer_once(_k, _m, system_prompt, user_prompt),
+        label="gemini-story-writer", seed_key=api_key, models=_text_model_chain(model),
+    )
+    if result is not None:
+        llm_cache_put(_ns, model, system_prompt, user_prompt, result)
+    return result

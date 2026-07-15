@@ -720,6 +720,75 @@ def _story_cache_namespace() -> str:
         return "openai-story-plan"
 
 
+# ── GĐ1 Story Compiler: WRITER call (prose — the ONLY provider call with NO
+# JSON forcing). The Script pass needs free prose: JSON mode measurably flattens
+# narration ("the model writes TERSE narration in JSON mode", s15), so this call
+# deliberately omits response_format. Higher temperature (creative) + a large
+# token budget (a 10-minute script ≈ 9-10k chars ≈ far under 16k tokens). Cache
+# namespace is versioned like the story-plan one so a prompt bump invalidates it.
+_STORY_WRITER_MAX_TOKENS = int(os.getenv("OPENAI_STORY_WRITER_MAX_TOKENS", "16384"))
+_STORY_WRITER_TEMPERATURE = float(os.getenv("OPENAI_STORY_WRITER_TEMPERATURE", "0.8"))
+
+
+def _writer_cache_namespace() -> str:
+    try:
+        from app.features.render.ai.llm.story_prompts_v2 import SUPER_PROMPT_VERSION
+        return f"openai-story-writer|{SUPER_PROMPT_VERSION}"
+    except Exception:
+        return "openai-story-writer"
+
+
+def _call_openai_writer_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """One prose Writer call — raises on SDK error (retry/rotation wraps it)."""
+    client = _openai.OpenAI(api_key=api_key, timeout=180)
+    kwargs = dict(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    if _is_reasoning_model(model):
+        kwargs["max_completion_tokens"] = _STORY_WRITER_MAX_TOKENS
+        if _STORY_REASONING_EFFORT in ("minimal", "low", "medium", "high"):
+            kwargs["reasoning_effort"] = _STORY_REASONING_EFFORT
+    else:
+        kwargs["max_tokens"] = _STORY_WRITER_MAX_TOKENS
+        kwargs["temperature"] = _STORY_WRITER_TEMPERATURE
+    resp = client.chat.completions.create(**kwargs)
+    choice = resp.choices[0]
+    if getattr(choice, "finish_reason", None) == "length":
+        logger.warning(
+            "openai_client: story-writer TRUNCATED (finish_reason=length, max_tokens=%d) — "
+            "script tail may be missing; raise OPENAI_STORY_WRITER_MAX_TOKENS",
+            _STORY_WRITER_MAX_TOKENS,
+        )
+    return choice.message.content
+
+
+def _call_openai_writer(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Story Writer (prose) raw call: cache → key-rotation (pool) / retry.
+    Never raises; returns None on total failure (Sacred Contract #3)."""
+    _ns = _writer_cache_namespace()
+    cached = llm_cache_get(_ns, model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("openai_client: story-writer cache HIT model=%s", model)
+        return cached
+    if len(pool_for("openai", seed_key=api_key)) > 1:
+        result = call_with_key_rotation(
+            lambda _k: _call_openai_writer_once(_k, model, system_prompt, user_prompt),
+            label="openai-story-writer", seed_key=api_key, provider="openai",
+        )
+    else:
+        result = call_with_retry(
+            lambda: _call_openai_writer_once(api_key, model, system_prompt, user_prompt),
+            label="openai-story-writer",
+        )
+    if result is not None:
+        llm_cache_put(_ns, model, system_prompt, user_prompt, result)
+    return result
+
+
 def select_content_plan(
     script: str,
     target_duration_sec: float = 90.0,

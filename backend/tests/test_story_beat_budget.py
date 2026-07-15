@@ -22,8 +22,10 @@ def test_beat_hint_language_aware():
 def test_budget_present_in_both_modes(monkeypatch):
     # Hermetic: the dev .env may set STORY_MULTILINE_BEATS=1 (config.load_dotenv
     # injects it session-wide), which switches rule 5 to the dialogue variant and
-    # drops the per-beat char budget. Pin the code default (off) for this assertion.
+    # drops the per-beat char budget. GĐ1: UNSET multiline now follows the compiler
+    # (default ON) — pin the LEGACY single-line rule 5 via STORY_COMPILER=0.
     monkeypatch.delenv("STORY_MULTILINE_BEATS", raising=False)
+    monkeypatch.setenv("STORY_COMPILER", "0")
     # P1 (adapt) uses the standard per-beat budget threaded into rule 5.
     vi_story = build_super_story_prompt("once", "vi")[1]
     assert "~45-120 characters" in vi_story and "EVENLY sized" in vi_story

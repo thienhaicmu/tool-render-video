@@ -19,7 +19,9 @@ from typing import Callable, Optional
 from app.domain.story_plan_v2 import StoryPlan
 from app.features.render.ai.llm.story_prompts_v2 import (
     build_super_story_prompt, build_super_video_prompt, build_super_idea_prompt,
-    build_super_repair_prompt, SUPER_PROMPT_VERSION,
+    build_super_repair_prompt, SUPER_PROMPT_VERSION, compiler_enabled,
+    build_understanding_prompt, build_writer_adapt_prompt, build_writer_idea_prompt,
+    build_writer_repair_prompt, build_structure_prompt,
 )
 from app.features.render.ai.llm.story_parser_v2 import parse_super_plan_response
 
@@ -29,23 +31,35 @@ SuperCall = Callable[[str, str], Optional[str]]
 
 
 def estimate_super_plan_cost(*, source_chars: int, ceiling: int, model: str = "gpt-4o") -> dict:
-    """Rough $ estimate for ONE super-plan LLM call (F-08 — Story audit).
+    """Rough $ estimate for the Story planning LLM cost (F-08 — Story audit).
 
     Story imagery is procedural SVG ($0), but the planning LLM is NOT free — the
     pre-flight previously reported $0 total, hiding the only real cost. Returns
-    ``{input_tokens, output_tokens, cost_usd}`` as an ESTIMATE (not billed usage).
-    Per-1M rates are env-tunable (``OPENAI_STORY_PRICE_IN_PER_M`` /
-    ``OPENAI_STORY_PRICE_OUT_PER_M``, default gpt-4o). Never raises."""
+    ``{input_tokens, output_tokens, cost_usd, llm_calls}`` as an ESTIMATE (not
+    billed usage). Under the GĐ1 compiler the pipeline is 3 calls (Understanding →
+    Writer → Structure): the source is read ~2×, and the output includes the prose
+    script besides the JSON plan. Per-1M rates env-tunable
+    (``OPENAI_STORY_PRICE_IN_PER_M`` / ``OPENAI_STORY_PRICE_OUT_PER_M``, default
+    gpt-4o). Never raises."""
     try:
-        # ~4 chars/token; +~3500 chars fixed prompt overhead (schema+rules+vocab).
-        in_tok = int((max(0, int(source_chars)) + 3500) / 4)
-        out_tok = int(max(1, int(ceiling)) * 300)   # ~1 visual + its beats per slot
+        src = max(0, int(source_chars))
+        plan_out = int(max(1, int(ceiling)) * 300)      # ~1 visual + its beats per slot
+        if compiler_enabled():
+            calls = 3
+            # understanding(src) + writer(src+facts) + structure(script≈plan-size prose)
+            in_tok = int((src * 2.2 + 9000) / 4)
+            out_tok = plan_out * 2 + 800                 # script ≈ plan text + facts JSON
+        else:
+            calls = 1
+            in_tok = int((src + 3500) / 4)
+            out_tok = plan_out
         price_in = float(os.getenv("OPENAI_STORY_PRICE_IN_PER_M", "2.5"))
         price_out = float(os.getenv("OPENAI_STORY_PRICE_OUT_PER_M", "10.0"))
         cost = in_tok / 1_000_000 * price_in + out_tok / 1_000_000 * price_out
-        return {"input_tokens": in_tok, "output_tokens": out_tok, "cost_usd": round(cost, 4)}
+        return {"input_tokens": in_tok, "output_tokens": out_tok,
+                "cost_usd": round(cost, 4), "llm_calls": calls}
     except Exception:
-        return {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+        return {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "llm_calls": 0}
 
 
 def lint_story_plan(plan) -> list:
@@ -309,6 +323,123 @@ def _plan_idea_with_expand(call_fn: SuperCall, idea: str, duration_sec: int, gen
     return best
 
 
+def _run_compiler(*, call_fn: SuperCall, writer_call_fn: SuperCall,
+                  json_call_fn: Optional[SuperCall], source: str, chapter: str, idea: str,
+                  duration_sec: int, genre: str, language: str, art_style: str,
+                  aspect_ratio: str, subtitle_mode: str, ceiling: int,
+                  prior_context: str, library_catalog: str,
+                  provider_label: str) -> Optional[StoryPlan]:
+    """GĐ1 Story Compiler — 3 calls, deterministic validators between them:
+
+      1. UNDERSTANDING (paste only; ``json_call_fn``) → facts + quote-verified events.
+      2. WRITER (``writer_call_fn``, prose) → screenplay-lite script; validated
+         (speakers / event coverage / tail / length); ONE targeted repair round for
+         missing MAJOR events; idea mode length-loop measured by len(script).
+      3. STRUCTURE (``call_fn`` — the existing strict-schema plan call) → StoryPlan.
+
+    Returns the parsed plan or None (caller falls back to the legacy single-pass).
+    Never raises (Sacred Contract #3)."""
+    from app.features.render.ai.llm.story_understanding import (
+        parse_understanding, validate_understanding, understanding_block, validate_script,
+        script_spoken_chars,
+    )
+    _p = provider_label or "?"
+    src = (source or "paste").strip().lower()
+
+    # ── Pass 1 — Understanding (paste only; an idea has no source to cover) ──
+    u = None
+    if src == "paste" and json_call_fn is not None:
+        try:
+            usys, uusr = build_understanding_prompt(chapter, language)
+            u = parse_understanding(json_call_fn(usys, uusr))
+        except Exception as exc:
+            logger.info("story_compiler[%s]: understanding call failed %s", _p, exc)
+            u = None
+        if u is not None:
+            urep = validate_understanding(u, chapter)
+            logger.info("story_compiler[%s]: understanding events=%d verified=%d majors=%d/%d "
+                        "tail=%s order=%s", _p, urep["total"], urep["verified"],
+                        urep["majors_verified"], urep["majors_total"],
+                        urep["tail_covered"], urep["order_ok"])
+        else:
+            logger.info("story_compiler[%s]: no usable understanding — writing without facts", _p)
+
+    # ── Pass 2 — Writer (prose script) ────────────────────────────────────────
+    def _write(factor: float = 0.0) -> Optional[str]:
+        try:
+            if src == "idea":
+                wsys, wusr = build_writer_idea_prompt(
+                    idea, duration_sec, genre, language, prior_context, length_factor=factor)
+            else:
+                wsys, wusr = build_writer_adapt_prompt(
+                    chapter, language, genre,
+                    understanding_block(u) if u is not None else "", prior_context)
+            return writer_call_fn(wsys, wusr)
+        except Exception as exc:
+            logger.info("story_compiler[%s]: writer call failed %s", _p, exc)
+            return None
+
+    script = _write()
+    if not (script or "").strip():
+        logger.warning("story_compiler[%s]: writer produced no script", _p)
+        return None
+
+    target_chars = 0
+    if src == "idea" and duration_sec and duration_sec > 0:
+        from app.domain.story_plan_v2 import cps_for
+        target_chars = int(duration_sec * cps_for(language))
+
+    rep = validate_script(script, u, language=language, target_chars=target_chars)
+
+    # Idea length-loop: reuse the STORY_IDEA_EXPAND_* knobs, but measure the SCRIPT
+    # directly (len — no JSON parse, so a retry costs one writer call only).
+    if src == "idea" and target_chars > 0:
+        tries, floor, step, base = _idea_expand_env()
+        best, best_len = script, rep["spoken_chars"]
+        factor = base
+        for i in range(tries):
+            if best_len >= target_chars * max(floor, 0.9):
+                break
+            factor *= step
+            cand = _write(factor)
+            if not (cand or "").strip():
+                continue
+            cand_len = script_spoken_chars(cand)
+            logger.info("story_compiler[%s]: idea-expand try=%d factor=%.2f len=%d (target=%d)",
+                        _p, i + 1, factor, cand_len, target_chars)
+            if cand_len > best_len:
+                best, best_len = cand, cand_len
+        if best is not script:
+            script = best
+            rep = validate_script(script, u, language=language, target_chars=target_chars)
+
+    # Targeted repair (ONE round): missing MAJOR events are named; the writer weaves
+    # them in and returns the full corrected script.
+    if rep["missing_events"] and os.getenv("STORY_SCRIPT_REPAIR", "1") == "1":
+        try:
+            rsys, rusr = build_writer_repair_prompt(script, rep["missing_events"], language)
+            fixed = writer_call_fn(rsys, rusr)
+            if (fixed or "").strip() and "[SCENE" in fixed.upper():
+                script = fixed
+                rep = validate_script(script, u, language=language, target_chars=target_chars)
+                logger.info("story_compiler[%s]: script repaired — missing majors now %d",
+                            _p, len(rep["missing_events"]))
+        except Exception as exc:
+            logger.info("story_compiler[%s]: script repair failed %s", _p, exc)
+    if rep["warnings"]:
+        logger.info("story_compiler[%s]: script notes: %s", _p, "; ".join(rep["warnings"][:6]))
+
+    # ── Pass 3 — Structure (existing strict-schema plan call + repair pass) ──
+    ssys, susr = build_structure_prompt(
+        script, language, art_style, aspect_ratio, subtitle_mode, ceiling, genre,
+        characters=(u.characters if u is not None else []),
+        prior_context=prior_context, library_catalog=library_catalog)
+    plan = _call_and_parse(call_fn, ssys, susr, ceiling)
+    if plan is None:
+        logger.warning("story_compiler[%s]: structure pass produced no plan", _p)
+    return plan
+
+
 def run_super_plan(
     *,
     call_fn: SuperCall,
@@ -330,14 +461,64 @@ def run_super_plan(
     has_base_video: bool = False,
     base_video_dur: float = 0.0,
     provider_label: str = "",
+    writer_call_fn: Optional[SuperCall] = None,
+    json_call_fn: Optional[SuperCall] = None,
 ) -> Optional[StoryPlan]:
     """Turn a source (chapter text OR idea) into a StoryPlan v2. ``prior_context`` (G1)
     grounds a later series chapter on earlier ones. ``has_base_video`` routes a PASTE
-    source to the over-video prompt (P2) instead of the SVG prompt (P1). Returns None on
-    any failure (Sacred Contract #3 — never raises)."""
+    source to the over-video prompt (P2) instead of the SVG prompt (P1).
+
+    GĐ1: when the Story Compiler is enabled AND a ``writer_call_fn`` (prose) is
+    available, the plan is produced by the 3-call pipeline (Understanding → Writer →
+    Structure) — any failure inside it falls back to the legacy single-call path, so
+    a compiler hiccup never loses a render. Returns None on total failure (Sacred
+    Contract #3 — never raises)."""
     try:
         src = (source or "paste").strip().lower()
         _p = provider_label or "?"
+
+        # ── GĐ1 Story Compiler path (SVG sources only; P2 over-video stays legacy) ──
+        if (compiler_enabled() and writer_call_fn is not None and not has_base_video
+                and src in ("paste", "idea")
+                and ((src == "idea" and (idea or "").strip())
+                     or (src == "paste" and (chapter or "").strip()))):
+            try:
+                plan = _run_compiler(
+                    call_fn=call_fn, writer_call_fn=writer_call_fn, json_call_fn=json_call_fn,
+                    source=src, chapter=(chapter or "").strip(), idea=(idea or "").strip(),
+                    duration_sec=duration_sec, genre=genre, language=language,
+                    art_style=art_style, aspect_ratio=aspect_ratio, subtitle_mode=subtitle_mode,
+                    ceiling=ceiling, prior_context=prior_context,
+                    library_catalog=library_catalog, provider_label=_p)
+            except Exception as exc:
+                logger.warning("story_compiler[%s]: unexpected %s — falling back to legacy",
+                               _p, exc, exc_info=True)
+                plan = None
+            if plan is not None:
+                plan.cap_visuals(ceiling)
+                plan.validate_refs()
+                plan.reindex()
+                _seed_src = (chapter if src == "paste" else idea) or ""
+                plan.seed = int(seed) if seed else _stable_seed(_seed_src)
+                if series_id:
+                    plan.series_id = series_id
+                if chapter_no:
+                    plan.chapter_no = chapter_no
+                if language:
+                    plan.language = language
+                if not plan.art_style and art_style:
+                    plan.art_style = art_style
+                if aspect_ratio:
+                    plan.aspect_ratio = aspect_ratio
+                if plan.is_empty() or not plan.visuals:
+                    plan = None
+                else:
+                    logger.info("story_compiler[%s]: OK chars=%d visuals=%d beats=%d topic=%r",
+                                _p, len(plan.characters), plan.image_count(),
+                                plan.beat_count(), plan.topic)
+                    return plan
+            logger.info("story_compiler[%s]: falling back to legacy single-pass", _p)
+
         if src == "idea":
             idea = (idea or "").strip()
             if not idea:

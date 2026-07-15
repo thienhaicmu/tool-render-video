@@ -40,11 +40,25 @@ def _lean_contract() -> bool:
     return _os.getenv("STORY_LEAN_CONTRACT", "1") != "0"
 
 
+def _compiler() -> bool:
+    """GĐ1 Story Compiler gate — MUST stay in lockstep with
+    story_prompts_v2.compiler_enabled (same env, same default). Duplicated 1-liner
+    (not imported) so this module keeps zero prompt-module dependency."""
+    return _os.getenv("STORY_COMPILER", "1") != "0"
+
+
 def _multiline() -> bool:
-    """P1 — when on (default off), a beat carries a ``lines[]`` array (multi-speaker
-    dialogue) instead of the single narration/speaker/emotion fields. Off = the
-    pre-P1 contract, bit-identical."""
-    return _os.getenv("STORY_MULTILINE_BEATS", "0") == "1"
+    """P1 — when on, a beat carries a ``lines[]`` array (multi-speaker dialogue)
+    instead of the single narration/speaker/emotion fields. STORY_MULTILINE_BEATS:
+    "1" forces on, "0" forces off; UNSET follows the compiler (GĐ1 — the Writer
+    script separates dialogue, so structuring needs lines[]). Compiler off + unset
+    = off, bit-identical to the pre-P1 contract."""
+    raw = (_os.getenv("STORY_MULTILINE_BEATS", "") or "").strip()
+    if raw == "1":
+        return True
+    if raw == "0":
+        return False
+    return _compiler()
 
 
 def _enum(values) -> dict:
@@ -136,6 +150,14 @@ def build_story_plan_schema() -> dict:
         })
     elif _lean_contract():
         beat = _obj({k: v for k, v in beat["properties"].items() if k not in _LEAN_BEAT_DROP})
+    if _compiler():
+        # GĐ1 pacing LABELS (never seconds — mapped onto reading_speed/pause_after by
+        # the domain parser). Added to whichever beat shape is active; compiler off →
+        # schema byte-identical to s24.
+        props = dict(beat["properties"])
+        props["pace"] = _enum(("slow", "normal", "fast"))
+        props["pause"] = _enum(("none", "beat", "long"))
+        beat = _obj(props)
     return _obj({
         "topic": {"type": "string"},
         "tone": {"type": "string"},

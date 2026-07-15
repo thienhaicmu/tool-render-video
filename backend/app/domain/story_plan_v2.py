@@ -61,6 +61,14 @@ POSE = ("stand", "wave", "cheer", "point", "hip")
 EMOTION = ("normal", "happy", "angry", "sad", "surprised")
 # Where on-screen text (hook / future subtitle) sits; "auto" → derived from char_anchor.
 TEXT_ANCHOR = ("auto", "top", "bottom", "left", "right")
+# GĐ1 Story Compiler pacing LABELS (AI emits labels, never seconds — INV kept).
+# Mapped onto the numeric levers at parse time (see _beat_from): a label only
+# applies when the numeric field is ABSENT from the JSON, so a hand-authored /
+# round-tripped plan carrying real numbers is never overridden.
+PACE = ("slow", "normal", "fast")
+PAUSE = ("none", "beat", "long")
+_PACE_SPEED = {"slow": 0.88, "normal": 1.0, "fast": 1.12}
+_PAUSE_SEC = {"none": 0.0, "beat": 0.7, "long": 1.6}
 # Pool a "random" transition resolves into (deterministic via seed).
 _RANDOM_TRANSITIONS = ("fade", "slide", "zoom", "flash")
 
@@ -262,6 +270,10 @@ class RenderState:
     beat_audio: dict[str, BeatAudio] = field(default_factory=dict)       # beat_id → BeatAudio
     cues: list[Cue] = field(default_factory=list)
     total_sec: float = 0.0
+    # GĐ3 — per-character asset resolution state (character_resolver):
+    # char_id → matched_exact | matched | needs_approval | missing. Additive; {} on
+    # legacy plans. Review/monitor surface it; render never gates on it.
+    asset_status: dict[str, str] = field(default_factory=dict)
 
 
 # ── StoryPlan ────────────────────────────────────────────────────────────────
@@ -807,12 +819,20 @@ def _linespan_from(x) -> LineSpan:
                     anchor=_norm(x.get("anchor"), CHAR_ANCHOR, "center"))
 def _beat_from(x, i) -> Beat:
     if not isinstance(x, dict): return Beat(id=f"b{i}")
+    # GĐ1 pacing LABELS → numeric levers, ONLY when the numeric field is absent
+    # (a hand-authored / round-tripped plan carrying numbers is never overridden).
+    _rs = x.get("reading_speed")
+    if _rs is None:
+        _rs = _PACE_SPEED.get(_norm(x.get("pace"), PACE, "normal"), 1.0)
+    _pa = x.get("pause_after")
+    if _pa is None:
+        _pa = _PAUSE_SEC.get(_norm(x.get("pause"), PAUSE, "none"), 0.0)
     return Beat(id=(_str(x.get("id")) or f"b{i}"), narration=_str(x.get("narration")),
                 speaker_id=_str(x.get("speaker_id")), visual_id=_str(x.get("visual_id")),
                 focus=_norm(x.get("focus"), FOCUS, "center"), motion=_norm(x.get("motion"), MOTION, "zoom_in"),
                 emotion=_norm(x.get("emotion"), EMOTION, "normal"),
-                reading_speed=_clampf(x.get("reading_speed"), _READING_SPEED_MIN, _READING_SPEED_MAX, _READING_SPEED_DEFAULT),
-                pause_after=_clampf(x.get("pause_after"), 0.0, _PAUSE_MAX, 0.0),
+                reading_speed=_clampf(_rs, _READING_SPEED_MIN, _READING_SPEED_MAX, _READING_SPEED_DEFAULT),
+                pause_after=_clampf(_pa, 0.0, _PAUSE_MAX, 0.0),
                 hold_sec=max(0.0, _float(x.get("hold_sec"))),
                 transition_in=_norm(x.get("transition_in"), TRANSITION, "cut"),
                 pose=_norm(x.get("pose"), POSE, "stand"),
@@ -864,6 +884,9 @@ def _render_from(x) -> RenderState:
                     pose=_norm(c.get("pose"), POSE, "stand"),
                     source_audio=_norm(c.get("source_audio"), SOURCE_AUDIO, "mute"),
                     line_overlays=[_linespan_from(s) for s in _list(c.get("line_overlays")) if isinstance(s, dict)]))
+        st = x.get("asset_status")
+        if isinstance(st, dict):
+            rs.asset_status = {str(k): _str(v) for k, v in st.items() if _str(v)}
         rs.total_sec = _float(x.get("total_sec"))
     except Exception:
         pass
@@ -874,7 +897,7 @@ __all__ = [
     "StoryPlan", "CharacterDef", "SettingDef", "Visual", "Beat", "Line",
     "Word", "BeatAudio", "LineSpan", "Cue", "RenderState",
     "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE", "BGM_MOODS",
-    "REGION", "GENRE_KEY",
+    "REGION", "GENRE_KEY", "PACE", "PAUSE",
     "BGM_CUE", "BGM_INTENSITY", "SOURCE_AUDIO", "CHAR_ANCHOR", "CHAR_SCALE",
     "CHAR_MOTION", "TEXT_ANCHOR", "POSE", "EMOTION",
     "ASPECT_SIZE", "CPS", "CROP_RECT", "TRANSITION_SEC", "MIN_BEAT_SEC", "cps_for",

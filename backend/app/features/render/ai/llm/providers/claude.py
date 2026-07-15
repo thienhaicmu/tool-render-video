@@ -614,6 +614,53 @@ def _call_claude_content(api_key: str, model: str, system_prompt: str, user_prom
     return result
 
 
+# ── GĐ1 Story Compiler: WRITER call (prose — Claude has no JSON forcing to drop,
+# but this call gets its own creative temperature + big budget, separate from the
+# 0.5/8192 content tuning). Cache namespace versioned by the Story super-prompt
+# version so a prompt bump invalidates by construction.
+_STORY_WRITER_MAX_TOKENS = int(os.getenv("CLAUDE_STORY_WRITER_MAX_TOKENS", "16384"))
+_STORY_WRITER_TEMPERATURE = float(os.getenv("CLAUDE_STORY_WRITER_TEMPERATURE", "0.8"))
+
+
+def _writer_cache_namespace() -> str:
+    try:
+        from app.features.render.ai.llm.story_prompts_v2 import SUPER_PROMPT_VERSION
+        return f"claude-story-writer|{SUPER_PROMPT_VERSION}"
+    except Exception:
+        return "claude-story-writer"
+
+
+def _call_claude_writer_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    client = _AnthClient(api_key=api_key, timeout=180)
+    resp = client.messages.create(
+        model=model,
+        max_tokens=_STORY_WRITER_MAX_TOKENS,
+        temperature=_STORY_WRITER_TEMPERATURE,
+        system=system_prompt,
+        messages=[{"role": "user", "content": _cached_user_content(user_prompt, "CLAUDE_STORY_WRITER_CACHE")}],
+    )
+    if not resp.content:
+        return None
+    parts = [block.text for block in resp.content if getattr(block, "type", "") == "text"]
+    return "\n".join(parts) if parts else None
+
+
+def _call_claude_writer(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Story Writer (prose) call with cache + retry. Never raises."""
+    _ns = _writer_cache_namespace()
+    cached = llm_cache_get(_ns, model, system_prompt, user_prompt)
+    if cached is not None:
+        logger.info("claude_client: story-writer cache HIT model=%s", model)
+        return cached
+    result = call_with_retry(
+        lambda: _call_claude_writer_once(api_key, model, system_prompt, user_prompt),
+        label="claude-story-writer",
+    )
+    if result is not None:
+        llm_cache_put(_ns, model, system_prompt, user_prompt, result)
+    return result
+
+
 def select_content_plan(
     script: str,
     target_duration_sec: float = 90.0,

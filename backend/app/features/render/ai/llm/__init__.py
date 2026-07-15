@@ -270,6 +270,47 @@ def _get_story_call_fn(provider_name: str, api_key: str, model: Optional[str]):
         return None
 
 
+def _get_story_raw_fn(provider_name: str, api_key: str, model: Optional[str],
+                      attr_names: "tuple[str, ...]") -> "Optional[object]":
+    """Bind the first available provider raw call from ``attr_names`` as a
+    ``call_fn(system, user) -> str | None``. Shared by the GĐ1 compiler bindings
+    below. Defensive — never raises; None when the provider lacks the call."""
+    try:
+        if provider_name == "openai":
+            from app.features.render.ai.llm.providers import openai as _mod
+        elif provider_name == "claude":
+            from app.features.render.ai.llm.providers import claude as _mod
+        else:
+            from app.features.render.ai.llm.providers import gemini as _mod
+        raw_call = None
+        for name in attr_names:
+            raw_call = getattr(_mod, name.format(p=provider_name), None)
+            if raw_call is not None:
+                break
+        if raw_call is None:
+            return None
+        resolved_model = model or getattr(_mod, "_DEFAULT_MODEL", None)
+        if not resolved_model:
+            return None
+        return lambda _sys, _usr: raw_call(api_key, resolved_model, _sys, _usr)
+    except Exception as exc:
+        logger.warning("llm: _get_story_raw_fn(%s, %s) failed %s", provider_name, attr_names, exc)
+        return None
+
+
+def _get_writer_call_fn(provider_name: str, api_key: str, model: Optional[str]):
+    """GĐ1 — the provider's PROSE Writer call (``_call_<p>_writer``, no JSON
+    forcing). None when the provider has no writer call → the dispatcher falls
+    back to the legacy single-pass for that provider."""
+    return _get_story_raw_fn(provider_name, api_key, model, ("_call_{p}_writer",))
+
+
+def _get_json_call_fn(provider_name: str, api_key: str, model: Optional[str]):
+    """GĐ1 — a general JSON-mode call for the Understanding pass (reuses the
+    provider's Content call: json_object/mime-typed, NOT the story strict schema)."""
+    return _get_story_raw_fn(provider_name, api_key, model, ("_call_{p}_content",))
+
+
 def generate_story_plan_v2(
     *,
     provider: str = "openai",
@@ -338,6 +379,10 @@ def generate_story_plan_v2(
         call_fn = _get_story_call_fn(_p, _key, _model_for(_p))
         if call_fn is None:
             continue
+        # GĐ1 compiler bindings (prose Writer + JSON Understanding). None simply
+        # means run_super_plan takes the legacy single-pass for this provider.
+        writer_call_fn = _get_writer_call_fn(_p, _key, _model_for(_p))
+        json_call_fn = _get_json_call_fn(_p, _key, _model_for(_p))
         _t0 = _time.perf_counter()
         try:
             plan = run_super_plan(
@@ -347,6 +392,7 @@ def generate_story_plan_v2(
                 series_id=series_id, chapter_no=chapter_no, seed=seed,
                 prior_context=prior_context, library_catalog=library_catalog,
                 has_base_video=has_base_video, base_video_dur=base_video_dur, provider_label=_p,
+                writer_call_fn=writer_call_fn, json_call_fn=json_call_fn,
             )
         except Exception as exc:
             logger.warning("llm: generate_story_plan_v2 provider=%s raised %s", _p, exc)

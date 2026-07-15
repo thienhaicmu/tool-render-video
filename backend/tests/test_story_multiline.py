@@ -93,13 +93,18 @@ def test_derive_char_anchor_uses_primary_line_speaker():
 
 def test_strict_schema_multiline_toggle(monkeypatch):
     from app.features.render.ai.llm.story_schema_v2 import build_story_plan_schema
-    # Hermetic: the dev .env sets STORY_MULTILINE_BEATS=1 (injected session-wide by
-    # config.load_dotenv); clear it so the "OFF (default)" branch is what we assert.
+    # Hermetic: the dev .env may set STORY_MULTILINE_BEATS (injected session-wide by
+    # config.load_dotenv); clear it. GĐ1: UNSET now follows the compiler, so the
+    # LEGACY single-line branch is pinned via STORY_COMPILER=0.
     monkeypatch.delenv("STORY_MULTILINE_BEATS", raising=False)
-    # OFF (default) → single-line beat (narration on the beat, no lines).
+    monkeypatch.setenv("STORY_COMPILER", "0")
     beat = build_story_plan_schema()["properties"]["timeline"]["items"]["properties"]
     assert "lines" not in beat and "narration" in beat
-    # ON → beat holds a lines[] array; who-says-what moves into each line.
+    # GĐ1 default (compiler on, multiline unset) → lines[] + pacing labels present.
+    monkeypatch.delenv("STORY_COMPILER", raising=False)
+    beat = build_story_plan_schema()["properties"]["timeline"]["items"]["properties"]
+    assert "lines" in beat and "pace" in beat and "pause" in beat
+    # Forced ON → beat holds a lines[] array; who-says-what moves into each line.
     monkeypatch.setenv("STORY_MULTILINE_BEATS", "1")
     beat = build_story_plan_schema()["properties"]["timeline"]["items"]["properties"]
     assert "lines" in beat and "narration" not in beat and "speaker_id" not in beat
@@ -112,8 +117,10 @@ def test_strict_schema_multiline_toggle(monkeypatch):
 
 def test_prose_prompt_multiline_toggle(monkeypatch):
     from app.features.render.ai.llm.story_prompts_v2 import build_super_idea_prompt
-    # Hermetic: clear the dev .env's STORY_MULTILINE_BEATS=1 so "off" is the default.
+    # Hermetic: clear the dev .env's STORY_MULTILINE_BEATS. GĐ1: unset follows the
+    # compiler → pin the legacy single-line prompt via STORY_COMPILER=0.
     monkeypatch.delenv("STORY_MULTILINE_BEATS", raising=False)
+    monkeypatch.setenv("STORY_COMPILER", "0")
     _, off = build_super_idea_prompt("x", duration_sec=60, language="vi")
     assert '"lines"' not in off and "narration" in off
     monkeypatch.setenv("STORY_MULTILINE_BEATS", "1")

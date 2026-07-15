@@ -28,7 +28,7 @@ MAX_SOURCE_CHARS = int(_os.getenv("STORY_MAX_SOURCE_CHARS", "60000"))
 # detailed outline (losing the ending/message). Env-tunable; generous default so a full
 # multi-act brief survives, still bounded for prompt context.
 MAX_IDEA_CHARS = int(_os.getenv("STORY_MAX_IDEA_CHARS", "20000"))
-SUPER_PROMPT_VERSION = "s24"  # s24: added modern-drama procedural scenes (station/pachinko/hotel) → new scene_kind tokens auto-appear in the TOKEN VOCAB. s23: master-data sync — TOKEN VOCAB block also teaches genre_key + region (derived from domain GENRE_KEY/REGION, incl. new xianxia) so the AI library-picks a reachable asset scope. s22: multiline rule-5 now threads the per-beat length hint (beat_char_hint) + drops the "SHORT SCENE / 1-4 turns" cap, so a beat's lines total a SUBSTANTIAL mini-scene — fixes multiline beats coming out as 1-word stubs (10-min request → ~78s). s21: P3 idea — STORY IDEA treated as a SKELETON to DRAMATIZE (never compress at input granularity) + build_super_idea_prompt gains a length_factor override so the director can ESCALATE-AND-REGENERATE when the first plan lands short (STORY_IDEA_EXPAND_*). s20: P1 MULTI-LINE beats — STORY_MULTILINE_BEATS=1 makes a beat carry a lines[] dialogue array (each turn its own speaker/text/emotion/pose); one shot may hold 1-4 turns. Default off = pre-P1, bit-identical. s19: Phase-3 LEAN CONTRACT — SVG prompts (P1/P3) ask only for the CREATIVE per-beat fields (narration/speaker/visual/focus/bgm_mood/emotion/pose/hook); the 9 mechanical style labels are derived by StoryPlan.derive_beat_styling (cuts OpenAI strict-mode truncation). P2 keeps the full schema. Toggle STORY_LEAN_CONTRACT=0 to restore the 19-field ask. s18: Phase-1 hygiene — rule-5 self-contradiction fixed (RICH beats no longer told "no paragraph-long beats"); OUTPUT FRAME/aspect now injected in-prompt (was a dead param); STORY_IDEA_DEFAULT_SEC fallback when the FE omits a target length. s17: P3 length compensation (aim ~1.8× since gpt-4o delivers ~55% of a requested length from a thin idea in one call; STORY_IDEA_LENGTH_FACTOR). s16: five-act beat QUOTA (mandate beats per stage → model can't compress a 3-min story into too few beats). s15: P3 RICH-beat length lever — beats are full ~10s paragraphs (~cps*10 chars), count+length derived from target with explicit arithmetic (fixes the terse-beat cap that held a 3-min idea at ~70s). s14: THREE specialised super-prompts by use-case — P1 adapt→SVG, P2 adapt→over-video (new, overlay/source_audio focus), P3 idea→length-as-brief scene scaffold. Full schema kept. s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A); s10: idea length; s9: drop negative_prompt (F-12); s8: emotion+vocab; s7: pose; s6: library-pick; s5: asset hints; s4: bgm_cue/char_*
+SUPER_PROMPT_VERSION = "s25"  # s25: GĐ1 STORY COMPILER — 3-call pipeline (Understanding → Writer prose script → Structure), gated by STORY_COMPILER (default ON; =0 → legacy s24 single-call byte-identical). Adds: build_understanding_prompt (fact extraction w/ verbatim quotes), build_writer_*_prompt (screenplay-lite prose, craft rules + genre style packs, NO JSON), build_writer_repair_prompt (targeted missing-event repair), build_structure_prompt (script → StoryPlan strict JSON, character ids pinned), per-beat pace/pause pacing labels (compiler-only), _multiline auto-ON under the compiler. s24: added modern-drama procedural scenes (station/pachinko/hotel) → new scene_kind tokens auto-appear in the TOKEN VOCAB. s23: master-data sync — TOKEN VOCAB block also teaches genre_key + region (derived from domain GENRE_KEY/REGION, incl. new xianxia) so the AI library-picks a reachable asset scope. s22: multiline rule-5 now threads the per-beat length hint (beat_char_hint) + drops the "SHORT SCENE / 1-4 turns" cap, so a beat's lines total a SUBSTANTIAL mini-scene — fixes multiline beats coming out as 1-word stubs (10-min request → ~78s). s21: P3 idea — STORY IDEA treated as a SKELETON to DRAMATIZE (never compress at input granularity) + build_super_idea_prompt gains a length_factor override so the director can ESCALATE-AND-REGENERATE when the first plan lands short (STORY_IDEA_EXPAND_*). s20: P1 MULTI-LINE beats — STORY_MULTILINE_BEATS=1 makes a beat carry a lines[] dialogue array (each turn its own speaker/text/emotion/pose); one shot may hold 1-4 turns. Default off = pre-P1, bit-identical. s19: Phase-3 LEAN CONTRACT — SVG prompts (P1/P3) ask only for the CREATIVE per-beat fields (narration/speaker/visual/focus/bgm_mood/emotion/pose/hook); the 9 mechanical style labels are derived by StoryPlan.derive_beat_styling (cuts OpenAI strict-mode truncation). P2 keeps the full schema. Toggle STORY_LEAN_CONTRACT=0 to restore the 19-field ask. s18: Phase-1 hygiene — rule-5 self-contradiction fixed (RICH beats no longer told "no paragraph-long beats"); OUTPUT FRAME/aspect now injected in-prompt (was a dead param); STORY_IDEA_DEFAULT_SEC fallback when the FE omits a target length. s17: P3 length compensation (aim ~1.8× since gpt-4o delivers ~55% of a requested length from a thin idea in one call; STORY_IDEA_LENGTH_FACTOR). s16: five-act beat QUOTA (mandate beats per stage → model can't compress a 3-min story into too few beats). s15: P3 RICH-beat length lever — beats are full ~10s paragraphs (~cps*10 chars), count+length derived from target with explicit arithmetic (fixes the terse-beat cap that held a 3-min idea at ~70s). s14: THREE specialised super-prompts by use-case — P1 adapt→SVG, P2 adapt→over-video (new, overlay/source_audio focus), P3 idea→length-as-brief scene scaffold. Full schema kept. s13: per-beat narration budget (P-C); s12: reuse example + visual target (P-B); s11: SVG cleanup (P-A); s10: idea length; s9: drop negative_prompt (F-12); s8: emotion+vocab; s7: pose; s6: library-pick; s5: asset hints; s4: bgm_cue/char_*
 # AI-facing music-mood vocab (drop the "default" fallback folder — not a creative choice).
 _MOOD_VOCAB = "|".join(m for m in BGM_MOODS if m != "default")
 
@@ -145,7 +145,7 @@ _SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ══�
       "emotion": "normal|happy|angry|sad|surprised",
       "pose": "stand|wave|cheer|point|hip",
       "text_anchor": "auto|top|bottom|left|right",
-      "hook": false, "hook_text": "" }
+      <PACING_FIELDS>"hook": false, "hook_text": "" }
   ]
 }"""
 
@@ -186,7 +186,7 @@ _SCHEMA_LEAN = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ═
       "bgm_mood": "<MOOD_VOCAB>",
       "emotion": "normal|happy|angry|sad|surprised",
       "pose": "stand|wave|cheer|point|hip",
-      "hook": false, "hook_text": "" }
+      <PACING_FIELDS>"hook": false, "hook_text": "" }
   ]
 }"""
 
@@ -197,11 +197,25 @@ def _lean_contract() -> bool:
     return _os.getenv("STORY_LEAN_CONTRACT", "1") != "0"
 
 
+def compiler_enabled() -> bool:
+    """GĐ1 Story Compiler (Understanding → Writer → Structure, 3 calls) — default ON.
+    STORY_COMPILER=0 restores the legacy single-call path byte-identical (prompt,
+    strict schema and dispatch all key off this)."""
+    return _os.getenv("STORY_COMPILER", "1") != "0"
+
+
 def _multiline() -> bool:
     """P1 — a beat carries a ``lines[]`` dialogue array (each turn its own speaker/
-    emotion) instead of a single narration. Default off. STORY_MULTILINE_BEATS=1 to
-    enable. Off = the pre-P1 contract, bit-identical."""
-    return _os.getenv("STORY_MULTILINE_BEATS", "0") == "1"
+    emotion) instead of a single narration. STORY_MULTILINE_BEATS: "1" forces on,
+    "0" forces off; UNSET follows the compiler (the Writer script separates dialogue
+    per speaker, so structuring it needs lines[] — GĐ1). Legacy (compiler off +
+    unset) stays off, bit-identical to pre-P1."""
+    raw = (_os.getenv("STORY_MULTILINE_BEATS", "") or "").strip()
+    if raw == "1":
+        return True
+    if raw == "0":
+        return False
+    return compiler_enabled()
 
 
 # P1 — MULTI-LINE beat: one shot (khung hình) holding a `lines[]` dialogue array. The
@@ -235,7 +249,7 @@ _SCHEMA_MULTILINE = """═══ OUTPUT SCHEMA (return ONLY this one JSON object
     { "id": "b1", "visual_id": "<a visuals id>",
       "focus": "wide|left|center|right|top|bottom|close",
       "bgm_mood": "<MOOD_VOCAB>",
-      "hook": false, "hook_text": "",
+      <PACING_FIELDS>"hook": false, "hook_text": "",
       "lines": [
         { "speaker_id": "<a characters id, or '' for narrator>",
           "text": "<what this speaker says here, in target language>",
@@ -248,8 +262,15 @@ _SCHEMA_MULTILINE = """═══ OUTPUT SCHEMA (return ONLY this one JSON object
 
 def _schema(lean: bool) -> str:
     if _multiline():
-        return _SCHEMA_MULTILINE
-    return _SCHEMA_LEAN if lean else _SCHEMA
+        s = _SCHEMA_MULTILINE
+    else:
+        s = _SCHEMA_LEAN if lean else _SCHEMA
+    # GĐ1 pacing labels (compiler-only): labels, never seconds — the pipeline maps
+    # them onto reading_speed/pause_after. Compiler off → token removed → schemas
+    # byte-identical to s24.
+    pacing = ('"pace": "slow|normal|fast", "pause": "none|beat|long",\n      '
+              if compiler_enabled() else "")
+    return s.replace("<PACING_FIELDS>", pacing)
 
 
 def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_char_hint: str = "",
@@ -363,10 +384,25 @@ def _rules(ceiling: int, aspect: str, lang_name: str, subtitle_mode: str, beat_c
         + _r5
         + f"6. {hook_rule}\n"
         + _style
+        + _pacing_rule()
         + _reuse_example()
         + "═══ SELF-CHECK before answering ═══\n"
         "Verify every visual_id / speaker_id / character_ids exists in the arrays above; if not, fix it.\n"
         "═══ OUTPUT JSON ═══"
+    )
+
+
+def _pacing_rule() -> str:
+    """GĐ1 pacing labels (compiler-only): teach WHEN to use them. LABELS only — the
+    pipeline maps them onto reading_speed / pause_after deterministically. "" when
+    the compiler is off, so legacy rules stay byte-identical."""
+    if not compiler_enabled():
+        return ""
+    return (
+        "P. pace = the beat's delivery speed: slow (grief / aftermath / intimacy) | "
+        "normal | fast (action / danger / chase). pause = the silence AFTER the beat: "
+        "none | beat (a breath after a reveal) | long (let a cliffhanger / scene end land). "
+        "Use non-default values on the ~20% of beats that carry the emotion — never on all.\n"
     )
 
 
@@ -636,5 +672,316 @@ def build_super_repair_prompt(broken: str) -> "tuple[str, str]":
     return _SYSTEM_REPAIR, "Fix this into ONE valid StoryPlan JSON object:\n\n" + _fit(broken)
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# GĐ1 STORY COMPILER prompts — 3-call pipeline (gated by STORY_COMPILER):
+#   Call 1  build_understanding_prompt  — fact extraction with VERBATIM quotes
+#   Call 2  build_writer_*_prompt       — prose SCRIPT (screenplay-lite, NO JSON)
+#           build_writer_repair_prompt  — targeted missing-event repair
+#   Call 3  build_structure_prompt      — script → StoryPlan JSON (ids pinned)
+# All user text is CONCATENATED (never str.format'd) — brace-safe like the rest
+# of this module. Deterministic validators live in story_understanding.py.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Call 1: Content Understanding ─────────────────────────────────────────────
+_SYS_UNDERSTAND = (
+    "You are a meticulous literary analyst. Read the WHOLE story text and extract ONLY what it "
+    "actually states — never invent, never interpret beyond the text, never summarise creatively. "
+    "Every event carries a short VERBATIM quote copied character-for-character from the source "
+    "(it is used to verify you against the text). " + _JSON_TAIL
+)
+
+_UNDERSTANDING_SCHEMA = """═══ OUTPUT SCHEMA (return ONLY this one JSON object) ═══
+{
+  "topic": "<one-line topic>",
+  "genre": "<detected genre>",
+  "tone": "<detected tone>",
+  "characters": [
+    { "id": "<lowercase_slug>", "name": "<name EXACTLY as written in the text>",
+      "role": "protagonist|antagonist|support|minor",
+      "gender": "male|female|", "desc": "<look/age/traits stated in the text, '' if none>" }
+  ],
+  "locations": [ { "id": "<slug>", "name": "<place as written>", "desc": "" } ],
+  "relationships": [ { "a": "<character id>", "b": "<character id>", "type": "<as stated>" } ],
+  "goals_conflicts": [ "<each stated goal / conflict, one line each>" ],
+  "events": [
+    { "id": "e1", "summary": "<what happens, 1 sentence, factual>",
+      "characters": ["<character ids involved>"], "location": "<location id or ''>",
+      "time": "<time marker as written or ''>",
+      "quote": "<EXACT substring copied from the source, 30-160 chars, from THIS event's passage>",
+      "importance": "major|minor" }
+  ]
+}"""
+
+
+def build_understanding_prompt(chapter: str, language: str = "vi") -> "tuple[str, str]":
+    """Call 1 — (system, user) to extract the story's facts (characters / locations /
+    ordered events with verbatim quotes). JSON-mode call; validated deterministically
+    by story_understanding.validate_understanding (quote-matching)."""
+    lang_name = _lang_name(language)
+    user = (
+        _UNDERSTANDING_SCHEMA
+        + "\n\n═══ HARD RULES ═══\n"
+        "1. ONE JSON object. No prose/markdown.\n"
+        "2. events are in SOURCE ORDER and cover the story START TO END — the final event is "
+        "the story's actual ending. 8-25 events for a chapter; mark the plot-critical ones "
+        "importance=major.\n"
+        "3. Every quote is copied VERBATIM from the source (same language, same characters) — "
+        "never paraphrase it.\n"
+        "4. ids are lowercase ASCII slugs (han_phong). names keep the source's exact spelling.\n"
+        f"5. summary/desc fields are written in {lang_name}.\n"
+        "6. Do NOT invent characters, events, relationships or details absent from the text.\n"
+        "\n═══ SOURCE STORY ═══\n" + _fit(chapter) + "\n\n═══ OUTPUT JSON ═══"
+    )
+    return _SYS_UNDERSTAND, user
+
+
+# ── Call 2: Writer (prose script) ─────────────────────────────────────────────
+# Genre style packs — voice guidance merged into the writer prompt. Keys cover the
+# FE GENRE_PRESETS + domain genre_key tokens; unknown/empty → the neutral pack.
+_STYLE_PACKS = {
+    "kiem-hiep": "Voice: heroic, faintly archaic; strong verbs; imagery of blades, wind, moonlight; keep wuxia address forms (ta/ngươi/hắn/nàng) consistent.",
+    "wuxia": "Voice: heroic, faintly archaic; strong verbs; imagery of blades, wind, moonlight; keep wuxia address forms consistent.",
+    "tien-hiep": "Voice: mythic and vast; contrast mortal smallness with immortal scale; measured cadence that surges at breakthroughs.",
+    "xianxia": "Voice: mythic and vast; contrast mortal smallness with immortal scale; measured cadence that surges at breakthroughs.",
+    "huyen-huyen": "Voice: wonder-forward fantasy; vivid sensory magic; keep power rules concrete and consistent.",
+    "fantasy": "Voice: wonder-forward fantasy; vivid sensory magic; keep power rules concrete and consistent.",
+    "ngon-tinh": "Voice: warm, interior, intimate; emotion through small physical details (a held breath, an unsent message); no direct melodrama.",
+    "ngontinh": "Voice: warm, interior, intimate; emotion through small physical details; no direct melodrama.",
+    "kinh-di": "Voice: quiet dread over gore; sound and absence-of-sound; short sentences when fear peaks; never explain the horror too early.",
+    "horror": "Voice: quiet dread over gore; sound and absence-of-sound; short sentences when fear peaks; never explain the horror too early.",
+    "do-thi": "Voice: contemporary, grounded, conversational; real-world stakes (money, status, family); dialogue does the heavy lifting.",
+    "hiendai": "Voice: contemporary, grounded, conversational; real-world stakes; dialogue does the heavy lifting.",
+    "khoa-huyen": "Voice: crisp and curious; concrete tech/wonder details; keep explanations short — mystery pulls harder than exposition.",
+    "codai": "Voice: courtly and restrained; period-true forms of address; intrigue simmers under etiquette.",
+}
+_STYLE_DEFAULT = "Voice: cinematic and warm; concrete detail over abstraction; every scene earns its place."
+
+
+def _style_pack(genre: str) -> str:
+    return _STYLE_PACKS.get((genre or "").strip().lower(), _STYLE_DEFAULT)
+
+
+def _craft_rules(lang_name: str) -> str:
+    return (
+        "═══ HOW TO WRITE (craft rules) ═══\n"
+        "1. SHOW, don't tell: concrete action + sensory detail instead of emotion labels.\n"
+        "2. Vary sentence rhythm: short sentences at tension peaks; longer flowing lines for "
+        "memory and scenery.\n"
+        "3. End every [SCENE] on a PULL — a question, threat or reversal that drags the "
+        "viewer onward.\n"
+        "4. Dialogue reveals character or conflict — no small talk; each turn ≤ 2 sentences; "
+        "it must sound natural READ ALOUD.\n"
+        "5. BANNED clichés (in any language): 'time flew by', 'couldn't believe his eyes', "
+        "'a feeling hard to describe', 'little did they know' — replace with a specific detail.\n"
+        "6. The FIRST 3 sentences must hook (an image, a paradox or a threat) — never open "
+        "with plain weather or scenery alone.\n"
+        f"7. Write ONLY in {lang_name}. Keep every name EXACTLY as given.\n"
+    )
+
+
+_SCRIPT_FORMAT = (
+    "═══ SCRIPT FORMAT (mandatory — no other markup, no markdown) ═══\n"
+    "[SCENE: <short_place_slug>]\n"
+    "NARR: <narration paragraph, spoken style>\n"
+    "<Character Name> (<normal|happy|angry|sad|surprised>): \"<spoken line>\"\n"
+    "Rules: every piece of DIRECT SPEECH gets its own dialogue line with the speaker's "
+    "name — never leave quoted speech inside a NARR line. NARR lines carry no name. "
+    "Start a new [SCENE: ...] whenever the place or time jumps.\n"
+)
+
+_SYS_WRITER_ADAPT = (
+    "You are an acclaimed audio-drama storyteller adapting an EXISTING story into a NARRATION "
+    "SCRIPT for a voiced video. You dramatize the TELLING — vivid spoken prose, separated "
+    "dialogue — but NEVER the events: preserve every name, fact, plot turn and the ENDING "
+    "exactly as the source states them. Output the SCRIPT only — no preamble, no notes."
+)
+
+_SYS_WRITER_IDEA = (
+    "You are an acclaimed screenwriter-storyteller. From a short IDEA, write a COMPLETE story "
+    "of the requested length as a NARRATION SCRIPT for a voiced video (a real arc: hook → "
+    "rising action → climax → resolution), with vivid spoken prose and separated character "
+    "dialogue. Output the SCRIPT only — no preamble, no notes."
+)
+
+
+def _facts_block(understanding_block: str) -> str:
+    ub = (understanding_block or "").strip()
+    if not ub:
+        return ""
+    return (
+        "\n═══ STORY FACTS (extracted from the source — cover ALL events, in this order) ═══\n"
+        + ub
+        + "\nEvery event above MUST appear in your script, in order. The last event is the "
+        "ending — the script must reach it.\n"
+    )
+
+
+def build_writer_adapt_prompt(chapter: str, language: str = "vi", genre: str = "",
+                              understanding_block: str = "", prior_context: str = "") -> "tuple[str, str]":
+    """Call 2 (paste) — (system, user) to dramatize an existing chapter into the
+    screenplay-lite SCRIPT. ``understanding_block`` (rendered by story_understanding)
+    pins the event checklist; the validator then verifies coverage deterministically."""
+    lang_name = _lang_name(language)
+    user = (
+        f"NARRATION LANGUAGE: {lang_name}\n"
+        f"STYLE: {_style_pack(genre)}\n"
+        + _series_memory_block(prior_context)
+        + _facts_block(understanding_block)
+        + _craft_rules(lang_name)
+        + _SCRIPT_FORMAT
+        + "\n═══ SOURCE STORY (adapt THIS faithfully, start to end) ═══\n" + _fit(chapter)
+        + "\n\n═══ WRITE THE SCRIPT NOW ═══"
+    )
+    return _SYS_WRITER_ADAPT, user
+
+
+def build_writer_idea_prompt(idea: str, duration_sec: int = 0, genre: str = "",
+                             language: str = "vi", prior_context: str = "",
+                             length_factor: float = 0.0) -> "tuple[str, str]":
+    """Call 2 (idea) — (system, user) to WRITE a story of a target length as the
+    screenplay-lite SCRIPT. Length is a character budget (duration × CPS × factor);
+    the director's expand-loop re-calls with a higher ``length_factor`` when the
+    script lands short (measured by len(), no JSON parse needed)."""
+    lang_name = _lang_name(language)
+    if not duration_sec or duration_sec <= 0:
+        try:
+            duration_sec = int(_os.getenv("STORY_IDEA_DEFAULT_SEC", "0") or 0)
+        except (TypeError, ValueError):
+            duration_sec = 0
+    cps = _CPS.get((language or "").strip().lower()[:2], 14.0)
+    try:
+        _factor = max(1.0, float(_os.getenv("STORY_IDEA_LENGTH_FACTOR", "1.8") or 1.8))
+    except (TypeError, ValueError):
+        _factor = 1.8
+    if length_factor and length_factor > 0:
+        _factor = max(1.0, float(length_factor))
+    budget = int(duration_sec * cps * _factor) if duration_sec else 0
+    _scenes = max(3, int(round(budget / (cps * 10.0) / 4.0))) if budget else 0
+    brief = (
+        "═══ BRIEF ═══\n"
+        f"Write the COMPLETE story in {lang_name}. The spoken text (NARR + dialogue) must total "
+        f"about {budget} CHARACTERS — that total DEFINES the task; a little over is fine, SHORT "
+        "IS A FAILURE. The IDEA below may already be an outline: treat it as a SKELETON to "
+        "DRAMATIZE scene by scene — its own length never limits yours.\n"
+        f"Structure: ~{_scenes} scenes across five stages — HOOK/SETUP, RISING ACTION, MIDPOINT "
+        "TWIST, CLIMAX, RESOLUTION — each stage fully written out, never summarised.\n"
+    ) if budget else "═══ BRIEF ═══\nWrite a complete story with a real arc; you decide the length.\n"
+    genre_line = f"GENRE: {genre.strip()}\n" if (genre or "").strip() else ""
+    user = (
+        f"NARRATION LANGUAGE: {lang_name}\n{genre_line}"
+        f"STYLE: {_style_pack(genre)}\n"
+        + _series_memory_block(prior_context)
+        + brief
+        + _craft_rules(lang_name)
+        + _SCRIPT_FORMAT
+        + "\n═══ STORY IDEA (a skeleton to dramatize & expand) ═══\n" + _fit(idea, MAX_IDEA_CHARS)
+        + "\n\n═══ WRITE THE SCRIPT NOW ═══"
+    )
+    return _SYS_WRITER_IDEA, user
+
+
+_SYS_WRITER_REPAIR = (
+    "You are the same storyteller revising your own narration script. You will receive the "
+    "script plus a list of source events it MISSED. Weave every missing event into the right "
+    "place (source order), keeping everything else intact. Return the FULL corrected script "
+    "in the same format — no notes, no diff, no markdown."
+)
+
+
+def build_writer_repair_prompt(script: str, missing_events: "list[str]",
+                               language: str = "vi") -> "tuple[str, str]":
+    """Call 2-repair — targeted: only the missing events are named; the model returns
+    the full corrected script. Bounded to ONE repair round by the director."""
+    lang_name = _lang_name(language)
+    miss = "\n".join(f"- {m}" for m in (missing_events or []) if (m or "").strip())
+    user = (
+        f"NARRATION LANGUAGE: {lang_name}\n"
+        "═══ MISSING EVENTS (add these, in story order) ═══\n" + (miss or "-") + "\n\n"
+        + _SCRIPT_FORMAT
+        + "\n═══ CURRENT SCRIPT ═══\n" + _fit(script)
+        + "\n\n═══ RETURN THE FULL CORRECTED SCRIPT NOW ═══"
+    )
+    return _SYS_WRITER_REPAIR, user
+
+
+# ── Call 3: Structure (script → StoryPlan JSON) ───────────────────────────────
+_SYS_STRUCTURE = (
+    "You are a video-production DIRECTOR converting an APPROVED narration script into a strict "
+    "production JSON plan. You NEVER rewrite the story — you structure it: keep the script's "
+    "wording verbatim (trimming only fillers), map its scenes to settings/visuals and its lines "
+    "to speakers. " + _JSON_TAIL
+)
+
+
+def _character_table(characters: "list[dict]") -> str:
+    """Pin the Understanding pass's character ids so the plan reuses them EXACTLY —
+    groundwork for identity locks (GĐ3). [] → '' (structure derives its own)."""
+    rows = []
+    for c in (characters or []):
+        cid = (c.get("id") or "").strip()
+        if not cid:
+            continue
+        rows.append(f"  {cid} | {c.get('name', '')} | {c.get('gender', '') or '?'}"
+                    f" | {(c.get('desc') or '')[:100]}")
+    if not rows:
+        return ""
+    return (
+        "\n═══ CHARACTER TABLE (use these EXACT ids; map every dialogue name to its id) ═══\n"
+        "  id | name | gender | look\n" + "\n".join(rows)
+        + "\nEvery characters[].id in your JSON MUST come from this table (same spelling). "
+        "A dialogue line's <Character Name> maps to that character's id; NARR maps to \"\".\n"
+    )
+
+
+def build_structure_prompt(script: str, language: str = "vi", art_style: str = "",
+                           aspect_ratio: str = "16:9", subtitle_mode: str = "hook_only",
+                           ceiling: int = 15, genre: str = "",
+                           characters: "list[dict] | None" = None,
+                           prior_context: str = "", library_catalog: str = "") -> "tuple[str, str]":
+    """Call 3 — (system, user) to structure the SCRIPT into a StoryPlan v2. Reuses the
+    battle-tested schema/rules machinery (multiline schema when active, pacing labels,
+    library-pick, vocab, self-check); only the METHOD + SOURCE differ from P1."""
+    lang_name = _lang_name(language)
+    if _multiline():
+        mapping = (
+            "(d) TIMELINE: walk the script in order. One beat = one shot: a NARR paragraph, or a "
+            "run of consecutive lines in the same place/moment. Each script line becomes ONE "
+            "entry in the beat's \"lines\" (NARR → speaker_id \"\", a dialogue line → its "
+            "character's id, with its (emotion)). Keep the wording VERBATIM.\n"
+        )
+    else:
+        mapping = (
+            "(d) TIMELINE: walk the script in order. A NARR paragraph → a narrator beat "
+            "(speaker_id \"\"); a dialogue line → its OWN beat with that character's id as "
+            "speaker_id and ONLY the spoken words as narration. Keep the wording VERBATIM.\n"
+        )
+    method = (
+        "═══ METHOD (follow this order) ═══\n"
+        "(a) CHARACTERS: everyone who speaks or is described (use the CHARACTER TABLE ids when given).\n"
+        "(b) SETTINGS: one per distinct [SCENE: ...] place.\n"
+        f"(c) VISUALS (≤{ceiling}): one per setting/moment, REUSED across that scene's beats.\n"
+        + mapping
+    )
+    style_line = f"ART STYLE HINT: {art_style.strip()}\n" if (art_style or "").strip() else ""
+    genre_line = f"GENRE: {genre.strip()}\n" if (genre or "").strip() else ""
+    user = (
+        f"NARRATION LANGUAGE: {lang_name}\n{genre_line}{style_line}"
+        + method
+        + _character_table(list(characters or []))
+        + _series_memory_block(prior_context)
+        + _library_block(library_catalog)
+        + _vocab_block()
+        + "\n═══ APPROVED SCRIPT (structure THIS; wording is FINAL) ═══\n" + _fit(script) + "\n\n"
+        + _schema(_lean_contract()).replace("{LANG}", lang_name).replace("<LANG code>", language).replace("<MOOD_VOCAB>", _MOOD_VOCAB) + "\n\n"
+        + _rules(ceiling, aspect_ratio, lang_name, subtitle_mode, _beat_char_hint(language), "svg",
+                 lean=_lean_contract(), multiline=_multiline())
+    )
+    return _SYS_STRUCTURE, user
+
+
 __all__ = ["build_super_story_prompt", "build_super_video_prompt", "build_super_idea_prompt",
-           "build_super_repair_prompt", "SUPER_PROMPT_VERSION"]
+           "build_super_repair_prompt", "SUPER_PROMPT_VERSION",
+           # GĐ1 Story Compiler
+           "compiler_enabled", "build_understanding_prompt",
+           "build_writer_adapt_prompt", "build_writer_idea_prompt", "build_writer_repair_prompt",
+           "build_structure_prompt"]
