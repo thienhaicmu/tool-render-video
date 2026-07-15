@@ -1,0 +1,15 @@
+{
+  "id": "sample",
+  "name": "Sample Pack",
+  "desc": "dev fixture (plumbing test only — not product art)",
+  "fps": 30,
+  "actions": {
+    "stand": {"file": "anims/ball.json", "loop": true},
+    "wave": {"file": "anims/ball.json", "loop": false},
+    "*": {"file": "anims/ball.json", "loop": true}
+  },
+  "emotions": {},
+  "colors": {
+    "#3380cc": ["outfit_primary", 1.0]
+  }
+}

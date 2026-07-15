@@ -104,3 +104,6 @@ checkpoints/
 frontend/*.tsbuildinfo
 # pytest session sandbox (isolated data dir — never the real data/)
 backend/tests/.pytest-data/
+
+# generated visual review artifacts (rebuild via backend/scripts/build_*_library.py / contact sheets)
+artifacts/

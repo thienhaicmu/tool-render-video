@@ -36,3 +36,4 @@ nvidia-ml-py>=12.535
 # librosa
 # mediapipe
 # faster-whisper
+rlottie-python>=1.3.6            # GD2 visual v2: offline Lottie character-pack renderer (optional at runtime - lottie_pack degrades when absent)
