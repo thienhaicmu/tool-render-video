@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 from pathlib import Path
 
 from app.features.render.engine.visual.svg_char import char_inner
@@ -62,6 +63,8 @@ def _bg_layer(plan, setting, w: int, h: int) -> str:
         except Exception:
             pass
     try:
+        if os.getenv("STORY_V3_ONLY", "0") == "1":
+            raise RuntimeError("legacy background library disabled by STORY_V3_ONLY")
         from app.db.story_asset_repo import get_by_slug, match_asset, active_library_style
         _st = active_library_style(getattr(plan, "art_style", "") or "")
         asset = (getattr(setting, "asset", "") or "").strip()
@@ -109,6 +112,8 @@ def _char_layer(ch, plan) -> str:
             pass
         return ""
     try:
+        if os.getenv("STORY_V3_ONLY", "0") == "1":
+            raise RuntimeError("legacy character library disabled by STORY_V3_ONLY")
         from app.db.story_asset_repo import get_by_slug, match_asset, active_library_style
         _st = active_library_style(getattr(plan, "art_style", "") or "")
         asset = (getattr(ch, "asset", "") or "").strip()

@@ -171,7 +171,7 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
     # STORY_LIBRARY_PICK=0 to opt out (e.g. shrink the prompt for a pure gpt-image run,
     # which ignores the picks). An empty library → catalog "" → prompt byte-identical.
     library_catalog = ""
-    if os.getenv("STORY_LIBRARY_PICK", "1") == "1":
+    if os.getenv("STORY_LIBRARY_PICK", "1") == "1" and os.getenv("STORY_V3_ONLY", "0") != "1":
         try:
             from app.db import story_asset_repo
             from app.features.render.engine.visual.character_resolver import resolver_enabled
@@ -399,7 +399,7 @@ def run_story_v2(
         from app.features.render.engine.visual.character_resolver import (
             resolve_characters, resolver_enabled,
         )
-        if resolver_enabled():
+        if resolver_enabled() and os.getenv("STORY_V3_ONLY", "0") != "1":
             _res = resolve_characters(
                 plan, locked=_locked_assets,
                 region=(plan.region or ""), genres=_genre_group(genre))

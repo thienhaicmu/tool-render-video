@@ -123,7 +123,11 @@ def match_scenes(
 def scene_manifest_path() -> str:
     configured = os.getenv("STORY_V3_SCENE_MANIFEST", "").strip()
     if configured:
-        return configured
+        from pathlib import Path
+        path = Path(configured)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[7] / path
+        return str(path)
     from pathlib import Path
     default = Path(__file__).resolve().parents[7] / "data" / "visual_library_v3_legacy_scenes_approved_pilot.json"
     return str(default) if default.is_file() else ""

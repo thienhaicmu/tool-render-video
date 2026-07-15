@@ -76,3 +76,21 @@ if no approved manifest exists, the legacy path remains the automatic fallback.
 Character assignments are stored in `visual_identity_id`; scene assignments are
 stored in `visual_scene_identity_id`. Both bridges require an active identity
 and return to the legacy path when no approved artifact is available.
+
+## Clone and rebuild
+
+Generated binaries are intentionally not committed. A fresh clone restores the
+same library by running:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe scripts/materialize_visual_library_v3.py
+```
+
+The source manifests live in `assets/visual_library_v3/`; the command rebuilds
+all 620 character masters and 190 scene variants under `data/`. Existing
+machines can remove the obsolete library and stale database rows with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/clean_legacy_visual_library.py --confirm --prune-db
+```

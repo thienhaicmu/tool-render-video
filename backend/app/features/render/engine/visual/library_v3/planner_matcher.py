@@ -24,9 +24,15 @@ from .contracts import CharacterIdentitySpec
 MATCH_MIN = 5.0
 ASSIGN_MIN = 2.0
 DEFAULT_CHARACTER_MANIFEST = (
-    Path(__file__).resolve().parents[7]
-    / "data" / "visual_library_v3_legacy_characters_approved_pilot.json"
+    Path(__file__).resolve().parents[7] / "data" / "visual_library_v3_legacy_characters_approved_pilot.json"
 )
+
+
+def _project_path(value: str) -> str:
+    path = Path(value)
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parents[7] / path
+    return str(path)
 
 
 def _identity_tokens(identity: CharacterIdentitySpec) -> set[str]:
@@ -205,7 +211,7 @@ def matcher_enabled() -> bool:
 def configured_manifest_path() -> str:
     configured = os.getenv("STORY_V3_CHARACTER_MANIFEST", "").strip()
     if configured:
-        return configured
+        return _project_path(configured)
     return str(DEFAULT_CHARACTER_MANIFEST) if DEFAULT_CHARACTER_MANIFEST.is_file() else ""
 
 
