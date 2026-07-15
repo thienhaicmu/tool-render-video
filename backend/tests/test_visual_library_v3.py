@@ -18,6 +18,7 @@ from app.features.render.engine.visual.library_v3 import (
     validate_manifest,
     write_manifest,
     load_active_catalog,
+    configured_manifest_path,
     match_characters,
     resolve_character_preview,
 )
@@ -27,6 +28,10 @@ from app.features.render.engine.visual.v2.look_spec import derive_look
 
 STYLE = "anime_clean_v3"
 HASH = "a" * 64
+
+
+def test_v3_package_exports_configured_manifest_path():
+    assert callable(configured_manifest_path)
 
 
 def _template() -> CharacterTemplateSpec:

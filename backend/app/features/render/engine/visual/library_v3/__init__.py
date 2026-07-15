@@ -17,7 +17,7 @@ from .contracts import (
 from .registry import ManifestValidationError, load_manifest, validate_manifest, write_manifest
 from .character_renderer import build_character_master, render_identity_master
 from .active_catalog import ActiveCatalog, load_active_catalog
-from .planner_matcher import match_characters
+from .planner_matcher import configured_manifest_path, match_characters
 from .artifact_bridge import resolve_character_preview
 from .scene_artifact_bridge import resolve_scene_preview
 from .scene_matcher import match_scenes
@@ -36,6 +36,7 @@ __all__ = [
     "VisualLibraryManifest",
     "load_manifest",
     "load_active_catalog",
+    "configured_manifest_path",
     "match_characters",
     "resolve_character_preview",
     "resolve_scene_preview",

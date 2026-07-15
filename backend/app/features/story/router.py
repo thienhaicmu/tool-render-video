@@ -402,13 +402,13 @@ def _resolve_plan_assets(plan, *, series_id: str = "", genre: str = "") -> "Opti
         from app.features.render.engine.visual.character_resolver import (
             resolve_characters, resolver_enabled,
         )
-        if (not resolver_enabled() or _os.getenv("STORY_V3_ONLY", "0") == "1") and v3_rep is None:
+        if (not resolver_enabled() or os.getenv("STORY_V3_ONLY", "0") == "1") and v3_rep is None:
             return None
         from app.features.render.engine.pipeline.story_pipeline_v2 import _genre_group
         rep = (resolve_characters(
             plan, locked=_locked,
             region=(getattr(plan, "region", "") or ""), genres=_genre_group(genre))
-               if resolver_enabled() and _os.getenv("STORY_V3_ONLY", "0") != "1" else None)
+               if resolver_enabled() and os.getenv("STORY_V3_ONLY", "0") != "1" else None)
         statuses = dict(rep["statuses"] if rep else {})
         if v3_rep:
             for cid in v3_rep["assigned"]:
