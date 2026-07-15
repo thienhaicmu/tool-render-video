@@ -163,6 +163,30 @@ detail, not a code/git issue.
 > After pulling changes that touch dependencies, re-run
 > `pip install -r requirements.txt` **and** `npm install` before starting.
 
+### Sync runtime data without building or starting the app
+
+`data/` is intentionally gitignored. To move the database, Story projects,
+V3 visual library, and other durable runtime data from this machine to another
+clone, run the standalone synchronizer while both apps are stopped:
+
+```powershell
+python scripts/sync_data.py `
+  --source D:\tool-render-video `
+  --destination D:\tool-render-video-other `
+  --profile portable
+```
+
+The `portable` profile includes the V3 library, manifests, `app.db`, BGM,
+uploads, project state, and plan runs. It skips derived caches, logs, model
+downloads, temporary files, and cookies. Each copied file is verified with
+SHA-256 and a manifest is written to `data/.data-sync-manifest.json`.
+
+For a literal full data copy, including caches and local runtime files, use
+`--profile full`. Cookies remain excluded unless explicitly requested with
+`--include-sensitive`. The synchronizer never copies `.env`, API keys,
+virtual environments, or frontend build output, and it does not build or
+start either application.
+
 ### PowerShell shortcuts
 
 ```powershell
