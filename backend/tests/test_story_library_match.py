@@ -51,8 +51,9 @@ def test_match_falls_back_to_setting_name(monkeypatch):
 def test_match_honors_ai_chosen_setting_asset(monkeypatch):
     # T2 debt — Phase A now honors the AI's library-pick (setting.asset) BEFORE fuzzy match,
     # same precedence as svg_compose (single policy).
+    # style-aware: get_by_slug now also receives the active library ``style`` kwarg.
     monkeypatch.setattr("app.db.story_asset_repo.get_by_slug",
-                        lambda slug, kind="": "/lib/pick.png" if slug == "cn_bg_x" else None)
+                        lambda slug, kind="", **k: "/lib/pick.png" if slug == "cn_bg_x" else None)
     fuzzy = []
     monkeypatch.setattr("app.db.story_asset_repo.match_asset",
                         lambda *a, **k: fuzzy.append(1) or "/fuzzy.png")

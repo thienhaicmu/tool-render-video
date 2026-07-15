@@ -18,6 +18,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -105,8 +107,13 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         try:
             from app.db import story_asset_repo
             from app.features.render.engine.pipeline.story_pipeline_v2 import _genre_group
+            from app.features.render.engine.visual.character_resolver import resolver_enabled
+            # GĐ3: resolver on → the engine assigns characters; prompt carries only
+            # the BACKGROUNDS section.
+            _kinds = ("background",) if resolver_enabled() else ("character", "background")
             library_catalog = story_asset_repo.build_library_catalog(
-                genres=_genre_group(req.genre or ""))
+                genres=_genre_group(req.genre or ""), kinds=_kinds,
+                style=(story_asset_repo.active_library_style(req.art_style or "") or None))
         except Exception:
             library_catalog = ""
 
@@ -152,6 +159,18 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
             _lint = list(_lint) + [
                 f"length is ~{_est:.0f}s vs target ~{_tgt}s ({_est / _tgt * 100:.0f}% of "
                 "requested) — edit the timeline or regenerate to reach the length"]
+    # GĐ3: deterministic character→asset resolution (identity lock + unique) so the
+    # Review opens with real assignments + per-character states.
+    _asset_res = _resolve_plan_assets(plan, series_id=_sid, genre=(req.genre or ""))
+    # GĐ4b: readiness preview (no output_dir at plan time) — warns merge into the
+    # review warnings so the user sees them BEFORE spending a render.
+    _ready = None
+    try:
+        from app.features.render.engine.pipeline.story_readiness import evaluate_readiness
+        _ready = evaluate_readiness(plan, target_sec=int(req.duration_sec or 0))
+        _lint = list(_lint) + list(_ready["warns"]) + list(_ready["fails"])
+    except Exception:
+        _ready = None
     return {
         "plan": json.loads(plan.to_json()),
         "image_count": _visual_count,
@@ -162,17 +181,139 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         "source_chars": _src_len,
         "source_char_limit": _src_limit,
         "warnings": _lint,
+        # GĐ3: per-character asset assignment + state (matched_exact | matched |
+        # needs_approval | missing). Additive; None when the resolver is off.
+        "asset_resolution": _asset_res,
+        # GĐ4b: readiness preview (storage checks run at render time, not here).
+        "readiness": _ready,
+        # GĐ1: how this plan was authored — "compiler" (Understanding → Writer →
+        # Structure, 3 calls) vs "single_pass" (legacy 1 call). Additive.
+        "authoring_mode": _authoring_mode(),
         # Story imagery is procedural SVG + offline ($0); the super-plan LLM is not.
         "cost_preflight": {
             "visual_count": _visual_count,
             "character_count": len(plan.characters),
             "premium_image_count": 0,
             "image_cost_usd": 0.0,
+            "estimated_llm_calls": _llm_cost.get("llm_calls", 1),
             "estimated_llm_input_tokens": _llm_cost["input_tokens"],
             "estimated_llm_cost_usd": _llm_cost["cost_usd"],
             "estimated_cost_usd": _llm_cost["cost_usd"],   # total = image($0) + LLM
         },
     }
+
+
+def _authoring_mode() -> str:
+    try:
+        from app.features.render.ai.llm.story_prompts_v2 import compiler_enabled
+        return "compiler" if compiler_enabled() else "single_pass"
+    except Exception:
+        return "single_pass"
+
+
+def _resolve_plan_assets(plan, *, series_id: str = "", genre: str = "") -> "Optional[dict]":
+    """GĐ3 — run the deterministic character resolver on a freshly-built/validated
+    plan (mutates ``characters[].asset`` + ``render.asset_status``). Returns the
+    report dict for the API response, or None when the resolver is off / fails."""
+    try:
+        from app.features.render.engine.visual.character_resolver import (
+            resolve_characters, resolver_enabled,
+        )
+        if not resolver_enabled():
+            return None
+        from app.features.render.engine.pipeline.story_pipeline_v2 import _genre_group
+        from app.features.render.engine.pipeline.story_series_memory import locked_assets
+        rep = resolve_characters(
+            plan, locked=locked_assets((series_id or "").strip()),
+            region=(getattr(plan, "region", "") or ""), genres=_genre_group(genre))
+        by_id = {c.id: c for c in plan.characters}
+        return {
+            "statuses": rep["statuses"],
+            "needs_approval": rep["needs_approval"],
+            "missing": rep["missing"],
+            "characters": [
+                {"id": cid, "name": (getattr(by_id.get(cid), "name", "") or cid),
+                 "asset": rep["assigned"].get(cid, ""), "status": st}
+                for cid, st in rep["statuses"].items()
+            ],
+        }
+    except Exception as exc:
+        logger.info("story: asset resolution skipped: %s", exc)
+        return None
+
+
+# ── GĐ1f: async plan (the compiler is 3 sequential LLM calls — a long chapter can
+# take minutes, past typical HTTP client timeouts). Minimal in-process job registry:
+# POST /plan/async → {plan_job_id}; GET /plan/async/{id} → {status, result|error}.
+# The sync POST /plan stays untouched (backward compat). Registry is bounded and
+# self-pruning; jobs live in memory only (a restart loses them — the FE just retries).
+_PLAN_JOBS: "dict[str, dict]" = {}
+_PLAN_JOBS_LOCK = threading.Lock()
+_PLAN_JOBS_MAX = 40
+_PLAN_JOB_TTL_SEC = 30 * 60
+
+
+def _prune_plan_jobs_locked() -> None:
+    now = time.time()
+    dead = [k for k, v in _PLAN_JOBS.items()
+            if now - v.get("created", now) > _PLAN_JOB_TTL_SEC]
+    for k in dead:
+        _PLAN_JOBS.pop(k, None)
+    while len(_PLAN_JOBS) > _PLAN_JOBS_MAX:
+        oldest = min(_PLAN_JOBS, key=lambda k: _PLAN_JOBS[k].get("created", 0))
+        _PLAN_JOBS.pop(oldest, None)
+
+
+def _run_plan_job(job_id: str, req: "StoryPlanRequest") -> None:
+    try:
+        result = plan_storyboard(req)          # reuse the sync logic verbatim
+        with _PLAN_JOBS_LOCK:
+            if job_id in _PLAN_JOBS:
+                _PLAN_JOBS[job_id].update(status="done", result=result)
+    except HTTPException as he:
+        with _PLAN_JOBS_LOCK:
+            if job_id in _PLAN_JOBS:
+                _PLAN_JOBS[job_id].update(status="error", error=str(he.detail),
+                                          status_code=int(he.status_code))
+    except Exception as exc:                   # defensive — never let the thread die silently
+        logger.warning("story plan job %s failed: %s", job_id, exc)
+        with _PLAN_JOBS_LOCK:
+            if job_id in _PLAN_JOBS:
+                _PLAN_JOBS[job_id].update(status="error", error="planning failed",
+                                          status_code=502)
+
+
+@router.post("/plan/async")
+def plan_storyboard_async(req: StoryPlanRequest) -> dict:
+    """Start a plan job in the background → ``{plan_job_id}``. Poll GET
+    /plan/async/{id}. Same validation/semantics as POST /plan (it runs the same
+    function); 422s surface at poll time as status=error."""
+    job_id = uuid.uuid4().hex
+    with _PLAN_JOBS_LOCK:
+        _prune_plan_jobs_locked()
+        _PLAN_JOBS[job_id] = {"status": "running", "created": time.time()}
+    threading.Thread(target=_run_plan_job, args=(job_id, req),
+                     name=f"story-plan-{job_id[:8]}", daemon=True).start()
+    return {"plan_job_id": job_id, "status": "running"}
+
+
+@router.get("/plan/async/{job_id}")
+def plan_storyboard_async_status(job_id: str) -> dict:
+    """Poll a plan job: ``{status: running|done|error, result?, error?}``.
+    404 on a malformed/unknown/expired id."""
+    if not _TOKEN_RE.match(job_id or ""):
+        raise HTTPException(status_code=404, detail="not found")
+    with _PLAN_JOBS_LOCK:
+        job = _PLAN_JOBS.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="not found")
+        out = {"status": job.get("status", "running")}
+        if job.get("status") == "done":
+            out["result"] = job.get("result")
+        elif job.get("status") == "error":
+            out["error"] = job.get("error", "")
+            out["status_code"] = job.get("status_code", 502)
+    return out
 
 
 # ── Paste-JSON validate (feature: paste a StoryPlan → render, no AI) ──────────
@@ -249,6 +390,10 @@ def validate_story_plan(req: StoryValidateRequest) -> dict:
     except Exception:
         pass
 
+    # GĐ3: resolve characters on the pasted plan too (hand-authored picks are honored;
+    # empty ones get a unique library assignment + state for the Review chips).
+    _asset_res = _resolve_plan_assets(plan)
+
     ok = not errors
     return {
         "ok": ok,
@@ -258,6 +403,7 @@ def validate_story_plan(req: StoryValidateRequest) -> dict:
         "beat_count": plan.beat_count(),
         "character_count": len(plan.characters),
         "image_count": plan.image_count(),
+        "asset_resolution": _asset_res,
         "plan_normalized": (json.loads(plan.to_json()) if ok else None),
     }
 

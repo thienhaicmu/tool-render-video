@@ -118,6 +118,12 @@ def _anchor_xy(text_anchor: str) -> "tuple[str, str]":
         return "w*0.06", "(h-text_h)/2"
     if a == "right":
         return "w-text_w-w*0.06", "(h-text_h)/2"
+    # GĐ4a render-internal safe corners (composition.choose_hook_anchor) — never
+    # stored on the plan; keep the hook clear of the occupied character slots.
+    if a == "top_left":
+        return "w*0.05", "h*0.08"
+    if a == "top_right":
+        return "w-text_w-w*0.05", "h*0.08"
     return "(w-text_w)/2", "h*0.10"          # auto (default, backward-compat)
 
 
@@ -189,23 +195,28 @@ def _char_overlay_parts(cue, width: int, height: int, dur: float, *,
     """(fg_chain, x_expr, y_expr) to composite a speaking character's transparent master
     over the base. Scale by char_scale (height fraction of the canvas), position by
     char_anchor, animate by char_motion. ``anchor``/``scale``/``motion`` OVERRIDE the
-    cue's values (P3 — per-line overlays place each speaker at its own slot). Uses overlay
-    expression vars W/H (main), w/h (overlay), t (time). x/y are single-quoted at the call
-    site so commas inside ``if(...)`` are safe in the filtergraph. Never raises."""
+    cue's values (P3 — per-line overlays place each speaker at its own slot). GĐ4a:
+    slot x + FACING flip (a right-anchored character mirrors to face the centre) +
+    portrait reflow come from visual/composition.py — shared with compose_visual. Uses
+    overlay expression vars W/H (main), w/h (overlay), t (time). x/y are single-quoted
+    at the call site so commas inside ``if(...)`` are safe. Never raises."""
     try:
+        from app.features.render.engine.visual.composition import anchor_slot, overlay_scale_mult
         frac = _CHAR_SCALE_FRAC.get((scale or getattr(cue, "char_scale", "medium") or "medium"), 0.72)
+        frac *= overlay_scale_mult(width, height)          # portrait reflow
         ch = max(2, int(height * frac))
         anchor = (anchor or getattr(cue, "char_anchor", "left") or "left")
         motion = (motion or getattr(cue, "char_motion", "fade") or "fade")
         margin = width * 0.03
+        x_frac, flip = anchor_slot(anchor, width, height)
         if anchor == "center":
             xt = "(W-w)/2"
         elif anchor == "right":
-            xt = f"W-w-{margin:.1f}"
+            xt = f"min(W-w-{margin:.1f},{width * x_frac:.1f}-w/2)"
         else:                                   # left (default)
-            xt = f"{margin:.1f}"
+            xt = f"max({margin:.1f},{width * x_frac:.1f}-w/2)"
         yt = "H-h"                              # stand on the ground (bottom-aligned)
-        fg = f"scale=-1:{ch},format=rgba"
+        fg = f"scale=-1:{ch}," + ("hflip," if flip else "") + "format=rgba"
         x, y = xt, yt
         if motion == "fade":
             fo = max(0.0, dur - _CHAR_FADE_SEC)
@@ -238,6 +249,12 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         have_img = _ok_file(img)
         have_audio = _ok_file(cue.audio_path)
         out = Path(ctx.shots_dir) / f"cue_{part_no:04d}.mp4"
+        # GĐ4c targeted reuse: on RESUME a cue clip that already encoded is reused —
+        # a mid-render interruption re-encodes only the missing cues. Only in resume
+        # (fresh renders always re-encode: params/plan may have changed).
+        if (getattr(ctx, "resume", False) and _ok_file(str(out))
+                and os.getenv("STORY_CUE_REUSE", "1") == "1"):
+            return {"clip": str(out), "error": "", "fallback": False, "reused": True}
 
         # A2: optional LOCAL base video the story is composited over. When present, the
         # cue's base layer is a SEGMENT of that video, seeked to the cue's position in
@@ -300,10 +317,17 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
             col = _norm_color(getattr(ctx, "bg_value", "") or "#101820")
             cmd += ["-f", "lavfi", "-t", f"{dur:.3f}", "-i", f"color=c={col}:s={width}x{height}:r={fps:.3f}"]
             vf = f"scale={width}:{height},setsar=1,format=yuv420p,fps={fps:.3f}"
-        # Composition-QA: when a character is overlaid (bottom-aligned), keep an auto/
-        # bottom hook at the TOP so the character never covers it. Only affects the
-        # overlay path — the image/no-overlay hook position is unchanged.
-        _ta_qa = "top" if ((overlay_master or multi_overlays) and (getattr(cue, "text_anchor", "auto") in ("auto", "bottom"))) else ""
+        # GĐ4a composition-QA: the hook text picks the top corner FURTHEST from the
+        # occupied character slots (multi-line overlays each declare their anchor;
+        # the single-overlay path occupies the cue's char_anchor). An explicit
+        # author anchor is respected. No overlay → position unchanged.
+        _ta_qa = ""
+        if overlay_master or multi_overlays:
+            from app.features.render.engine.visual.composition import choose_hook_anchor
+            _occ = {(getattr(s, "anchor", "") or "") for _mp, s in multi_overlays}
+            if overlay_master and not multi_overlays:
+                _occ.add(getattr(cue, "char_anchor", "center") or "center")
+            _ta_qa = choose_hook_anchor(_occ, getattr(cue, "text_anchor", "auto"))
         vf += _overlay_suffix(cue, width, height, part_no, text_anchor=_ta_qa,
                               lang=getattr(plan, "language", ""))   # burn hook title (CJK-aware font)
         if have_audio:

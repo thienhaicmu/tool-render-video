@@ -94,6 +94,18 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
     if (path) masters[cid] = path; else delete masters[cid]
     patch({ render: { ...plan.render, masters } })
   }
+  // GĐ3 — a manual library pick assigns the ASSET IDENTITY in one step: the slug on
+  // the character (resolver treats it as matched_exact), the file as locked master,
+  // and the status chip flips accordingly.
+  const updateAssetPick = (cid: string, slug: string, path: string) => {
+    const masters = { ...(plan.render?.masters ?? {}) }
+    if (path) masters[cid] = path
+    const asset_status = { ...(plan.render?.asset_status ?? {}), [cid]: 'matched_exact' }
+    patch({
+      characters: plan.characters.map((c) => (c.id === cid ? { ...c, asset: slug } : c)),
+      render: { ...plan.render, masters, asset_status },
+    })
+  }
   const updateVisual = (id: string, up: Partial<Visual>) =>
     patch({ visuals: plan.visuals.map((v) => (v.id === id ? { ...v, ...up } : v)) })
   // AL4 — pin a library background into render.visual_assets so the render reuses that
@@ -167,7 +179,8 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
       </div>
 
       <CharactersPanel vi={vi} plan={plan} artStyle={artStyle} language={language}
-        onChange={updateCharacter} onVoiceChange={updateVoice} onMasterChange={updateMaster} />
+        onChange={updateCharacter} onVoiceChange={updateVoice} onMasterChange={updateMaster}
+        onAssetPick={updateAssetPick} />
       <VisualsPanel
         vi={vi} plan={plan} aspect={aspect} colors={colors}
         previews={previews} setPreview={setPreview}

@@ -24,12 +24,10 @@ W, H = 1536, 1024               # default target (16:9); compose_visual accepts 
 _SCENE_W, _SCENE_H = 1536, 1024  # scene templates are authored at this size
 _CHAR_W, _CHAR_H = 1024, 1536    # chibi char frame
 
-# per character-count: (center-x fraction of width, scale as fraction of frame height)
-_ZONE_FRACS = {
-    1: [(0.50, 0.86)],
-    2: [(0.30, 0.72), (0.70, 0.72)],
-    3: [(0.19, 0.60), (0.50, 0.60), (0.81, 0.60)],
-}
+# GĐ4a: slot geometry (x, scale, FACING flip, portrait reflow) is centralised in
+# visual/composition.py — shared with the beat_render overlay path so a character
+# stands/faces the same way in the key-visual and in the cue overlay.
+_BASE_CHAR_FRAC = 0.86       # base char height as fraction of frame (slot multiplies it)
 
 
 def _embed(path: str, *, x: float = 0, y: float = 0, w: int = 0, h: int = 0, cover: bool = False) -> str:
@@ -53,10 +51,12 @@ def _bg_layer(plan, setting, w: int, h: int) -> str:
     region = getattr(plan, "region", "") or ""
     genre = getattr(plan, "genre_key", "") or ""
     try:
-        from app.db.story_asset_repo import get_by_slug, match_asset
+        from app.db.story_asset_repo import get_by_slug, match_asset, active_library_style
+        _st = active_library_style(getattr(plan, "art_style", "") or "")
         asset = (getattr(setting, "asset", "") or "").strip()
-        p = (get_by_slug(asset, "background") if asset else None) or \
-            match_asset("background", name=scene_kind, region=region, genre=genre)
+        p = (get_by_slug(asset, "background", style=_st) if asset else None) or \
+            match_asset("background", name=scene_kind, region=region, genre=genre,
+                        style=(_st or None))
         img = _embed(p, w=w, h=h, cover=True) if p else ""
         if img:
             return img
@@ -86,12 +86,13 @@ def _char_layer(ch, plan) -> str:
     region = getattr(plan, "region", "") or ""
     genre = getattr(plan, "genre_key", "") or ""
     try:
-        from app.db.story_asset_repo import get_by_slug, match_asset
+        from app.db.story_asset_repo import get_by_slug, match_asset, active_library_style
+        _st = active_library_style(getattr(plan, "art_style", "") or "")
         asset = (getattr(ch, "asset", "") or "").strip()
         q = _char_query(ch)
-        p = (get_by_slug(asset, "character") if asset else None) or \
+        p = (get_by_slug(asset, "character", style=_st) if asset else None) or \
             (match_asset("character", name=q, region=region, genre=genre,
-                         transparent_only=True) if q else None)
+                         transparent_only=True, style=(_st or None)) if q else None)
         img = _embed(p, w=_CHAR_W, h=_CHAR_H) if p else ""
         if img:
             return img
@@ -114,14 +115,18 @@ def compose_visual(plan, visual, w: int = W, h: int = H, chars: bool = True) -> 
         bg = _bg_layer(plan, setting, w, h)
         cids = [c for c in (getattr(visual, "character_ids", None) or [])][:3] if chars else []
         chars = ""
-        for (cxf, scf), cid in zip(_ZONE_FRACS.get(len(cids), _ZONE_FRACS[3]), cids):
+        from app.features.render.engine.visual.composition import layout_slots
+        for (cxf, mult, flip), cid in zip(layout_slots(len(cids), w, h), cids):
             ch = plan.character(cid)
             inner = _char_layer(ch, plan)      # library-pick asset → else procedural chibi
             if not inner:
                 continue
+            scf = _BASE_CHAR_FRAC * mult
             sc = (scf * h) / _CHAR_H            # scale so char height ≈ scf·h
             tx = cxf * w - (_CHAR_W * sc) / 2.0
             ty = h - _CHAR_H * sc               # feet at the bottom edge
+            if flip:                            # GĐ4a: side characters face the centre
+                inner = f'<g transform="translate({_CHAR_W},0) scale(-1,1)">{inner}</g>'
             chars += f'<g transform="translate({tx:.1f},{ty:.1f}) scale({sc:.4f})">{inner}</g>'
         return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">'
                 f'{bg}{chars}</svg>')

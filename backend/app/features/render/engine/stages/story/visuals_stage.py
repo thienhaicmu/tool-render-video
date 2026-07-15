@@ -47,10 +47,11 @@ def _match_library_background(plan, visual):
         if getattr(visual, "character_ids", None):
             return None
         s = plan.setting(getattr(visual, "setting_id", "") or "")
-        from app.db.story_asset_repo import get_by_slug, match_asset
+        from app.db.story_asset_repo import get_by_slug, match_asset, active_library_style
+        _st = active_library_style(getattr(plan, "art_style", "") or "")
         asset = ((getattr(s, "asset", "") or "").strip()) if s else ""
         if asset:                                        # AI-chosen library-pick (exact) wins
-            p = get_by_slug(asset, "background")
+            p = get_by_slug(asset, "background", style=_st)
             if p:
                 return p
         name = ((getattr(s, "scene_kind", "") or getattr(s, "name", "")) if s else "").strip()
@@ -58,7 +59,8 @@ def _match_library_background(plan, visual):
             return None
         return match_asset("background", name=name,
                            region=(getattr(plan, "region", "") or ""),
-                           genre=(getattr(plan, "genre_key", "") or ""))
+                           genre=(getattr(plan, "genre_key", "") or ""),
+                           style=(_st or None))
     except Exception:
         return None
 
@@ -257,9 +259,12 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
         from app.features.render.engine.visual.svg_raster import save_svg_png
         from app.features.render.engine.visual.svg_presets import preset
         from app.features.render.engine.visual.svg_compose import _char_query
-        from app.db.story_asset_repo import get_by_slug, best_asset, _split_variant
+        from app.db.story_asset_repo import (
+            get_by_slug, best_asset, _split_variant, active_library_style,
+        )
         region = (getattr(plan, "region", "") or "")
         genre = (getattr(plan, "genre_key", "") or "")
+        _st = active_library_style(getattr(plan, "art_style", "") or "")
         _out = Path(out_dir)
         for cid, pairs in used.items():
             c = plan.character(cid)
@@ -270,7 +275,7 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
                 q = _char_query(c)                          # base, so its emotion/pose variants still apply
                 if q:
                     m = best_asset("character", name=q, region=region, genre=genre,
-                                   transparent_only=True)
+                                   transparent_only=True, style=(_st or None))
                     if m:
                         asset = _split_variant(m.get("slug", ""))[0]
             for emo, pose in pairs:
@@ -286,9 +291,9 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
                     # other axis — so fall through to procedural, which combines emotion + pose.
                     # Otherwise use the single-axis variant (emotion preferred), else base asset.
                     if not (vp and ve):
-                        path = (get_by_slug(f"{asset}_{ve}", "character") if ve else None) \
-                            or (get_by_slug(f"{asset}_{vp}", "character") if vp else None) \
-                            or get_by_slug(asset, "character")
+                        path = (get_by_slug(f"{asset}_{ve}", "character", style=_st) if ve else None) \
+                            or (get_by_slug(f"{asset}_{vp}", "character", style=_st) if vp else None) \
+                            or get_by_slug(asset, "character", style=_st)
                 if not path:                                # procedural chibi with this emotion + pose
                     opts = preset(getattr(c, "archetype", "") or "", region, genre, getattr(c, "gender", "") or "")
                     opts["expr"] = emotion_expr(emo)

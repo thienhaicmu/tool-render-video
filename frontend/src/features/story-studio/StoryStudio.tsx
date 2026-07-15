@@ -20,7 +20,7 @@ import { useI18n } from '../../i18n/useI18n'
 import { useRenderStore } from '../../stores/renderStore'
 import { useUIStore } from '../../stores/uiStore'
 import { getDefaultOutputDir } from '../../api/outputDir'
-import { planStory, validateStoryPlan, type StoryPlanV2 } from '../../api/story'
+import { planStoryAsync, validateStoryPlan, type StoryPlanV2 } from '../../api/story'
 import {
   listStoryProjects, saveStoryProject, getStoryProject, deleteStoryProject,
   listTrashedStoryProjects, restoreStoryProject, purgeStoryProject,
@@ -250,7 +250,9 @@ export function StoryStudio() {
     if (cfg.source === 'paste_json') { void onValidatePaste(); return }
     setBusy(true); setError(null); setNotice(null)
     try {
-      const r = await planStory({
+      // GĐ1f — async job + poll: the compiler runs 3 sequential LLM calls, which can
+      // exceed a single HTTP request's comfort zone on long chapters.
+      const r = await planStoryAsync({
         source: cfg.source,
         chapter_text: cfg.source === 'paste' ? cfg.chapterText.trim() : undefined,
         idea: cfg.source === 'idea' ? cfg.idea.trim() : undefined,

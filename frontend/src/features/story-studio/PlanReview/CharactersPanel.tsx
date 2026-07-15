@@ -18,7 +18,15 @@ const SAMPLE: Record<string, string> = {
   ko: '안녕하세요, 이것이 이 캐릭터의 목소리입니다.',
 }
 
-export function CharactersPanel({ vi, plan, artStyle, language, onChange, onVoiceChange, onMasterChange }: {
+// GĐ3 — per-character asset state chip (from render.asset_status).
+const STATUS_CHIP: Record<string, { vi: string; en: string; cls: string }> = {
+  matched_exact: { vi: '🔒 khớp kho', en: '🔒 locked', cls: 'st-tag--dim' },
+  matched: { vi: '✓ kho', en: '✓ library', cls: 'st-tag--dim' },
+  needs_approval: { vi: '⚠ cần duyệt', en: '⚠ review', cls: 'st-tag--warn' },
+  missing: { vi: '✖ thiếu asset', en: '✖ missing', cls: 'st-tag--warn' },
+}
+
+export function CharactersPanel({ vi, plan, artStyle, language, onChange, onVoiceChange, onMasterChange, onAssetPick }: {
   vi: boolean
   plan: StoryPlanV2
   artStyle: string
@@ -26,6 +34,7 @@ export function CharactersPanel({ vi, plan, artStyle, language, onChange, onVoic
   onChange: (id: string, up: Partial<CharacterDef>) => void
   onVoiceChange: (cid: string, engine: string, voiceId: string) => void
   onMasterChange: (cid: string, path: string) => void
+  onAssetPick?: (cid: string, slug: string, path: string) => void
 }) {
   // Available voices for this language's TTS engine (per-character override picker).
   const [avail, setAvail] = useState<StoryVoicesResponse | null>(null)
@@ -49,14 +58,16 @@ export function CharactersPanel({ vi, plan, artStyle, language, onChange, onVoic
           <CharacterRow key={c.id} vi={vi} c={c} artStyle={artStyle} language={lang}
             sample={sampleFor(c.id)} voice={plan.render?.voices?.[c.id]} avail={avail}
             locked={!!plan.render?.masters?.[c.id]}
-            onChange={onChange} onVoiceChange={onVoiceChange} onMasterChange={onMasterChange} />
+            assetStatus={plan.render?.asset_status?.[c.id] || ''}
+            onChange={onChange} onVoiceChange={onVoiceChange} onMasterChange={onMasterChange}
+            onAssetPick={onAssetPick} />
         ))}
       </div>
     </StudioCard>
   )
 }
 
-function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked, onChange, onVoiceChange, onMasterChange }: {
+function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked, assetStatus, onChange, onVoiceChange, onMasterChange, onAssetPick }: {
   vi: boolean
   c: CharacterDef
   artStyle: string
@@ -65,9 +76,11 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
   voice?: [string, string]
   avail: StoryVoicesResponse | null
   locked: boolean
+  assetStatus: string
   onChange: (id: string, up: Partial<CharacterDef>) => void
   onVoiceChange: (cid: string, engine: string, voiceId: string) => void
   onMasterChange: (cid: string, path: string) => void
+  onAssetPick?: (cid: string, slug: string, path: string) => void
 }) {
   const [master, setMaster] = useState<{ st: 'idle' | 'busy' | 'err'; url: string }>({ st: 'idle', url: '' })
   const [variant, setVariant] = useState(0)
@@ -138,8 +151,14 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
           <span className="st-tag st-tag--dim">{c.voice_gender || c.gender}</span>
         )}
         {(c.asset || '').trim() && (
-          <span className="st-tag st-tag--dim" title={vi ? 'Nhân vật AI khớp sẵn từ kho' : 'AI matched this from the library'}>
+          <span className="st-tag st-tag--dim" title={vi ? 'Asset kho được gán cho nhân vật này' : 'Library asset assigned to this character'}>
             📚 {c.asset}
+          </span>
+        )}
+        {assetStatus && STATUS_CHIP[assetStatus] && (
+          <span className={`st-tag ${STATUS_CHIP[assetStatus].cls}`}
+            title={vi ? 'Trạng thái gán asset (GĐ3) — bấm 🗂️ Kho để đổi' : 'Asset resolution state — use 🗂️ Library to change'}>
+            {vi ? STATUS_CHIP[assetStatus].vi : STATUS_CHIP[assetStatus].en}
           </span>
         )}
         {avail && (avail.female.length > 0 || avail.male.length > 0) && (
@@ -178,7 +197,9 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
             onClose={() => setPicker(false)}
             onPick={(a) => {
               setMaster({ st: 'idle', url: `/api/story/assets/${a.id}/image` })
-              onMasterChange(c.id, a.path)          // lock the library asset into the plan
+              // GĐ3: one pick assigns the identity — slug + locked master + status.
+              if (onAssetPick) onAssetPick(c.id, a.slug, a.path)
+              else onMasterChange(c.id, a.path)
             }} />
         )}
         {(master.url || locked) && (

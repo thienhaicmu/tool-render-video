@@ -169,7 +169,13 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
     if os.getenv("STORY_LIBRARY_PICK", "1") == "1":
         try:
             from app.db import story_asset_repo
-            library_catalog = story_asset_repo.build_library_catalog(genres=_genre_group(genre))
+            from app.features.render.engine.visual.character_resolver import resolver_enabled
+            # GĐ3: with the resolver on, the ENGINE assigns characters — the prompt
+            # only needs the BACKGROUNDS section (smaller prompt, no unverifiable picks).
+            _kinds = ("background",) if resolver_enabled() else ("character", "background")
+            library_catalog = story_asset_repo.build_library_catalog(
+                genres=_genre_group(genre), kinds=_kinds,
+                style=(story_asset_repo.active_library_style(art_style) or None))
         except Exception:
             library_catalog = ""
     plan = generate_story_plan_v2(
@@ -324,7 +330,52 @@ def run_story_v2(
             except Exception as _spec_exc:
                 logger.warning("story v2: scene_spec banking skipped (non-fatal): %s", _spec_exc)
 
+        # ── GĐ3: deterministic character→asset resolution (identity lock + unique) ──
+        # Runs BEFORE persist + overlay-master gen (both read CharacterDef.asset).
+        # Locks from the series Character DB win; Review/paste picks are honored;
+        # everyone else gets a unique best-match from the real library inventory.
+        from app.features.render.engine.visual.character_resolver import (
+            resolve_characters, resolver_enabled,
+        )
+        if resolver_enabled():
+            from app.features.render.engine.pipeline.story_series_memory import locked_assets
+            _series_for_lock = (getattr(payload, "story_series_id", "") or "").strip()
+            _res = resolve_characters(
+                plan, locked=locked_assets(_series_for_lock),
+                region=(plan.region or ""), genres=_genre_group(genre))
+            if _res["needs_approval"] or _res["missing"]:
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.assets.resolution", level="WARNING",
+                    message=(f"Character assets: {len(_res['needs_approval'])} need approval, "
+                             f"{len(_res['missing'])} missing (render tiếp tục — nhân vật thiếu "
+                             "sẽ không có overlay)"),
+                    step="render.story",
+                    context={"needs_approval": _res["needs_approval"],
+                             "missing": _res["missing"], "statuses": _res["statuses"]},
+                )
+
         update_story_plan(job_id, plan.to_json())
+
+        # ── GĐ4b: Production Readiness gate — đánh giá 8 tiêu chí TRƯỚC khi tốn
+        # ảnh/TTS/encode. FAIL-set tối thiểu (rỗng/không visual/đĩa/thư mục xuất);
+        # còn lại là WARNING lên monitor. STORY_READINESS_GATE=0 → chỉ log.
+        from app.features.render.engine.pipeline.story_readiness import (
+            evaluate_readiness, gate_enabled,
+        )
+        _ready = evaluate_readiness(
+            plan, target_sec=duration_sec, output_dir=output_dir)
+        if _ready["warns"] or _ready["fails"]:
+            _emit_render_event(
+                channel_code=effective_channel, job_id=job_id, event="story.readiness",
+                level=("ERROR" if _ready["fails"] else "WARNING"),
+                message=(f"Readiness: {len(_ready['fails'])} fail, {len(_ready['warns'])} warn"),
+                step="render.story", context={"checks": _ready["checks"]},
+            )
+            _job_log(effective_channel, job_id,
+                     "Story readiness: " + "; ".join(_ready["fails"] + _ready["warns"]))
+        if not _ready["ready"] and gate_enabled():
+            raise RuntimeError("Story readiness FAILED: " + "; ".join(_ready["fails"]))
 
         # P3: soft semantic lint (non-mutating) — surface weak-plan signals in the
         # monitor without gating the render. Best-effort; never raises.
@@ -472,6 +523,7 @@ def run_story_v2(
             width=width, height=height, fps=fps, bg_value=bg_value, ffmpeg_threads=_cue_threads,
             base_video_path=base_video_path, base_video_dur=base_video_dur,   # A1 (consumed in A2)
             base_video_has_audio=base_video_has_audio,                        # A4
+            resume=bool(resume_mode),                                         # GĐ4c cue reuse
         )
 
         # ── 6. Render cues (parallel; libx264/CPU → no NVENC contention) ────

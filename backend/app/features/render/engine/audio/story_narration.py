@@ -84,13 +84,33 @@ def synthesize_timeline(plan, *, job_id: str, audio_dir, subtitle_mode: str = "h
         logger.info("story_narration: %d beats in %d voice-run(s) lang=%s",
                     total, len(runs), locale)
 
+        # GĐ4c targeted reuse: a beat whose PERSISTED audio still exists on disk is
+        # NOT re-synthesized (resume / partial repair chỉ TTS lại beat thay đổi —
+        # normalize_for_render đã xoá beat_audio của plan sửa tay, nên chỉ resume
+        # hưởng). STORY_TTS_REUSE=0 tắt (re-synth toàn bộ như trước).
+        _reuse = os.getenv("STORY_TTS_REUSE", "1") == "1"
+
+        def _has_valid_audio(bid: str) -> bool:
+            ba = plan.render.beat_audio.get(bid)
+            try:
+                return bool(_reuse and ba and ba.dur > 0 and ba.path
+                            and Path(ba.path).exists() and Path(ba.path).stat().st_size > 0)
+            except Exception:
+                return False
+
         # Silent-hold beats (no text) resolve instantly; only text beats hit TTS.
         spoken = []
+        reused = 0
         for beat in beats:
             if beat.effective_lines():
+                if _has_valid_audio(beat.id):
+                    reused += 1
+                    continue                               # keep the persisted BeatAudio
                 spoken.append(beat)
             else:                                          # silent hold beat (intentional)
                 plan.render.beat_audio[beat.id] = BeatAudio("", max(0.0, float(beat.hold_sec or 0.0)), [])
+        if reused:
+            logger.info("story_narration: reused %d persisted beat audio(s)", reused)
 
         done = total - len(spoken)                         # silent beats already resolved
 

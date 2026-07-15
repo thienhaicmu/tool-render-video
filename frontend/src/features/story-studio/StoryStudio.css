@@ -69,6 +69,8 @@
   white-space: nowrap;
 }
 .st-tag--dim { color: var(--text-3); }
+/* GĐ3 — asset-resolution attention chip (needs_approval / missing) */
+.st-tag--warn { color: var(--warning, #d9a23a); border-color: var(--warning, #d9a23a); }
 .st-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .st-chip {
   padding: 3px var(--space-3);

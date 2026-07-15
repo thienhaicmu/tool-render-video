@@ -204,12 +204,24 @@ Content Director (`render_format="content"`) giờ chạy trên orchestrator dù
 
 | Biến | Mặc định | Ý nghĩa |
 |------|----------|---------|
+| `STORY_COMPILER` | `1` (on) | **GĐ1 Story Compiler** — plan qua 3 call: Understanding (facts + quote-verify) → Writer (kịch bản văn xuôi screenplay-lite, KHÔNG JSON) → Structure (đổ khuôn StoryPlan). Kèm validator định thức giữa các pass + 1 vòng repair kịch bản có chủ đích. `0` = về đường 1-call cũ, bit-identical (prompt s24, schema cũ, multiline off khi unset) |
+| `STORY_SCRIPT_REPAIR` | `1` | (Compiler) 1 vòng Writer-repair khi kịch bản thiếu MAJOR event (targeted — chỉ nêu event thiếu). `0` = tắt |
+| `OPENAI_STORY_WRITER_MAX_TOKENS` / `_TEMPERATURE` | `16384` / `0.8` | Budget + nhiệt call Writer (prose) — tương tự `GEMINI_STORY_WRITER_*`, `CLAUDE_STORY_WRITER_*` |
+| `STORY_READINESS_GATE` | `1` (on) | **GĐ4b** — Production Readiness Validator chạy trước khi tốn ảnh/TTS/encode (8 nhóm: content/continuity/identity/background/composition/tts/duration/storage). FAIL-set tối thiểu (timeline rỗng, không visual, thư mục xuất không ghi được, đĩa <`STORY_MIN_FREE_GB_FAIL`=1GB) mới chặn render; còn lại WARNING lên monitor + `/plan` (field `readiness`). `0` = chỉ log |
+| `STORY_TTS_REUSE` / `STORY_CUE_REUSE` | `1` / `1` | **GĐ4c targeted reuse** — resume KHÔNG TTS lại beat đã có audio hợp lệ trên đĩa và KHÔNG encode lại cue clip đã xong (gián đoạn giữa chừng chỉ làm phần thiếu). `0` = làm lại toàn bộ như trước |
+| `STORY_CHAR_RESOLVER` | `1` (on) | **GĐ3** — engine gán asset nhân vật DETERMINISTIC từ kho thật (hard-filter giới tính + chấm điểm mô tả VI→EN + UNIQUE — 2 nhân vật không trùng mặt) thay vì AI tự chọn slug; prompt chỉ còn mục BACKGROUNDS; identity lock xuyên chương qua `characters.asset_slug` (migration 0026); trạng thái per-character (`matched_exact/matched/needs_approval/missing`) trả về `/plan`+`/validate` (`asset_resolution`) và hiện chip ở Review. `0` = về AI-pick cũ |
 | `STORY_AI_PROVIDER` | `openai` | Provider chạy super-plan (ghi đè bằng `ai_provider` trong payload) |
 | `STORY_SUPER_MODEL` | `gpt-4o` | Model super-plan |
 | `STORY_PLAN_REPAIR` | `1` | Chạy 1 vòng LLM-repair khi parse plan hỏng (Sacred #3 vẫn None nếu repair fail). `0` = tắt |
 | `STORY_MAX_IMAGES` | `15` | **Ceiling** số key-visual/truyện — trần chi phí ảnh (parser cap + gen enforce) |
 | `STORY_MAX_SOURCE_CHARS` | `60000` | Cap độ dài truyện nguồn đọc vào prompt |
-| `STORY_MAX_CHAPTER_CHARS_SINGLE` | `18000` | Trên ngưỡng này → tách 2 super-call nối timeline (chunk-merge) |
+| `STORY_MAX_CHAPTER_CHARS_SINGLE` | `18000` | (Đường 1-call cũ) trên ngưỡng này → tách 2 super-call nối timeline (chunk-merge). Compiler đọc cả chương trong 1 lần |
+
+> **GĐ1 (2026-07-15):** `STORY_MULTILINE_BEATS` đổi ngữ nghĩa: `1` ép bật, `0` ép tắt,
+> **unset = theo `STORY_COMPILER`** (compiler bật → beat mang `lines[]` + nhãn nhịp
+> `pace`/`pause`). `/api/story/plan` có bản async: `POST /api/story/plan/async` →
+> `{plan_job_id}` + `GET /api/story/plan/async/{id}` (FE dùng mặc định — 3 call
+> tuần tự có thể chạy nhiều phút với chương dài).
 
 ### Ảnh (visual)
 

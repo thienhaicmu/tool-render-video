@@ -114,7 +114,12 @@ def test_char_overlay_composites_master(monkeypatch, tmp_path):
     assert "/m.png" in cmd                            # master added as an input
     fc = cmd[cmd.index("-filter_complex") + 1]
     assert "[2:v]" in fc and "overlay=x=" in fc       # composited from input [2]
-    assert f"scale=-1:{int(1280 * 0.90)}" in fc       # large → 0.90 of canvas height
+    # GĐ4a portrait reflow: 720×1280 is PORTRAIT → large (0.90) × PORTRAIT_SCALE_MULT
+    # so two figures fit the narrow frame; right-anchored masters mirror (hflip)
+    # to face the scene centre.
+    from app.features.render.engine.visual.composition import PORTRAIT_SCALE_MULT
+    assert f"scale=-1:{int(1280 * 0.90 * PORTRAIT_SCALE_MULT)}" in fc
+    assert "hflip" in fc                              # right anchor faces inward
     assert "fade=t=in" in fc and "alpha=1" in fc      # fade motion on the fg
 
 

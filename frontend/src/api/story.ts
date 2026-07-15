@@ -90,8 +90,18 @@ export interface RenderState {
   voices: Record<string, [string, string]>
   refs: Record<string, string>
   masters?: Record<string, string>   // A5 — char_id → locked transparent master path
+  // GĐ3 — char_id → matched_exact | matched | needs_approval | missing
+  asset_status?: Record<string, string>
   cues: Cue[]
   total_sec: number
+}
+
+/** GĐ3 — deterministic character→library-asset resolution report. */
+export interface AssetResolution {
+  statuses: Record<string, string>
+  needs_approval: string[]
+  missing: string[]
+  characters: { id: string; name: string; asset: string; status: string }[]
 }
 
 export interface StoryPlanV2 {
@@ -144,6 +154,8 @@ export interface StoryPlanResponse {
   // P3 — soft semantic lint of the plan (non-blocking): orphan visuals,
   // generic-look speakers, looping narration. Shown as review hints.
   warnings?: string[]
+  // GĐ3 — engine-resolved character assets + per-character state (null = resolver off)
+  asset_resolution?: AssetResolution | null
 }
 
 // Paste-JSON feature: preflight a hand-pasted StoryPlan before render (no AI).
@@ -155,6 +167,7 @@ export interface StoryValidateResponse {
   beat_count: number
   character_count: number
   image_count: number
+  asset_resolution?: AssetResolution | null   // GĐ3
   plan_normalized: StoryPlanV2 | null   // scrubbed + reset — render THIS
 }
 
@@ -226,6 +239,37 @@ function post<T>(path: string, body: unknown): Promise<T> {
 /** One super plan call → StoryPlan v2 (source A=paste chapter / B=idea). */
 export const planStory = (req: StoryPlanRequest) =>
   post<StoryPlanResponse>('/api/story/plan', req)
+
+// ── GĐ1f: async plan — the compiler runs 3 sequential LLM calls (a long chapter
+// can take minutes), so the FE starts a job and polls instead of holding one
+// HTTP request open. Same request/response shapes as the sync endpoint.
+export interface StoryPlanJobStart { plan_job_id: string; status: string }
+export interface StoryPlanJobStatus {
+  status: 'running' | 'done' | 'error'
+  result?: StoryPlanResponse
+  error?: string
+  status_code?: number
+}
+
+export const planStoryStart = (req: StoryPlanRequest) =>
+  post<StoryPlanJobStart>('/api/story/plan/async', req)
+
+export const planStoryStatus = (jobId: string) =>
+  apiFetch<StoryPlanJobStatus>(`/api/story/plan/async/${encodeURIComponent(jobId)}`)
+
+/** Start an async plan job and poll it to completion (2s interval, 15 min cap).
+ * Resolves with the same StoryPlanResponse as planStory; rejects on error. */
+export async function planStoryAsync(req: StoryPlanRequest): Promise<StoryPlanResponse> {
+  const { plan_job_id } = await planStoryStart(req)
+  const deadline = Date.now() + 15 * 60_000
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 2000))
+    const s = await planStoryStatus(plan_job_id)
+    if (s.status === 'done' && s.result) return s.result
+    if (s.status === 'error') throw new Error(s.error || 'Story planning failed')
+    if (Date.now() > deadline) throw new Error('Story planning timed out')
+  }
+}
 
 /** Preflight a hand-pasted StoryPlan JSON (paste-JSON feature) before render — no AI. */
 export const validateStoryPlan = (plan: string | StoryPlanV2, has_base_video = false) =>
