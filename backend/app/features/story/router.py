@@ -240,7 +240,7 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     # via story_plan_override) carried no asset picks — library matching was bypassed
     # for the FE review flow. Empty catalog → prompt byte-identical (Sacred #2 rollback).
     library_catalog = ""
-    if _os.getenv("STORY_LIBRARY_PICK", "1") == "1" and _os.getenv("STORY_V3_ONLY", "0") != "1":
+    if _os.getenv("STORY_LIBRARY_PICK", "1") == "1" and _os.getenv("STORY_V3_ONLY", "1") != "1":
         try:
             from app.db import story_asset_repo
             from app.features.render.engine.pipeline.story_pipeline_v2 import _genre_group
@@ -402,13 +402,13 @@ def _resolve_plan_assets(plan, *, series_id: str = "", genre: str = "") -> "Opti
         from app.features.render.engine.visual.character_resolver import (
             resolve_characters, resolver_enabled,
         )
-        if (not resolver_enabled() or os.getenv("STORY_V3_ONLY", "0") == "1") and v3_rep is None:
+        if (not resolver_enabled() or os.getenv("STORY_V3_ONLY", "1") == "1") and v3_rep is None:
             return None
         from app.features.render.engine.pipeline.story_pipeline_v2 import _genre_group
         rep = (resolve_characters(
             plan, locked=_locked,
             region=(getattr(plan, "region", "") or ""), genres=_genre_group(genre))
-               if resolver_enabled() and os.getenv("STORY_V3_ONLY", "0") != "1" else None)
+               if resolver_enabled() and os.getenv("STORY_V3_ONLY", "1") != "1" else None)
         statuses = dict(rep["statuses"] if rep else {})
         if v3_rep:
             for cid in v3_rep["assigned"]:
@@ -705,7 +705,7 @@ def character_master(req: CharacterMasterRequest) -> dict:
     $0) for the Review character panel — the SAME asset the render overlays. Returns
     ``{path, url}``. 422 without any character signal; 502 on compose failure / resvg-py
     unavailable (Sacred Contract #3)."""
-    if os.getenv("STORY_V3_ONLY", "0") == "1":
+    if os.getenv("STORY_V3_ONLY", "1") == "1":
         from app.features.render.engine.visual.library_v3 import resolve_character_preview
         import shutil
         v3_path = resolve_character_preview(req.character_id, framing="full_body")

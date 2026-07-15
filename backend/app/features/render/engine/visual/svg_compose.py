@@ -63,7 +63,7 @@ def _bg_layer(plan, setting, w: int, h: int) -> str:
         except Exception:
             pass
     try:
-        if os.getenv("STORY_V3_ONLY", "0") == "1":
+        if os.getenv("STORY_V3_ONLY", "1") == "1":
             raise RuntimeError("legacy background library disabled by STORY_V3_ONLY")
         from app.db.story_asset_repo import get_by_slug, match_asset, active_library_style
         _st = active_library_style(getattr(plan, "art_style", "") or "")
@@ -76,7 +76,7 @@ def _bg_layer(plan, setting, w: int, h: int) -> str:
             return img
     except Exception:
         pass
-    if os.getenv("STORY_V3_ONLY", "0") == "1":
+    if os.getenv("STORY_V3_ONLY", "1") == "1":
         # Do not silently replace an unresolved V3 identity with procedural art.
         return ""
     # procedural scene (authored at 1536×1024) scaled to COVER w×h
@@ -114,11 +114,11 @@ def _char_layer(ch, plan) -> str:
         except Exception:
             pass
         return ""
-    if os.getenv("STORY_V3_ONLY", "0") == "1":
+    if os.getenv("STORY_V3_ONLY", "1") == "1":
         # An unresolved character must be selected from the approved V3 catalog.
         return ""
     try:
-        if os.getenv("STORY_V3_ONLY", "0") == "1":
+        if os.getenv("STORY_V3_ONLY", "1") == "1":
             raise RuntimeError("legacy character library disabled by STORY_V3_ONLY")
         from app.db.story_asset_repo import get_by_slug, match_asset, active_library_style
         _st = active_library_style(getattr(plan, "art_style", "") or "")
@@ -162,6 +162,9 @@ def compose_visual(plan, visual, w: int = W, h: int = H, chars: bool = True) -> 
             if flip:                            # GĐ4a: side characters face the centre
                 inner = f'<g transform="translate({_CHAR_W},0) scale(-1,1)">{inner}</g>'
             chars += f'<g transform="translate({tx:.1f},{ty:.1f}) scale({sc:.4f})">{inner}</g>'
+        if os.getenv("STORY_V3_ONLY", "1") == "1" and not bg and not chars:
+            logger.warning("svg_compose: V3 visual %s has no resolved layer", getattr(visual, "id", ""))
+            return ""
         return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">'
                 f'{bg}{chars}</svg>')
     except Exception as exc:

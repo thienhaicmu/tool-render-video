@@ -42,6 +42,15 @@ def test_compose_never_raises_on_bad_input():
     assert isinstance(compose_visual(_plan(), Visual(id="v1")), str)
 
 
+def test_v3_only_never_returns_an_empty_layer_svg(monkeypatch):
+    monkeypatch.setenv("STORY_V3_ONLY", "1")
+    plan = StoryPlan(
+        characters=[CharacterDef(id="a", archetype="unknown")],
+        settings=[SettingDef(id="s", scene_kind="unknown")],
+    )
+    assert compose_visual(plan, Visual(id="v1", setting_id="s", character_ids=["a"])) == ""
+
+
 def test_compose_uses_ai_chosen_library_asset(tmp_path):
     # Library-pick (B4): EXPLICIT character.asset / setting.asset slugs → embed the EXACT
     # library file (base64 <image>), not procedural art.

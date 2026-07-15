@@ -44,6 +44,8 @@ def _match_library_background(plan, visual):
     for a Visual with NO character_ids — the cue render overlays characters per-beat, so a
     plain library background would drop them; those keep procedural gen."""
     try:
+        if os.getenv("STORY_V3_ONLY", "1") == "1":
+            return None
         if getattr(visual, "character_ids", None):
             return None
         s = plan.setting(getattr(visual, "setting_id", "") or "")
@@ -92,7 +94,8 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
     # Offline library-first: auto-match a stock BACKGROUND for character-less Visuals
     # before composing procedurally. Gated by STORY_LIBRARY_FIRST (off by default). A
     # matched visual is filled + dropped from gen_visuals (skip compose).
-    if os.getenv("STORY_LIBRARY_FIRST", "0") == "1":
+    if (os.getenv("STORY_LIBRARY_FIRST", "0") == "1"
+            and os.getenv("STORY_V3_ONLY", "1") != "1"):
         _matched: list = []
         for v in list(gen_visuals):
             p = _match_library_background(plan, v)
@@ -188,9 +191,9 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
                 seen.add(sp); used.append(sp)
         if not used:
             return
-        from app.features.render.engine.visual.story_reference_sheet import generate_character_master
         region = (getattr(plan, "region", "") or "")
         genre = (getattr(plan, "genre_key", "") or "")
+        v3_only = os.getenv("STORY_V3_ONLY", "1") == "1"
         library_first = os.getenv("STORY_LIBRARY_FIRST", "0") == "1"
         for cid in used:
             if plan.render.masters.get(cid):
@@ -201,14 +204,22 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
             # AL5 library-first (opt-in): reuse a matching offline library character
             # (transparent master) by name before composing. Default off → procedural.
             path = None
-            if library_first:
+            if v3_only:
+                try:
+                    from app.features.render.engine.visual.library_v3 import resolve_character_preview
+                    path = resolve_character_preview(
+                        getattr(c, "visual_identity_id", "") or "", framing="full_body")
+                except Exception:
+                    path = None
+            elif library_first:
                 try:
                     from app.db.story_asset_repo import match_asset
                     path = match_asset("character", getattr(c, "name", "") or "",
                                        transparent_only=True)
                 except Exception:
                     path = None
-            if not path:
+            if not path and not v3_only:
+                from app.features.render.engine.visual.story_reference_sheet import generate_character_master
                 path = generate_character_master(c, art_style=art_style, region=region, genre=genre)
             if not path:
                 continue
@@ -254,6 +265,25 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
                         (getattr(ln, "emotion", "normal") or "normal").strip().lower(),
                         (getattr(ln, "pose", "stand") or "stand").strip().lower()))
         if not used:
+            return
+        if os.getenv("STORY_V3_ONLY", "1") == "1":
+            from app.features.render.engine.visual.library_v3 import resolve_character_preview
+            for cid, pairs in used.items():
+                c = plan.character(cid)
+                if c is None:
+                    continue
+                path = resolve_character_preview(
+                    getattr(c, "visual_identity_id", "") or "", framing="full_body")
+                if not path:
+                    continue
+                for emo, pose in pairs:
+                    key = f"{cid}:{emo}:{pose}"
+                    if not plan.render.masters.get(key):
+                        plan.render.masters[key] = path
+            try:
+                update_story_plan(job_id, plan.to_json())
+            except Exception:
+                pass
             return
         from app.features.render.engine.visual.svg_char import build_char, emotion_expr
         from app.features.render.engine.visual.svg_raster import save_svg_png
