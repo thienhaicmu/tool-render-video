@@ -177,8 +177,9 @@ python scripts/sync_data.py `
 ```
 
 The `portable` profile includes the V3 library, manifests, `app.db`, BGM,
-uploads, project state, and plan runs. It skips derived caches, logs, model
-downloads, temporary files, and cookies. Each copied file is verified with
+uploads, project state, and AI memory. It skips render history, plan-run traces,
+DB backups, derived caches, logs, model downloads, temporary files, and cookies.
+Each copied file is verified with
 SHA-256 and a manifest is written to `data/.data-sync-manifest.json`.
 
 For a literal full data copy, including caches and local runtime files, use
@@ -186,6 +187,20 @@ For a literal full data copy, including caches and local runtime files, use
 `--include-sensitive`. The synchronizer never copies `.env`, API keys,
 virtual environments, or frontend build output, and it does not build or
 start either application.
+
+To clean this machine before syncing master data, stop the app and run:
+
+```powershell
+python scripts/clean_runtime_data.py --project D:\tool-render-video
+python scripts/clean_runtime_data.py --project D:\tool-render-video --confirm
+```
+
+This removes render/download history, job parts, scores, feedback, caches,
+temporary files, logs, reports, old DB backups, and Story plan-run traces. It
+preserves V3 artwork/manifests, asset library, BGM, Story projects, and AI
+memory. The confirmed command creates a recoverable SQLite backup outside
+`data/`; add `--include-model-caches` only when Whisper/HuggingFace/Torch
+downloads should also be removed.
 
 ### PowerShell shortcuts
 

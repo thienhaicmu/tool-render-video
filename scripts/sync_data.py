@@ -36,6 +36,14 @@ PORTABLE_EXCLUDED_DIRS = {
     "playwright",
     "installers",
     "cookies",
+    "backups",
+    "story_plan_runs",
+    "reports",
+    "playwright",
+    "tmp",
+    "smoke-test-output",
+    "smoke-test-output-batch10",
+    "smoke-test-output-batch10R",
 }
 SENSITIVE_DIRS = {"cookies"}
 VOLATILE_DB_SUFFIXES = {"-wal", "-shm"}

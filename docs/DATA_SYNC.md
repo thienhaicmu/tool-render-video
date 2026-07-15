@@ -20,10 +20,11 @@ Portable sync includes:
 
 - `data/visual_library_v3/` and all V3 manifests;
 - `data/app.db` and `data/ai_memory.db` using a consistent SQLite snapshot;
-- BGM, uploads, Story plan runs, state, backups, and asset library files.
+- BGM, uploads, state, AI memory, and asset library files.
 
-It excludes derived caches, logs, temporary files, downloaded model caches,
-installers, and cookies. This is the recommended profile for a second clone.
+It excludes render history, Story plan runs, database backups, derived caches,
+logs, temporary files, downloaded model caches, installers, and cookies. This
+is the recommended profile for a clean second clone.
 
 ## Full sync
 
@@ -49,3 +50,20 @@ full multi-gigabyte model copy makes checksum verification impractical.
 The source and destination must be different project roots. Existing files at
 the destination are replaced atomically one by one; files excluded by the
 selected profile are left untouched.
+
+## Clean runtime history first
+
+To keep only master/project data on the source machine before syncing:
+
+```powershell
+python scripts/clean_runtime_data.py --project D:\tool-render-video
+python scripts/clean_runtime_data.py --project D:\tool-render-video --confirm
+```
+
+The first command is a dry run. The confirmed command deletes render jobs,
+job parts, download history, scores, feedback, runtime cache, temp/log/report
+directories, old database backups, and Story plan-run traces. It preserves the
+V3 library, manifests, asset library, BGM, Story projects, and AI memory. A
+SQLite backup is created in `.runtime-cleanup-backups/`, outside `data/`, before
+the database is cleaned. Use `--include-model-caches` to also remove large
+Whisper/HuggingFace/Torch/font caches.

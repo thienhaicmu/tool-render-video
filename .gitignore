@@ -72,6 +72,7 @@ backend/dist/
 !.env.example
 reports/
 temp/
+.runtime-cleanup-backups/
 
 # ================================================
 # Media files (VERY IMPORTANT)
