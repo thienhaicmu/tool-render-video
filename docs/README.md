@@ -1,11 +1,11 @@
 # Documentation — AI Video Render Studio
 
 > Bộ tài liệu này viết từ source code hiện tại (không dựa audit cũ). Khi tài
-> liệu và code mâu thuẫn: **tin code**. Cập nhật gần nhất **2026-07-03** — bổ
-> sung: giọng đọc **Gemini TTS**, **render monitor** thiết kế lại (dashboard,
-> step indicator, theme-aware), recap tôn trọng `add_subtitle` + ghép tập nhanh,
-> vá deadlock motion-crop. Các doc phase/plan/audit đã xong được gỡ khỏi `docs/`
-> (còn trong git history).
+> liệu và code mâu thuẫn: **tin code**. Cập nhật gần nhất **2026-07-15** — Story
+> Mode nâng cấp GĐ1→GĐ4 (Story Compiler 3-call, kho asset style-aware + identity
+> resolver, readiness gate, composition engine); doc Story hợp nhất vào
+> [STORY_MODE.md](STORY_MODE.md). Các doc phase/plan đã hoàn thành được gỡ khỏi
+> `docs/` (còn trong git history).
 
 AI Video Render Studio là một ứng dụng desktop **offline-first** để biến video
 dài (file local hoặc tải về từ YouTube/TikTok) thành các clip ngắn dạng dọc
@@ -26,9 +26,12 @@ cho desktop.
 | [CONFIGURATION.md](CONFIGURATION.md) | Toàn bộ biến môi trường + đường dẫn dữ liệu |
 | [API_CONTRACT.md](API_CONTRACT.md) | REST + WebSocket API, các contract đóng băng |
 | [FRONTEND.md](FRONTEND.md) | Cấu trúc frontend React + vỏ Electron |
-| [CONTENT_STRATEGY.md](CONTENT_STRATEGY.md) | Chiến lược nội dung / các lớp "intelligence" chọn & xếp hạng clip |
-| [STORY_ROADMAP.md](STORY_ROADMAP.md) | Plan tổng tối ưu Story Mode v2 (chi phí/chất lượng/tốc độ/UI) theo phase |
-| [RECAP_TESTING.md](RECAP_TESTING.md) | Hướng dẫn kiểm thử chế độ recap (video dài, act-structured) |
+| [STORY_MODE.md](STORY_MODE.md) | **Story Mode chuẩn (GĐ1→GĐ4)**: compiler 3-call, resolver + identity lock, readiness gate, composition, API, kill-switch |
+| [STORY_MODE_OUTPUT_TEMPLATES.md](STORY_MODE_OUTPUT_TEMPLATES.md) | **Spec StoryPlan JSON cho agent ngoài** (system prompt sẵn dán + ví dụ render được) |
+| [STORY_SCENE_SPEC.md](STORY_SCENE_SPEC.md) | scene_spec — vẽ nền declarative trong JSON dán |
+| [OFFLINE_JP_VISUAL_LIBRARY.md](OFFLINE_JP_VISUAL_LIBRARY.md) | Bộ hình JP 3-style (24 vai + 12 nền) — kiến trúc + fallback |
+| [STYLE_PACK_SPEC.md](STYLE_PACK_SPEC.md) | Chuẩn Lottie character pack (mua/cài/recolor/render offline) |
+| [CONTENT_MODE_BACKLOG.md](CONTENT_MODE_BACKLOG.md) | Backlog Content Mode |
 
 ## Đọc theo nhu cầu
 
