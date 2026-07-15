@@ -104,6 +104,42 @@ def _genre_group(genre: str) -> tuple:
     return _GENRE_GROUP.get((genre or "").strip().lower(), ())
 
 
+def _v3_only_missing(plan, character_report: dict | None, scene_report: dict | None,
+                     *, skip_scenes: bool = False) -> dict[str, list[str]]:
+    """Return required Story visuals that have no approved V3 assignment.
+
+    V3-only renders must never turn an unresolved identity into an opaque blank PNG.
+    The reports are intentionally checked against every visual in the plan because
+    the image stage generates the whole visual set before cue rendering.
+    """
+    required_chars = sorted({
+        str(cid).strip()
+        for visual in (getattr(plan, "visuals", None) or [])
+        for cid in (getattr(visual, "character_ids", None) or [])
+        if str(cid).strip()
+    })
+    assigned_chars = {
+        cid for cid, status in ((character_report or {}).get("statuses", {}) or {}).items()
+        if status in {"matched", "matched_exact"}
+    }
+    missing_chars = [cid for cid in required_chars if cid not in assigned_chars]
+
+    required_settings = sorted({
+        str(getattr(visual, "setting_id", "") or "").strip()
+        for visual in (getattr(plan, "visuals", None) or [])
+        if str(getattr(visual, "setting_id", "") or "").strip()
+    })
+    assigned_settings = {
+        sid for sid, status in ((scene_report or {}).get("statuses", {}) or {}).items()
+        if status in {"matched", "matched_exact"}
+    }
+    missing_settings = (
+        [] if skip_scenes
+        else [sid for sid in required_settings if sid not in assigned_settings]
+    )
+    return {"characters": missing_chars, "settings": missing_settings}
+
+
 def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, idea,
                            duration_sec, genre, language, art_style, aspect, subtitle_mode,
                            has_base_video=False, base_video_dur=0.0) -> "tuple[StoryPlan, dict]":
@@ -428,6 +464,28 @@ def run_story_v2(
                 pass
 
         update_story_plan(job_id, plan.to_json())
+
+        if os.getenv("STORY_V3_ONLY", "0") == "1":
+            _v3_missing = _v3_only_missing(
+                plan, _v3_match, _v3_scene_match, skip_scenes=bool(base_video_path),
+            )
+            if _v3_missing["characters"] or _v3_missing["settings"]:
+                _missing_bits = []
+                if _v3_missing["characters"]:
+                    _missing_bits.append("characters=" + ", ".join(_v3_missing["characters"][:8]))
+                if _v3_missing["settings"]:
+                    _missing_bits.append("settings=" + ", ".join(_v3_missing["settings"][:8]))
+                _v3_message = (
+                    "Story V3: no approved identity for " + "; ".join(_missing_bits) +
+                    ". Approve/add these V3 library identities before rendering."
+                )
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.v3_identity.blocked", level="ERROR",
+                    message=_v3_message, step="render.story",
+                    context={"missing": _v3_missing},
+                )
+                raise RuntimeError(_v3_message)
 
         # ── GĐ4b: Production Readiness gate — đánh giá 8 tiêu chí TRƯỚC khi tốn
         # ảnh/TTS/encode. FAIL-set tối thiểu (rỗng/không visual/đĩa/thư mục xuất);

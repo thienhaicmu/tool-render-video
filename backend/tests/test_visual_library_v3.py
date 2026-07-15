@@ -22,12 +22,17 @@ from app.features.render.engine.visual.library_v3 import (
     match_characters,
     resolve_character_preview,
 )
+from app.features.render.engine.visual.library_v3.style_aliases import normalize_v3_style
 from app.domain.story_plan_v2 import CharacterDef, StoryPlan
 from app.features.render.engine.visual.v2.look_spec import derive_look
 
 
 STYLE = "anime_clean_v3"
 HASH = "a" * 64
+
+
+def test_human_facing_style_alias_maps_to_v3_id():
+    assert normalize_v3_style("cinematic ink-wash") == "jp_anime_cinematic_v1"
 
 
 def test_v3_package_exports_configured_manifest_path():

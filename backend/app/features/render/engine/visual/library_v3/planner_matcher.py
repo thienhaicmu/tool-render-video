@@ -20,6 +20,7 @@ from ..character_resolver import (
 )
 from .active_catalog import ActiveCatalog
 from .contracts import CharacterIdentitySpec
+from .style_aliases import normalize_v3_style
 
 MATCH_MIN = 5.0
 ASSIGN_MIN = 2.0
@@ -119,7 +120,7 @@ def match_characters(
         return report
 
     region = (region or getattr(plan, "region", "") or "").strip().lower()
-    style = (style or getattr(plan, "art_style", "") or "").strip().lower()
+    style = normalize_v3_style(style or getattr(plan, "art_style", "") or "")
     locked = {str(key): str(value).strip() for key, value in (locked or {}).items() if str(value).strip()}
     candidates = [
         identity for identity in catalog.characters

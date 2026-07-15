@@ -18,6 +18,7 @@ from app.domain.story_plan_v2 import (
 from app.features.render.engine.pipeline.story_readiness import (
     FAIL, PASS, WARN, evaluate_readiness, gate_enabled,
 )
+from app.features.render.engine.pipeline.story_pipeline_v2 import _v3_only_missing
 from app.features.render.engine.visual.composition import (
     anchor_slot, choose_hook_anchor, layout_slots, overlay_scale_mult,
 )
@@ -131,6 +132,22 @@ def test_readiness_hook_and_crowd_warn():
     p.timeline[0].hook_text = "x" * 80
     r = evaluate_readiness(p)
     assert any(c["id"] == "composition" and c["level"] == WARN for c in r["checks"])
+
+
+def test_v3_only_missing_reports_required_visual_layers():
+    p = StoryPlan(
+        characters=[CharacterDef(id="a"), CharacterDef(id="b")],
+        settings=[SettingDef(id="s1"), SettingDef(id="s2")],
+        visuals=[Visual(id="v1", setting_id="s1", character_ids=["a", "b"]),
+                 Visual(id="v2", setting_id="s2", character_ids=["b"])],
+    )
+    missing = _v3_only_missing(
+        p,
+        {"assigned": {"a": "v3_a"}, "statuses": {"a": "matched"}},
+        {"assigned": {"s1": "v3_s1"}, "statuses": {"s1": "matched_exact"}},
+    )
+    assert missing == {"characters": ["b"], "settings": ["s2"]}
+    assert _v3_only_missing(p, None, None, skip_scenes=True)["settings"] == []
 
 
 def test_readiness_gate_env(monkeypatch):

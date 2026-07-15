@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from ..character_resolver import MATCHED, MATCHED_EXACT, MISSING, NEEDS_APPROVAL, _char_tokens
 from .active_catalog import ActiveCatalog
 from .contracts import SceneIdentitySpec
+from .style_aliases import normalize_v3_style
 
 MATCH_MIN = 4.0
 ASSIGN_MIN = 1.0
@@ -58,7 +59,7 @@ def match_scenes(
     if not settings:
         return report
     region = (region or getattr(plan, "region", "") or "").strip().lower()
-    style = (style or getattr(plan, "art_style", "") or "").strip().lower()
+    style = normalize_v3_style(style or getattr(plan, "art_style", "") or "")
     candidates = [
         scene for scene in catalog.scenes
         if (not region or not scene.region or scene.region == region) and _style_allowed(scene, style)
