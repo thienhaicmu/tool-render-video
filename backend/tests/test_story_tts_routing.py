@@ -38,6 +38,29 @@ def test_elevenlabs_branch_success(monkeypatch):
     assert out == "ELEVEN_OK.mp3"
 
 
+def test_elevenlabs_failure_drops_provider_voice_before_edge(monkeypatch):
+    """An ElevenLabs id must not poison the Edge fallback profile."""
+    monkeypatch.setattr(tts_elevenlabs, "elevenlabs_available", lambda: True)
+    monkeypatch.setattr(
+        tts_elevenlabs,
+        "synthesize_elevenlabs",
+        lambda **kw: (_ for _ in ()).throw(RuntimeError("provider down")),
+    )
+    seen = {}
+
+    def fake_edge(**kw):
+        seen.update(kw)
+        return "EDGE_OK.mp3"
+
+    monkeypatch.setattr(tts, "generate_narration_mp3", fake_edge)
+    out = tts.generate_narration_audio(
+        text="ã“ã‚Œã¯ãƒ†ã‚¹ãƒˆã§ã™", language="ja-JP", gender="female", rate="+0%",
+        job_id="t", voice_id="21m00Tcm4TlvDq8ikWAM", tts_engine="elevenlabs",
+    )
+    assert out == "EDGE_OK.mp3"
+    assert seen["voice_id"] is None
+
+
 # ── P4: Gemini failure → ElevenLabs (user directive) ─────────────────────────
 
 def test_gemini_failure_falls_back_to_elevenlabs(monkeypatch):

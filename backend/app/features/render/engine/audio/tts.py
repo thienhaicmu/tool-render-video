@@ -574,9 +574,25 @@ def generate_narration_audio(
     engine = (tts_engine or "edge").strip().lower()
 
     def _edge() -> str:
+        # Story plans may carry a provider-specific voice id (for example an
+        # ElevenLabs id) while falling back to Edge-TTS.  Passing that id into
+        # resolve_voice_profile makes Edge reject the request before Piper or
+        # XTTS can take over.  Keep a caller-supplied id only when it belongs
+        # to the Edge catalog; otherwise let the language/gender profile pick
+        # the correct Edge voice.
+        edge_voice_id = voice_id
+        if edge_voice_id:
+            try:
+                resolve_voice_profile(language, gender, voice_id=edge_voice_id)
+            except (TypeError, ValueError):
+                logger.info(
+                    "tts_edge_voice_fallback job_id=%s provider=%s voice_id=%s",
+                    job_id, engine, edge_voice_id,
+                )
+                edge_voice_id = None
         return generate_narration_mp3(
             text=text, language=language, gender=gender, rate=rate,
-            job_id=job_id, voice_id=voice_id, output_path=output_path,
+            job_id=job_id, voice_id=edge_voice_id, output_path=output_path,
             content_type=content_type, emotion=emotion,
         )
 
