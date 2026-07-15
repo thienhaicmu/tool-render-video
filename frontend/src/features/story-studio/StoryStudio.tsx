@@ -20,7 +20,9 @@ import { useI18n } from '../../i18n/useI18n'
 import { useRenderStore } from '../../stores/renderStore'
 import { useUIStore } from '../../stores/uiStore'
 import { getDefaultOutputDir } from '../../api/outputDir'
-import { planStoryAsync, validateStoryPlan, type StoryPlanV2 } from '../../api/story'
+import {
+  planStoryAsync, validateStoryPlan, type StoryPlanningTrace, type StoryPlanV2,
+} from '../../api/story'
 import {
   listStoryProjects, saveStoryProject, getStoryProject, deleteStoryProject,
   listTrashedStoryProjects, restoreStoryProject, purgeStoryProject,
@@ -54,6 +56,7 @@ export function StoryStudio() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [planningProgress, setPlanningProgress] = useState<StoryPlanningTrace | null>(null)
 
   // SP2 — project persistence (save / autosave / open / delete).
   const [projectId, setProjectId] = useState('')
@@ -230,7 +233,7 @@ export function StoryStudio() {
 
   // paste_json — preflight the pasted StoryPlan (no AI), then reuse the Review screen.
   async function onValidatePaste() {
-    setBusy(true); setError(null); setNotice(null)
+    setBusy(true); setError(null); setNotice(null); setPlanningProgress(null)
     try {
       const r = await validateStoryPlan(cfg.pastedJson.trim(), !!cfg.baseVideoPath.trim())
       if (!r.ok || !r.plan_normalized) {
@@ -248,10 +251,9 @@ export function StoryStudio() {
   async function onGenerate() {
     if (!inputReady || busy) return
     if (cfg.source === 'paste_json') { void onValidatePaste(); return }
-    setBusy(true); setError(null); setNotice(null)
+    setBusy(true); setError(null); setNotice(null); setPlanningProgress(null)
     try {
-      // GĐ1f — async job + poll: the compiler runs 3 sequential LLM calls, which can
-      // exceed a single HTTP request's comfort zone on long chapters.
+      // Async job + poll: compiler/repair/fallback may run multiple sequential LLM calls.
       const r = await planStoryAsync({
         source: cfg.source,
         chapter_text: cfg.source === 'paste' ? cfg.chapterText.trim() : undefined,
@@ -264,7 +266,7 @@ export function StoryStudio() {
         subtitle_mode: cfg.subtitles ? 'hook_only' : 'off',
         series_id: cfg.seriesId || undefined,
         chapter_no: cfg.chapterNo || undefined,
-      })
+      }, setPlanningProgress)
       if (!r.plan?.timeline?.length) {
         setError(vi ? 'AI không dựng được kế hoạch. Kiểm tra API key / thử lại.'
                     : 'AI produced no plan. Check API key / retry.')
@@ -288,6 +290,16 @@ export function StoryStudio() {
             ? `Bạn đặt ~${want} phút nhưng AI dựng ~${got} phút (≈${Math.round(est)}s). Chỉnh timeline ở bước Duyệt nếu cần đúng thời lượng.`
             : `You targeted ~${want} min but the AI wrote ~${got} min (≈${Math.round(est)}s). Edit the timeline in Review to hit the length.`)
         }
+        if (r.warnings?.length) {
+          const warningText = (vi ? 'Cảnh báo: ' : 'Warnings: ') + r.warnings.join(' · ')
+          setNotice((current) => [current, warningText].filter(Boolean).join(' · '))
+        }
+        if (r.authoring_mode === 'compiler_fallback_single_pass') {
+          const fallbackText = vi
+            ? 'Compiler không qua quality gate; kế hoạch dùng legacy fallback.'
+            : 'The compiler did not pass its quality gate; this plan used the legacy fallback.'
+          setNotice((current) => [current, fallbackText].filter(Boolean).join(' · '))
+        }
         setPhase('review')
       }
     } catch (e) { fail(e) } finally { setBusy(false) }
@@ -305,6 +317,9 @@ export function StoryStudio() {
       story_series_id: cfg.seriesId,
       story_chapter_no: cfg.chapterNo,
       story_plan_override: JSON.stringify(p),
+      story_plan_provider: planningProgress?.selected_provider || '',
+      story_plan_model: planningProgress?.selected_model || '',
+      story_plan_authoring_mode: planningProgress?.authoring_mode || '',
       story_base_video_path: cfg.baseVideoPath,
       story_voice_mode: cfg.voiceMode,
       voice_language: VOICE_LOCALE[cfg.language],
@@ -347,7 +362,9 @@ export function StoryStudio() {
       )}
       {error && <div className="st-alert st-alert--fail" role="alert">{error}</div>}
       {notice && <div className="st-alert st-alert--warn" role="status">{notice}</div>}
-      {busy && phase === 'input' && cfg.source !== 'paste_json' && <StoryDirectorConsole vi={vi} source={cfg.source} />}
+      {busy && phase === 'input' && cfg.source !== 'paste_json' && (
+        <StoryDirectorConsole vi={vi} source={cfg.source} progress={planningProgress} />
+      )}
       {phase === 'input' && (
         <InputScreen
           vi={vi} cfg={cfg} setKey={setKey} busy={busy} ready={inputReady}

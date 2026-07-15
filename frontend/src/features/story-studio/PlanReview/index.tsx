@@ -12,7 +12,7 @@
  * (visual_id → image url) is shared so the TimelineEditor can thumbnail each visual.
  */
 import { useEffect, useRef, useState } from 'react'
-import type { StoryPlanV2, Beat, Visual, CharacterDef } from '../../../api/story'
+import type { StoryPlanV2, Beat, Visual, CharacterDef, ShotDef } from '../../../api/story'
 import { svgPreview } from '../../../api/story'
 import type { Aspect, StoryLang } from '../types'
 import { beatEstSec, visualColorMap } from './helpers'
@@ -78,6 +78,10 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
     (s, b) => s + beatEstSec(b, language) + Math.max(0, b.pause_after || 0), 0)
   const mm = Math.floor(liveTotal / 60)
   const ss = Math.round(liveTotal % 60)
+  const shots = plan.shots ?? []
+  const scenes = plan.scenes ?? []
+  const shotSizes = new Set(shots.map((shot) => shot.shot_size)).size
+  const shotAngles = new Set(shots.map((shot) => shot.angle)).size
 
   const patch = (p: Partial<StoryPlanV2>) => setPlan({ ...plan, ...p })
   const updateCharacter = (id: string, up: Partial<CharacterDef>) =>
@@ -117,6 +121,8 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
   }
   const updateBeat = (id: string, up: Partial<Beat>) =>
     patch({ timeline: plan.timeline.map((b) => (b.id === id ? { ...b, ...up } : b)) })
+  const updateShot = (id: string, up: Partial<ShotDef>) =>
+    patch({ shots: (plan.shots ?? []).map((shot) => (shot.id === id ? { ...shot, ...up } : shot)) })
 
   function moveBeat(id: string, dir: -1 | 1) {
     const t = [...plan.timeline]
@@ -153,6 +159,9 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
           <div className="st-muted">
             {plan.characters.length} {vi ? 'nhân vật' : 'characters'} · {plan.visuals.length} {vi ? 'hình' : 'visuals'} ·{' '}
             {plan.timeline.length} {vi ? 'phân đoạn' : 'beats'} · ~{mm}m {ss}s
+            {shots.length > 0 && (
+              <> · {scenes.length} {vi ? 'cảnh' : 'scenes'} · {shots.length} shots · {shotSizes}/{shotAngles} {vi ? 'cỡ/góc' : 'sizes/angles'}</>
+            )}
             {(libChars > 0 || libSettings > 0) && (
               <span className="st-tag st-tag--dim" style={{ marginLeft: 8 }}
                 title={vi ? 'Số nhân vật/cảnh AI khớp sẵn từ kho (còn lại vẽ tự động)'
@@ -188,7 +197,8 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
       />
       <TimelineEditor
         vi={vi} plan={plan} language={language} colors={colors} previews={previews}
-        onChangeBeat={updateBeat} onMove={moveBeat} onDelete={deleteBeat} onAdd={addBeatAfter}
+        onChangeBeat={updateBeat} onChangeShot={updateShot}
+        onMove={moveBeat} onDelete={deleteBeat} onAdd={addBeatAfter}
       />
     </>
   )

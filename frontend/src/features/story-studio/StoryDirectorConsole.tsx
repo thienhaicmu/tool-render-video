@@ -1,50 +1,79 @@
-/**
- * StoryDirectorConsole — the "AI Story Director" planning overlay (F4a).
- *
- * Shown while the ONE super plan call runs (planStory). The call is synchronous
- * (no server progress stream for planning), so — like Content's AiDirectorConsole
- * — this steps through the REAL dependency order on a timer and HOLDS the last
- * step until the parent unmounts it (no fake %). Mode B (idea) prepends an
- * authoring step. Studio BASE tokens only.
- */
-import { useEffect, useState } from 'react'
+import type { StoryPlanningTrace } from '../../api/story'
 import type { StorySource } from './types'
 
-export function StoryDirectorConsole({ vi, source }: { vi: boolean; source: StorySource }) {
-  const steps = (source === 'idea'
-    ? (vi ? ['Sáng tác truyện từ ý tưởng', 'Đọc & hiểu truyện', 'Định nghĩa nhân vật', 'Dựng bối cảnh', 'Thiết kế key-visual', 'Viết timeline']
-          : ['Authoring the story', 'Reading & understanding', 'Defining characters', 'Building settings', 'Designing key visuals', 'Writing the timeline'])
-    : (vi ? ['Đọc & hiểu truyện', 'Định nghĩa nhân vật', 'Dựng bối cảnh', 'Thiết kế key-visual', 'Viết timeline']
-          : ['Reading & understanding', 'Defining characters', 'Building settings', 'Designing key visuals', 'Writing the timeline']))
+type Props = {
+  vi: boolean
+  source: StorySource
+  progress: StoryPlanningTrace | null
+}
 
-  const [at, setAt] = useState(0)
-  useEffect(() => {
-    setAt(0)
-    // Advance through the steps and HOLD on the last one (the call may still be
-    // running) — honest: we never claim "done" here, the parent unmounts us.
-    const t = setInterval(() => setAt((i) => Math.min(i + 1, steps.length - 1)), 1200)
-    return () => clearInterval(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source])
+const stageGroup = (stage = '') => {
+  if (stage.startsWith('understanding')) return 'understanding'
+  if (stage.startsWith('writer')) return 'writer'
+  if (stage.startsWith('structure')) return 'structure'
+  if (stage.startsWith('legacy')) return 'legacy'
+  return stage
+}
+
+export function StoryDirectorConsole({ vi, source, progress }: Props) {
+  const labels: Record<string, string> = vi
+    ? {
+        understanding: 'Đọc và kiểm chứng dữ kiện',
+        writer: 'Sáng tác kịch bản lời kể',
+        structure: 'Dựng kế hoạch sản xuất',
+        legacy: 'Dựng kế hoạch dự phòng',
+      }
+    : {
+        understanding: 'Read and verify source facts',
+        writer: 'Write the narration script',
+        structure: 'Build the production plan',
+        legacy: 'Build the fallback plan',
+      }
+
+  const stages = source === 'idea'
+    ? ['writer', 'structure']
+    : ['understanding', 'writer', 'structure']
+  const active = stageGroup(progress?.phase)
+  if ((progress?.compiler_fallback || active === 'legacy') && !stages.includes('legacy')) {
+    stages.push('legacy')
+  }
+  const completed = new Set(
+    (progress?.events || [])
+      .filter((event) => event.event === 'call_completed' && event.status === 'success')
+      .map((event) => stageGroup(event.stage)),
+  )
+  const routes = Object.entries(progress?.role_routes ?? {})
 
   return (
     <div className="st-console-backdrop" role="status" aria-live="polite">
       <div className="st-console">
         <div className="st-console-hd">
           <span className="st-console-spin" aria-hidden />
-          <span className="st-console-title">{vi ? 'AI Story Director đang dựng kế hoạch…' : 'AI Story Director is planning…'}</span>
+          <span className="st-console-title">
+            {progress?.message || (vi ? 'AI Story Director đang chuẩn bị...' : 'AI Story Director is preparing...')}
+          </span>
         </div>
         <ol className="st-console-steps">
-          {steps.map((s, i) => {
-            const state = i < at ? 'done' : i === at ? 'active' : 'todo'
+          {stages.map((stage, index) => {
+            const state = active === stage ? 'active' : completed.has(stage) ? 'done' : 'todo'
             return (
-              <li key={s} className={`st-console-step is-${state}`}>
-                <span className="st-console-dot">{i < at ? '✓' : i + 1}</span>
-                <span>{s}</span>
+              <li key={stage} className={`st-console-step is-${state}`}>
+                <span className="st-console-dot">{state === 'done' ? '✓' : index + 1}</span>
+                <span>{labels[stage]}</span>
               </li>
             )
           })}
         </ol>
+        <div className="st-console-meta">
+          {vi ? 'Lượt gọi AI thực tế' : 'Actual AI calls'}: {progress?.actual_llm_calls ?? 0}
+        </div>
+        {routes.length > 0 && (
+          <div className="st-console-routes">
+            {routes.map(([role, route]) => (
+              <span key={role}>{role}: {route.provider || '?'} / {route.model || '?'}</span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -54,7 +54,7 @@ def test_lint_clean_plan_no_warnings():
         language="vi",
         characters=[CharacterDef(id="hero", name="Hero", canonical_desc="a hero")],
         visuals=[Visual(id="v1", setting_id="", prompt="scene", character_ids=["hero"])],
-        timeline=[Beat(id="b1", narration="Một câu.", speaker_id="hero", visual_id="v1")],
+        timeline=[Beat(id="b1", narration="Một câu.", speaker_id="hero", visual_id="v1", hook=True)],
     )
     assert lint_story_plan(p) == []
 

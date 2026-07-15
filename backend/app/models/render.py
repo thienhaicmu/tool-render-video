@@ -410,6 +410,11 @@ class RenderRequest(BaseModel):
     # set, run_story renders FROM this plan and SKIPS the AI planning call. "" =
     # generate via the Story Director (Sacred Contract #2: default inert).
     story_plan_override: str = ""
+    # Provenance copied from the approved planning run so render-by-override keeps
+    # the provider/model/compiler path that authored the plan.
+    story_plan_provider: str = ""
+    story_plan_model: str = ""
+    story_plan_authoring_mode: str = ""
     # ── Story v2 input source (B0) ────────────────────────────────────────────
     # Two ways to feed Story Mode, both → the SAME super-prompt StoryPlan v2:
     #   ""|"paste" = adapt the story text in ``content_script`` (default, inert).

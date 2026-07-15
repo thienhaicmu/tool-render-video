@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -161,6 +162,7 @@ def validate_understanding(u: StoryUnderstanding, chapter: str) -> dict:
         if not hay:
             return rep
         positions: list[int] = []
+        end_positions: list[int] = []
         for ev in u.events:
             rep["total"] += 1
             if ev.importance == "major":
@@ -175,13 +177,14 @@ def validate_understanding(u: StoryUnderstanding, chapter: str) -> dict:
                     ev.verified = True
                     ev.src_pos = pos
                     positions.append(pos)
+                    end_positions.append(pos + len(q))
                     rep["verified"] += 1
                     if ev.importance == "major":
                         rep["majors_verified"] += 1
                     continue
             rep["warnings"].append(f"event {ev.id}: quote not found in source (unverified)")
         if positions:
-            rep["tail_covered"] = max(positions) >= len(hay) * _TAIL_FRACTION
+            rep["tail_covered"] = max(end_positions) >= len(hay) * _TAIL_FRACTION
             if not rep["tail_covered"]:
                 rep["warnings"].append(
                     "no verified event in the last 30% of the chapter — the ending may be missing")
@@ -200,6 +203,12 @@ def understanding_block(u: StoryUnderstanding) -> str:
     events are listed — an unverified summary is still a to-cover item)."""
     try:
         lines: list[str] = []
+        if u.topic:
+            lines.append(f"TOPIC: {u.topic}")
+        if u.genre:
+            lines.append(f"GENRE: {u.genre}")
+        if u.tone:
+            lines.append(f"TONE: {u.tone}")
         if u.characters:
             lines.append("CHARACTERS:")
             for c in u.characters:
@@ -207,14 +216,34 @@ def understanding_block(u: StoryUnderstanding) -> str:
                 desc = (c.get("desc") or "")[:80]
                 lines.append("- " + " | ".join(b for b in bits if b) + (f" | {desc}" if desc else ""))
         if u.locations:
-            lines.append("PLACES: " + ", ".join(l.get("name", "") for l in u.locations if l.get("name")))
+            lines.append("PLACES:")
+            for loc in u.locations:
+                name = loc.get("name", "")
+                if name:
+                    desc = (loc.get("desc") or "")[:120]
+                    lines.append(f"- {loc.get('id', '')} | {name}" + (f" | {desc}" if desc else ""))
+        if u.relationships:
+            lines.append("RELATIONSHIPS:")
+            for rel in u.relationships[:32]:
+                lines.append(f"- {rel.get('a', '')} -> {rel.get('b', '')}: {rel.get('type', '')}")
         if u.goals_conflicts:
             lines.append("CORE CONFLICTS: " + " · ".join(u.goals_conflicts[:6]))
         if u.events:
             lines.append("EVENTS (cover ALL, in order):")
             for ev in u.events:
                 tag = "[MAJOR] " if ev.importance == "major" else ""
-                lines.append(f"{ev.id}. {tag}{ev.summary}")
+                meta = []
+                if ev.characters:
+                    meta.append("characters=" + ",".join(ev.characters))
+                if ev.location:
+                    meta.append("location=" + ev.location)
+                if ev.time:
+                    meta.append("time=" + ev.time)
+                verification = "verified" if ev.verified else "unverified"
+                suffix = f" ({'; '.join(meta)})" if meta else ""
+                lines.append(f"{ev.id}. {tag}{ev.summary}{suffix} [{verification}]")
+                if ev.quote:
+                    lines.append(f"   source quote: {ev.quote[:180]}")
         return "\n".join(lines).strip()
     except Exception:
         return ""
@@ -321,6 +350,101 @@ def validate_script(script: str, u: Optional[StoryUnderstanding], *,
     return rep
 
 
+def understanding_gate(rep: dict, *, min_verified_ratio: float = 0.70) -> "list[str]":
+    """Return blocking reasons for a Pass-1 validation report."""
+    reasons: list[str] = []
+    try:
+        total = int(rep.get("total") or 0)
+        verified = int(rep.get("verified") or 0)
+        majors_total = int(rep.get("majors_total") or 0)
+        majors_verified = int(rep.get("majors_verified") or 0)
+        if total <= 0:
+            reasons.append("understanding contains no verifiable events")
+        elif verified / total < max(0.0, min(1.0, float(min_verified_ratio))):
+            reasons.append(f"only {verified}/{total} events have verified source quotes")
+        if majors_total > 0 and majors_verified < majors_total:
+            reasons.append(f"only {majors_verified}/{majors_total} major events are verified")
+        if not bool(rep.get("tail_covered")):
+            reasons.append("no verified event covers the source ending")
+        if not bool(rep.get("order_ok", True)):
+            reasons.append("verified events are not in source order")
+    except Exception as exc:
+        reasons.append(f"understanding gate failed: {exc}")
+    return reasons
+
+
+def script_gate(rep: dict, *, target_chars: int = 0,
+                min_target_ratio: float = 0.70) -> "list[str]":
+    """Return blocking reasons after the bounded Writer repair/expand attempts."""
+    reasons: list[str] = []
+    try:
+        if not bool(rep.get("ok")):
+            reasons.append("script is empty or misses one or more major events")
+        unknown = list(rep.get("unknown_speakers") or [])
+        if unknown:
+            reasons.append("unknown speakers remain: " + ", ".join(unknown[:8]))
+        if not bool(rep.get("tail_ok", True)):
+            reasons.append("the final major event is under-told or appears too early")
+        spoken = int(rep.get("spoken_chars") or 0)
+        if target_chars > 0 and spoken < target_chars * max(0.0, float(min_target_ratio)):
+            reasons.append(f"script length {spoken} is below the accepted target floor")
+    except Exception as exc:
+        reasons.append(f"script gate failed: {exc}")
+    return reasons
+
+
+def validate_plan_coverage(script: str, plan) -> dict:
+    """Measure deterministic spoken-token recall from approved script to StoryPlan."""
+    rep = {"coverage": 0.0, "order_coverage": 0.0,
+           "script_tokens": 0, "plan_tokens": 0, "warnings": []}
+    try:
+        source = _SCENE_RE.sub("", script or "")
+        source = re.sub(r"^NARR\s*:\s*", "", source, flags=re.MULTILINE)
+        source = re.sub(r"^[^:\n\[\]]{1,60}?\s*(?:\([^)]{0,24}\))?\s*:\s*", "", source,
+                        flags=re.MULTILINE)
+        plan_parts = []
+        for beat in list(getattr(plan, "timeline", None) or []):
+            try:
+                plan_parts.extend((ln.text or "") for ln in beat.effective_lines())
+            except Exception:
+                plan_parts.append(getattr(beat, "narration", "") or "")
+        src_tokens = [t for t in _norm(source).split() if len(t) > 1]
+        normalized_plan = _norm(" ".join(plan_parts))
+        plan_tokens = [t for t in normalized_plan.split() if len(t) > 1]
+        rep["script_tokens"] = len(src_tokens)
+        rep["plan_tokens"] = len(plan_tokens)
+        if src_tokens:
+            matched = sum((Counter(src_tokens) & Counter(plan_tokens)).values())
+            rep["coverage"] = round(matched / len(src_tokens), 4)
+            # Sample ordered 3-token anchors across the script and require monotonic
+            # matches in the plan. This catches a Structure pass that preserves words
+            # but silently reorders scenes or moves the ending.
+            anchor_count = min(12, max(1, len(src_tokens) // 3))
+            step = max(1, len(src_tokens) // anchor_count)
+            anchors = [" ".join(src_tokens[i:i + 3])
+                       for i in range(0, len(src_tokens), step)
+                       if len(src_tokens[i:i + 3]) == 3][:anchor_count]
+            cursor = 0
+            ordered_hits = 0
+            for anchor in anchors:
+                pos = normalized_plan.find(anchor, cursor)
+                if pos >= 0:
+                    ordered_hits += 1
+                    cursor = pos + len(anchor)
+            rep["order_coverage"] = round(ordered_hits / len(anchors), 4) if anchors else 0.0
+        if not src_tokens:
+            rep["warnings"].append("approved script has no spoken tokens")
+        elif rep["coverage"] < 0.75:
+            rep["warnings"].append(
+                f"StoryPlan preserves only {rep['coverage'] * 100:.0f}% of approved script tokens")
+        if src_tokens and rep["order_coverage"] < 0.70:
+            rep["warnings"].append(
+                f"StoryPlan preserves only {rep['order_coverage'] * 100:.0f}% of ordered script anchors")
+    except Exception as exc:
+        rep["warnings"].append(f"plan coverage validation failed: {exc}")
+    return rep
+
+
 def _slug(name: str) -> str:
     t = unicodedata.normalize("NFD", name or "")
     t = "".join(ch for ch in t if unicodedata.category(ch) != "Mn")
@@ -329,4 +453,5 @@ def _slug(name: str) -> str:
 
 
 __all__ = ["StoryUnderstanding", "UEvent", "parse_understanding", "validate_understanding",
-           "understanding_block", "validate_script", "script_spoken_chars"]
+           "understanding_block", "validate_script", "script_spoken_chars",
+           "understanding_gate", "script_gate", "validate_plan_coverage"]

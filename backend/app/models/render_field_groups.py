@@ -49,7 +49,8 @@ FIELD_GROUPS: dict[str, frozenset[str]] = {
         # images + narration → Video. BE-only (wire surface lands in P6). The
         # chapter text reuses content_script (in the "content" group).
         "story_series_id", "story_chapter_no", "story_art_style",
-        "story_reading_pace", "story_plan_override",
+        "story_reading_pace", "story_plan_override", "story_plan_provider",
+        "story_plan_model", "story_plan_authoring_mode",
         # v2 (B0): input source — paste text vs AI-authored from an idea.
         "story_source", "story_idea", "story_duration_sec", "story_genre",
         # Phase 2: final image provider (gpt_image paid | pollinations free).

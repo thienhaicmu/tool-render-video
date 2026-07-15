@@ -67,6 +67,14 @@ TEXT_ANCHOR = ("auto", "top", "bottom", "left", "right")
 # round-tripped plan carrying real numbers is never overridden.
 PACE = ("slow", "normal", "fast")
 PAUSE = ("none", "beat", "long")
+SEQUENCE_ROLE = ("setup", "inciting", "rising", "climax", "resolution")
+SCENE_PURPOSE = ("setup", "reveal", "conflict", "reversal", "climax", "payoff", "transition")
+SHOT_SIZE = ("extreme_wide", "wide", "medium", "close", "extreme_close")
+SHOT_ANGLE = ("eye_level", "high", "low", "over_shoulder", "top_down", "dutch")
+LENS = ("wide", "normal", "portrait", "telephoto")
+CAMERA_POSITION = ("front", "three_quarter", "profile", "rear", "overhead")
+COMPOSITION = ("centered", "rule_of_thirds", "symmetrical", "leading_lines", "negative_space")
+MOTION_INTENT = ("static", "push_in", "pull_out", "track_left", "track_right", "reveal")
 _PACE_SPEED = {"slow": 0.88, "normal": 1.0, "fast": 1.12}
 _PAUSE_SEC = {"none": 0.0, "beat": 0.7, "long": 1.6}
 # Pool a "random" transition resolves into (deterministic via seed).
@@ -154,11 +162,70 @@ class Line:
 
 
 @dataclass
+class RelationshipDef:
+    source_id: str = ""
+    target_id: str = ""
+    kind: str = ""
+    status: str = ""
+
+
+@dataclass
+class Sequence:
+    id: str = ""
+    role: str = "setup"
+    purpose: str = ""
+    scene_ids: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Scene:
+    id: str = ""
+    sequence_id: str = ""
+    setting_id: str = ""
+    purpose: str = "setup"
+    participant_ids: list[str] = field(default_factory=list)
+    beat_ids: list[str] = field(default_factory=list)
+    shot_ids: list[str] = field(default_factory=list)
+    time_of_day: str = ""
+    entry_state: str = ""
+    exit_state: str = ""
+    continuity_key: str = ""
+
+
+@dataclass
+class Shot:
+    id: str = ""
+    scene_id: str = ""
+    beat_ids: list[str] = field(default_factory=list)
+    visual_id: str = ""
+    shot_size: str = "medium"
+    angle: str = "eye_level"
+    lens: str = "normal"
+    camera_position: str = "front"
+    blocking: str = ""
+    eyeline: str = ""
+    axis: str = ""
+    composition: str = "rule_of_thirds"
+    motion_intent: str = "static"
+
+
+@dataclass
+class CharacterState:
+    character_id: str = ""
+    scene_id: str = ""
+    objective: str = ""
+    emotion: str = "normal"
+    position: str = ""
+    continuity_notes: str = ""
+
+
+@dataclass
 class Beat:
     id: str = ""
     narration: str = ""
     speaker_id: str = ""      # → CharacterDef.id ∪ ""
     visual_id: str = ""       # → Visual.id
+    shot_id: str = ""         # → Shot.id (derived for legacy plans)
     focus: str = "center"     # ∈ FOCUS
     motion: str = "zoom_in"   # ∈ MOTION
     emotion: str = "normal"
@@ -294,6 +361,11 @@ class StoryPlan:
     characters: list[CharacterDef] = field(default_factory=list)
     settings: list[SettingDef] = field(default_factory=list)
     visuals: list[Visual] = field(default_factory=list)
+    relationships: list[RelationshipDef] = field(default_factory=list)
+    sequences: list[Sequence] = field(default_factory=list)
+    scenes: list[Scene] = field(default_factory=list)
+    shots: list[Shot] = field(default_factory=list)
+    character_states: list[CharacterState] = field(default_factory=list)
     timeline: list[Beat] = field(default_factory=list)
     render: RenderState = field(default_factory=RenderState)
 
@@ -309,6 +381,14 @@ class StoryPlan:
     def setting(self, sid: str) -> Optional[SettingDef]:
         k = (sid or "").strip().lower()
         return next((s for s in self.settings if s.id.strip().lower() == k), None) if k else None
+
+    def shot(self, shot_id: str) -> Optional[Shot]:
+        k = (shot_id or "").strip().lower()
+        return next((s for s in self.shots if s.id.strip().lower() == k), None) if k else None
+
+    def scene(self, scene_id: str) -> Optional[Scene]:
+        k = (scene_id or "").strip().lower()
+        return next((s for s in self.scenes if s.id.strip().lower() == k), None) if k else None
 
     def image_count(self) -> int:
         return len(self.visuals)
@@ -357,9 +437,45 @@ class StoryPlan:
         try:
             # INV7: unique ids per list.
             _dedupe_ids(self.characters); _dedupe_ids(self.settings); _dedupe_ids(self.visuals)
+            _dedupe_ids(self.sequences); _dedupe_ids(self.scenes); _dedupe_ids(self.shots)
             char_ids = {c.id for c in self.characters}
             set_ids = {s.id for s in self.settings}
             vis_ids = {v.id for v in self.visuals}
+            seq_ids = {s.id for s in self.sequences}
+            scene_ids = {s.id for s in self.scenes}
+            shot_ids = {s.id for s in self.shots}
+            beat_ids = {b.id for b in self.timeline}
+            self.relationships = [r for r in self.relationships
+                                  if r.source_id in char_ids and r.target_id in char_ids
+                                  and r.source_id != r.target_id]
+            for seq in self.sequences:
+                seq.role = _norm(seq.role, SEQUENCE_ROLE, "setup")
+                seq.scene_ids = [sid for sid in seq.scene_ids if sid in scene_ids]
+            for scene in self.scenes:
+                if scene.sequence_id not in seq_ids:
+                    scene.sequence_id = ""
+                if scene.setting_id not in set_ids:
+                    scene.setting_id = ""
+                scene.purpose = _norm(scene.purpose, SCENE_PURPOSE, "setup")
+                scene.participant_ids = [cid for cid in scene.participant_ids if cid in char_ids]
+                scene.beat_ids = [bid for bid in scene.beat_ids if bid in beat_ids]
+                scene.shot_ids = [sid for sid in scene.shot_ids if sid in shot_ids]
+            for shot in self.shots:
+                if shot.scene_id not in scene_ids:
+                    shot.scene_id = ""
+                if shot.visual_id not in vis_ids:
+                    shot.visual_id = ""
+                shot.beat_ids = [bid for bid in shot.beat_ids if bid in beat_ids]
+                shot.shot_size = _norm(shot.shot_size, SHOT_SIZE, "medium")
+                shot.angle = _norm(shot.angle, SHOT_ANGLE, "eye_level")
+                shot.lens = _norm(shot.lens, LENS, "normal")
+                shot.camera_position = _norm(shot.camera_position, CAMERA_POSITION, "front")
+                shot.composition = _norm(shot.composition, COMPOSITION, "rule_of_thirds")
+                shot.motion_intent = _norm(shot.motion_intent, MOTION_INTENT, "static")
+            self.character_states = [s for s in self.character_states
+                                     if s.character_id in char_ids and s.scene_id in scene_ids]
+            for state in self.character_states:
+                state.emotion = _norm(state.emotion, EMOTION, "normal")
             for v in self.visuals:                                   # INV3/INV4/INV5
                 if v.setting_id and v.setting_id not in set_ids:
                     v.setting_id = ""
@@ -372,6 +488,8 @@ class StoryPlan:
             for b in self.timeline:
                 if b.visual_id not in vis_ids:                       # INV1: dangling → drop
                     continue
+                if b.shot_id and b.shot_id not in shot_ids:
+                    b.shot_id = ""
                 if b.speaker_id and b.speaker_id not in char_ids:    # INV2
                     b.speaker_id = ""
                 for ln in b.lines:                                   # INV2 (per line) + INV5
@@ -462,7 +580,9 @@ class StoryPlan:
         Pure; never raises."""
         try:
             self.cap_visuals(ceiling)      # cap_visuals also reindexes
+            self.derive_scene_shot_grammar()
             self.validate_refs()
+            self.apply_shot_grammar()
             self.reindex()
             self.render.cues = []          # rebuilt by build_cues every render
             self.render.beat_audio = {}    # re-synthesized by synthesize_timeline
@@ -471,6 +591,145 @@ class StoryPlan:
         except Exception:
             pass
         return self
+
+    def derive_scene_shot_grammar(self) -> "StoryPlan":
+        """Fill a first-class editorial/camera graph for legacy AI plans.
+
+        Existing authored entities win. Missing entities are derived from contiguous
+        setting runs and one executable shot per beat. The timeline remains the
+        backward-compatible source of narration and timing.
+        """
+        try:
+            if not self.timeline:
+                return self
+            beat_ids = {beat.id for beat in self.timeline}
+            shot_ids = {shot.id for shot in self.shots}
+            if (self.scenes and self.shots
+                    and all((beat.shot_id or "") in shot_ids for beat in self.timeline)
+                    and all(any(bid in beat_ids for bid in shot.beat_ids) for shot in self.shots)):
+                return self.apply_shot_grammar()
+
+            vis_by_id = {v.id: v for v in self.visuals}
+            self.sequences = []
+            self.scenes = []
+            self.shots = []
+            self.character_states = []
+            total = len(self.timeline)
+            ranges = ((0.00, 0.18, "setup"), (0.18, 0.34, "inciting"),
+                      (0.34, 0.72, "rising"), (0.72, 0.90, "climax"),
+                      (0.90, 1.01, "resolution"))
+
+            scene_beats: list[list[Beat]] = []
+            current: list[Beat] = []
+            current_key = None
+            for beat in self.timeline:
+                visual = vis_by_id.get(beat.visual_id)
+                setting_id = visual.setting_id if visual else ""
+                key = (setting_id, beat.visual_id)
+                if current and key != current_key:
+                    scene_beats.append(current)
+                    current = []
+                current_key = key
+                current.append(beat)
+            if current:
+                scene_beats.append(current)
+
+            seq_by_role: dict[str, Sequence] = {}
+            size_cycle = ("wide", "medium", "close", "medium", "wide", "extreme_close")
+            angle_cycle = ("eye_level", "three_quarter", "low", "over_shoulder", "high")
+            comp_cycle = ("rule_of_thirds", "leading_lines", "centered", "negative_space", "symmetrical")
+            motion_cycle = ("push_in", "track_left", "static", "track_right", "pull_out", "reveal")
+            beat_index = {b.id: i for i, b in enumerate(self.timeline)}
+            char_positions = self._char_positions()
+
+            for scene_no, beats in enumerate(scene_beats, start=1):
+                first_idx = beat_index.get(beats[0].id, 0)
+                fraction = first_idx / max(1, total - 1)
+                role = next(r for lo, hi, r in ranges if lo <= fraction < hi)
+                sequence = seq_by_role.get(role)
+                if sequence is None:
+                    sequence = Sequence(id=f"seq{len(seq_by_role) + 1}", role=role,
+                                        purpose=role.replace("_", " "))
+                    seq_by_role[role] = sequence
+                    self.sequences.append(sequence)
+
+                scene_id = f"sc{scene_no}"
+                visual = vis_by_id.get(beats[0].visual_id)
+                setting_id = visual.setting_id if visual else ""
+                purpose = "climax" if role == "climax" else "payoff" if role == "resolution" else (
+                    "reversal" if role == "rising" and fraction > 0.55 else
+                    "conflict" if role in ("inciting", "rising") else "setup")
+                participants: list[str] = []
+                for beat in beats:
+                    ids = [beat.primary_speaker(), *[line.speaker_id for line in beat.effective_lines()]]
+                    for cid in ids:
+                        if cid and cid not in participants:
+                            participants.append(cid)
+                scene = Scene(id=scene_id, sequence_id=sequence.id, setting_id=setting_id,
+                              purpose=purpose, participant_ids=participants,
+                              beat_ids=[b.id for b in beats], continuity_key=(setting_id or scene_id))
+                sequence.scene_ids.append(scene_id)
+                self.scenes.append(scene)
+
+                for local_i, beat in enumerate(beats):
+                    global_i = beat_index.get(beat.id, 0)
+                    shot_id = f"sh{global_i + 1}"
+                    is_first = local_i == 0
+                    is_hook = bool(beat.hook or (beat.hook_text or "").strip())
+                    is_payoff = role == "resolution" and local_i == len(beats) - 1
+                    size = "wide" if is_first else size_cycle[(global_i + int(self.seed or 0)) % len(size_cycle)]
+                    if is_hook or is_payoff:
+                        size = "close"
+                    angle_token = angle_cycle[(global_i + scene_no + int(self.seed or 0)) % len(angle_cycle)]
+                    shot = Shot(
+                        id=shot_id, scene_id=scene_id, beat_ids=[beat.id], visual_id=beat.visual_id,
+                        shot_size=size,
+                        angle=("eye_level" if angle_token == "three_quarter" else angle_token),
+                        lens=("wide" if size in ("extreme_wide", "wide") else
+                              "portrait" if size in ("close", "extreme_close") else "normal"),
+                        camera_position=("three_quarter" if angle_token == "three_quarter" else
+                                         "profile" if global_i % 4 == 3 else "front"),
+                        blocking=("establish participants and geography" if is_first else
+                                  "hold the active speaker on the dominant third"),
+                        eyeline=("toward the opposing third" if beat.primary_speaker() else "environmental"),
+                        axis=f"{scene_id}:primary",
+                        composition=comp_cycle[(global_i + int(self.seed or 0)) % len(comp_cycle)],
+                        motion_intent=("reveal" if is_first else
+                                       motion_cycle[(global_i + int(self.seed or 0)) % len(motion_cycle)]),
+                    )
+                    beat.shot_id = shot_id
+                    scene.shot_ids.append(shot_id)
+                    self.shots.append(shot)
+                for cid in participants:
+                    self.character_states.append(CharacterState(
+                        character_id=cid, scene_id=scene_id,
+                        objective=("resolve the central conflict" if purpose in ("climax", "payoff")
+                                   else "advance the scene objective"),
+                        emotion=next((b.emotion for b in beats if b.primary_speaker() == cid), "normal"),
+                        position=char_positions.get(cid, "center"),
+                        continuity_notes=f"Keep appearance and screen side stable within {scene_id}",
+                    ))
+            return self.apply_shot_grammar()
+        except Exception:
+            return self
+
+    def apply_shot_grammar(self) -> "StoryPlan":
+        """Project editable Shot decisions onto renderer-supported Beat controls."""
+        try:
+            focus_map = {"extreme_wide": "wide", "wide": "wide", "medium": "center",
+                         "close": "close", "extreme_close": "close"}
+            motion_map = {"static": "static", "push_in": "zoom_in", "pull_out": "zoom_out",
+                          "track_left": "pan_left", "track_right": "pan_right", "reveal": "pan_up"}
+            shots = {shot.id: shot for shot in self.shots}
+            for beat in self.timeline:
+                shot = shots.get(beat.shot_id)
+                if shot is None:
+                    continue
+                beat.focus = focus_map.get(shot.shot_size, beat.focus)
+                beat.motion = motion_map.get(shot.motion_intent, beat.motion)
+            return self
+        except Exception:
+            return self
 
     def _char_positions(self) -> dict:
         """Stable screen slot per character by first appearance (center → left → right → …).
@@ -699,6 +958,11 @@ class StoryPlan:
             characters=[_character_from(x) for x in _list(d.get("characters"))],
             settings=[_setting_from(x) for x in _list(d.get("settings"))],
             visuals=[_visual_from(x) for x in _list(d.get("visuals"))],
+            relationships=[_relationship_from(x) for x in _list(d.get("relationships"))],
+            sequences=[_sequence_from(x) for x in _list(d.get("sequences"))],
+            scenes=[_scene_from(x) for x in _list(d.get("scenes"))],
+            shots=[_shot_from(x) for x in _list(d.get("shots"))],
+            character_states=[_character_state_from(x) for x in _list(d.get("character_states"))],
             timeline=[_beat_from(x, i) for i, x in enumerate(_list(d.get("timeline")), start=1)],
             render=_render_from(d.get("render")),
         )
@@ -802,6 +1066,37 @@ def _visual_from(x) -> Visual:
     return Visual(id=_str(x.get("id")), setting_id=_str(x.get("setting_id")),
                   prompt=_str(x.get("prompt")), negative_prompt=_str(x.get("negative_prompt")),
                   character_ids=_str_list(x.get("character_ids")), tier=_norm(x.get("tier"), TIER, "medium"))
+def _relationship_from(x) -> RelationshipDef:
+    if not isinstance(x, dict): return RelationshipDef()
+    return RelationshipDef(source_id=_str(x.get("source_id") or x.get("a")),
+                           target_id=_str(x.get("target_id") or x.get("b")),
+                           kind=_str(x.get("kind") or x.get("type")), status=_str(x.get("status")))
+def _sequence_from(x) -> Sequence:
+    if not isinstance(x, dict): return Sequence()
+    return Sequence(id=_str(x.get("id")), role=_norm(x.get("role"), SEQUENCE_ROLE, "setup"),
+                    purpose=_str(x.get("purpose")), scene_ids=_str_list(x.get("scene_ids")))
+def _scene_from(x) -> Scene:
+    if not isinstance(x, dict): return Scene()
+    return Scene(id=_str(x.get("id")), sequence_id=_str(x.get("sequence_id")),
+                 setting_id=_str(x.get("setting_id")), purpose=_norm(x.get("purpose"), SCENE_PURPOSE, "setup"),
+                 participant_ids=_str_list(x.get("participant_ids")), beat_ids=_str_list(x.get("beat_ids")),
+                 shot_ids=_str_list(x.get("shot_ids")), time_of_day=_str(x.get("time_of_day")),
+                 entry_state=_str(x.get("entry_state")), exit_state=_str(x.get("exit_state")),
+                 continuity_key=_str(x.get("continuity_key")))
+def _shot_from(x) -> Shot:
+    if not isinstance(x, dict): return Shot()
+    return Shot(id=_str(x.get("id")), scene_id=_str(x.get("scene_id")), beat_ids=_str_list(x.get("beat_ids")),
+                visual_id=_str(x.get("visual_id")), shot_size=_norm(x.get("shot_size"), SHOT_SIZE, "medium"),
+                angle=_norm(x.get("angle"), SHOT_ANGLE, "eye_level"), lens=_norm(x.get("lens"), LENS, "normal"),
+                camera_position=_norm(x.get("camera_position"), CAMERA_POSITION, "front"),
+                blocking=_str(x.get("blocking")), eyeline=_str(x.get("eyeline")), axis=_str(x.get("axis")),
+                composition=_norm(x.get("composition"), COMPOSITION, "rule_of_thirds"),
+                motion_intent=_norm(x.get("motion_intent"), MOTION_INTENT, "static"))
+def _character_state_from(x) -> CharacterState:
+    if not isinstance(x, dict): return CharacterState()
+    return CharacterState(character_id=_str(x.get("character_id")), scene_id=_str(x.get("scene_id")),
+                          objective=_str(x.get("objective")), emotion=_norm(x.get("emotion"), EMOTION, "normal"),
+                          position=_str(x.get("position")), continuity_notes=_str(x.get("continuity_notes")))
 def _line_from(x) -> Line:
     if not isinstance(x, dict):
         return Line()
@@ -829,6 +1124,7 @@ def _beat_from(x, i) -> Beat:
         _pa = _PAUSE_SEC.get(_norm(x.get("pause"), PAUSE, "none"), 0.0)
     return Beat(id=(_str(x.get("id")) or f"b{i}"), narration=_str(x.get("narration")),
                 speaker_id=_str(x.get("speaker_id")), visual_id=_str(x.get("visual_id")),
+                shot_id=_str(x.get("shot_id")),
                 focus=_norm(x.get("focus"), FOCUS, "center"), motion=_norm(x.get("motion"), MOTION, "zoom_in"),
                 emotion=_norm(x.get("emotion"), EMOTION, "normal"),
                 reading_speed=_clampf(_rs, _READING_SPEED_MIN, _READING_SPEED_MAX, _READING_SPEED_DEFAULT),
@@ -895,9 +1191,11 @@ def _render_from(x) -> RenderState:
 
 __all__ = [
     "StoryPlan", "CharacterDef", "SettingDef", "Visual", "Beat", "Line",
+    "RelationshipDef", "Sequence", "Scene", "Shot", "CharacterState",
     "Word", "BeatAudio", "LineSpan", "Cue", "RenderState",
     "FOCUS", "MOTION", "TRANSITION", "TIER", "GENDER", "SUBTITLE_MODE", "BGM_MOODS",
-    "REGION", "GENRE_KEY", "PACE", "PAUSE",
+    "REGION", "GENRE_KEY", "PACE", "PAUSE", "SEQUENCE_ROLE", "SCENE_PURPOSE",
+    "SHOT_SIZE", "SHOT_ANGLE", "LENS", "CAMERA_POSITION", "COMPOSITION", "MOTION_INTENT",
     "BGM_CUE", "BGM_INTENSITY", "SOURCE_AUDIO", "CHAR_ANCHOR", "CHAR_SCALE",
     "CHAR_MOTION", "TEXT_ANCHOR", "POSE", "EMOTION",
     "ASPECT_SIZE", "CPS", "CROP_RECT", "TRANSITION_SEC", "MIN_BEAT_SEC", "cps_for",

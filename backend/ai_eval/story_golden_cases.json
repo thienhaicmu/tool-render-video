@@ -1,0 +1,12 @@
+[
+  {"id":"revenge_vi","source":"paste","sample_file":"story_revenge_vi.txt","language":"vi","genre":"wuxia"},
+  {"id":"lighthouse_en","source":"paste","sample_file":"story_lighthouse_en.txt","language":"en","genre":"mystery"},
+  {"id":"romance_vi","source":"idea","idea":"Hai bác sĩ từng yêu nhau buộc phải trực chung trong đêm bão và cứu một đứa trẻ, từ đó đối diện hiểu lầm cũ.","duration_sec":120,"language":"vi","genre":"romance"},
+  {"id":"horror_vi","source":"idea","idea":"Một bảo vệ ca đêm nhận ra mọi camera đều ghi hình anh ta đi trước chính mình đúng mười phút.","duration_sec":90,"language":"vi","genre":"horror"},
+  {"id":"fantasy_en","source":"idea","idea":"A cartographer discovers that every lie she draws becomes a real island, until one creation asks to be erased.","duration_sec":120,"language":"en","genre":"fantasy"},
+  {"id":"family_vi","source":"idea","idea":"Người cha ít nói học nấu món phở của vợ đã mất để giữ lời hứa với con gái trong ngày tốt nghiệp.","duration_sec":100,"language":"vi","genre":"family-drama"},
+  {"id":"thriller_en","source":"idea","idea":"A train dispatcher hears a distress call from a train removed from the timetable thirty years ago.","duration_sec":90,"language":"en","genre":"thriller"},
+  {"id":"office_vi","source":"idea","idea":"Một nhân viên sắp nghỉ việc phát hiện đồng nghiệp âm thầm sửa lại những sai lầm của cô suốt nhiều năm, nhưng người đó đang bị đổ tội.","duration_sec":120,"language":"vi","genre":"modern-drama"},
+  {"id":"scifi_en","source":"idea","idea":"The last human gardener on Mars receives seeds labelled with the names of people who have not been born yet.","duration_sec":110,"language":"en","genre":"science-fiction"},
+  {"id":"mystery_vi","source":"idea","idea":"Một thợ sửa đồng hồ tìm thấy trong mỗi chiếc đồng hồ hỏng một phút ký ức của chủ nhân và ghép được manh mối về em trai mất tích.","duration_sec":120,"language":"vi","genre":"mystery"}
+]

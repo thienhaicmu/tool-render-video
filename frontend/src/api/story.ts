@@ -40,6 +40,59 @@ export interface Visual {
   tier: string
 }
 
+export interface RelationshipDef {
+  source_id: string
+  target_id: string
+  kind: string
+  status: string
+}
+
+export interface SequenceDef {
+  id: string
+  role: string
+  purpose: string
+  scene_ids: string[]
+}
+
+export interface SceneDef {
+  id: string
+  sequence_id: string
+  setting_id: string
+  purpose: string
+  participant_ids: string[]
+  beat_ids: string[]
+  shot_ids: string[]
+  time_of_day: string
+  entry_state: string
+  exit_state: string
+  continuity_key: string
+}
+
+export interface ShotDef {
+  id: string
+  scene_id: string
+  beat_ids: string[]
+  visual_id: string
+  shot_size: string
+  angle: string
+  lens: string
+  camera_position: string
+  blocking: string
+  eyeline: string
+  axis: string
+  composition: string
+  motion_intent: string
+}
+
+export interface CharacterStateDef {
+  character_id: string
+  scene_id: string
+  objective: string
+  emotion: string
+  position: string
+  continuity_notes: string
+}
+
 /** P1 — one spoken line inside a Beat (a beat = one shot that may hold several
  * dialogue turns). speaker_id '' = narrator. */
 export interface Line {
@@ -54,6 +107,7 @@ export interface Beat {
   narration: string
   speaker_id: string
   visual_id: string
+  shot_id?: string
   focus: string
   motion: string
   emotion: string
@@ -117,6 +171,11 @@ export interface StoryPlanV2 {
   characters: CharacterDef[]
   settings: SettingDef[]
   visuals: Visual[]
+  relationships?: RelationshipDef[]
+  sequences?: SequenceDef[]
+  scenes?: SceneDef[]
+  shots?: ShotDef[]
+  character_states?: CharacterStateDef[]
   timeline: Beat[]
   render: RenderState
 }
@@ -156,6 +215,55 @@ export interface StoryPlanResponse {
   warnings?: string[]
   // GĐ3 — engine-resolved character assets + per-character state (null = resolver off)
   asset_resolution?: AssetResolution | null
+  authoring_mode?: 'compiler' | 'single_pass' | 'compiler_fallback_single_pass' | string
+  readiness?: { ready?: boolean; passes?: string[]; warns?: string[]; fails?: string[] } | null
+  quality_signals?: {
+    scene_shot?: {
+      scenes?: number
+      shots?: number
+      beat_coverage?: number
+      establishing_rate?: number
+      unique_sizes?: number
+      unique_angles?: number
+      shot_score?: number
+    }
+  }
+  planning_trace?: StoryPlanningTrace
+  cost_preflight?: {
+    estimated_llm_calls?: number
+    actual_llm_calls?: number
+    estimated_llm_input_tokens?: number
+    estimated_llm_output_tokens?: number
+    estimated_llm_cost_usd?: number
+    estimated_cost_usd?: number
+  }
+}
+
+export interface StoryPlanningEvent {
+  event: string
+  stage?: string
+  status?: string
+  call_no?: number
+  latency_ms?: number
+  provider?: string
+  model?: string
+  passed?: boolean
+  reasons?: string[]
+}
+
+export interface StoryPlanningTrace {
+  run_id: string
+  status: string
+  phase: string
+  message: string
+  actual_llm_calls: number
+  authoring_mode?: string
+  selected_provider?: string
+  selected_model?: string
+  role_routes?: Record<string, { provider?: string; model?: string }>
+  compiler_fallback?: boolean
+  artifacts_available?: boolean
+  events: StoryPlanningEvent[]
 }
 
 // Paste-JSON feature: preflight a hand-pasted StoryPlan before render (no AI).
@@ -249,6 +357,7 @@ export interface StoryPlanJobStatus {
   result?: StoryPlanResponse
   error?: string
   status_code?: number
+  progress?: StoryPlanningTrace
 }
 
 export const planStoryStart = (req: StoryPlanRequest) =>
@@ -259,12 +368,16 @@ export const planStoryStatus = (jobId: string) =>
 
 /** Start an async plan job and poll it to completion (2s interval, 15 min cap).
  * Resolves with the same StoryPlanResponse as planStory; rejects on error. */
-export async function planStoryAsync(req: StoryPlanRequest): Promise<StoryPlanResponse> {
+export async function planStoryAsync(
+  req: StoryPlanRequest,
+  onProgress?: (progress: StoryPlanningTrace) => void,
+): Promise<StoryPlanResponse> {
   const { plan_job_id } = await planStoryStart(req)
   const deadline = Date.now() + 15 * 60_000
   for (;;) {
     await new Promise((r) => setTimeout(r, 2000))
     const s = await planStoryStatus(plan_job_id)
+    if (s.progress) onProgress?.(s.progress)
     if (s.status === 'done' && s.result) return s.result
     if (s.status === 'error') throw new Error(s.error || 'Story planning failed')
     if (Date.now() > deadline) throw new Error('Story planning timed out')

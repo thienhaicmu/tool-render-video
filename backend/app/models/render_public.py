@@ -174,7 +174,8 @@ FE_FACING_FIELDS: frozenset[str] = frozenset({
     # default (Sacred Contract #2). /api/render/process (extra="forbid") accepts
     # them so the FE can submit a story render.
     "story_series_id", "story_chapter_no", "story_art_style",
-    "story_reading_pace", "story_plan_override",
+    "story_reading_pace", "story_plan_override", "story_plan_provider",
+    "story_plan_model", "story_plan_authoring_mode",
     # Story v2 (B0) — input source: paste story text vs AI-authored from an idea.
     "story_source", "story_idea", "story_duration_sec", "story_genre",
     # NOTE: story_image_provider is NO LONGER wired to the FE — Story Mode is SVG-only,

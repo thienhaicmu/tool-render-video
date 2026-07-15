@@ -12,6 +12,7 @@ from app.domain.story_plan_v2 import StoryPlan, CharacterDef, SettingDef, Visual
 from ai_eval.structural_story import (
     image_reuse, hook_discipline, character_grounding, narration_quality,
     ref_integrity, duration_fit, story_structural_report, summarize_story_structural,
+    scene_shot_quality,
 )
 
 
@@ -111,3 +112,11 @@ def test_overall_separates_good_from_weak():
 def test_report_never_raises_on_none():
     r = story_structural_report(None)
     assert r["empty"] is True and r["overall_score"] == 0.0
+
+
+def test_scene_shot_quality_rewards_derived_grammar():
+    plan = _good().derive_scene_shot_grammar()
+    report = scene_shot_quality(plan)
+    assert report["beat_coverage"] == 1.0
+    assert report["establishing_rate"] == 1.0
+    assert report["shot_score"] >= 75.0

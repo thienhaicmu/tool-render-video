@@ -937,7 +937,8 @@ def build_structure_prompt(script: str, language: str = "vi", art_style: str = "
                            aspect_ratio: str = "16:9", subtitle_mode: str = "hook_only",
                            ceiling: int = 15, genre: str = "",
                            characters: "list[dict] | None" = None,
-                           prior_context: str = "", library_catalog: str = "") -> "tuple[str, str]":
+                           prior_context: str = "", library_catalog: str = "",
+                           fact_context: str = "") -> "tuple[str, str]":
     """Call 3 — (system, user) to structure the SCRIPT into a StoryPlan v2. Reuses the
     battle-tested schema/rules machinery (multiline schema when active, pacing labels,
     library-pick, vocab, self-check); only the METHOD + SOURCE differ from P1."""
@@ -968,6 +969,7 @@ def build_structure_prompt(script: str, language: str = "vi", art_style: str = "
         f"NARRATION LANGUAGE: {lang_name}\n{genre_line}{style_line}"
         + method
         + _character_table(list(characters or []))
+        + _facts_block(fact_context)
         + _series_memory_block(prior_context)
         + _library_block(library_catalog)
         + _vocab_block()

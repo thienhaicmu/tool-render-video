@@ -104,6 +104,31 @@ def test_plan_cost_preflight_image_free_llm_surfaced(monkeypatch):
     assert cp["estimated_cost_usd"] == cp["estimated_llm_cost_usd"]
 
 
+def test_plan_persists_trace_and_reports_actual_calls(monkeypatch, tmp_path):
+    monkeypatch.setattr(story_router, "_PLAN_RUN_DIR", tmp_path)
+
+    def _fake(**kwargs):
+        observe = kwargs["observer"]
+        observe({"event": "call_started", "stage": "writer", "provider": "openai",
+                 "system": "system", "user": "user"})
+        observe({"event": "call_completed", "stage": "writer", "provider": "openai",
+                 "status": "success", "latency_ms": 12.0, "output": "script"})
+        observe({"event": "authoring_selected", "mode": "compiler", "provider": "openai"})
+        observe({"event": "provider_selected", "provider": "openai", "model": "gpt-4o"})
+        return _plan()
+
+    monkeypatch.setattr(story_router, "generate_story_plan_v2", _fake)
+    out = plan_storyboard(StoryPlanRequest(source="idea", idea="A complete idea"))
+    trace = out["planning_trace"]
+    run_dir = tmp_path / trace["run_id"]
+    assert out["authoring_mode"] == "compiler"
+    assert out["cost_preflight"]["actual_llm_calls"] == 1
+    assert trace["selected_provider"] == "openai" and trace["selected_model"] == "gpt-4o"
+    assert (run_dir / "manifest.json").exists()
+    assert (run_dir / "01_writer_input.json").exists()
+    assert (run_dir / "01_writer_output.txt").read_text(encoding="utf-8") == "script"
+
+
 # ── /api/story/visual/svg-preview ─────────────────────────────────────────────
 
 def test_svg_preview_422_empty_plan():

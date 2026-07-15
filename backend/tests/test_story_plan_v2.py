@@ -5,6 +5,7 @@ import json
 
 from app.domain.story_plan_v2 import (
     StoryPlan, CharacterDef, SettingDef, Visual, Beat, BeatAudio, Word,
+    RelationshipDef, Sequence, Scene, Shot, CharacterState,
     SCHEMA_VERSION, CROP_RECT,
 )
 
@@ -91,6 +92,43 @@ def test_unknown_keys_dropped_defaults():
                                         "visuals": [{"id": "v1", "prompt": "x"}]}))
     assert p is not None and p.schema_version == SCHEMA_VERSION
     assert p.beat_count() == 1
+
+
+def test_scene_shot_grammar_is_derived_and_roundtrips():
+    p = _plan()
+    p.derive_scene_shot_grammar()
+    assert p.sequences and p.scenes and len(p.shots) == p.beat_count()
+    assert all(beat.shot_id for beat in p.timeline)
+    assert p.scenes[0].shot_ids
+    assert p.shots[0].shot_size == "wide"
+    assert p.timeline[0].focus == "wide"
+    restored = StoryPlan.from_json(p.to_json())
+    assert restored is not None
+    assert restored.shots[0].id == p.shots[0].id
+    assert restored.timeline[0].shot_id == p.timeline[0].shot_id
+
+
+def test_authored_shot_controls_render_focus_and_motion():
+    p = _plan().derive_scene_shot_grammar()
+    first = p.shot(p.timeline[0].shot_id)
+    assert first is not None
+    first.shot_size = "extreme_close"
+    first.motion_intent = "pull_out"
+    p.apply_shot_grammar()
+    assert p.timeline[0].focus == "close"
+    assert p.timeline[0].motion == "zoom_out"
+
+
+def test_scene_shot_refs_and_relationships_are_validated():
+    p = _plan().derive_scene_shot_grammar()
+    p.relationships = [RelationshipDef("han", "missing", "enemy"),
+                       RelationshipDef("han", "han", "self")]
+    p.shots[0].angle = "impossible"
+    p.character_states.append(CharacterState("missing", p.scenes[0].id))
+    p.validate_refs()
+    assert p.relationships == []
+    assert p.shots[0].angle == "eye_level"
+    assert all(state.character_id != "missing" for state in p.character_states)
 
 
 # ── INVARIANTS ─────────────────────────────────────────────────────────────────

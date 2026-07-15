@@ -334,6 +334,7 @@ def generate_story_plan_v2(
     api_key: str = "",
     model: Optional[str] = None,
     resolve_key: Optional[Callable[[str], str]] = None,
+    observer: "Optional[Callable[[dict], None]]" = None,
 ) -> Optional["StoryPlan"]:
     """Story v2 — ONE super call → StoryPlan v2. Three specialised prompts by use-case:
     idea → P3 (write to length); paste + base video → P2 (narrate over video); paste →
@@ -367,22 +368,74 @@ def generate_story_plan_v2(
         # chose a model AND that provider is the primary they picked.
         return _explicit_model if (_explicit_model and _p == primary) else None
 
-    for _p in _provider_chain(primary):
-        _key = api_key
+    def _observe(event: str, **data) -> None:
+        if observer is None:
+            return
+        try:
+            observer({"event": event, "ts": _time.time(), **data})
+        except Exception:
+            pass
+
+    def _key_for(_p: str) -> str:
         if resolve_key is not None:
             try:
-                _key = resolve_key(_p) or ""
+                return resolve_key(_p) or ""
             except Exception:
-                _key = api_key
-        if not _key:
+                return api_key if _p == primary else ""
+        return api_key
+
+    def _role_route(role: str, fallback_provider: str,
+                    fallback_model: "Optional[str]") -> "tuple[str, Optional[str]]":
+        if os.getenv("STORY_ROLE_ROUTING", "1") == "0":
+            return fallback_provider, fallback_model
+        prefix = f"STORY_{role.upper()}"
+        routed_provider = (os.getenv(f"{prefix}_PROVIDER", "") or "").strip().lower()
+        if routed_provider not in SUPPORTED_PROVIDERS:
+            routed_provider = fallback_provider
+        routed_model = (os.getenv(f"{prefix}_MODEL", "") or "").strip() or None
+        if routed_model is None:
+            routed_model = fallback_model if routed_provider == fallback_provider else _model_for(routed_provider)
+        return routed_provider, routed_model
+
+    attempted_routes: set[tuple[str, str]] = set()
+    for _p in _provider_chain(primary):
+        structure_p, structure_model = _role_route("structure", _p, _model_for(_p))
+        route_key = (structure_p, structure_model or "provider_default")
+        if route_key in attempted_routes:
             continue
-        call_fn = _get_story_call_fn(_p, _key, _model_for(_p))
+        attempted_routes.add(route_key)
+        structure_key = _key_for(structure_p)
+        if not structure_key:
+            continue
+        writer_p, writer_model = _role_route("writer", structure_p, structure_model)
+        understand_p, understand_model = _role_route("understanding", structure_p, structure_model)
+        routes = {
+            "understanding": {"provider": understand_p, "model": understand_model or "provider_default"},
+            "writer": {"provider": writer_p, "model": writer_model or "provider_default"},
+            "structure": {"provider": structure_p, "model": structure_model or "provider_default"},
+        }
+        _observe("provider_attempt", provider=structure_p,
+                 model=(structure_model or "provider_default"), primary=primary,
+                 role_routes=routes)
+        call_fn = _get_story_call_fn(structure_p, structure_key, structure_model)
         if call_fn is None:
             continue
-        # GĐ1 compiler bindings (prose Writer + JSON Understanding). None simply
-        # means run_super_plan takes the legacy single-pass for this provider.
-        writer_call_fn = _get_writer_call_fn(_p, _key, _model_for(_p))
-        json_call_fn = _get_json_call_fn(_p, _key, _model_for(_p))
+        writer_key = _key_for(writer_p)
+        writer_call_fn = (_get_writer_call_fn(writer_p, writer_key, writer_model)
+                          if writer_key else None)
+        if writer_call_fn is None and writer_p != structure_p:
+            _observe("role_route_fallback", role="writer", requested_provider=writer_p,
+                     fallback_provider=structure_p)
+            writer_p, writer_model = structure_p, structure_model
+            writer_call_fn = _get_writer_call_fn(structure_p, structure_key, structure_model)
+        understand_key = _key_for(understand_p)
+        json_call_fn = (_get_json_call_fn(understand_p, understand_key, understand_model)
+                        if understand_key else None)
+        if json_call_fn is None and understand_p != structure_p:
+            _observe("role_route_fallback", role="understanding", requested_provider=understand_p,
+                     fallback_provider=structure_p)
+            understand_p, understand_model = structure_p, structure_model
+            json_call_fn = _get_json_call_fn(structure_p, structure_key, structure_model)
         _t0 = _time.perf_counter()
         try:
             plan = run_super_plan(
@@ -391,24 +444,32 @@ def generate_story_plan_v2(
                 aspect_ratio=aspect_ratio, subtitle_mode=subtitle_mode, ceiling=ceiling,
                 series_id=series_id, chapter_no=chapter_no, seed=seed,
                 prior_context=prior_context, library_catalog=library_catalog,
-                has_base_video=has_base_video, base_video_dur=base_video_dur, provider_label=_p,
+                has_base_video=has_base_video, base_video_dur=base_video_dur,
+                provider_label=structure_p, model_label=(structure_model or "provider_default"),
+                writer_provider_label=writer_p, writer_model_label=(writer_model or "provider_default"),
+                json_provider_label=understand_p, json_model_label=(understand_model or "provider_default"),
                 writer_call_fn=writer_call_fn, json_call_fn=json_call_fn,
+                observer=observer,
             )
         except Exception as exc:
-            logger.warning("llm: generate_story_plan_v2 provider=%s raised %s", _p, exc)
+            logger.warning("llm: generate_story_plan_v2 provider=%s raised %s", structure_p, exc)
             plan = None
         # F-07: instrument the Story super-plan call (previously invisible on
         # /metrics). Pure observation — never breaks the dispatch.
         try:
             from app.services.metrics import LLM_STORY_PLAN_CALLS, LLM_STORY_PLAN_LATENCY
-            LLM_STORY_PLAN_LATENCY.labels(provider=_p).observe(_time.perf_counter() - _t0)
+            LLM_STORY_PLAN_LATENCY.labels(provider=structure_p).observe(_time.perf_counter() - _t0)
             LLM_STORY_PLAN_CALLS.labels(
-                provider=_p, status=("success" if plan is not None else "empty")).inc()
+                provider=structure_p, status=("success" if plan is not None else "empty")).inc()
         except Exception:
             pass
         if plan is not None:
-            if _p != primary:
-                logger.info("llm: story-plan-v2 fallback succeeded provider=%s (primary=%s None)", _p, primary)
+            _observe("provider_selected", provider=structure_p,
+                     model=(structure_model or "provider_default"), primary=primary,
+                     role_routes=routes)
+            if structure_p != primary:
+                logger.info("llm: story-plan-v2 fallback succeeded provider=%s (primary=%s None)",
+                            structure_p, primary)
             return plan
     logger.warning("llm: generate_story_plan_v2 produced no plan")
     return None

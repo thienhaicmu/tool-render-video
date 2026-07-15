@@ -163,9 +163,10 @@ def test_public_field_count_pinned():
     # (coerced to "svg") to deserialise legacy payloads. FE 96→95, BE-only 80→81, total 176.
     # Story P2 (2026-07-13): +1 story_voice_mode, FE-facing (Story Studio's voice-mode
     # toggle: dialogue|narrator). FE 95→96, BE-only 81, total 176→177.
-    assert len(FE_FACING_FIELDS) == 96, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
+    # Planning provenance adds provider/model/authoring-mode to approved plan overrides.
+    assert len(FE_FACING_FIELDS) == 99, f"FE_FACING_FIELDS = {len(FE_FACING_FIELDS)}"
     assert len(BE_ONLY_FIELDS)   == 81, f"BE_ONLY_FIELDS = {len(BE_ONLY_FIELDS)}"
-    assert len(RenderRequest.model_fields) == 177, (
+    assert len(RenderRequest.model_fields) == 180, (
         f"RenderRequest has {len(RenderRequest.model_fields)} fields — "
         "MT-3 pin must move together with MT-2's pin."
     )

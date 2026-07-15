@@ -183,6 +183,9 @@
 .st-tl-badge img { width: 100%; height: 100%; object-fit: cover; }
 .st-tl-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .st-tl-controls { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
+.st-shot-meta { display: flex; gap: 8px; margin-bottom: 6px; color: var(--text-muted); font-size: 11px; }
+.st-shot-meta span { padding-right: 8px; border-right: 1px solid var(--border); }
+.st-shot-meta span:last-child { border-right: 0; }
 /* P2 — dialogue lines editor: a subtle grouped block so multi-turn beats read clearly. */
 .st-tl-lines { border-left: 2px solid var(--border); padding-left: var(--space-2); }
 .st-tl-lines > div { align-items: center; }
@@ -256,6 +259,8 @@
 }
 .st-console-step.is-active .st-console-dot { background: var(--accent); border-color: var(--accent); color: var(--text-inverse, #fff); }
 .st-console-step.is-done .st-console-dot { background: var(--ok); border-color: var(--ok); color: var(--text-inverse, #fff); }
+.st-console-meta { margin-top: var(--space-4); font-size: var(--text-xs); color: var(--text-3); }
+.st-console-routes { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: var(--text-xs); color: var(--text-3); }
 
 /* ── AssetPicker (library, AL4) ───────────────────────────────────────────── */
 .st-asset-modal {

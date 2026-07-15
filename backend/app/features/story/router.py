@@ -28,7 +28,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from app.core.config import CACHE_DIR
+from app.core.config import APP_DATA_DIR, CACHE_DIR
 from app.db import story_repo, story_project_repo, story_asset_repo
 from app.features.render.ai.llm import generate_story_plan_v2
 
@@ -42,6 +42,137 @@ _PREVIEW_DIR = CACHE_DIR / "story_preview"
 _VISUAL_DIR = CACHE_DIR / "story_preview_visual"
 _MASTER_DIR = CACHE_DIR / "story_master"          # transparent character-master previews
 _TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
+_PLAN_RUN_DIR = APP_DATA_DIR / "story_plan_runs"
+_PLAN_RUN_CONTEXT = threading.local()
+
+
+class _PlanRunObserver:
+    """Persist pass artifacts and expose a compact, thread-safe planning trace."""
+
+    _PHASE_LABELS = {
+        "understanding": "Reading and verifying source facts",
+        "writer": "Writing the narration script",
+        "writer_expand": "Expanding the narration script",
+        "writer_repair": "Repairing missing story events",
+        "structure": "Structuring the production plan",
+        "structure_repair": "Repairing the production plan JSON",
+        "legacy_plan": "Building the legacy production plan",
+    }
+
+    def __init__(self, run_id: str, job_id: str = "") -> None:
+        self.run_id = run_id
+        self.job_id = job_id
+        self.run_dir = _PLAN_RUN_DIR / run_id
+        self.lock = threading.Lock()
+        self.sequence = 0
+        self.active: dict[str, list[int]] = {}
+        self.trace: dict = {
+            "run_id": run_id,
+            "status": "running",
+            "phase": "queued",
+            "message": "Planning queued",
+            "actual_llm_calls": 0,
+            "authoring_mode": "",
+            "selected_provider": "",
+            "selected_model": "",
+            "compiler_fallback": False,
+            "events": [],
+            "artifacts_available": True,
+        }
+
+    @staticmethod
+    def _safe_stage(stage: str) -> str:
+        return re.sub(r"[^a-z0-9_-]+", "_", (stage or "call").lower())[:64] or "call"
+
+    def _write_text(self, path: Path, value: str) -> None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(value or "", encoding="utf-8")
+            tmp.replace(path)
+        except Exception as exc:
+            logger.info("story plan artifact write skipped: %s", exc)
+            self.trace["artifacts_available"] = False
+
+    def _persist_manifest(self) -> None:
+        self._write_text(
+            self.run_dir / "manifest.json",
+            json.dumps(self.trace, ensure_ascii=False, indent=2, default=str),
+        )
+
+    def _update_job(self) -> None:
+        if not self.job_id:
+            return
+        try:
+            with _PLAN_JOBS_LOCK:
+                job = _PLAN_JOBS.get(self.job_id)
+                if job is not None:
+                    job["progress"] = self.public_trace()
+        except Exception:
+            pass
+
+    def public_trace(self) -> dict:
+        return {k: v for k, v in self.trace.items() if k != "events"} | {
+            "events": list(self.trace.get("events", []))[-30:]
+        }
+
+    def __call__(self, event: dict) -> None:
+        with self.lock:
+            raw = dict(event or {})
+            kind = str(raw.get("event") or "event")
+            stage = str(raw.get("stage") or "")
+            system = str(raw.pop("system", "") or "")
+            user = str(raw.pop("user", "") or "")
+            output = str(raw.pop("output", "") or "")
+
+            if kind == "call_started":
+                self.sequence += 1
+                seq = self.sequence
+                self.active.setdefault(stage, []).append(seq)
+                self.trace["actual_llm_calls"] += 1
+                self.trace["phase"] = stage
+                self.trace["message"] = self._PHASE_LABELS.get(stage, stage.replace("_", " ").title())
+                safe = self._safe_stage(stage)
+                self._write_text(
+                    self.run_dir / f"{seq:02d}_{safe}_input.json",
+                    json.dumps({"provider": raw.get("provider", ""),
+                                "model": raw.get("model", ""),
+                                "system": system, "user": user},
+                               ensure_ascii=False, indent=2),
+                )
+                raw["call_no"] = seq
+            elif kind == "call_completed":
+                queue = self.active.get(stage) or []
+                seq = queue.pop(0) if queue else self.sequence
+                safe = self._safe_stage(stage)
+                self._write_text(self.run_dir / f"{seq:02d}_{safe}_output.txt", output)
+                raw["call_no"] = seq
+            elif kind == "authoring_selected":
+                self.trace["authoring_mode"] = raw.get("mode", "")
+            elif kind == "compiler_fallback":
+                self.trace["compiler_fallback"] = True
+            elif kind == "source_chunked":
+                self.trace["source_chunked"] = True
+                self.trace["chunk_count"] = int(raw.get("chunks") or 0)
+            elif kind == "provider_selected":
+                self.trace["selected_provider"] = raw.get("provider", "")
+                self.trace["selected_model"] = raw.get("model", "")
+                self.trace["role_routes"] = raw.get("role_routes", {})
+            elif kind == "provider_attempt":
+                self.trace["role_routes"] = raw.get("role_routes", {})
+            elif kind == "run_completed":
+                self.trace["status"] = "done"
+                self.trace["phase"] = "done"
+                self.trace["message"] = "Story plan ready"
+            elif kind == "run_failed":
+                self.trace["status"] = "error"
+                self.trace["phase"] = "error"
+                self.trace["message"] = str(raw.get("error") or "Planning failed")
+
+            self.trace["events"].append(raw)
+            self.trace["events"] = self.trace["events"][-120:]
+            self._persist_manifest()
+            self._update_job()
 
 
 class StoryPlanRequest(BaseModel):
@@ -82,6 +213,12 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
             raise HTTPException(status_code=422, detail="idea is required for source=idea")
     elif not chapter:
         raise HTTPException(status_code=422, detail="chapter_text is required")
+
+    observer = getattr(_PLAN_RUN_CONTEXT, "observer", None)
+    if observer is None:
+        observer = _PlanRunObserver(uuid.uuid4().hex)
+    observer({"event": "request_started", "ts": time.time(), "source": source,
+              "source_chars": len(idea if source == "idea" else chapter)})
 
     from app.features.render.engine.pipeline.llm_stage import _resolve_api_key
 
@@ -130,8 +267,11 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         # F-11: the generic ai_cloud_api_key is the ACTIVE provider's key — a
         # cross-provider fallback resolves only from its own per-provider/env key.
         resolve_key=lambda _p: _resolve_api_key(req, _p, allow_generic=(_p == provider))[0],
+        observer=observer,
     )
     if plan is None or plan.is_empty() or plan.image_count() == 0:
+        observer({"event": "run_failed", "ts": time.time(),
+                  "error": "Story planning returned no usable plan"})
         raise HTTPException(status_code=502, detail="Story planning returned no usable plan")
 
     _visual_count = plan.image_count()
@@ -143,9 +283,12 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     _src_limit = MAX_SOURCE_CHARS if source == "paste" else MAX_IDEA_CHARS
     # F-08: Story imagery is procedural SVG ($0), but the planning LLM is NOT free.
     # Surface an ESTIMATE so the pre-flight no longer reports a misleading $0 total.
-    from app.features.render.ai.llm.story_director_v2 import estimate_super_plan_cost, lint_story_plan
+    from app.features.render.ai.llm.story_director_v2 import (
+        estimate_super_plan_cost, lint_story_plan, shot_grammar_report,
+    )
     _llm_cost = estimate_super_plan_cost(
-        source_chars=_src_len, ceiling=_visual_count, model=(req.llm_model or "gpt-4o"))
+        source_chars=_src_len, ceiling=_visual_count, model=(req.llm_model or "gpt-4o"),
+        source=source, has_base_video=bool(req.use_video and source == "paste"))
     # P3: soft semantic lint (non-mutating) so the FE Review can flag weak-plan
     # signals (orphan visuals, generic-look speakers, looping narration).
     _lint = lint_story_plan(plan)
@@ -171,13 +314,19 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         _lint = list(_lint) + list(_ready["warns"]) + list(_ready["fails"])
     except Exception:
         _ready = None
+    observer({"event": "run_completed", "ts": time.time()})
+    _trace = observer.public_trace()
+    _mode = _trace.get("authoring_mode") or _authoring_mode(
+        source=source, has_base_video=bool(req.use_video and source == "paste"))
     return {
         "plan": json.loads(plan.to_json()),
         "image_count": _visual_count,
         "beat_count": plan.beat_count(),
         "estimated_total_sec": round(plan.estimated_total_sec(), 1),
         "character_count": len(plan.characters),
-        "source_truncated": bool(_src_len > _src_limit),
+        "source_truncated": bool(_src_len > _src_limit and not _trace.get("source_chunked")),
+        "source_chunked": bool(_trace.get("source_chunked")),
+        "source_chunk_count": int(_trace.get("chunk_count") or 0),
         "source_chars": _src_len,
         "source_char_limit": _src_limit,
         "warnings": _lint,
@@ -186,9 +335,11 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         "asset_resolution": _asset_res,
         # GĐ4b: readiness preview (storage checks run at render time, not here).
         "readiness": _ready,
+        "quality_signals": {"scene_shot": shot_grammar_report(plan)},
         # GĐ1: how this plan was authored — "compiler" (Understanding → Writer →
         # Structure, 3 calls) vs "single_pass" (legacy 1 call). Additive.
-        "authoring_mode": _authoring_mode(),
+        "authoring_mode": _mode,
+        "planning_trace": _trace,
         # Story imagery is procedural SVG + offline ($0); the super-plan LLM is not.
         "cost_preflight": {
             "visual_count": _visual_count,
@@ -196,16 +347,20 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
             "premium_image_count": 0,
             "image_cost_usd": 0.0,
             "estimated_llm_calls": _llm_cost.get("llm_calls", 1),
+            "actual_llm_calls": int(_trace.get("actual_llm_calls") or 0),
             "estimated_llm_input_tokens": _llm_cost["input_tokens"],
+            "estimated_llm_output_tokens": _llm_cost["output_tokens"],
             "estimated_llm_cost_usd": _llm_cost["cost_usd"],
             "estimated_cost_usd": _llm_cost["cost_usd"],   # total = image($0) + LLM
         },
     }
 
 
-def _authoring_mode() -> str:
+def _authoring_mode(*, source: str = "paste", has_base_video: bool = False) -> str:
     try:
         from app.features.render.ai.llm.story_prompts_v2 import compiler_enabled
+        if has_base_video or source not in ("paste", "idea"):
+            return "single_pass"
         return "compiler" if compiler_enabled() else "single_pass"
     except Exception:
         return "single_pass"
@@ -265,22 +420,31 @@ def _prune_plan_jobs_locked() -> None:
 
 
 def _run_plan_job(job_id: str, req: "StoryPlanRequest") -> None:
+    observer = _PlanRunObserver(job_id, job_id=job_id)
+    _PLAN_RUN_CONTEXT.observer = observer
     try:
         result = plan_storyboard(req)          # reuse the sync logic verbatim
         with _PLAN_JOBS_LOCK:
             if job_id in _PLAN_JOBS:
                 _PLAN_JOBS[job_id].update(status="done", result=result)
     except HTTPException as he:
+        observer({"event": "run_failed", "ts": time.time(), "error": str(he.detail)})
         with _PLAN_JOBS_LOCK:
             if job_id in _PLAN_JOBS:
                 _PLAN_JOBS[job_id].update(status="error", error=str(he.detail),
                                           status_code=int(he.status_code))
     except Exception as exc:                   # defensive — never let the thread die silently
+        observer({"event": "run_failed", "ts": time.time(), "error": "planning failed"})
         logger.warning("story plan job %s failed: %s", job_id, exc)
         with _PLAN_JOBS_LOCK:
             if job_id in _PLAN_JOBS:
                 _PLAN_JOBS[job_id].update(status="error", error="planning failed",
                                           status_code=502)
+    finally:
+        try:
+            delattr(_PLAN_RUN_CONTEXT, "observer")
+        except AttributeError:
+            pass
 
 
 @router.post("/plan/async")
@@ -291,7 +455,11 @@ def plan_storyboard_async(req: StoryPlanRequest) -> dict:
     job_id = uuid.uuid4().hex
     with _PLAN_JOBS_LOCK:
         _prune_plan_jobs_locked()
-        _PLAN_JOBS[job_id] = {"status": "running", "created": time.time()}
+        _PLAN_JOBS[job_id] = {
+            "status": "running", "created": time.time(),
+            "progress": {"run_id": job_id, "status": "running", "phase": "queued",
+                         "message": "Planning queued", "actual_llm_calls": 0, "events": []},
+        }
     threading.Thread(target=_run_plan_job, args=(job_id, req),
                      name=f"story-plan-{job_id[:8]}", daemon=True).start()
     return {"plan_job_id": job_id, "status": "running"}
@@ -307,7 +475,8 @@ def plan_storyboard_async_status(job_id: str) -> dict:
         job = _PLAN_JOBS.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="not found")
-        out = {"status": job.get("status", "running")}
+        out = {"status": job.get("status", "running"),
+               "progress": job.get("progress", {})}
         if job.get("status") == "done":
             out["result"] = job.get("result")
         elif job.get("status") == "error":

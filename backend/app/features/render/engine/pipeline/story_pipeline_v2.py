@@ -125,7 +125,12 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
         if plan is not None and plan.schema_version == 2 and not plan.is_empty() and plan.image_count() > 0:
             logger.info("story v2: using story_plan_override (%d visuals, strict=%s)",
                         plan.image_count(), _strict)
-            return plan, {"plan_source": "override", "provider": "", "model": ""}
+            return plan, {
+                "plan_source": "override",
+                "provider": (getattr(payload, "story_plan_provider", "") or ""),
+                "model": (getattr(payload, "story_plan_model", "") or ""),
+                "authoring_mode": (getattr(payload, "story_plan_authoring_mode", "") or ""),
+            }
         if _strict:
             raise RuntimeError(
                 "paste_json: the pasted StoryPlan is invalid — it needs schema_version=2, "
@@ -178,6 +183,15 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
                 style=(story_asset_repo.active_library_style(art_style) or None))
         except Exception:
             library_catalog = ""
+    _plan_trace: dict = {}
+
+    def _observe_plan(event: dict) -> None:
+        if event.get("event") == "provider_selected":
+            _plan_trace["provider"] = event.get("provider", "")
+            _plan_trace["model"] = event.get("model", "")
+        elif event.get("event") == "authoring_selected":
+            _plan_trace["authoring_mode"] = event.get("mode", "")
+
     plan = generate_story_plan_v2(
         provider=provider, source=source, chapter=chapter, idea=idea,
         duration_sec=duration_sec, genre=genre, language=language, art_style=art_style,
@@ -187,14 +201,16 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
         has_base_video=has_base_video, base_video_dur=base_video_dur,
         api_key=api_key, model=(getattr(payload, "llm_model", None) or None),
         resolve_key=resolve_key,
+        observer=_observe_plan,
     )
     if plan is None or plan.is_empty() or plan.image_count() == 0:
         raise RuntimeError("Story v2: super plan returned no usable StoryPlan")
     if not (plan.language or "").strip():
         plan.language = language
     return plan, {
-        "plan_source": "fresh", "provider": provider,
-        "model": (getattr(payload, "llm_model", None) or ""),
+        "plan_source": "fresh", "provider": (_plan_trace.get("provider") or provider),
+        "model": (_plan_trace.get("model") or getattr(payload, "llm_model", None) or ""),
+        "authoring_mode": _plan_trace.get("authoring_mode", ""),
     }
 
 
@@ -298,7 +314,7 @@ def run_story_v2(
             raise RuntimeError("Story v2: empty content_script — nothing to render")
 
         # ── 1. Super plan (1 AI call) ───────────────────────────────────────
-        _set_stage(JobStage.ANALYZING, 12, "Story Director: super plan (1 call)")
+        _set_stage(JobStage.ANALYZING, 12, "Story Director: building and validating story plan")
         plan, plan_meta = _resolve_story_plan_v2(
             payload, job_id=job_id, resume_mode=resume_mode, source=source, chapter=chapter,
             idea=idea, duration_sec=duration_sec, genre=genre, language=language,
@@ -496,6 +512,18 @@ def run_story_v2(
         synthesize_timeline(plan, job_id=job_id, audio_dir=audio_dir, subtitle_mode=subtitle_mode,
                             effective_channel=effective_channel, on_progress=_narr_progress,
                             voice_mode=_voice_mode)
+        if os.getenv("STORY_TTS_HARD_GATE", "1") == "1":
+            silent_spoken = []
+            for beat in plan.timeline:
+                if not beat.effective_lines():
+                    continue
+                audio = plan.render.beat_audio.get(beat.id)
+                if not audio or not audio.path or float(audio.dur or 0.0) <= 0:
+                    silent_spoken.append(beat.id)
+            if silent_spoken:
+                raise RuntimeError(
+                    "Story v2: TTS quality gate failed; narrated beats have no audio: "
+                    + ", ".join(silent_spoken[:20]))
 
         # ── 5. CUE SHEET (deterministic) ────────────────────────────────────
         plan.build_cues(subtitle_mode)

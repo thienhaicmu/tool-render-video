@@ -181,13 +181,22 @@ def lint_load(plan: Any) -> dict:
         return {"lint_warnings": -1, "lint_score": 0.0, "error": "unreadable_plan"}
 
 
+def scene_shot_quality(plan: Any) -> dict:
+    """First-class scene/shot coverage and camera diversity."""
+    try:
+        from app.features.render.ai.llm.story_director_v2 import shot_grammar_report
+        return shot_grammar_report(plan)
+    except Exception:
+        return {"scenes": 0, "shots": 0, "shot_score": 0.0, "error": "unreadable_plan"}
+
+
 # Composite weights — sum to 1.0. Reuse + narration dominate (the two behaviours the
 # super-prompt most insists on); integrity is a hard guard; duration only counts in
 # idea mode (weight redistributed when None).
 _WEIGHTS = {
-    "reuse_score": 0.22, "hook_score": 0.12, "grounding_score": 0.18,
-    "narration_score": 0.22, "integrity_score": 0.14, "duration_score": 0.06,
-    "lint_score": 0.06,
+    "reuse_score": 0.18, "hook_score": 0.10, "grounding_score": 0.16,
+    "narration_score": 0.20, "integrity_score": 0.12, "duration_score": 0.05,
+    "lint_score": 0.05, "shot_score": 0.14,
 }
 
 
@@ -204,6 +213,7 @@ def story_structural_report(plan: Any, requested_duration_sec: float = 0.0) -> d
         "integrity": ref_integrity(plan),
         "duration": duration_fit(plan, requested_duration_sec),
         "lint": lint_load(plan),
+        "scene_shot": scene_shot_quality(plan),
     }
     # Weighted composite over available component scores (skip None → redistribute).
     comp = {
@@ -214,6 +224,7 @@ def story_structural_report(plan: Any, requested_duration_sec: float = 0.0) -> d
         "integrity_score": report["integrity"].get("integrity_score"),
         "duration_score": report["duration"].get("duration_score"),
         "lint_score": report["lint"].get("lint_score"),
+        "shot_score": report["scene_shot"].get("shot_score"),
     }
     num = den = 0.0
     for k, w in _WEIGHTS.items():
@@ -237,13 +248,14 @@ def summarize_story_structural(report: dict) -> str:
                 f"hooks={report.get('hooks', {}).get('hooks_total')} "
                 f"ground={g.get('grounding_score')} narr={n.get('narration_score')} "
                 f"integ={report.get('integrity', {}).get('integrity_score')} "
-                f"lint={report.get('lint', {}).get('lint_warnings')}")
+                f"lint={report.get('lint', {}).get('lint_warnings')} "
+                f"shot={report.get('scene_shot', {}).get('shot_score')}")
     except Exception:
         return "story-structural: unreadable"
 
 
 __all__ = [
     "image_reuse", "hook_discipline", "character_grounding", "narration_quality",
-    "ref_integrity", "duration_fit", "lint_load",
+    "ref_integrity", "duration_fit", "lint_load", "scene_shot_quality",
     "story_structural_report", "summarize_story_structural",
 ]

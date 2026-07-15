@@ -34,6 +34,8 @@ def _finalize_story_v2(job_id, effective_channel, payload, plan, *, output_dir, 
     )
     if not _qa["ok"]:
         raise RuntimeError(f"Story v2: output failed QA: {_qa.get('error')}")
+    if not bool(_qa.get("metadata", {}).get("has_audio")):
+        raise RuntimeError("Story v2: output failed QA: audio stream is missing")
     _final_dur = float(_qa["metadata"].get("duration") or 0.0)
 
     _thumb_path = ""
@@ -110,6 +112,7 @@ def _finalize_story_v2(job_id, effective_channel, payload, plan, *, output_dir, 
         "story_provider": (plan_meta or {}).get("provider", ""),
         "story_llm_model": (plan_meta or {}).get("model", ""),
         "story_plan_source": (plan_meta or {}).get("plan_source", ""),
+        "story_authoring_mode": (plan_meta or {}).get("authoring_mode", ""),
     }
     _terminal_status = "completed_with_errors" if failed_parts else "completed"
     upsert_job(

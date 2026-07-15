@@ -7,17 +7,22 @@
  * Studio BASE only — no content-studio.
  */
 import { StudioCard } from '../../../components/studio'
-import type { StoryPlanV2, Beat, Line } from '../../../api/story'
+import type { StoryPlanV2, Beat, Line, ShotDef } from '../../../api/story'
 import { FOCUS, MOTION, TRANSITION, EMOTION, POSE, type StoryLang } from '../types'
 import { beatEstSec } from './helpers'
 
-export function TimelineEditor({ vi, plan, language, colors, previews, onChangeBeat, onMove, onDelete, onAdd }: {
+const SHOT_SIZE = ['extreme_wide', 'wide', 'medium', 'close', 'extreme_close']
+const SHOT_ANGLE = ['eye_level', 'high', 'low', 'over_shoulder', 'top_down', 'dutch']
+const MOTION_INTENT = ['static', 'push_in', 'pull_out', 'track_left', 'track_right', 'reveal']
+
+export function TimelineEditor({ vi, plan, language, colors, previews, onChangeBeat, onChangeShot, onMove, onDelete, onAdd }: {
   vi: boolean
   plan: StoryPlanV2
   language: StoryLang
   colors: Record<string, string>
   previews: Record<string, string>
   onChangeBeat: (id: string, up: Partial<Beat>) => void
+  onChangeShot: (id: string, up: Partial<ShotDef>) => void
   onMove: (id: string, dir: -1 | 1) => void
   onDelete: (id: string) => void
   onAdd: (afterId: string) => void
@@ -30,7 +35,10 @@ export function TimelineEditor({ vi, plan, language, colors, previews, onChangeB
     <StudioCard icon="🎞️" title={vi ? 'Timeline (phân đoạn)' : 'Timeline (beats)'}
       aside={`${plan.timeline.length} · ~${Math.floor(total / 60)}m ${Math.round(total % 60)}s`}>
       <div className="st-tl">
-        {plan.timeline.map((b, i) => (
+        {plan.timeline.map((b, i) => {
+          const shot = (plan.shots ?? []).find((item) => item.id === b.shot_id)
+          const scene = (plan.scenes ?? []).find((item) => item.id === shot?.scene_id)
+          return (
           <div className="st-tl-row" key={b.id}>
             <div className="st-tl-badge" style={{ background: colors[b.visual_id] || 'var(--border)' }}
               title={b.visual_id}>
@@ -40,6 +48,13 @@ export function TimelineEditor({ vi, plan, language, colors, previews, onChangeB
             </div>
 
             <div className="st-tl-main">
+              {shot && (
+                <div className="st-shot-meta">
+                  <span>{scene?.id || shot.scene_id}</span>
+                  <span>{scene?.purpose || 'scene'}</span>
+                  <span>{shot.id}</span>
+                </div>
+              )}
               {b.lines && b.lines.length ? (
                 <LinesEditor vi={vi} lines={b.lines} speakers={speakers}
                   onChange={(lines) => onChangeBeat(b.id, { lines })} />
@@ -73,6 +88,19 @@ export function TimelineEditor({ vi, plan, language, colors, previews, onChangeB
                 <Sel label={vi ? 'Chuyển cảnh' : 'Transition'} value={b.transition_in}
                   onChange={(v) => onChangeBeat(b.id, { transition_in: v })}
                   opts={TRANSITION.map((t) => ({ value: t, label: t }))} />
+                {shot && (
+                  <>
+                    <Sel label={vi ? 'Cỡ cảnh' : 'Shot size'} value={shot.shot_size}
+                      onChange={(v) => onChangeShot(shot.id, { shot_size: v })}
+                      opts={SHOT_SIZE.map((value) => ({ value, label: value }))} />
+                    <Sel label={vi ? 'Góc máy' : 'Angle'} value={shot.angle}
+                      onChange={(v) => onChangeShot(shot.id, { angle: v })}
+                      opts={SHOT_ANGLE.map((value) => ({ value, label: value }))} />
+                    <Sel label={vi ? 'Máy quay' : 'Camera'} value={shot.motion_intent}
+                      onChange={(v) => onChangeShot(shot.id, { motion_intent: v })}
+                      opts={MOTION_INTENT.map((value) => ({ value, label: value }))} />
+                  </>
+                )}
                 {/* Per-beat speaker expression + gesture — single-line mode only (in
                     multi-line mode emotion/pose live per line inside the LinesEditor). */}
                 {!(b.lines && b.lines.length) && b.speaker_id && (
@@ -112,7 +140,8 @@ export function TimelineEditor({ vi, plan, language, colors, previews, onChangeB
               </div>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </StudioCard>
   )

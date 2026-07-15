@@ -18,7 +18,7 @@ import json
 
 import pytest
 
-from app.features.render.ai.llm.story_director_v2 import run_super_plan
+from app.features.render.ai.llm.story_director_v2 import _split_source_chunks, run_super_plan
 from app.features.render.ai.llm.story_prompts_v2 import (
     build_understanding_prompt, build_writer_adapt_prompt, build_writer_idea_prompt,
     build_writer_repair_prompt, build_structure_prompt,
@@ -183,13 +183,21 @@ def test_pace_pause_labels_map_to_numeric():
 
 # ── Director orchestration ────────────────────────────────────────────────────
 
+def _covered_plan_json() -> str:
+    """A Structure response that actually preserves the approved Writer script."""
+    raw = json.loads(_PLAN_JSON)
+    raw["timeline"][0]["narration"] = _SCRIPT
+    raw["timeline"][0]["hook"] = True
+    return json.dumps(raw, ensure_ascii=False)
+
+
 def _fns():
     """(calls, call_fn, writer_fn, json_fn) — happy-path fakes with call logging."""
     calls = []
 
     def call_fn(sysm, usr):
         calls.append(("structure", sysm, usr))
-        return _PLAN_JSON
+        return _covered_plan_json()
 
     def writer_fn(sysm, usr):
         calls.append(("writer", sysm, usr))
@@ -274,7 +282,7 @@ def test_compiler_script_repair_round(monkeypatch):
 
     def call_fn(sysm, usr):
         calls.append(("structure", sysm))
-        return _PLAN_JSON
+        return _covered_plan_json()
 
     plan = run_super_plan(call_fn=call_fn, source="paste", chapter=_CHAPTER, language="vi",
                           writer_call_fn=writer_fn, json_call_fn=lambda s, u: _UND_JSON)
@@ -288,6 +296,62 @@ def test_estimate_cost_reports_calls(monkeypatch):
     monkeypatch.delenv("STORY_COMPILER", raising=False)
     c3 = estimate_super_plan_cost(source_chars=10000, ceiling=10)
     assert c3["llm_calls"] == 3 and c3["cost_usd"] > 0
+    c2 = estimate_super_plan_cost(source_chars=10000, ceiling=10, source="idea")
+    assert c2["llm_calls"] == 2 and c2["input_tokens"] < c3["input_tokens"]
     monkeypatch.setenv("STORY_COMPILER", "0")
     c1 = estimate_super_plan_cost(source_chars=10000, ceiling=10)
     assert c1["llm_calls"] == 1 and c1["input_tokens"] < c3["input_tokens"]
+
+
+def test_understanding_block_preserves_relationships_and_quotes():
+    u = parse_understanding(_UND_JSON)
+    validate_understanding(u, _CHAPTER)
+    block = understanding_block(u)
+    assert "RELATIONSHIPS" in block
+    assert "source quote:" in block
+    assert "TOPIC:" in block and "TONE:" in block
+
+
+def test_compiler_trace_reports_physical_calls_and_selected_mode(monkeypatch):
+    monkeypatch.delenv("STORY_COMPILER", raising=False)
+    monkeypatch.setenv("STORY_IDEA_EXPAND_TRIES", "0")
+    calls, call_fn, writer_fn, json_fn = _fns()
+    events = []
+    plan = run_super_plan(
+        call_fn=call_fn, source="idea", idea="idea", language="vi",
+        writer_call_fn=writer_fn, json_call_fn=json_fn, observer=events.append,
+    )
+    assert plan is not None
+    assert [e["stage"] for e in events if e["event"] == "call_started"] == ["writer", "structure"]
+    assert any(e["event"] == "authoring_selected" and e["mode"] == "compiler" for e in events)
+
+
+def test_compiler_rejects_structure_that_drops_script(monkeypatch):
+    monkeypatch.delenv("STORY_COMPILER", raising=False)
+    monkeypatch.setenv("STORY_IDEA_EXPAND_TRIES", "0")
+    calls = []
+
+    def structure(sysm, user):
+        calls.append("structure")
+        return _PLAN_JSON
+
+    events = []
+    plan = run_super_plan(
+        call_fn=structure, source="idea", idea="idea", language="vi",
+        writer_call_fn=lambda s, u: _SCRIPT, json_call_fn=lambda s, u: _UND_JSON,
+        observer=events.append,
+    )
+    assert plan is not None
+    assert calls == ["structure", "structure"]
+    assert any(e["event"] == "validation" and e.get("stage") == "structure"
+               and not e.get("passed") for e in events)
+    assert any(e["event"] == "compiler_fallback" for e in events)
+
+
+def test_source_chunker_preserves_tail_without_oversized_parts():
+    source = "first paragraph\n\n" + "x" * 120 + "\n\nlast ending"
+    parts = _split_source_chunks(source, limit=80)
+    assert len(parts) >= 2
+    assert all(len(part) <= 80 for part in parts)
+    assert "".join(parts).replace("\n", "") == source.replace("\n", "")
+    assert parts[-1].endswith("last ending")

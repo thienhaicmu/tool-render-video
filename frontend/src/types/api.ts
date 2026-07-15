@@ -226,6 +226,9 @@ export interface RenderRequest {
   // Approved/edited StoryPlan JSON from the Storyboard review. When set, the
   // backend renders from it and skips AI planning.
   story_plan_override?: string
+  story_plan_provider?: string
+  story_plan_model?: string
+  story_plan_authoring_mode?: string
   // Story v2 (B0) — input source: 'paste' adapts story text in content_script;
   // 'idea' has the AI author the story from story_idea (+ duration/genre).
   story_source?: 'paste' | 'idea'
