@@ -9,6 +9,7 @@ import { BASE_URL } from '../../../api/client'
 import type { StoryPlanV2, CharacterDef, StoryVoicesResponse } from '../../../api/story'
 import { generateCharacterMaster, getStoryVoices, previewNarration } from '../../../api/story'
 import { AssetPicker } from './AssetPicker'
+import type { StoryAsset } from '../../../api/storyAssets'
 
 // Short spoken sample when a character has no line yet in the timeline.
 const SAMPLE: Record<string, string> = {
@@ -34,7 +35,7 @@ export function CharactersPanel({ vi, plan, artStyle, language, onChange, onVoic
   onChange: (id: string, up: Partial<CharacterDef>) => void
   onVoiceChange: (cid: string, engine: string, voiceId: string) => void
   onMasterChange: (cid: string, path: string) => void
-  onAssetPick?: (cid: string, slug: string, path: string) => void
+  onAssetPick?: (cid: string, asset: StoryAsset) => void
 }) {
   // Available voices for this language's TTS engine (per-character override picker).
   const [avail, setAvail] = useState<StoryVoicesResponse | null>(null)
@@ -57,7 +58,7 @@ export function CharactersPanel({ vi, plan, artStyle, language, onChange, onVoic
         {plan.characters.map((c) => (
           <CharacterRow key={c.id} vi={vi} c={c} artStyle={artStyle} language={lang}
             sample={sampleFor(c.id)} voice={plan.render?.voices?.[c.id]} avail={avail}
-            locked={!!plan.render?.masters?.[c.id]}
+            locked={!!plan.render?.masters?.[c.id] || !!c.visual_identity_id}
             assetStatus={plan.render?.asset_status?.[c.id] || ''}
             onChange={onChange} onVoiceChange={onVoiceChange} onMasterChange={onMasterChange}
             onAssetPick={onAssetPick} />
@@ -80,7 +81,7 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
   onChange: (id: string, up: Partial<CharacterDef>) => void
   onVoiceChange: (cid: string, engine: string, voiceId: string) => void
   onMasterChange: (cid: string, path: string) => void
-  onAssetPick?: (cid: string, slug: string, path: string) => void
+  onAssetPick?: (cid: string, asset: StoryAsset) => void
 }) {
   const [master, setMaster] = useState<{ st: 'idle' | 'busy' | 'err'; url: string }>({ st: 'idle', url: '' })
   const [variant, setVariant] = useState(0)
@@ -96,6 +97,13 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
     const v = regen ? variant + 1 : variant
     setVariant(v)
     setMaster({ st: 'busy', url: '' })
+    if ((c.visual_identity_id || '').trim()) {
+      setMaster({
+        st: 'idle',
+        url: `/api/story/v3/assets/character/${encodeURIComponent(c.visual_identity_id || '')}`,
+      })
+      return
+    }
     try {
       const r = await generateCharacterMaster({
         character_id: c.id, name: c.name, archetype: c.archetype || '',
@@ -150,9 +158,9 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
         {(c.gender || c.voice_gender) && (
           <span className="st-tag st-tag--dim">{c.voice_gender || c.gender}</span>
         )}
-        {(c.asset || '').trim() && (
+        {(c.visual_identity_id || '').trim() && (
           <span className="st-tag st-tag--dim" title={vi ? 'Asset kho được gán cho nhân vật này' : 'Library asset assigned to this character'}>
-            📚 {c.asset}
+            📚 {c.visual_identity_id || c.asset}
           </span>
         )}
         {assetStatus && STATUS_CHIP[assetStatus] && (
@@ -196,9 +204,9 @@ function CharacterRow({ vi, c, artStyle, language, sample, voice, avail, locked,
           <AssetPicker vi={vi} kind="character"
             onClose={() => setPicker(false)}
             onPick={(a) => {
-              setMaster({ st: 'idle', url: `/api/story/assets/${a.id}/image` })
+              setMaster({ st: 'idle', url: a.preview_url || `/api/story/v3/assets/character/${encodeURIComponent(a.identity_id || a.id)}` })
               // GĐ3: one pick assigns the identity — slug + locked master + status.
-              if (onAssetPick) onAssetPick(c.id, a.slug, a.path)
+              if (onAssetPick) onAssetPick(c.id, a)
               else onMasterChange(c.id, a.path)
             }} />
         )}

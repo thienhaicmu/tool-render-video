@@ -76,6 +76,9 @@ def _bg_layer(plan, setting, w: int, h: int) -> str:
             return img
     except Exception:
         pass
+    if os.getenv("STORY_V3_ONLY", "0") == "1":
+        # Do not silently replace an unresolved V3 identity with procedural art.
+        return ""
     # procedural scene (authored at 1536×1024) scaled to COVER w×h
     sc = max(w / _SCENE_W, h / _SCENE_H)
     tx = (w - _SCENE_W * sc) / 2.0
@@ -110,6 +113,9 @@ def _char_layer(ch, plan) -> str:
                 return _embed(v3_path, w=_CHAR_W, h=_CHAR_H)
         except Exception:
             pass
+        return ""
+    if os.getenv("STORY_V3_ONLY", "0") == "1":
+        # An unresolved character must be selected from the approved V3 catalog.
         return ""
     try:
         if os.getenv("STORY_V3_ONLY", "0") == "1":

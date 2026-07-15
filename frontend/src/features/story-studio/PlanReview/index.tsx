@@ -7,8 +7,8 @@
  *   TimelineEditor  — the beat list (narration · visual · focus/motion/transition
  *                     · emotion/pose · hook) with reorder / add / delete + live duration
  *
- * Story Mode is SVG-only: previews are composed procedurally server-side (offline, $0,
- * WYSIWYG) via /api/story/visual/svg-preview. A locally-held ``previews`` map
+ * Story Mode previews are composed server-side from the approved V3 library via
+ * /api/story/visual/svg-preview. A locally-held ``previews`` map
  * (visual_id → image url) is shared so the TimelineEditor can thumbnail each visual.
  */
 import { useEffect, useRef, useState } from 'react'
@@ -19,6 +19,7 @@ import { beatEstSec, visualColorMap } from './helpers'
 import { CharactersPanel } from './CharactersPanel'
 import { VisualsPanel } from './VisualsPanel'
 import { TimelineEditor } from './TimelineEditor'
+import type { StoryAsset } from '../../../api/storyAssets'
 
 function newBeatId(existing: Beat[]): string {
   let i = existing.length + 1
@@ -43,8 +44,7 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
   const [previews, setPreviews] = useState<Record<string, string>>({})
   const setPreview = (id: string, url: string) => setPreviews((p) => ({ ...p, [id]: url }))
 
-  // On entering Review, compose the procedural SVG for the whole storyboard so the user
-  // sees exactly what the render will produce (WYSIWYG, offline $0). One batch call.
+  // On entering Review, compose the whole storyboard from V3 identities in one batch.
   const draftRan = useRef(false)
   const [drafting, setDrafting] = useState(false)
   const [draftMsg, setDraftMsg] = useState('')
@@ -71,8 +71,8 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
 
   // Library-pick matching visibility (D3): how many characters/settings the AI resolved
   // to a library asset slug (the rest fall back to fuzzy match → procedural art).
-  const libChars = plan.characters.filter((c) => (c.asset || '').trim()).length
-  const libSettings = plan.settings.filter((s) => (s.asset || '').trim()).length
+  const libChars = plan.characters.filter((c) => (c.visual_identity_id || '').trim()).length
+  const libSettings = plan.settings.filter((s) => (s.visual_scene_identity_id || '').trim()).length
   const colors = visualColorMap(plan.visuals)
   const liveTotal = plan.timeline.reduce(
     (s, b) => s + beatEstSec(b, language) + Math.max(0, b.pause_after || 0), 0)
@@ -101,12 +101,15 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
   // GĐ3 — a manual library pick assigns the ASSET IDENTITY in one step: the slug on
   // the character (resolver treats it as matched_exact), the file as locked master,
   // and the status chip flips accordingly.
-  const updateAssetPick = (cid: string, slug: string, path: string) => {
+  const updateAssetPick = (cid: string, asset: StoryAsset) => {
+    const identity = (asset.identity_id || asset.id || '').trim()
     const masters = { ...(plan.render?.masters ?? {}) }
-    if (path) masters[cid] = path
+    delete masters[cid]
     const asset_status = { ...(plan.render?.asset_status ?? {}), [cid]: 'matched_exact' }
     patch({
-      characters: plan.characters.map((c) => (c.id === cid ? { ...c, asset: slug } : c)),
+      characters: plan.characters.map((c) => (c.id === cid
+        ? { ...c, asset: '', visual_identity_id: identity }
+        : c)),
       render: { ...plan.render, masters, asset_status },
     })
   }
@@ -114,10 +117,16 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
     patch({ visuals: plan.visuals.map((v) => (v.id === id ? { ...v, ...up } : v)) })
   // AL4 — pin a library background into render.visual_assets so the render reuses that
   // exact file (library-first, skips SVG compose). "" clears it (back to procedural).
-  const updateVisualAsset = (id: string, path: string) => {
+  const updateVisualAsset = (id: string, identityId: string) => {
     const va = { ...(plan.render?.visual_assets ?? {}) }
-    if (path) va[id] = path; else delete va[id]
-    patch({ render: { ...plan.render, visual_assets: va } })
+    delete va[id]
+    const settingId = plan.visuals.find((v) => v.id === id)?.setting_id || ''
+    patch({
+      settings: plan.settings.map((s) => (s.id === settingId
+        ? { ...s, asset: '', visual_scene_identity_id: identityId }
+        : s)),
+      render: { ...plan.render, visual_assets: va },
+    })
   }
   const updateBeat = (id: string, up: Partial<Beat>) =>
     patch({ timeline: plan.timeline.map((b) => (b.id === id ? { ...b, ...up } : b)) })
@@ -172,8 +181,8 @@ export function PlanReview({ vi, plan, setPlan, busy, artStyle, aspect, language
           </div>
         </div>
         <div className="st-actions">
-          <span className="st-tag st-tag--dim" title={vi ? 'Ảnh chibi vẽ trong máy — offline, $0' : 'Chibi art rendered locally — offline, $0'}>
-            🖍 {vi ? 'Chibi · $0' : 'Chibi · $0'}
+          <span className="st-tag st-tag--dim" title={vi ? 'Ảnh lấy từ Visual Library V3' : 'Images from the approved Visual Library V3'}>
+            🖼 {vi ? 'Visual Library V3' : 'Visual Library V3'}
           </span>
           <button type="button" className="st-btn" disabled={busy || drafting} onClick={() => void draftAll(true)}>
             {drafting ? draftMsg : (vi ? '↻ Dựng lại ảnh' : '↻ Recompose')}

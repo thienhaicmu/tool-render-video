@@ -7,7 +7,7 @@
  * then uses it directly instead of calling AI (library-first, AL3).
  */
 import { useEffect, useState } from 'react'
-import { listStoryAssets, scanStoryAssets, storyAssetImageUrl, type StoryAsset } from '../../../api/storyAssets'
+import { listV3Assets, scanStoryAssets, v3AssetImageUrl, type StoryAsset } from '../../../api/storyAssets'
 
 const REGIONS = ['', 'cn', 'jp', 'ko', 'vi', 'eu', 'us'] as const
 const GENRES = ['', 'wuxia', 'ngontinh', 'horror', 'fantasy', 'codai', 'hiendai'] as const
@@ -29,7 +29,7 @@ export function AssetPicker({ vi, kind, region: region0 = '', genre: genre0 = ''
 
   const load = () => {
     setBusy(true)
-    void listStoryAssets({ kind, region, genre, q })
+    void listV3Assets({ kind, region, genre, q })
       .then((r) => setAssets(r.assets || []))
       .catch(() => setAssets([]))
       .finally(() => setBusy(false))
@@ -80,7 +80,7 @@ export function AssetPicker({ vi, kind, region: region0 = '', genre: genre0 = ''
               onClick={() => { onPick(a); onClose() }} title={a.slug}>
               <div className="st-asset-thumb"
                 style={{ background: a.transparent ? 'repeating-conic-gradient(#c8c8c8 0% 25%, #fff 0% 50%) 50% / 12px 12px' : 'var(--bg-panel)' }}>
-                <img src={storyAssetImageUrl(a.id)} alt={a.slug} loading="lazy" />
+                <img src={v3AssetImageUrl(a)} alt={a.name || a.slug} loading="lazy" />
               </div>
               <span className="st-asset-name">{a.name || a.slug}</span>
               <span className="st-asset-meta st-muted">{[a.region, a.genre].filter(Boolean).join('·')}</span>

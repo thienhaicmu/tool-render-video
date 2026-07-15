@@ -21,6 +21,7 @@ export interface CharacterDef {
   voice_style?: string
   archetype?: string   // library role token (procedural/fuzzy match)
   asset?: string       // library-pick: AI-chosen library character slug ('' = none)
+  visual_identity_id?: string // approved Visual Library V3 identity
 }
 
 export interface SettingDef {
@@ -29,6 +30,7 @@ export interface SettingDef {
   canonical_desc: string
   scene_kind?: string  // library scene token (procedural/fuzzy match)
   asset?: string       // library-pick: AI-chosen library background slug ('' = none)
+  visual_scene_identity_id?: string // approved Visual Library V3 scene identity
 }
 
 export interface Visual {
@@ -156,6 +158,7 @@ export interface AssetResolution {
   needs_approval: string[]
   missing: string[]
   characters: { id: string; name: string; asset: string; status: string }[]
+  scenes?: { id: string; asset: string; status: string }[]
 }
 
 export interface StoryPlanV2 {

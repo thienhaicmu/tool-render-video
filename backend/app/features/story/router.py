@@ -5,18 +5,18 @@ The render itself goes through the shared render API (render_format="story"); th
 router covers the review flow the FE Story Studio drives before render:
 
     POST /api/story/plan                      — ONE super call → StoryPlan v2
-    POST /api/story/visual/svg-preview        — compose procedural SVG key-visual(s)
+    POST /api/story/visual/svg-preview        — compose V3-aware key-visual(s)
     POST /api/story/character/reference-sheet — transparent SVG character master
     POST /api/story/narration/preview         — one beat's narration to audio
 
-Story Mode is SVG-only: all imagery is procedural (offline, $0). AI is used ONLY for
-the super plan. All calls are defensive (Sacred Contract #3): a None/empty result
-surfaces as a clean 4xx/502 — no unhandled raise reaches the client.
+Story Mode uses approved V3 identities whenever available; unresolved identities do
+not silently fall back to legacy artwork. AI is used ONLY for the super plan.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -281,7 +281,7 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     from app.features.render.ai.llm.story_prompts_v2 import MAX_SOURCE_CHARS, MAX_IDEA_CHARS
     _src_len = len(chapter) if source == "paste" else len(idea)
     _src_limit = MAX_SOURCE_CHARS if source == "paste" else MAX_IDEA_CHARS
-    # F-08: Story imagery is procedural SVG ($0), but the planning LLM is NOT free.
+    # F-08: Story imagery comes from the approved V3 library; the planning LLM is NOT free.
     # Surface an ESTIMATE so the pre-flight no longer reports a misleading $0 total.
     from app.features.render.ai.llm.story_director_v2 import (
         estimate_super_plan_cost, lint_story_plan, shot_grammar_report,
@@ -340,7 +340,7 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         # Structure, 3 calls) vs "single_pass" (legacy 1 call). Additive.
         "authoring_mode": _mode,
         "planning_trace": _trace,
-        # Story imagery is procedural SVG + offline ($0); the super-plan LLM is not.
+        # Story imagery is V3-library based; the super-plan LLM is not free.
         "cost_preflight": {
             "visual_count": _visual_count,
             "character_count": len(plan.characters),
@@ -634,7 +634,7 @@ class SvgPreviewRequest(BaseModel):
 
 @router.post("/visual/svg-preview")
 def svg_visual_preview(req: SvgPreviewRequest) -> dict:
-    """Compose the procedural SVG key-visual(s) for a StoryPlan so the FE Review shows
+    """Compose V3-aware key-visual(s) for a StoryPlan so the FE Review shows
     exactly what the render will produce (WYSIWYG, offline, $0). Returns
     ``{items: [{visual_id, token, url}]}`` for every visual that composed. 422 on an
     empty/invalid plan; 502 when the SVG rasteriser is unavailable (resvg-py). Composes
@@ -705,6 +705,21 @@ def character_master(req: CharacterMasterRequest) -> dict:
     $0) for the Review character panel — the SAME asset the render overlays. Returns
     ``{path, url}``. 422 without any character signal; 502 on compose failure / resvg-py
     unavailable (Sacred Contract #3)."""
+    if os.getenv("STORY_V3_ONLY", "0") == "1":
+        from app.features.render.engine.visual.library_v3 import resolve_character_preview
+        import shutil
+        v3_path = resolve_character_preview(req.character_id, framing="full_body")
+        if not v3_path:
+            raise HTTPException(status_code=422, detail="select an approved V3 character identity first")
+        try:
+            _MASTER_DIR.mkdir(parents=True, exist_ok=True)
+            token = uuid.uuid4().hex
+            shutil.copyfile(v3_path, _MASTER_DIR / f"{token}.png")
+            return {"path": v3_path, "url": f"/api/story/character/master/{token}"}
+        except Exception as exc:
+            logger.warning("story: V3 master preview copy failed: %s", exc)
+            raise HTTPException(status_code=502, detail="V3 character preview failed") from exc
+
     from types import SimpleNamespace
     from app.features.render.engine.visual.story_reference_sheet import generate_character_master
 
@@ -962,6 +977,111 @@ def restore_story_project_version(project_id: str, version_id: str) -> dict:
 
 
 # ── AL2: offline asset library (list / get / thumb / scan / delete) ───────────
+
+def _v3_manifest_path(kind: str) -> str:
+    """Return the configured approved V3 manifest for a UI asset kind."""
+    if (kind or "").strip().lower() == "character":
+        from app.features.render.engine.visual.library_v3.planner_matcher import configured_manifest_path
+        return configured_manifest_path()
+    from app.features.render.engine.visual.library_v3.scene_matcher import scene_manifest_path
+    return scene_manifest_path()
+
+
+def _v3_asset_path(kind: str, identity_id: str, style: str = "") -> Path | None:
+    """Resolve one active V3 preview artifact inside its manifest root."""
+    from app.features.render.engine.visual.library_v3 import load_active_catalog
+
+    source = Path(_v3_manifest_path(kind))
+    if not source.is_file():
+        return None
+    catalog = load_active_catalog(source)
+    target_id = (identity_id or "").strip()
+    if kind == "character":
+        target = catalog.character(target_id)
+        if target is None:
+            target = catalog.character(catalog.resolve_legacy_alias(target_id) or "")
+        if target is None:
+            return None
+        master = next((item for item in target.masters if item.framing == "full_body"), None)
+        master = master or next(iter(target.masters), None)
+        raw = (master.preview_artifact.path if master else "") or (master.artifact.path if master else "")
+    else:
+        target = catalog.scene(target_id)
+        if target is None:
+            target = catalog.scene(catalog.resolve_legacy_alias(target_id) or "")
+        if target is None:
+            return None
+        variants = list(target.variants)
+        chosen = next((item for item in variants if style and item.get("style_id") == style), None)
+        chosen = chosen or (variants[0] if variants else {})
+        raw = str(chosen.get("preview_path") or chosen.get("artifact_path") or "")
+    if not raw:
+        return None
+    candidate = (source.parent / raw).resolve()
+    try:
+        candidate.relative_to(source.parent.resolve())
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() and candidate.stat().st_size > 0 else None
+
+
+@router.get("/v3/assets")
+def list_v3_story_assets(kind: str = "", region: str = "", genre: str = "", q: str = "", style: str = "") -> dict:
+    """List approved V3 identities for the Story review picker."""
+    from app.features.render.engine.visual.library_v3 import load_active_catalog
+
+    requested = (kind or "").strip().lower()
+    if requested == "background":
+        requested = "scene"
+    if requested not in ("", "character", "scene"):
+        return {"assets": []}
+    items = []
+    for source_kind in ((requested,) if requested else ("character", "scene")):
+        source = Path(_v3_manifest_path(source_kind))
+        if not source.is_file():
+            continue
+        catalog = load_active_catalog(source)
+        entries = catalog.characters if source_kind == "character" else catalog.scenes
+        for entry in entries:
+            haystack = " ".join((entry.id, entry.display_name, entry.role if source_kind == "character" else entry.scene_kind)).lower()
+            if region and (entry.region or "").lower() != region.strip().lower():
+                continue
+            if genre and genre.strip().lower() not in haystack:
+                continue
+            if style and style.strip().lower() not in {entry.style_id.lower(), *(item.lower() for item in entry.compatible_style_ids)}:
+                continue
+            if q and q.strip().lower() not in haystack:
+                continue
+            asset_kind = "character" if source_kind == "character" else "background"
+            items.append({
+                "id": entry.id,
+                "identity_id": entry.id,
+                "source": "v3",
+                "kind": asset_kind,
+                "region": entry.region,
+                "genre": entry.scene_kind if source_kind == "scene" else entry.role,
+                "slug": entry.id,
+                "name": entry.display_name or entry.id,
+                "tags": ",".join(entry.signature_features) if source_kind == "character" else entry.scene_kind,
+                "style": entry.style_id,
+                "path": "",
+                "preview_url": f"/api/story/v3/assets/{asset_kind}/{entry.id}",
+                "transparent": source_kind == "character",
+            })
+    return {"assets": items}
+
+
+@router.get("/v3/assets/{kind}/{identity_id}")
+def get_v3_story_asset_image(kind: str, identity_id: str, style: str = ""):
+    """Stream an approved V3 character or scene preview artifact."""
+    normalized = "character" if (kind or "").strip().lower() == "character" else "scene"
+    path = _v3_asset_path(normalized, identity_id, style=style)
+    if path is None:
+        raise HTTPException(status_code=404, detail="V3 asset not found")
+    suffix = path.suffix.lower()
+    media_type = "image/svg+xml" if suffix == ".svg" else ("image/webp" if suffix == ".webp" else "image/png")
+    return FileResponse(str(path), media_type=media_type)
+
 
 @router.get("/assets")
 def list_story_assets(kind: str = "", region: str = "", genre: str = "", q: str = "") -> dict:
