@@ -106,14 +106,12 @@ def _genre_group(genre: str) -> tuple:
 
 def _v3_only_missing(plan, character_report: dict | None, scene_report: dict | None,
                      *, skip_scenes: bool = False) -> dict[str, list[str]]:
-    """Return required Story scene layers that have no usable V3 assignment.
+    """Report which required Story layers will render via the procedural fallback.
 
-    A character without an identity ID is intentionally reported as a procedural V3
-    fallback, not as a render blocker. Since 2026-07-16 settings are the same: an
-    unresolved scene AUTO-generates a v2 anime background in svg_compose._bg_layer
-    (user ruling — "no ID → generate"), so nothing here blocks the render anymore.
-    The strict ``characters``/``settings`` keys stay in the report shape for the
-    blocked-branch guard in run_story_v2 (defensive, currently always empty).
+    Purely informational — never a render blocker. A character without a usable V3
+    identity uses the deterministic V3 procedural renderer; an unresolved setting
+    AUTO-generates a v2 anime background in svg_compose._bg_layer (user ruling
+    2026-07-16 — "no ID → generate").
     """
     required_chars = sorted({
         str(cid).strip()
@@ -141,9 +139,7 @@ def _v3_only_missing(plan, character_report: dict | None, scene_report: dict | N
         else [sid for sid in required_settings if sid not in assigned_settings]
     )
     return {
-        "characters": [],
         "procedural_characters": procedural_chars,
-        "settings": [],
         "procedural_settings": procedural_settings,
     }
 
@@ -209,24 +205,9 @@ def _resolve_story_plan_v2(payload, *, job_id, resume_mode, source, chapter, ide
     # G1: ground a later series chapter on earlier ones (no-op when series_id empty).
     from app.features.render.engine.pipeline.story_series_memory import build_prior_context
     prior_context = build_prior_context(_sid, before_chapter=(_cno or None))
-    # Library-pick: inject the asset-library catalog so the AI plan can CHOOSE assets by
-    # slug. Default ON (STORY_LIBRARY_PICK=1) now that the library is large (569 assets)
-    # + fuzzy matching is strong — this is the strongest matching signal. Set
-    # STORY_LIBRARY_PICK=0 to opt out (e.g. shrink the prompt for a pure gpt-image run,
-    # which ignores the picks). An empty library → catalog "" → prompt byte-identical.
+    # V3-only: identities are matched by the ENGINE (match_characters/match_scenes)
+    # after the plan call — the prompt no longer carries a legacy asset catalog.
     library_catalog = ""
-    if os.getenv("STORY_LIBRARY_PICK", "1") == "1" and os.getenv("STORY_V3_ONLY", "1") != "1":
-        try:
-            from app.db import story_asset_repo
-            from app.features.render.engine.visual.character_resolver import resolver_enabled
-            # GĐ3: with the resolver on, the ENGINE assigns characters — the prompt
-            # only needs the BACKGROUNDS section (smaller prompt, no unverifiable picks).
-            _kinds = ("background",) if resolver_enabled() else ("character", "background")
-            library_catalog = story_asset_repo.build_library_catalog(
-                genres=_genre_group(genre), kinds=_kinds,
-                style=(story_asset_repo.active_library_style(art_style) or None))
-        except Exception:
-            library_catalog = ""
     _plan_trace: dict = {}
 
     def _observe_plan(event: dict) -> None:
@@ -440,78 +421,32 @@ def run_story_v2(
         except Exception as _v3_exc:
             logger.info("story v3 identity matching skipped: %s", _v3_exc)
 
-        from app.features.render.engine.visual.character_resolver import (
-            resolve_characters, resolver_enabled,
-        )
-        if resolver_enabled() and os.getenv("STORY_V3_ONLY", "1") != "1":
-            _res = resolve_characters(
-                plan, locked=_locked_assets,
-                region=(plan.region or ""), genres=_genre_group(genre))
-            if _res["needs_approval"] or _res["missing"]:
-                _emit_render_event(
-                    channel_code=effective_channel, job_id=job_id,
-                    event="story.assets.resolution", level="WARNING",
-                    message=(f"Character assets: {len(_res['needs_approval'])} need approval, "
-                             f"{len(_res['missing'])} missing (render tiếp tục — nhân vật thiếu "
-                             "sẽ không có overlay)"),
-                    step="render.story",
-                    context={"needs_approval": _res["needs_approval"],
-                             "missing": _res["missing"], "statuses": _res["statuses"]},
-                )
-
-        # The legacy resolver may have filled a compatibility slug after V3.
-        # Keep the V3 status for identities that actually won V3 matching so
-        # readiness and the Review response describe the rendered identity.
-        if _v3_match and _v3_match["assigned"]:
-            try:
-                merged_status = dict(getattr(plan.render, "asset_status", None) or {})
-                for _cid in _v3_match["assigned"]:
-                    merged_status[_cid] = _v3_match["statuses"][_cid]
-                plan.render.asset_status = merged_status
-            except Exception:
-                pass
-
         update_story_plan(job_id, plan.to_json())
 
-        if os.getenv("STORY_V3_ONLY", "1") == "1":
-            _v3_missing = _v3_only_missing(
-                plan, _v3_match, _v3_scene_match, skip_scenes=bool(base_video_path),
+        # Surface which layers will use the procedural fallback (informational —
+        # never a render blocker: characters use the deterministic V3 renderer,
+        # settings auto-generate a v2 anime background in svg_compose).
+        _v3_missing = _v3_only_missing(
+            plan, _v3_match, _v3_scene_match, skip_scenes=bool(base_video_path),
+        )
+        if _v3_missing.get("procedural_characters"):
+            _emit_render_event(
+                channel_code=effective_channel, job_id=job_id,
+                event="story.v3_identity.procedural", level="INFO",
+                message=("V3 procedural character fallback: "
+                         + ", ".join(_v3_missing["procedural_characters"][:8])),
+                step="render.story",
+                context={"characters": _v3_missing["procedural_characters"]},
             )
-            if _v3_missing.get("procedural_characters"):
-                _emit_render_event(
-                    channel_code=effective_channel, job_id=job_id,
-                    event="story.v3_identity.procedural", level="INFO",
-                    message=("V3 procedural character fallback: "
-                             + ", ".join(_v3_missing["procedural_characters"][:8])),
-                    step="render.story",
-                    context={"characters": _v3_missing["procedural_characters"]},
-                )
-            if _v3_missing.get("procedural_settings"):
-                _emit_render_event(
-                    channel_code=effective_channel, job_id=job_id,
-                    event="story.v3_scene.procedural", level="INFO",
-                    message=("V3 procedural scene fallback (v2 anime background): "
-                             + ", ".join(_v3_missing["procedural_settings"][:8])),
-                    step="render.story",
-                    context={"settings": _v3_missing["procedural_settings"]},
-                )
-            if _v3_missing["characters"] or _v3_missing["settings"]:
-                _missing_bits = []
-                if _v3_missing["characters"]:
-                    _missing_bits.append("characters=" + ", ".join(_v3_missing["characters"][:8]))
-                if _v3_missing["settings"]:
-                    _missing_bits.append("settings=" + ", ".join(_v3_missing["settings"][:8]))
-                _v3_message = (
-                    "Story V3: no approved identity for " + "; ".join(_missing_bits) +
-                    ". Approve/add these V3 library identities before rendering."
-                )
-                _emit_render_event(
-                    channel_code=effective_channel, job_id=job_id,
-                    event="story.v3_identity.blocked", level="ERROR",
-                    message=_v3_message, step="render.story",
-                    context={"missing": _v3_missing},
-                )
-                raise RuntimeError(_v3_message)
+        if _v3_missing.get("procedural_settings"):
+            _emit_render_event(
+                channel_code=effective_channel, job_id=job_id,
+                event="story.v3_scene.procedural", level="INFO",
+                message=("V3 procedural scene fallback (v2 anime background): "
+                         + ", ".join(_v3_missing["procedural_settings"][:8])),
+                step="render.story",
+                context={"settings": _v3_missing["procedural_settings"]},
+            )
 
         # ── GĐ4b: Production Readiness gate — đánh giá 8 tiêu chí TRƯỚC khi tốn
         # ảnh/TTS/encode. FAIL-set tối thiểu (rỗng/không visual/đĩa/thư mục xuất);

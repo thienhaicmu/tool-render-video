@@ -156,13 +156,6 @@ def match_characters(
             target = exact_target(getattr(char, "visual_identity_id", ""))
         if target is None and honor_existing:
             target = exact_target(getattr(char, "asset", ""))
-        # A non-V3 legacy slug is owned by the legacy resolver. Do not silently
-        # replace a locked or hand-picked legacy asset with a V3 identity.
-        if target is None and honor_existing and (
-            locked.get(cid) or getattr(char, "asset", "")
-        ):
-            if os.getenv("STORY_V3_ONLY", "1") != "1":
-                continue
         if target is not None and target.id not in used:
             assign(char, target, MATCHED_EXACT)
         else:
@@ -188,11 +181,9 @@ def match_characters(
             if score > best_score:
                 best, best_score = identity, score
         if best is None or best_score < ASSIGN_MIN:
-            if os.getenv("STORY_V3_ONLY", "1") == "1":
-                report["statuses"][cid] = PROCEDURAL
-            else:
-                report["statuses"][cid] = MISSING
-                report["missing"].append(cid)
+            # No usable identity → the deterministic V3 procedural renderer takes
+            # over downstream (never a render blocker, never a substituted face).
+            report["statuses"][cid] = PROCEDURAL
             if apply:
                 char.visual_identity_id = ""
             continue

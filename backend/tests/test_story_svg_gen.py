@@ -11,7 +11,6 @@ import app.features.render.engine.visual.svg_raster as sr
 def _patch_io(mp):
     mp.setattr(vs, "update_story_plan", lambda *a, **k: None)
     mp.setattr(vs, "_emit_render_event", lambda *a, **k: None)
-    mp.delenv("STORY_LIBRARY_FIRST", raising=False)
 
 
 def _plan():

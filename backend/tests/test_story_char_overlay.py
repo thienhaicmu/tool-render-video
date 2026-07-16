@@ -42,56 +42,30 @@ def test_overlay_masters_procedural_per_emotion(monkeypatch, tmp_path):
         assert path.endswith(".png")
 
 
-def test_overlay_masters_library_variant(monkeypatch, tmp_path):
-    monkeypatch.setenv("STORY_CHAR_OVERLAY", "1")
-    monkeypatch.setenv("STORY_V3_ONLY", "0")   # pins the legacy library-variant branch
-    monkeypatch.setattr(vs, "update_story_plan", lambda *a, **k: None)
-    from app.db import story_asset_repo as R
-    for slug in ("cn_hero_zzz", "cn_hero_zzz_angry"):
-        f = tmp_path / f"{slug}.png"; f.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 256)
-        R.upsert_asset(path=str(f), kind="character", region="cn", genre="wuxia", slug=slug)
-    p = _plan(asset="cn_hero_zzz")
-    vs._generate_overlay_masters(p, tmp_path, job_id="j", effective_channel="c")
-    # angry → the library _angry variant; sad (no variant) → the base asset
-    assert p.render.masters["han:angry:stand"].endswith("cn_hero_zzz_angry.png")
-    assert p.render.masters["han:sad:stand"].endswith("cn_hero_zzz.png")
-
-
 def test_overlay_masters_pose(monkeypatch, tmp_path):
-    # N4+ per-beat POSE — key includes pose; library uses _{pose} variant when present.
+    # N4+ per-beat POSE — the master key includes the pose; the V3 procedural
+    # renderer generates the per-(emotion, pose) master.
     monkeypatch.setenv("STORY_CHAR_OVERLAY", "1")
-    monkeypatch.setenv("STORY_V3_ONLY", "0")   # pins the legacy library-variant branch
     monkeypatch.setattr(vs, "update_story_plan", lambda *a, **k: None)
-    from app.db import story_asset_repo as R
-    for slug in ("cn_p_zzz", "cn_p_zzz_wave"):
-        f = tmp_path / f"{slug}.png"; f.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 256)
-        R.upsert_asset(path=str(f), kind="character", region="cn", genre="wuxia", slug=slug)
     p = StoryPlan(region="cn", genre_key="wuxia",
-                  characters=[CharacterDef(id="han", name="H", archetype="swordsman", asset="cn_p_zzz")],
+                  characters=[CharacterDef(id="han", name="H", archetype="swordsman")],
                   visuals=[Visual(id="v1", prompt="x")],
                   timeline=[Beat(id="b1", narration="a", visual_id="v1", speaker_id="han", pose="wave")])
     vs._generate_overlay_masters(p, tmp_path, job_id="j", effective_channel="c")
-    assert p.render.masters["han:normal:wave"].endswith("cn_p_zzz_wave.png")   # pose variant chosen
+    assert p.render.masters["han:normal:wave"].endswith(".png")
 
 
-def test_overlay_masters_emotion_plus_pose_uses_procedural(monkeypatch, tmp_path):
-    # When BOTH emotion AND pose are non-default, the library has no combined variant, so
-    # a single-axis variant would drop one axis → fall through to procedural (build_char
-    # combines both). Even a matched library asset must not override this.
+def test_overlay_masters_emotion_plus_pose(monkeypatch, tmp_path):
+    # BOTH emotion AND pose non-default → one combined-axis V3 procedural master.
     monkeypatch.setenv("STORY_CHAR_OVERLAY", "1")
     monkeypatch.setattr(vs, "update_story_plan", lambda *a, **k: None)
-    from app.db import story_asset_repo as R
-    for slug in ("cn_combo_zzz", "cn_combo_zzz_point", "cn_combo_zzz_angry"):
-        f = tmp_path / f"{slug}.png"; f.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 256)
-        R.upsert_asset(path=str(f), kind="character", region="cn", genre="wuxia", slug=slug)
     p = StoryPlan(region="cn", genre_key="wuxia",
-                  characters=[CharacterDef(id="han", name="H", archetype="swordsman", asset="cn_combo_zzz")],
+                  characters=[CharacterDef(id="han", name="H", archetype="swordsman")],
                   visuals=[Visual(id="v1", prompt="x")],
                   timeline=[Beat(id="b1", narration="a", visual_id="v1", speaker_id="han",
                                  emotion="angry", pose="point")])
     vs._generate_overlay_masters(p, tmp_path, job_id="j", effective_channel="c")
-    m = p.render.masters["han:angry:point"]
-    assert "cn_combo_zzz" not in m and m.endswith(".png")   # procedural, not a library variant
+    assert p.render.masters["han:angry:point"].endswith(".png")
 
 
 def test_compose_chars_false_is_background_only():

@@ -31,9 +31,6 @@ def test_defaults_are_near_lossless():
 
 
 def test_render_one_cue_uses_configurable_intermediate(monkeypatch, tmp_path):
-    # No visual asset on purpose (tests the encode wiring on the legacy solid-bg
-    # path) — V3-only mode would refuse to render a blank cue.
-    monkeypatch.setenv("STORY_V3_ONLY", "0")
     captured = {}
 
     def fake_run(cmd, **kw):
@@ -46,7 +43,9 @@ def test_render_one_cue_uses_configurable_intermediate(monkeypatch, tmp_path):
     monkeypatch.setattr(br, "_CUE_CRF", "13")
     monkeypatch.setattr(br, "_CUE_PRESET", "faster")
 
-    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={}))
+    img = tmp_path / "v1.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 128)
+    plan = SimpleNamespace(render=SimpleNamespace(visual_assets={"v1": str(img)}))
     r = br.render_one_cue(_ctx(tmp_path), plan, 1, _cue())
     assert r["clip"], r
 
@@ -140,10 +139,11 @@ def test_char_overlay_switches_per_line(monkeypatch, tmp_path):
     # the on-screen character switches with the speaker (image path, no base video).
     from app.domain.story_plan_v2 import LineSpan
     captured = _capture(monkeypatch)
-    monkeypatch.setenv("STORY_V3_ONLY", "0")   # legacy solid-bg path (no visual asset)
     monkeypatch.setattr(br, "_ok_file", lambda p: p in ("/mA.png", "/mB.png") or (bool(p) and Path(p).exists()))
+    img = tmp_path / "v1.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 128)
     plan = SimpleNamespace(render=SimpleNamespace(
-        visual_assets={}, masters={"a:angry:point": "/mA.png", "b:sad:stand": "/mB.png"}))
+        visual_assets={"v1": str(img)}, masters={"a:angry:point": "/mA.png", "b:sad:stand": "/mB.png"}))
     ctx = SimpleNamespace(width=1280, height=720, fps=30.0, shots_dir=str(tmp_path),
                           bg_value="#101820", ffmpeg_threads=0)
     cue = SimpleNamespace(start_sec=0.0, end_sec=4.0, crop_from=(0, 0, 1, 1), crop_to=(0, 0, 1, 1),

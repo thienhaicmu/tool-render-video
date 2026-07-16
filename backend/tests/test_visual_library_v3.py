@@ -196,11 +196,9 @@ def test_planner_matcher_uses_active_identity_and_apply_is_explicit(tmp_path):
     assert plan.render.asset_status["planner_hero"] == applied["statuses"]["planner_hero"]
 
 
-def test_planner_matcher_rejects_review_identity_and_mismatched_gender(tmp_path, monkeypatch):
-    # Pins the REJECT path (missing, no assignment). With STORY_V3_ONLY=1 an unresolved
-    # character becomes PROCEDURAL instead — that path is pinned by
-    # test_v3_matcher_marks_unresolved_character_as_procedural below.
-    monkeypatch.setenv("STORY_V3_ONLY", "0")
+def test_planner_matcher_rejects_review_identity_and_mismatched_gender(tmp_path):
+    # A review-state identity and a gender-mismatched one are never assigned —
+    # the character goes PROCEDURAL (deterministic V3 renderer downstream).
     manifest = _manifest(tmp_path, state="active")
     review = replace(manifest.characters[0], id="review_hero", quality_state="review")
     manifest = replace(manifest, characters=(manifest.characters[0], review))
@@ -213,21 +211,20 @@ def test_planner_matcher_rejects_review_identity_and_mismatched_gender(tmp_path,
     report = match_characters(plan, catalog)
 
     assert report["assigned"] == {}
-    assert report["missing"] == ["planner_man"]
+    assert report["statuses"]["planner_man"] == PROCEDURAL
+    assert report["missing"] == []
 
 
-def test_v3_matcher_marks_unresolved_character_as_procedural(tmp_path, monkeypatch):
+def test_v3_matcher_marks_unresolved_character_as_procedural(tmp_path):
     manifest = _manifest(tmp_path, state="active")
     catalog = ActiveCatalog.from_manifest(manifest)
     plan = StoryPlan(characters=[CharacterDef(
         id="planner_man", name="Unknown", gender="male", age="adult",
         canonical_desc="unknown character",
     )])
-    monkeypatch.setenv("STORY_V3_ONLY", "1")
     report = match_characters(plan, catalog)
     assert report["statuses"]["planner_man"] == PROCEDURAL
     assert report["missing"] == []
-    monkeypatch.setenv("STORY_V3_ONLY", "0")
 
 
 def test_planner_character_fallback_uses_v3_template():

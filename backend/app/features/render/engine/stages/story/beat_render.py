@@ -264,8 +264,10 @@ def render_one_cue(ctx, plan, part_no: int, cue) -> dict:
         base_video = getattr(ctx, "base_video_path", "") or ""
         base_dur = float(getattr(ctx, "base_video_dur", 0.0) or 0.0)
         use_video = bool(base_video) and _ok_file(base_video)
-        if (os.getenv("STORY_V3_ONLY", "1") == "1"
-                and not use_video and not have_img):
+        # No base video AND no key-visual on disk → refuse rather than deliver a
+        # blank solid-colour cue (upstream visuals_stage always fills the asset,
+        # so reaching this means a genuine upstream failure).
+        if not use_video and not have_img:
             return {
                 "clip": None,
                 "error": f"V3 visual missing for {cue.visual_id}",

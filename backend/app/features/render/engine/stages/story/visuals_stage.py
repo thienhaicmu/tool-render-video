@@ -34,39 +34,6 @@ def _worker_count(env_name: str, default: int, n_items: int) -> int:
     return max(1, min(w, max(1, int(n_items or 1))))
 
 
-def _match_library_background(plan, visual):
-    """Offline library-first: resolve a stock BACKGROUND for a CHARACTER-LESS Visual
-    (establishing shot) before composing procedurally. Returns an on-disk path or None.
-    Never raises.
-
-    Same precedence as svg_compose._bg_layer (single policy): the AI-chosen
-    ``setting.asset`` slug (exact, library-pick) → a fuzzy ``scene_kind``/name match. Only
-    for a Visual with NO character_ids — the cue render overlays characters per-beat, so a
-    plain library background would drop them; those keep procedural gen."""
-    try:
-        if os.getenv("STORY_V3_ONLY", "1") == "1":
-            return None
-        if getattr(visual, "character_ids", None):
-            return None
-        s = plan.setting(getattr(visual, "setting_id", "") or "")
-        from app.db.story_asset_repo import get_by_slug, match_asset, active_library_style
-        _st = active_library_style(getattr(plan, "art_style", "") or "")
-        asset = ((getattr(s, "asset", "") or "").strip()) if s else ""
-        if asset:                                        # AI-chosen library-pick (exact) wins
-            p = get_by_slug(asset, "background", style=_st)
-            if p:
-                return p
-        name = ((getattr(s, "scene_kind", "") or getattr(s, "name", "")) if s else "").strip()
-        if not name:
-            return None
-        return match_asset("background", name=name,
-                           region=(getattr(plan, "region", "") or ""),
-                           genre=(getattr(plan, "genre_key", "") or ""),
-                           style=(_st or None))
-    except Exception:
-        return None
-
-
 def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int,
                      *, job_id: str, effective_channel: str, provider: str = "svg") -> list:
     """Compose one procedural SVG image per Visual → plan.render.visual_assets[vid].
@@ -90,34 +57,6 @@ def _generate_images(plan, out_dir: Path, art_style: str, img_w: int, img_h: int
         except Exception:
             return False
     gen_visuals = [v for v in plan.visuals if not _ready(v.id)]
-
-    # Offline library-first: auto-match a stock BACKGROUND for character-less Visuals
-    # before composing procedurally. Gated by STORY_LIBRARY_FIRST (off by default). A
-    # matched visual is filled + dropped from gen_visuals (skip compose).
-    if (os.getenv("STORY_LIBRARY_FIRST", "0") == "1"
-            and os.getenv("STORY_V3_ONLY", "1") != "1"):
-        _matched: list = []
-        for v in list(gen_visuals):
-            p = _match_library_background(plan, v)
-            if p:
-                plan.render.visual_assets[v.id] = p
-                _matched.append(v.id)
-        if _matched:
-            gen_visuals = [v for v in gen_visuals if v.id not in _matched]
-            try:
-                update_story_plan(job_id, plan.to_json())
-            except Exception:
-                pass
-            for vid in _matched:
-                try:
-                    _emit_render_event(
-                        channel_code=effective_channel, job_id=job_id,
-                        event="story.visual.matched", level="INFO",
-                        message=f"Key-visual {vid} matched from library (no compose)",
-                        step="render.story",
-                        context={"visual_id": vid, "done": len(plan.render.visual_assets), "total": total})
-                except Exception:
-                    pass
 
     # N4 overlay: the key-visual is composed BACKGROUND-ONLY and the speaking character is
     # composited per-beat at cue render (emotion + pose aware). DEFAULT ON — the per-beat
@@ -191,44 +130,27 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
                 seen.add(sp); used.append(sp)
         if not used:
             return
-        region = (getattr(plan, "region", "") or "")
-        genre = (getattr(plan, "genre_key", "") or "")
-        v3_only = os.getenv("STORY_V3_ONLY", "1") == "1"
-        library_first = os.getenv("STORY_LIBRARY_FIRST", "0") == "1"
         for cid in used:
             if plan.render.masters.get(cid):
                 continue
             c = plan.character(cid)
             if c is None:
                 continue
-            # AL5 library-first (opt-in): reuse a matching offline library character
-            # (transparent master) by name before composing. Default off → procedural.
-            path = None
-            if v3_only:
-                try:
-                    from app.features.render.engine.visual.library_v3 import (
-                        render_planner_character_png, resolve_character_preview,
-                    )
-                    from app.features.render.engine.visual.library_v3.style_aliases import normalize_v3_style
-                    from app.core.config import APP_DATA_DIR
-                    path = resolve_character_preview(
-                        getattr(c, "visual_identity_id", "") or "", framing="full_body")
-                    if not path:
-                        path = render_planner_character_png(
-                            c, Path(APP_DATA_DIR) / "content_assets" / f"v3_master_{cid}.png",
-                            style_id=normalize_v3_style(art_style))
-                except Exception:
-                    path = None
-            elif library_first:
-                try:
-                    from app.db.story_asset_repo import match_asset
-                    path = match_asset("character", getattr(c, "name", "") or "",
-                                       transparent_only=True)
-                except Exception:
-                    path = None
-            if not path and not v3_only:
-                from app.features.render.engine.visual.story_reference_sheet import generate_character_master
-                path = generate_character_master(c, art_style=art_style, region=region, genre=genre)
+            # V3: the approved identity master → else the deterministic V3 renderer.
+            try:
+                from app.features.render.engine.visual.library_v3 import (
+                    render_planner_character_png, resolve_character_preview,
+                )
+                from app.features.render.engine.visual.library_v3.style_aliases import normalize_v3_style
+                from app.core.config import APP_DATA_DIR
+                path = resolve_character_preview(
+                    getattr(c, "visual_identity_id", "") or "", framing="full_body")
+                if not path:
+                    path = render_planner_character_png(
+                        c, Path(APP_DATA_DIR) / "content_assets" / f"v3_master_{cid}.png",
+                        style_id=normalize_v3_style(art_style))
+            except Exception:
+                path = None
             if not path:
                 continue
             plan.render.masters[cid] = path
@@ -248,17 +170,13 @@ def _generate_character_masters(plan, art_style: str, *, job_id: str, effective_
         logger.warning("story v2: character masters failed (non-fatal): %s", exc)
 
 
-_LIB_EMOTIONS = ("happy", "angry", "sad", "surprised")   # emotion variants that exist in the library
-_LIB_POSES = ("wave", "cheer", "point", "hip")           # pose variants that exist in the library
-
-
 def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: str) -> None:
     """N4 — fill ``plan.render.masters['cid:emotion:pose']`` with a transparent per-(speaker,
-    emotion, pose) master for the overlay path. A library-picked character (character.asset)
-    uses its ``{asset}_{emotion}`` variant (else the base asset); a procedural character is
-    svg_char-generated with that emotion + pose. Only speakers on a beat drive this.
-    Best-effort — a missing master simply means that beat renders background-only. Never
-    raises. Self-gated by STORY_CHAR_OVERLAY (default ON — opt out with =0)."""
+    emotion, pose) master for the overlay path: the V3 identity master, else the
+    deterministic V3 procedural renderer with that emotion + pose. Only speakers on a
+    beat drive this. Best-effort — a missing master simply means that beat renders
+    background-only. Never raises. Self-gated by STORY_CHAR_OVERLAY (default ON —
+    opt out with =0)."""
     if os.getenv("STORY_CHAR_OVERLAY", "1") == "0":
         return
     try:
@@ -274,79 +192,26 @@ def _generate_overlay_masters(plan, out_dir, *, job_id: str, effective_channel: 
                         (getattr(ln, "pose", "stand") or "stand").strip().lower()))
         if not used:
             return
-        if os.getenv("STORY_V3_ONLY", "1") == "1":
-            from app.features.render.engine.visual.library_v3 import (
-                render_planner_character_png, resolve_character_preview,
-            )
-            from app.features.render.engine.visual.library_v3.style_aliases import normalize_v3_style
-            _out = Path(out_dir)
-            _style_id = normalize_v3_style(getattr(plan, "art_style", "") or "")
-            for cid, pairs in used.items():
-                c = plan.character(cid)
-                if c is None:
-                    continue
-                path = resolve_character_preview(
-                    getattr(c, "visual_identity_id", "") or "", framing="full_body")
-                for emo, pose in pairs:
-                    key = f"{cid}:{emo}:{pose}"
-                    if not plan.render.masters.get(key):
-                        _path = path or render_planner_character_png(
-                            c, _out / f"master_{cid}_{emo}_{pose}.png",
-                            emotion=emo, pose=pose, style_id=_style_id)
-                        if _path:
-                            plan.render.masters[key] = _path
-            try:
-                update_story_plan(job_id, plan.to_json())
-            except Exception:
-                pass
-            return
-        from app.features.render.engine.visual.svg_char import build_char, emotion_expr
-        from app.features.render.engine.visual.svg_raster import save_svg_png
-        from app.features.render.engine.visual.svg_presets import preset
-        from app.features.render.engine.visual.svg_compose import _char_query
-        from app.db.story_asset_repo import (
-            get_by_slug, best_asset, _split_variant, active_library_style,
+        from app.features.render.engine.visual.library_v3 import (
+            render_planner_character_png, resolve_character_preview,
         )
-        region = (getattr(plan, "region", "") or "")
-        genre = (getattr(plan, "genre_key", "") or "")
-        _st = active_library_style(getattr(plan, "art_style", "") or "")
+        from app.features.render.engine.visual.library_v3.style_aliases import normalize_v3_style
         _out = Path(out_dir)
+        _style_id = normalize_v3_style(getattr(plan, "art_style", "") or "")
         for cid, pairs in used.items():
             c = plan.character(cid)
             if c is None:
                 continue
-            asset = (getattr(c, "asset", "") or "").strip()
-            if not asset:                                   # F4: no AI slug → fuzzy-match a library
-                q = _char_query(c)                          # base, so its emotion/pose variants still apply
-                if q:
-                    m = best_asset("character", name=q, region=region, genre=genre,
-                                   transparent_only=True, style=(_st or None))
-                    if m:
-                        asset = _split_variant(m.get("slug", ""))[0]
+            path = resolve_character_preview(
+                getattr(c, "visual_identity_id", "") or "", framing="full_body")
             for emo, pose in pairs:
                 key = f"{cid}:{emo}:{pose}"
-                if plan.render.masters.get(key):
-                    continue
-                path = None
-                if asset:
-                    vp = pose if pose in _LIB_POSES else ""
-                    ve = emo if emo in _LIB_EMOTIONS else ""
-                    # The library has SEPARATE emotion and pose variants (never combined). When
-                    # BOTH are requested, a single-axis library variant would silently DROP the
-                    # other axis — so fall through to procedural, which combines emotion + pose.
-                    # Otherwise use the single-axis variant (emotion preferred), else base asset.
-                    if not (vp and ve):
-                        path = (get_by_slug(f"{asset}_{ve}", "character", style=_st) if ve else None) \
-                            or (get_by_slug(f"{asset}_{vp}", "character", style=_st) if vp else None) \
-                            or get_by_slug(asset, "character", style=_st)
-                if not path:                                # procedural chibi with this emotion + pose
-                    opts = preset(getattr(c, "archetype", "") or "", region, genre, getattr(c, "gender", "") or "")
-                    opts["expr"] = emotion_expr(emo)
-                    opts["pose"] = pose
-                    path = save_svg_png(build_char(opts), str(_out / f"master_{cid}_{emo}_{pose}.png"), 1024, 1536)
-                if not path:
-                    continue
-                plan.render.masters[key] = path
+                if not plan.render.masters.get(key):
+                    _path = path or render_planner_character_png(
+                        c, _out / f"master_{cid}_{emo}_{pose}.png",
+                        emotion=emo, pose=pose, style_id=_style_id)
+                    if _path:
+                        plan.render.masters[key] = _path
         try:
             update_story_plan(job_id, plan.to_json())
         except Exception:

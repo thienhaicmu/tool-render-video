@@ -75,11 +75,13 @@ def test_fallback_skips_persist(monkeypatch, tmp_path):
 
 def test_generate_character_masters_only_overlaid_speakers(monkeypatch):
     from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
-    import app.features.render.engine.visual.story_reference_sheet as rs
-    monkeypatch.setenv('STORY_V3_ONLY', '0')   # pins the legacy reference-sheet gen path
+    import app.features.render.engine.visual.library_v3 as v3
     monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
-    monkeypatch.setattr(rs, 'generate_character_master', lambda c, art_style='', **k: f'/m/{c.id}.png')
+    # V3 path: no approved identity master → the deterministic V3 renderer generates.
+    monkeypatch.setattr(v3, 'resolve_character_preview', lambda *a, **k: '')
+    monkeypatch.setattr(v3, 'render_planner_character_png',
+                        lambda c, out, **k: f'/m/{c.id}.png')
 
     p = StoryPlan(
         characters=[CharacterDef(id='han', name='Han'), CharacterDef(id='lo', name='Lo')],
@@ -95,10 +97,10 @@ def test_generate_character_masters_only_overlaid_speakers(monkeypatch):
 
 def test_generate_character_masters_noop_without_overlay(monkeypatch):
     from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
-    import app.features.render.engine.visual.story_reference_sheet as rs
+    import app.features.render.engine.visual.library_v3 as v3
     called = {'n': 0}
-    monkeypatch.setattr(rs, 'generate_character_master',
-                        lambda c, art_style='', **k: called.__setitem__('n', called['n'] + 1) or '/x.png')
+    monkeypatch.setattr(v3, 'render_planner_character_png',
+                        lambda c, out, **k: called.__setitem__('n', called['n'] + 1) or '/x.png')
     p = StoryPlan(characters=[CharacterDef(id='han', name='Han')],
                   visuals=[Visual(id='v1', prompt='x')],
                   timeline=[Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='none')])
@@ -130,45 +132,21 @@ def test_library_first_skips_preassigned_visual(monkeypatch, tmp_path):
     assert 'v2' in p.render.visual_assets and fb == []
 
 
-# ── AL5: STORY_LIBRARY_FIRST auto-matches a character master (opt-in) ──────────
+# ── V3: an approved identity master wins over the procedural renderer ─────────
 
-def test_library_first_auto_matches_character_master(monkeypatch):
+def test_character_master_prefers_v3_identity(monkeypatch):
     from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
-    import app.features.render.engine.visual.story_reference_sheet as rs
-    import app.db.story_asset_repo as ar
-    monkeypatch.setenv('STORY_V3_ONLY', '0')   # pins the legacy library-first path
+    import app.features.render.engine.visual.library_v3 as v3
     monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
     gen = {'n': 0}
-    monkeypatch.setattr(rs, 'generate_character_master',
-                        lambda c, art_style='', **k: gen.__setitem__('n', gen['n'] + 1) or '/ai/gen.png')
-    monkeypatch.setattr(ar, 'match_asset',
-                        lambda kind, name='', region='', genre='', transparent_only=False:
-                        '/lib/han.png' if (kind == 'character' and name == 'Han') else None)
-    monkeypatch.setenv('STORY_LIBRARY_FIRST', '1')
+    monkeypatch.setattr(v3, 'resolve_character_preview', lambda *a, **k: '/v3/han_master.png')
+    monkeypatch.setattr(v3, 'render_planner_character_png',
+                        lambda c, out, **k: gen.__setitem__('n', gen['n'] + 1) or '/ai/gen.png')
 
-    p = StoryPlan(characters=[CharacterDef(id='han', name='Han')],
+    p = StoryPlan(characters=[CharacterDef(id='han', name='Han', visual_identity_id='v3_han')],
                   visuals=[Visual(id='v1', prompt='x')],
                   timeline=[Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='left')])
     sp2._generate_character_masters(p, '', job_id='j', effective_channel='c')
-    assert p.render.masters == {'han': '/lib/han.png'}   # library match used
-    assert gen['n'] == 0                                 # procedural gen never called
-
-
-def test_library_first_off_generates_master(monkeypatch):
-    from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
-    import app.features.render.engine.visual.story_reference_sheet as rs
-    import app.db.story_asset_repo as ar
-    monkeypatch.setenv('STORY_V3_ONLY', '0')   # pins the legacy reference-sheet gen path
-    monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
-    monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
-    monkeypatch.setattr(rs, 'generate_character_master', lambda c, art_style='', **k: '/ai/gen.png')
-    monkeypatch.setattr(ar, 'match_asset',
-                        lambda *a, **k: (_ for _ in ()).throw(AssertionError('must not consult library when off')))
-    monkeypatch.delenv('STORY_LIBRARY_FIRST', raising=False)   # default off
-
-    p = StoryPlan(characters=[CharacterDef(id='han', name='Han')],
-                  visuals=[Visual(id='v1', prompt='x')],
-                  timeline=[Beat(id='b1', narration='a', visual_id='v1', speaker_id='han', char_anchor='left')])
-    sp2._generate_character_masters(p, '', job_id='j', effective_channel='c')
-    assert p.render.masters == {'han': '/ai/gen.png'}   # procedural gen path
+    assert p.render.masters == {'han': '/v3/han_master.png'}   # identity master used
+    assert gen['n'] == 0                                       # procedural gen never called
