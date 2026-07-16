@@ -1,0 +1,1731 @@
+{
+  "review_id": "lighthouse_en_r1",
+  "source": {
+    "id": "lighthouse_en",
+    "source": "paste",
+    "language": "en",
+    "genre": "mystery",
+    "chapter": "The lighthouse had been dark for forty years when Elias took the keeper's job. The village called it cursed; he called it quiet. On his first night, climbing the spiral stairs with a lantern, he found the old logbook of the previous keeper, Mara, its final entry torn out.\n\nFor weeks Elias tended the restored lamp, its beam sweeping the black water. But every night at 3:07, the light would flicker and dim on its own, as if something passed between it and the sea. He began to hear a voice in the wind — a woman, calling a name that was not his.\n\nOne storm-lashed evening, a ship's horn wailed offshore, lost in the fog. Elias raced to the lamp, but it died completely. In the darkness he saw her: Mara, pale and translucent, standing at the glass. She had drowned that night forty years ago, unable to light the lamp in time, and had kept vigil ever since — trapped by her failure.\n\nElias understood. He took her spectral hand and together they turned the great lens by force, coaxing a spark back into the wick. The beam blazed out through the storm. On the water, the ship's horn answered — grateful, alive — and steered safe past the rocks.\n\nAt dawn the lamp still burned. Mara was gone, her vigil finally ended. Elias sat on the gallery, the sea calm and silver, and for the first time the lighthouse felt not cursed, but free.\n"
+  },
+  "candidates": {
+    "B": {
+      "usable": true,
+      "narration": "The lighthouse had been dark for forty years when Elias took the keeper's job.\nThe village called it cursed; he called it quiet.\nOn his first night, he found the old logbook of the previous keeper, Mara, its final entry torn out.\nFor weeks Elias tended the restored lamp, its beam sweeping the black water.\nBut every night at 3:07, the light would flicker and dim on its own, as if something passed between it and the sea.\nHe began to hear a voice in the wind — a woman, calling a name that was not his.\nOne storm-lashed evening, a ship's horn wailed offshore, lost in the fog.\nElias raced to the lamp, but it died completely.\nIn the darkness, he saw her: Mara, pale and translucent, standing at the glass.\nI have waited for you, Elias.\nShe had drowned that night forty years ago, unable to light the lamp in time, and had kept vigil ever since — trapped by her failure.\nElias understood. He took her spectral hand and together they turned the great lens by force.\nCoaxing a spark back into the wick, the beam blazed out through the storm.\nOn the water, the ship's horn answered — grateful, alive — and steered safe past the rocks.\nAt dawn the lamp still burned. Mara was gone, her vigil finally ended.\nElias sat on the gallery, the sea calm and silver, and for the first time the lighthouse felt not cursed, but free.",
+      "plan": {
+        "art_style": "cinematic ink-wash fantasy",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "mara",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc2"
+          }
+        ],
+        "characters": [
+          {
+            "age": "30s",
+            "archetype": "office_worker",
+            "asset": "",
+            "canonical_desc": "A young man with short dark hair, wearing a simple keeper's uniform, carrying a lantern.",
+            "gender": "male",
+            "id": "elias",
+            "name": "Elias",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "30s",
+            "archetype": "ghost",
+            "asset": "",
+            "canonical_desc": "A pale and translucent woman in a flowing white dress, with long hair that appears to float as if underwater.",
+            "gender": "female",
+            "id": "mara",
+            "name": "Mara",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "fantasy",
+        "language": "en",
+        "reading_pace": "normal",
+        "region": "cn",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2",
+              "b3",
+              "b4",
+              "b5",
+              "b6",
+              "b7",
+              "b8"
+            ],
+            "continuity_key": "lighthouse",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "lighthouse",
+            "shot_ids": [
+              "sh1",
+              "sh2",
+              "sh3",
+              "sh4",
+              "sh5",
+              "sh6",
+              "sh7",
+              "sh8"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b9",
+              "b10",
+              "b11",
+              "b12",
+              "b13"
+            ],
+            "continuity_key": "lighthouse",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "mara"
+            ],
+            "purpose": "reversal",
+            "sequence_id": "seq2",
+            "setting_id": "lighthouse",
+            "shot_ids": [
+              "sh9",
+              "sh10",
+              "sh11",
+              "sh12",
+              "sh13"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b14",
+              "b15"
+            ],
+            "continuity_key": "lighthouse",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [],
+            "purpose": "payoff",
+            "sequence_id": "seq3",
+            "setting_id": "lighthouse",
+            "shot_ids": [
+              "sh14",
+              "sh15"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 100700349,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "resolution",
+            "role": "resolution",
+            "scene_ids": [
+              "sc3"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "A tall, weathered lighthouse standing on a rocky cliff, overlooking a dark sea, with a spiral staircase inside.",
+            "id": "lighthouse",
+            "name": "The Lighthouse",
+            "scene_kind": "castle_hall",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh1",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh2",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh3",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh4",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh5",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh6",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh7",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh8",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh9",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "close",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh10",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b11"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh11",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc2",
+            "shot_size": "medium",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "low",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b12"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh12",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc2",
+            "shot_size": "close",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b13"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh13",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc2",
+            "shot_size": "medium",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b14"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh14",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b15"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh15",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "close",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The lighthouse had been dark for forty years when Elias took the keeper's job."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The village called it cursed; he called it quiet."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "On his first night, he found the old logbook of the previous keeper, Mara, its final entry torn out."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "For weeks Elias tended the restored lamp, its beam sweeping the black water."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "But every night at 3:07, the light would flicker and dim on its own, as if something passed between it and the sea."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "He began to hear a voice in the wind — a woman, calling a name that was not his."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "One storm-lashed evening, a ship's horn wailed offshore, lost in the fog."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elias raced to the lamp, but it died completely."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "A haunting encounter!",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "In the darkness, he saw her: Mara, pale and translucent, standing at the glass."
+              },
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "mara",
+                "text": "I have waited for you, Elias."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "sad",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "She had drowned that night forty years ago, unable to light the lamp in time, and had kept vigil ever since — trapped by her failure."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b11",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elias understood. He took her spectral hand and together they turned the great lens by force."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh11",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b12",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Coaxing a spark back into the wick, the beam blazed out through the storm."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh12",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b13",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "On the water, the ship's horn answered — grateful, alive — and steered safe past the rocks."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh13",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b14",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "At dawn the lamp still burned. Mara was gone, her vigil finally ended."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh14",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b15",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elias sat on the gallery, the sea calm and silver, and for the first time the lighthouse felt not cursed, but free."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh15",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "mysterious",
+        "topic": "The Lighthouse Keeper",
+        "visuals": [
+          {
+            "character_ids": [
+              "elias"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "lighthouse",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "elias",
+              "mara"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "lighthouse",
+            "tier": "medium"
+          }
+        ]
+      }
+    },
+    "A": {
+      "usable": true,
+      "narration": "The lighthouse had stood dark against the horizon for forty years when Elias took the keeper's job.\nThe villagers called it cursed; he whispered it was merely quiet.\nOn his first night, lantern swaying as he ascended the spiral stairs, Elias discovered an old logbook, its cover worn by salt air.\nThe name inside was Mara, the previous keeper. Its final entry had been ripped away.\nNight after night, Elias nurtured the lamp back to life, its beam cutting through the black sea.\nYet, precisely at 3:07, the light would flicker, a spectral breath dimming its glow.\nIt was as if something unseen brushed between the lamp and the endless waves.\nAnd then, in the nocturnal winds, he heard it — a woman's voice, calling a name lost to time.\nThe storm hammered against the lighthouse, waves hurling themselves at its base.\nA ship's horn wailed from the fog, a sound of distress swallowed by the tempest.\nHeart pounding, Elias dashed to the lamp, but it dimmed to nothing, plunging the room into darkness.\nIn the gloom, she appeared — Mara, her form pale and translucent, framed against the glass.\nShe had drowned on such a night, forty years past, unable to ignite the lamp and save the souls at sea.\nHer spirit lingered, bound by her unfinished task.\nMara... you stayed.\nResolute, Elias reached for her hand, feeling its chill as if through a veil.\nTogether, they turned the great lens, straining against time itself, coaxing life back into the wick.\nThe beam surged to life, slicing through the storm.\nAcross the water, the ship's horn cried out again, this time grateful, alive.\nIt steered clear of the rocks, the danger past.\nAs dawn painted the sky in pastel hues, the lamp remained aglow, steadfast in its duty.\nMara was gone, her vigil finally at an end.\nElias sat on the gallery, the sea before him a tranquil silver.\nFor the first time, the lighthouse felt not like a relic of sorrow, but a beacon of hope, finally set free.",
+      "plan": {
+        "art_style": "",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "elias",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "elias",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc3"
+          }
+        ],
+        "characters": [
+          {
+            "age": "",
+            "archetype": "ghost",
+            "asset": "",
+            "canonical_desc": "keeper of the lighthouse",
+            "gender": "male",
+            "id": "elias",
+            "name": "Elias",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "",
+            "archetype": "ghost",
+            "asset": "",
+            "canonical_desc": "pale and translucent, drowned forty years ago",
+            "gender": "female",
+            "id": "mara",
+            "name": "Mara",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "fantasy",
+        "language": "en",
+        "reading_pace": "normal",
+        "region": "",
+        "relationships": [
+          {
+            "kind": "ghost and keeper",
+            "source_id": "elias",
+            "status": "",
+            "target_id": "mara"
+          }
+        ],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2",
+              "b3"
+            ],
+            "continuity_key": "lighthouse",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "lighthouse",
+            "shot_ids": [
+              "sh1",
+              "sh2",
+              "sh3"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b4",
+              "b5",
+              "b6",
+              "b7"
+            ],
+            "continuity_key": "lighthouse",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "elias"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "lighthouse",
+            "shot_ids": [
+              "sh4",
+              "sh5",
+              "sh6",
+              "sh7"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b8",
+              "b9"
+            ],
+            "continuity_key": "lighthouse",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "elias"
+            ],
+            "purpose": "climax",
+            "sequence_id": "seq3",
+            "setting_id": "lighthouse",
+            "shot_ids": [
+              "sh8",
+              "sh9"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 1057430462,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "climax",
+            "role": "climax",
+            "scene_ids": [
+              "sc3"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "dark for forty years",
+            "id": "lighthouse",
+            "name": "the lighthouse",
+            "scene_kind": "lighthouse",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh2",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh3",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "profile",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh4",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "portrait",
+            "motion_intent": "push_in",
+            "scene_id": "sc2",
+            "shot_size": "close",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "high",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh6",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc2",
+            "shot_size": "medium",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh7",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc2",
+            "shot_size": "close",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "low",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "profile",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh8",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh9",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "A dark secret revealed",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The lighthouse had stood dark against the horizon for forty years when Elias took the keeper's job."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The villagers called it cursed; he whispered it was merely quiet."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "On his first night, lantern swaying as he ascended the spiral stairs, Elias discovered an old logbook, its cover worn by salt air."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The name inside was Mara, the previous keeper. Its final entry had been ripped away."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Night after night, Elias nurtured the lamp back to life, its beam cutting through the black sea."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Yet, precisely at 3:07, the light would flicker, a spectral breath dimming its glow."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "It was as if something unseen brushed between the lamp and the endless waves."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "And then, in the nocturnal winds, he heard it — a woman's voice, calling a name lost to time."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The storm hammered against the lighthouse, waves hurling themselves at its base."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "A ship's horn wailed from the fog, a sound of distress swallowed by the tempest."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Heart pounding, Elias dashed to the lamp, but it dimmed to nothing, plunging the room into darkness."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "In the gloom, she appeared — Mara, her form pale and translucent, framed against the glass."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "She had drowned on such a night, forty years past, unable to ignite the lamp and save the souls at sea."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Her spirit lingered, bound by her unfinished task."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "A ghostly reunion",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "elias",
+                "text": "Mara... you stayed."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Resolute, Elias reached for her hand, feeling its chill as if through a veil."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Together, they turned the great lens, straining against time itself, coaxing life back into the wick."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The beam surged to life, slicing through the storm."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Across the water, the ship's horn cried out again, this time grateful, alive."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "It steered clear of the rocks, the danger past."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "As dawn painted the sky in pastel hues, the lamp remained aglow, steadfast in its duty."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Mara was gone, her vigil finally at an end."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "elias",
+                "text": "Elias sat on the gallery, the sea before him a tranquil silver."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "For the first time, the lighthouse felt not like a relic of sorrow, but a beacon of hope, finally set free."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "mysterious",
+        "topic": "The lighthouse keeper and the ghost",
+        "visuals": [
+          {
+            "character_ids": [
+              "elias"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "lighthouse",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "elias",
+              "mara"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "lighthouse",
+            "tier": "medium"
+          }
+        ]
+      }
+    }
+  }
+}

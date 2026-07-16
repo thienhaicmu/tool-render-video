@@ -1,0 +1,1973 @@
+{
+  "review_id": "thriller_en_r2",
+  "source": {
+    "id": "thriller_en",
+    "source": "idea",
+    "idea": "A train dispatcher hears a distress call from a train removed from the timetable thirty years ago.",
+    "duration_sec": 90,
+    "language": "en",
+    "genre": "thriller"
+  },
+  "candidates": {
+    "A": {
+      "usable": true,
+      "narration": "In the quiet hum of the train dispatch center, Jake stared at the flickering monitors, the weight of years pressing down on him.\nAnother day, another shift. Just me and these old machines, I guess.\nSuddenly, a shrill alarm pierced the silence, jolting him from his thoughts. It was a distress call, but it was impossible.\nWhat the hell? This train was removed from the timetable thirty years ago!\nJake's heart raced as he listened intently, the voice on the other end crackling with fear. It was a ghost from the past, a haunting echo.\nThis is Jake! Where are you? What happened?\nThe voice trembled, \"We’re trapped! The train won’t stop! It’s not supposed to be here!\"\nHold on! I’m sending help! Just stay calm!\nAs Jake scrambled to contact the authorities, a chill crept through the room. He felt a presence, an unseen force lurking.\nThis can’t be happening. That train is a myth!\nHe frantically typed on the keyboard, trying to pull up historical data. The train had derailed, or so the story went.\nWhy now? Why this train?\nSuddenly, the lights flickered, and the monitors went dark. Panic surged through Jake as he realized he was alone.\nNo, no! Not now!\nIn the darkness, he heard the faint sound of a train whistle echoing through the dispatch center, sending shivers down his spine.\nIt can’t be! It’s not real!\nDesperately, he grabbed the emergency radio, hoping to reach the outside world. The voice returned, frantic and pleading.\nI’m here! Just hold on!\nThe voice cried out, \"It’s coming for us! It’s coming for you too!\" The words echoed ominously in the dark room.\nWhat do you mean? What’s coming?\nJake felt a cold sweat trickle down his back. The train was no longer just a ghost; it was a reality that threatened to consume him.\nI need to find you! Where are you?!\nBut the line went dead, leaving Jake in a chilling silence, the weight of the past crashing down on him.\nNo! Don’t leave me!\nSuddenly, the lights flickered back on, revealing a shadowy figure standing at the edge of the room, watching him.\nWho’s there?! Show yourself!\nThe figure stepped forward, its face obscured, but Jake recognized the uniform. It was the conductor from the ghost train.\nYou... you shouldn’t be here!\n\"You have to stop it, Jake! It’s not just a train; it’s a curse!\" The conductor's voice echoed with urgency.\nI’ll do whatever it takes!\nWith newfound determination, Jake raced towards the control panel, ready to confront the darkness that had haunted him for decades.\nI won’t let this train take anyone else!",
+      "plan": {
+        "art_style": "cinematic thriller",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "dispatcher_jake",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          }
+        ],
+        "characters": [
+          {
+            "age": "40s",
+            "archetype": "office_worker",
+            "asset": "",
+            "canonical_desc": "A middle-aged man with disheveled hair, wearing a faded uniform, looking weary yet determined.",
+            "gender": "male",
+            "id": "dispatcher_jake",
+            "name": "Jake",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "horror",
+        "language": "en",
+        "reading_pace": "normal",
+        "region": "us",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2",
+              "b3",
+              "b4",
+              "b5",
+              "b6",
+              "b7",
+              "b8",
+              "b9",
+              "b10",
+              "b11",
+              "b12",
+              "b13",
+              "b14",
+              "b15",
+              "b16"
+            ],
+            "continuity_key": "train_dispatch_center",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "dispatcher_jake"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "train_dispatch_center",
+            "shot_ids": [
+              "sh1",
+              "sh2",
+              "sh3",
+              "sh4",
+              "sh5",
+              "sh6",
+              "sh7",
+              "sh8",
+              "sh9",
+              "sh10",
+              "sh11",
+              "sh12",
+              "sh13",
+              "sh14",
+              "sh15",
+              "sh16"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 4250093628,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "A dimly lit room filled with monitors displaying train schedules, maps, and blinking lights.",
+            "id": "train_dispatch_center",
+            "name": "Train Dispatch Center",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh2",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh4",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh6",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh8",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh9",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh10",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b11"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh11",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b12"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh12",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b13"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh13",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b14"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh14",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b15"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh15",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b16"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh16",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "A call from the past!",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "In the quiet hum of the train dispatch center, Jake stared at the flickering monitors, the weight of years pressing down on him."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "Another day, another shift. Just me and these old machines, I guess."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Suddenly, a shrill alarm pierced the silence, jolting him from his thoughts. It was a distress call, but it was impossible."
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "What the hell? This train was removed from the timetable thirty years ago!"
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Jake's heart raced as he listened intently, the voice on the other end crackling with fear. It was a ghost from the past, a haunting echo."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "This is Jake! Where are you? What happened?"
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The voice trembled, \"We’re trapped! The train won’t stop! It’s not supposed to be here!\""
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "Hold on! I’m sending help! Just stay calm!"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "As Jake scrambled to contact the authorities, a chill crept through the room. He felt a presence, an unseen force lurking."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "This can’t be happening. That train is a myth!"
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "He frantically typed on the keyboard, trying to pull up historical data. The train had derailed, or so the story went."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "Why now? Why this train?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Suddenly, the lights flickered, and the monitors went dark. Panic surged through Jake as he realized he was alone."
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "No, no! Not now!"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "In the darkness, he heard the faint sound of a train whistle echoing through the dispatch center, sending shivers down his spine."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "It can’t be! It’s not real!"
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Desperately, he grabbed the emergency radio, hoping to reach the outside world. The voice returned, frantic and pleading."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "I’m here! Just hold on!"
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The voice cried out, \"It’s coming for us! It’s coming for you too!\" The words echoed ominously in the dark room."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "What do you mean? What’s coming?"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b11",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Jake felt a cold sweat trickle down his back. The train was no longer just a ghost; it was a reality that threatened to consume him."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "I need to find you! Where are you?!"
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh11",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b12",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "But the line went dead, leaving Jake in a chilling silence, the weight of the past crashing down on him."
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "No! Don’t leave me!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh12",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b13",
+            "lines": [
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Suddenly, the lights flickered back on, revealing a shadowy figure standing at the edge of the room, watching him."
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "Who’s there?! Show yourself!"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh13",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b14",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The figure stepped forward, its face obscured, but Jake recognized the uniform. It was the conductor from the ghost train."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "You... you shouldn’t be here!"
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh14",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b15",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "\"You have to stop it, Jake! It’s not just a train; it’s a curse!\" The conductor's voice echoed with urgency."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "I’ll do whatever it takes!"
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh15",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b16",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "With newfound determination, Jake raced towards the control panel, ready to confront the darkness that had haunted him for decades."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dispatcher_jake",
+                "text": "I won’t let this train take anyone else!"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh16",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "mysterious",
+        "topic": "The Ghost Train",
+        "visuals": [
+          {
+            "character_ids": [
+              "dispatcher_jake"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "train_dispatch_center",
+            "tier": "medium"
+          }
+        ]
+      }
+    },
+    "B": {
+      "usable": true,
+      "narration": "The dim glow of monitors flickered across the cluttered control room. James, the night dispatcher, sipped stale coffee, eyes scanning the train schedules. Suddenly, static erupted from the radio, followed by a voice crackling with desperation.\nControl, this is Train 482! We're running out of time!\nJames froze, the mug trembling in his hand. Train 482 hadn't been on any schedule for decades. He leaned closer, adjusting the frequency to clear the interference.\nTrain 482, repeat your message. You shouldn't be on this line.\nThe voice returned, urgent and fragmented, the sound of an old steam engine echoing behind it.\nPassengers... need help! The tunnel ahead—it's not safe!\nJames's pulse quickened. He pulled up archived records, dust-covered and forgotten, revealing the train's final route. It was scheduled to pass through the old Black Hollow Tunnel, abandoned after a collapse thirty years ago.\nI'm sending help. Hang tight. What's your location?\nJames sped towards the tunnel, phone pressed to his ear. The forest loomed around him, shadows swallowing the road. The dispatcher coordinated with local authorities, the urgency of the situation mounting with every passing second.\nIt's freezing... lights going out...\nJames arrived, the tunnel's maw gaping like a forgotten relic. He could feel the icy breath of history brushing against his skin. The silence was heavy, oppressive, as if the past itself held its breath.\nFlashlight in hand, James ventured into the tunnel's depths. The beam cut through the dark, revealing rusted tracks and eerie silence.\nTrain 482, do you copy?\nSuddenly, the air shimmered, and for a fleeting moment, he saw them—a spectral train and passengers, translucent figures locked in eternal panic.\nThank you... we're free.\nThe vision faded, leaving only dust motes dancing in the light. James stood there, breathless, knowing he'd witnessed something beyond explanation. The past had spoken and, finally, found peace.\nBack at the control room, dawn spilled golden light across the consoles. James sat, tracing his fingers over faded documents, the radio silent now.\nSome ghosts just need to be heard.",
+      "plan": {
+        "art_style": "",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "voice",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "james",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "voice",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "james",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "voice",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "james",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "voice",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "james",
+            "continuity_notes": "Keep appearance and screen side stable within sc5",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc5"
+          }
+        ],
+        "characters": [
+          {
+            "age": "30s",
+            "archetype": "office_worker",
+            "asset": "",
+            "canonical_desc": "A weary night dispatcher in his 30s, with disheveled hair and a tired expression, wearing a faded uniform.",
+            "gender": "male",
+            "id": "james",
+            "name": "James",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "",
+            "archetype": "",
+            "asset": "",
+            "canonical_desc": "A disembodied voice filled with panic, representing the passengers of Train 482.",
+            "gender": "",
+            "id": "voice",
+            "name": "Voice",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "horror",
+        "language": "en",
+        "reading_pace": "normal",
+        "region": "us",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2"
+            ],
+            "continuity_key": "train_control_room",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "voice",
+              "james"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "train_control_room",
+            "shot_ids": [
+              "sh1",
+              "sh2"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b3",
+              "b4"
+            ],
+            "continuity_key": "control_room_intensifies",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "voice",
+              "james"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "control_room_intensifies",
+            "shot_ids": [
+              "sh3",
+              "sh4"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b5",
+              "b6"
+            ],
+            "continuity_key": "deserted_tunnel_entrance",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "voice"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq3",
+            "setting_id": "deserted_tunnel_entrance",
+            "shot_ids": [
+              "sh5",
+              "sh6"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b7",
+              "b8",
+              "b9"
+            ],
+            "continuity_key": "tunnel_depths",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc4",
+            "participant_ids": [
+              "james",
+              "voice"
+            ],
+            "purpose": "reversal",
+            "sequence_id": "seq3",
+            "setting_id": "tunnel_depths",
+            "shot_ids": [
+              "sh7",
+              "sh8",
+              "sh9"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b10"
+            ],
+            "continuity_key": "control_room_dawn",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc5",
+            "participant_ids": [
+              "james"
+            ],
+            "purpose": "payoff",
+            "sequence_id": "seq4",
+            "setting_id": "control_room_dawn",
+            "shot_ids": [
+              "sh10"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 4250093628,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "inciting",
+            "role": "inciting",
+            "scene_ids": [
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc3",
+              "sc4"
+            ]
+          },
+          {
+            "id": "seq4",
+            "purpose": "resolution",
+            "role": "resolution",
+            "scene_ids": [
+              "sc5"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "A dimly lit control room filled with flickering monitors and cluttered papers.",
+            "id": "train_control_room",
+            "name": "Train Control Room",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "The control room becomes more intense as the situation escalates, with flashing lights and urgent communication.",
+            "id": "control_room_intensifies",
+            "name": "Control Room Intensifies",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "The entrance of an old, abandoned tunnel, dark and foreboding, surrounded by dense forest.",
+            "id": "deserted_tunnel_entrance",
+            "name": "Deserted Tunnel Entrance",
+            "scene_kind": "forest",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "The dark, eerie depths of the tunnel, where shadows loom and silence reigns.",
+            "id": "tunnel_depths",
+            "name": "Tunnel Depths",
+            "scene_kind": "cave",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "The control room bathed in golden light as dawn breaks, illuminating the remnants of the night shift.",
+            "id": "control_room_dawn",
+            "name": "Control Room at Dawn",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh2",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh4",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc2",
+            "shot_size": "medium",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh6",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "extreme_close",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "wide",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "high",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh8",
+            "lens": "portrait",
+            "motion_intent": "track_left",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh9",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "low",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh10",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc5",
+            "shot_size": "close",
+            "visual_id": "v5"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "A voice from the past!",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The dim glow of monitors flickered across the cluttered control room. James, the night dispatcher, sipped stale coffee, eyes scanning the train schedules. Suddenly, static erupted from the radio, followed by a voice crackling with desperation."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "voice",
+                "text": "Control, this is Train 482! We're running out of time!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "James froze, the mug trembling in his hand. Train 482 hadn't been on any schedule for decades. He leaned closer, adjusting the frequency to clear the interference."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "james",
+                "text": "Train 482, repeat your message. You shouldn't be on this line."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The voice returned, urgent and fragmented, the sound of an old steam engine echoing behind it."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "voice",
+                "text": "Passengers... need help! The tunnel ahead—it's not safe!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "James's pulse quickened. He pulled up archived records, dust-covered and forgotten, revealing the train's final route. It was scheduled to pass through the old Black Hollow Tunnel, abandoned after a collapse thirty years ago."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "james",
+                "text": "I'm sending help. Hang tight. What's your location?"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "James sped towards the tunnel, phone pressed to his ear. The forest loomed around him, shadows swallowing the road. The dispatcher coordinated with local authorities, the urgency of the situation mounting with every passing second."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "voice",
+                "text": "It's freezing... lights going out..."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "James arrived, the tunnel's maw gaping like a forgotten relic. He could feel the icy breath of history brushing against his skin. The silence was heavy, oppressive, as if the past itself held its breath."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Flashlight in hand, James ventured into the tunnel's depths. The beam cut through the dark, revealing rusted tracks and eerie silence."
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "james",
+                "text": "Train 482, do you copy?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "A haunting vision!",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Suddenly, the air shimmered, and for a fleeting moment, he saw them—a spectral train and passengers, translucent figures locked in eternal panic."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "voice",
+                "text": "Thank you... we're free."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The vision faded, leaving only dust motes dancing in the light. James stood there, breathless, knowing he'd witnessed something beyond explanation. The past had spoken and, finally, found peace."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Back at the control room, dawn spilled golden light across the consoles. James sat, tracing his fingers over faded documents, the radio silent now."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "james",
+                "text": "Some ghosts just need to be heard."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v5"
+          }
+        ],
+        "tone": "tense",
+        "topic": "Train 482 Incident",
+        "visuals": [
+          {
+            "character_ids": [
+              "james",
+              "voice"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "train_control_room",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "james",
+              "voice"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "control_room_intensifies",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "james",
+              "voice"
+            ],
+            "id": "v3",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "deserted_tunnel_entrance",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "james",
+              "voice"
+            ],
+            "id": "v4",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "tunnel_depths",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "james"
+            ],
+            "id": "v5",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "control_room_dawn",
+            "tier": "medium"
+          }
+        ]
+      }
+    }
+  }
+}

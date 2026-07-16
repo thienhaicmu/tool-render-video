@@ -1,0 +1,2056 @@
+{
+  "review_id": "revenge_vi_r1",
+  "source": {
+    "id": "revenge_vi",
+    "source": "paste",
+    "language": "vi",
+    "genre": "wuxia",
+    "chapter": "Hàn Phong quỳ bên nấm mộ của sư phụ, nắm chặt thanh kiếm gãy trong tay. Đêm ấy, cả Thanh Vân môn chìm trong biển lửa vì sự phản bội của đại sư huynh Mộ Dung Tuấn — kẻ đã mở cổng cho Huyết Sát giáo tràn vào. Chỉ mình chàng sống sót.\n\nBa năm sau, Hàn Phong xuống núi, thân mang tuyệt kỹ \"Lưu Vân kiếm pháp\" đã luyện đến tầng thứ chín. Chàng lần theo dấu vết của Huyết Sát giáo đến thành Lạc Dương, nơi Mộ Dung Tuấn nay đã trở thành trưởng lão, hô mưa gọi gió.\n\nTại tửu lâu Vọng Nguyệt, chàng gặp Tô Linh Nhi — một nữ hiệp áo trắng đang truy tìm kẻ đã giết cha nàng. Hai người, cùng chung mối thù, quyết định liên thủ. Linh Nhi tinh thông ám khí, còn Hàn Phong mạnh về kiếm — họ bổ khuyết cho nhau.\n\nĐêm trăng tròn, hai người đột nhập tổng đàn Huyết Sát giáo. Mộ Dung Tuấn đã chờ sẵn, xung quanh là trăm tên giáo chúng. \"Ngươi tưởng một thanh kiếm gãy có thể đòi lại công đạo sao?\" hắn cười lạnh.\n\nHàn Phong không đáp. Chàng rút kiếm, ánh thép loé lên như dòng mây cuộn. Trận chiến kéo dài đến khi bình minh ló rạng. Linh Nhi trúng độc chưởng, gục xuống. Trong cơn phẫn nộ, Hàn Phong lĩnh ngộ tầng thứ mười của kiếm pháp — \"Vân Phá Thiên Khung\". Một kiếm chém ra, cả đại điện sụp đổ, Mộ Dung Tuấn tan thành tro bụi.\n\nBình minh chiếu lên gương mặt lấm máu của chàng. Mối thù đã báo, nhưng lòng chàng trống rỗng. Chàng bế Linh Nhi đã hôn mê lên vai, bước đi giữa tàn tích, hướng về phía mặt trời mọc — nơi có lẽ vẫn còn một con đường khác cho kẻ sống sót.\n"
+  },
+  "candidates": {
+    "B": {
+      "usable": true,
+      "narration": "Hàn Phong quỳ bên nấm mộ của sư phụ, nắm chặt thanh kiếm gãy trong tay.\nĐêm ấy, cả Thanh Vân môn chìm trong biển lửa vì sự phản bội của đại sư huynh Mộ Dung Tuấn.\nChỉ mình chàng sống sót, mang trong lòng mối thù sâu nặng.\nBa năm sau, Hàn Phong xuống núi, thân mang tuyệt kỹ \"Lưu Vân kiếm pháp\" đã luyện đến tầng thứ chín.\nChàng lần theo dấu vết của Huyết Sát giáo đến thành Lạc Dương.\nTại đây, Mộ Dung Tuấn đã trở thành trưởng lão, hô mưa gọi gió.\nTại tửu lâu Vọng Nguyệt, chàng gặp Tô Linh Nhi — một nữ hiệp áo trắng đang truy tìm kẻ đã giết cha nàng.\nTa sẽ không tha cho kẻ đã giết cha ta!\nChúng ta cùng chung mối thù, hãy liên thủ!\nLinh Nhi tinh thông ám khí, còn Hàn Phong mạnh về kiếm — họ bổ khuyết cho nhau.\nĐêm trăng tròn, hai người đột nhập tổng đàn Huyết Sát giáo.\nNgươi tưởng một thanh kiếm gãy có thể đòi lại công đạo sao?\nHàn Phong không đáp, chàng rút kiếm, ánh thép loé lên như dòng mây cuộn.\nTrận chiến kéo dài đến khi bình minh ló rạng.\nLinh Nhi trúng độc chưởng, gục xuống.\nTrong cơn phẫn nộ, Hàn Phong lĩnh ngộ tầng thứ mười của kiếm pháp — \"Vân Phá Thiên Khung\".\nMột kiếm chém ra, cả đại điện sụp đổ, Mộ Dung Tuấn tan thành tro bụi.\nBình minh chiếu lên gương mặt lấm máu của chàng, mối thù đã báo, nhưng lòng chàng trống rỗng.\nChàng bế Linh Nhi đã hôn mê lên vai, bước đi giữa tàn tích, hướng về phía mặt trời mọc.",
+      "plan": {
+        "art_style": "tranh mực nước cổ điển",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "to_linh_nhi",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "right",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "han_phong",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "mo_dung_tuan",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc4"
+          }
+        ],
+        "characters": [
+          {
+            "age": "25",
+            "archetype": "swordsman",
+            "asset": "",
+            "canonical_desc": "Nam thanh niên khoảng 25 tuổi, tóc đen dài, mặc áo choàng trắng, cầm thanh kiếm gãy với ánh mắt quyết tâm.",
+            "gender": "male",
+            "id": "han_phong",
+            "name": "Hàn Phong",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "40",
+            "archetype": "villain",
+            "asset": "",
+            "canonical_desc": "Nam trung niên khoảng 40 tuổi, tóc dài buộc gọn, mặc trang phục đen, có vẻ ngoài lạnh lùng và đầy quyền lực.",
+            "gender": "male",
+            "id": "mo_dung_tuan",
+            "name": "Mộ Dung Tuấn",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "22",
+            "archetype": "heroine",
+            "asset": "",
+            "canonical_desc": "Nữ hiệp khoảng 22 tuổi, tóc dài buộc cao, mặc áo trắng, có vẻ đẹp sắc sảo và ánh mắt kiên quyết.",
+            "gender": "female",
+            "id": "to_linh_nhi",
+            "name": "Tô Linh Nhi",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "wuxia",
+        "language": "vi",
+        "reading_pace": "normal",
+        "region": "cn",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2",
+              "b3"
+            ],
+            "continuity_key": "graveyard",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "graveyard",
+            "shot_ids": [
+              "sh1",
+              "sh2",
+              "sh3"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b4",
+              "b5",
+              "b6"
+            ],
+            "continuity_key": "city",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "city",
+            "shot_ids": [
+              "sh4",
+              "sh5",
+              "sh6"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b7",
+              "b8",
+              "b9"
+            ],
+            "continuity_key": "tavern",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "to_linh_nhi",
+              "han_phong"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "tavern",
+            "shot_ids": [
+              "sh7",
+              "sh8",
+              "sh9"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b10",
+              "b11",
+              "b12",
+              "b13",
+              "b14",
+              "b15",
+              "b16",
+              "b17",
+              "b18"
+            ],
+            "continuity_key": "blood_satan_temple",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc4",
+            "participant_ids": [
+              "mo_dung_tuan"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "blood_satan_temple",
+            "shot_ids": [
+              "sh10",
+              "sh11",
+              "sh12",
+              "sh13",
+              "sh14",
+              "sh15",
+              "sh16",
+              "sh17",
+              "sh18"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 2449249267,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1",
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc3",
+              "sc4"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "Một nấm mộ đơn giản giữa cánh đồng hoang, xung quanh là những ngọn cỏ dại và ánh trăng sáng.",
+            "id": "graveyard",
+            "name": "Nấm mộ của sư phụ",
+            "scene_kind": "graveyard",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Một thành phố nhộn nhịp với những con phố đông đúc, quán rượu và các thương nhân buôn bán.",
+            "id": "city",
+            "name": "Thành Lạc Dương",
+            "scene_kind": "street",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Một quán rượu ấm cúng với ánh đèn vàng, bàn ghế gỗ và những người khách đang trò chuyện.",
+            "id": "tavern",
+            "name": "Tửu lâu Vọng Nguyệt",
+            "scene_kind": "cafe",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Một ngôi đền lớn tối tăm, có nhiều biểu tượng ma quái và những tên giáo chúng đứng gác.",
+            "id": "blood_satan_temple",
+            "name": "Tổng đàn Huyết Sát giáo",
+            "scene_kind": "temple",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh1",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh2",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh3",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "profile",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh4",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh5",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "extreme_close",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "high",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh6",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh7",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "low",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh8",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc3",
+            "shot_size": "close",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh9",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc3",
+            "shot_size": "medium",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh10",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b11"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh11",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "extreme_close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "low",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b12"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh12",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc4",
+            "shot_size": "wide",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b13"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh13",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc4",
+            "shot_size": "medium",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "high",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b14"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh14",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b15"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh15",
+            "lens": "portrait",
+            "motion_intent": "track_right",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b16"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh16",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc4",
+            "shot_size": "wide",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "low",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b17"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh17",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "extreme_close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b18"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh18",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc4",
+            "shot_size": "wide",
+            "visual_id": "v4"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hàn Phong quỳ bên nấm mộ của sư phụ, nắm chặt thanh kiếm gãy trong tay."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Đêm ấy, cả Thanh Vân môn chìm trong biển lửa vì sự phản bội của đại sư huynh Mộ Dung Tuấn."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Chỉ mình chàng sống sót, mang trong lòng mối thù sâu nặng."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Ba năm sau, Hàn Phong xuống núi, thân mang tuyệt kỹ \"Lưu Vân kiếm pháp\" đã luyện đến tầng thứ chín."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Chàng lần theo dấu vết của Huyết Sát giáo đến thành Lạc Dương."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Tại đây, Mộ Dung Tuấn đã trở thành trưởng lão, hô mưa gọi gió."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "romantic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Tại tửu lâu Vọng Nguyệt, chàng gặp Tô Linh Nhi — một nữ hiệp áo trắng đang truy tìm kẻ đã giết cha nàng."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "romantic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "to_linh_nhi",
+                "text": "Ta sẽ không tha cho kẻ đã giết cha ta!"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "han_phong",
+                "text": "Chúng ta cùng chung mối thù, hãy liên thủ!"
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "romantic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Linh Nhi tinh thông ám khí, còn Hàn Phong mạnh về kiếm — họ bổ khuyết cho nhau."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "action",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Cuộc chiến quyết định!",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Đêm trăng tròn, hai người đột nhập tổng đàn Huyết Sát giáo."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "action",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b11",
+            "lines": [
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "mo_dung_tuan",
+                "text": "Ngươi tưởng một thanh kiếm gãy có thể đòi lại công đạo sao?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh11",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "action",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b12",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hàn Phong không đáp, chàng rút kiếm, ánh thép loé lên như dòng mây cuộn."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh12",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "action",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b13",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trận chiến kéo dài đến khi bình minh ló rạng."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh13",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b14",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Linh Nhi trúng độc chưởng, gục xuống."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh14",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Giây phút quyết định!",
+            "id": "b15",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trong cơn phẫn nộ, Hàn Phong lĩnh ngộ tầng thứ mười của kiếm pháp — \"Vân Phá Thiên Khung\"."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh15",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b16",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Một kiếm chém ra, cả đại điện sụp đổ, Mộ Dung Tuấn tan thành tro bụi."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh16",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b17",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Bình minh chiếu lên gương mặt lấm máu của chàng, mối thù đã báo, nhưng lòng chàng trống rỗng."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh17",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b18",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Chàng bế Linh Nhi đã hôn mê lên vai, bước đi giữa tàn tích, hướng về phía mặt trời mọc."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh18",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          }
+        ],
+        "tone": "hùng tráng",
+        "topic": "Báo thù của Hàn Phong",
+        "visuals": [
+          {
+            "character_ids": [
+              "han_phong"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "graveyard",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "han_phong"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "city",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "han_phong",
+              "to_linh_nhi"
+            ],
+            "id": "v3",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "tavern",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "han_phong",
+              "mo_dung_tuan",
+              "to_linh_nhi"
+            ],
+            "id": "v4",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "blood_satan_temple",
+            "tier": "medium"
+          }
+        ]
+      }
+    },
+    "A": {
+      "usable": true,
+      "narration": "Hàn Phong quỳ bên nấm mộ của sư phụ, nắm chặt thanh kiếm gãy trong tay.\nTôi sẽ trả thù cho người!\nBa năm đã trôi qua, Hàn Phong quyết tâm xuống núi, mang theo tuyệt kỹ 'Lưu Vân kiếm pháp'.\nTại tửu lâu Vọng Nguyệt, chàng gặp Tô Linh Nhi, một nữ hiệp đang truy tìm kẻ đã giết cha nàng.\nTôi sẽ không dừng lại cho đến khi tìm được kẻ thù!\nChúng ta hãy liên thủ lại để trả thù!\nĐêm trăng tròn, hai người đột nhập vào tổng đàn Huyết Sát giáo.\nNgươi tưởng một thanh kiếm gãy có thể đòi lại công đạo sao?\nTrận chiến diễn ra ác liệt, ánh kiếm loé lên giữa không gian tối tăm.\nTa sẽ không để ngươi thoát!\nLinh Nhi trúng độc chưởng, gục xuống.\nLinh Nhi! Không!\nTrong cơn phẫn nộ, Hàn Phong lĩnh ngộ tầng thứ mười của kiếm pháp.\nVân Phá Thiên Khung!\nMột kiếm chém ra, cả đại điện sụp đổ, Mộ Dung Tuấn tan thành tro bụi.\nBình minh chiếu lên gương mặt lấm máu của chàng, mối thù đã báo.\nNhưng lòng ta trống rỗng.\nChàng bế Linh Nhi đã hôn mê lên vai, bước đi giữa tàn tích, hướng về phía mặt trời mọc.",
+      "plan": {
+        "art_style": "cinematic ink-wash wuxia",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "han_phong",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "to_linh_nhi",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "right",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "han_phong",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "mo_dung_tuan",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "han_phong",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "han_phong",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc4"
+          }
+        ],
+        "characters": [
+          {
+            "age": "20s",
+            "archetype": "swordsman",
+            "asset": "",
+            "canonical_desc": "Nam thanh niên, tóc đen, mặc áo choàng trắng, cầm kiếm gãy, ánh mắt quyết tâm.",
+            "gender": "male",
+            "id": "han_phong",
+            "name": "Hàn Phong",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "30s",
+            "archetype": "villain",
+            "asset": "",
+            "canonical_desc": "Nam trung niên, tóc dài, mặc áo đen, có vẻ mặt lạnh lùng, khí chất mạnh mẽ.",
+            "gender": "male",
+            "id": "mo_dung_tuan",
+            "name": "Mộ Dung Tuấn",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "20s",
+            "archetype": "heroine",
+            "asset": "",
+            "canonical_desc": "Nữ hiệp, tóc dài, mặc áo trắng, xinh đẹp và mạnh mẽ, cầm ám khí.",
+            "gender": "female",
+            "id": "to_linh_nhi",
+            "name": "Tô Linh Nhi",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "wuxia",
+        "language": "vi",
+        "reading_pace": "normal",
+        "region": "cn",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2"
+            ],
+            "continuity_key": "graveyard",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "han_phong"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "graveyard",
+            "shot_ids": [
+              "sh1",
+              "sh2"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b3"
+            ],
+            "continuity_key": "tavern",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "to_linh_nhi",
+              "han_phong"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "tavern",
+            "shot_ids": [
+              "sh3"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b4",
+              "b5",
+              "b6",
+              "b7",
+              "b8"
+            ],
+            "continuity_key": "blood_satan_temple",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "mo_dung_tuan",
+              "han_phong"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq3",
+            "setting_id": "blood_satan_temple",
+            "shot_ids": [
+              "sh4",
+              "sh5",
+              "sh6",
+              "sh7",
+              "sh8"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b9"
+            ],
+            "continuity_key": "sunrise",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc4",
+            "participant_ids": [
+              "han_phong"
+            ],
+            "purpose": "payoff",
+            "sequence_id": "seq4",
+            "setting_id": "sunrise",
+            "shot_ids": [
+              "sh9"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 2449249267,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "inciting",
+            "role": "inciting",
+            "scene_ids": [
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc3"
+            ]
+          },
+          {
+            "id": "seq4",
+            "purpose": "resolution",
+            "role": "resolution",
+            "scene_ids": [
+              "sc4"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "Một nấm mộ đơn giản, xung quanh là cảnh hoang tàn, ánh trăng sáng.",
+            "id": "graveyard",
+            "name": "Nấm mộ",
+            "scene_kind": "graveyard",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Một tửu lâu ấm cúng, có ánh đèn vàng và không khí nhộn nhịp.",
+            "id": "tavern",
+            "name": "Tửu lâu Vọng Nguyệt",
+            "scene_kind": "cafe",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Một đại điện lớn, tối tăm, có nhiều giáo chúng đứng xung quanh, trang trí u ám.",
+            "id": "blood_satan_temple",
+            "name": "Tổng đàn Huyết Sát giáo",
+            "scene_kind": "temple",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Cảnh bình minh rực rỡ, ánh sáng chiếu sáng khắp nơi, mang lại hy vọng.",
+            "id": "sunrise",
+            "name": "Bình minh",
+            "scene_kind": "mountain",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh2",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "profile",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh4",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "close",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "high",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "extreme_close",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh6",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "portrait",
+            "motion_intent": "track_left",
+            "scene_id": "sc3",
+            "shot_size": "close",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "low",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh8",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc3",
+            "shot_size": "close",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "high",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh9",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hàn Phong quỳ bên nấm mộ của sư phụ, nắm chặt thanh kiếm gãy trong tay."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "han_phong",
+                "text": "Tôi sẽ trả thù cho người!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 1.6,
+            "pose": "stand",
+            "reading_speed": 0.88,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Ba năm đã trôi qua, Hàn Phong quyết tâm xuống núi, mang theo tuyệt kỹ 'Lưu Vân kiếm pháp'."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Tại tửu lâu Vọng Nguyệt, chàng gặp Tô Linh Nhi, một nữ hiệp đang truy tìm kẻ đã giết cha nàng."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "to_linh_nhi",
+                "text": "Tôi sẽ không dừng lại cho đến khi tìm được kẻ thù!"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "han_phong",
+                "text": "Chúng ta hãy liên thủ lại để trả thù!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "action",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Cuộc chiến cuối cùng!",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Đêm trăng tròn, hai người đột nhập vào tổng đàn Huyết Sát giáo."
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "mo_dung_tuan",
+                "text": "Ngươi tưởng một thanh kiếm gãy có thể đòi lại công đạo sao?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.12,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trận chiến diễn ra ác liệt, ánh kiếm loé lên giữa không gian tối tăm."
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "han_phong",
+                "text": "Ta sẽ không để ngươi thoát!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.12,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Linh Nhi trúng độc chưởng, gục xuống."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "han_phong",
+                "text": "Linh Nhi! Không!"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.7,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Sát thủ cuối cùng!",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trong cơn phẫn nộ, Hàn Phong lĩnh ngộ tầng thứ mười của kiếm pháp."
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "han_phong",
+                "text": "Vân Phá Thiên Khung!"
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.12,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Một kiếm chém ra, cả đại điện sụp đổ, Mộ Dung Tuấn tan thành tro bụi."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 1.6,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Bình minh chiếu lên gương mặt lấm máu của chàng, mối thù đã báo."
+              },
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "han_phong",
+                "text": "Nhưng lòng ta trống rỗng."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Chàng bế Linh Nhi đã hôn mê lên vai, bước đi giữa tàn tích, hướng về phía mặt trời mọc."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 1.6,
+            "pose": "stand",
+            "reading_speed": 0.88,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          }
+        ],
+        "tone": "bi thương",
+        "topic": "Báo thù của Hàn Phong",
+        "visuals": [
+          {
+            "character_ids": [
+              "han_phong"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "graveyard",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "han_phong",
+              "to_linh_nhi"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "tavern",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "han_phong",
+              "mo_dung_tuan",
+              "to_linh_nhi"
+            ],
+            "id": "v3",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "blood_satan_temple",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "han_phong",
+              "to_linh_nhi"
+            ],
+            "id": "v4",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "sunrise",
+            "tier": "medium"
+          }
+        ]
+      }
+    }
+  }
+}

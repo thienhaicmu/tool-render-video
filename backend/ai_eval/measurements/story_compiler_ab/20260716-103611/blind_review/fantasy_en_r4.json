@@ -1,0 +1,2051 @@
+{
+  "review_id": "fantasy_en_r4",
+  "source": {
+    "id": "fantasy_en",
+    "source": "idea",
+    "idea": "A cartographer discovers that every lie she draws becomes a real island, until one creation asks to be erased.",
+    "duration_sec": 120,
+    "language": "en",
+    "genre": "fantasy"
+  },
+  "candidates": {
+    "B": {
+      "usable": true,
+      "narration": "In a small workshop filled with maps and ink, Elara, a talented cartographer, sat at her desk, lost in thought.\nWhat if every lie I draw becomes a real place?\nElara's eyes sparkled with excitement as she picked up her quill, ready to create something extraordinary.\nLet's draw an island that no one knows about!\nAs she sketched, the ink shimmered and danced, forming the outline of an island that seemed to pulse with life.\nTo her astonishment, the island materialized before her eyes, vibrant and full of color, just as she had imagined.\nIt worked! I created a real island!\nElara ventured onto the island, marveling at the exotic plants and creatures that thrived in this newfound world.\nBut as she explored, a voice echoed from the depths of the island, calling out to her with urgency.\nWho’s there?\nA shimmering figure appeared, an embodiment of the island itself, with eyes that glimmered like stars.\nWhat are you?\nThe figure spoke, its voice a blend of sorrow and wisdom, \"I am the essence of the lies you create, and I seek to be erased.\"\nElara's heart raced as she realized the gravity of the situation; her creation wanted to disappear.\nBut if I erase you, what happens to this island?\n\"The island will fade, but the truth will remain. You must choose between your lies and reality,\" the figure replied.\nElara stood torn, her mind racing with memories of the joy the island brought her, yet knowing it was built on deception.\nI can't let you go, but I can't keep living a lie either!\nIn a moment of clarity, Elara decided. She would not erase the island, but she would embrace the truth instead.\nI will share the story of this island, of its beauty and its lies!\nThe figure smiled, a soft glow surrounding it, as the island began to shimmer with a new light, transforming into a place of truth.\n\"Thank you, Elara. You have chosen wisely. This island will now be a beacon of creativity and honesty,\" it said.\nElara returned to her workshop, her heart light and her spirit renewed, ready to create with a newfound purpose.\nFrom now on, I will draw only the truth!",
+      "plan": {
+        "art_style": "cinematic fantasy",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc5",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc5"
+          }
+        ],
+        "characters": [
+          {
+            "age": "20s",
+            "archetype": "scholar",
+            "asset": "",
+            "canonical_desc": "A young cartographer with long, flowing brown hair, wearing a leather apron and holding a quill, exuding creativity and curiosity.",
+            "gender": "female",
+            "id": "elara",
+            "name": "Elara",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "fantasy",
+        "language": "en",
+        "reading_pace": "normal",
+        "region": "",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2",
+              "b3"
+            ],
+            "continuity_key": "workshop",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "elara"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "workshop",
+            "shot_ids": [
+              "sh1",
+              "sh2",
+              "sh3"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b4",
+              "b5",
+              "b6",
+              "b7",
+              "b8"
+            ],
+            "continuity_key": "island",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "elara"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "island",
+            "shot_ids": [
+              "sh4",
+              "sh5",
+              "sh6",
+              "sh7",
+              "sh8"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b9",
+              "b10",
+              "b11"
+            ],
+            "continuity_key": "ocean",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "elara"
+            ],
+            "purpose": "reversal",
+            "sequence_id": "seq3",
+            "setting_id": "ocean",
+            "shot_ids": [
+              "sh9",
+              "sh10",
+              "sh11"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b12",
+              "b13",
+              "b14"
+            ],
+            "continuity_key": "cave",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc4",
+            "participant_ids": [
+              "elara"
+            ],
+            "purpose": "climax",
+            "sequence_id": "seq4",
+            "setting_id": "cave",
+            "shot_ids": [
+              "sh12",
+              "sh13",
+              "sh14"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b15"
+            ],
+            "continuity_key": "workshop",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc5",
+            "participant_ids": [
+              "elara"
+            ],
+            "purpose": "payoff",
+            "sequence_id": "seq5",
+            "setting_id": "workshop",
+            "shot_ids": [
+              "sh15"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 564356166,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "inciting",
+            "role": "inciting",
+            "scene_ids": [
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc3"
+            ]
+          },
+          {
+            "id": "seq4",
+            "purpose": "climax",
+            "role": "climax",
+            "scene_ids": [
+              "sc4"
+            ]
+          },
+          {
+            "id": "seq5",
+            "purpose": "resolution",
+            "role": "resolution",
+            "scene_ids": [
+              "sc5"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "A cluttered workshop filled with maps, scrolls, and ink pots, illuminated by warm candlelight.",
+            "id": "workshop",
+            "name": "Elara's Workshop",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "A vibrant, mystical island with colorful flora and fauna, shimmering waters, and a sky that changes colors.",
+            "id": "island",
+            "name": "The Island of Lies",
+            "scene_kind": "beach",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "A vast, calm ocean with deep blue waters and a clear sky, representing the boundary between reality and imagination.",
+            "id": "ocean",
+            "name": "The Ocean of Truth",
+            "scene_kind": "beach",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "A dark, mysterious cave with glowing crystals and echoes of whispers, where secrets are hidden.",
+            "id": "cave",
+            "name": "The Cave of Secrets",
+            "scene_kind": "cave",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh2",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh3",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh4",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "low",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh5",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh6",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "extreme_close",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "high",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh8",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc2",
+            "shot_size": "medium",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "low",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh9",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "close",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh10",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc3",
+            "shot_size": "medium",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "high",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b11"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh11",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b12"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh12",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "wide",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "low",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b13"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh13",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc4",
+            "shot_size": "wide",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b14"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh14",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc4",
+            "shot_size": "medium",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b15"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh15",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc5",
+            "shot_size": "close",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "A cartographer's secret!",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "In a small workshop filled with maps and ink, Elara, a talented cartographer, sat at her desk, lost in thought."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "What if every lie I draw becomes a real place?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elara's eyes sparkled with excitement as she picked up her quill, ready to create something extraordinary."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "Let's draw an island that no one knows about!"
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "As she sketched, the ink shimmered and danced, forming the outline of an island that seemed to pulse with life."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "To her astonishment, the island materialized before her eyes, vibrant and full of color, just as she had imagined."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "It worked! I created a real island!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elara ventured onto the island, marveling at the exotic plants and creatures that thrived in this newfound world."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "But as she explored, a voice echoed from the depths of the island, calling out to her with urgency."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "Who’s there?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "A shimmering figure appeared, an embodiment of the island itself, with eyes that glimmered like stars."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "What are you?"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The figure spoke, its voice a blend of sorrow and wisdom, \"I am the essence of the lies you create, and I seek to be erased.\""
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "A choice to make!",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elara's heart raced as she realized the gravity of the situation; her creation wanted to disappear."
+              },
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "But if I erase you, what happens to this island?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "\"The island will fade, but the truth will remain. You must choose between your lies and reality,\" the figure replied."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b11",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elara stood torn, her mind racing with memories of the joy the island brought her, yet knowing it was built on deception."
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "I can't let you go, but I can't keep living a lie either!"
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh11",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b12",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "In a moment of clarity, Elara decided. She would not erase the island, but she would embrace the truth instead."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "I will share the story of this island, of its beauty and its lies!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh12",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b13",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The figure smiled, a soft glow surrounding it, as the island began to shimmer with a new light, transforming into a place of truth."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh13",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b14",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "\"Thank you, Elara. You have chosen wisely. This island will now be a beacon of creativity and honesty,\" it said."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh14",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b15",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elara returned to her workshop, her heart light and her spirit renewed, ready to create with a newfound purpose."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "From now on, I will draw only the truth!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh15",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "mysterious",
+        "topic": "The Cartographer's Lies",
+        "visuals": [
+          {
+            "character_ids": [
+              "elara"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "workshop",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "elara"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "island",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "elara"
+            ],
+            "id": "v3",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "ocean",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "elara"
+            ],
+            "id": "v4",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "cave",
+            "tier": "medium"
+          }
+        ]
+      }
+    },
+    "A": {
+      "usable": true,
+      "narration": "In a dusty study filled with yellowing maps, Cartographer Elara traced an island onto parchment. The ink shimmered like a woven spell, each stroke whispering secrets to the air. Elara leaned back, feeling the thrill of creation.\nAnother island for the map, another gem in the crown of discovery.\nShe didn't merely draw; she conjured. Each island she created was a lie, a mere figment, until it wasn't. They materialized, dotting the vast, unexplored seas. But today, as the ink dried, a chill spread through the room.\nSlanting rain and roaring waves echoed Elara’s inner turmoil as she sailed towards her latest creation. The island rose from the ocean, cloaked in mist, its shape uncanny and unsettling.\nWhat mysteries do you hold? Why do you call to me so?\nAs her boat scraped the shore, the island quivered, its trees whispering in a language only the wind knew. Elara felt drawn deeper, a tug she couldn't resist, as if the island itself had a voice.\nBeneath a canopy of emerald leaves, Elara wandered through the forest. The air was thick with magic, each breath a taste of something ancient. Suddenly, a figure emerged from the shadows, eyes gleaming with knowing.\nYou've given us life, Cartographer. But some creations are better left unwritten.\nWho are you? What are you?\nThe figure, neither fully man nor spirit, shimmered like the ink from her pen. It was a part of the island, a sentinel born of her imagination.\nAt the island's heart, the land pulsed with energy. The figure gestured to the ground, where a map lay, its lines alive and shifting.\nErase us before it's too late. Not all lies can hold truth safely.\nBut how can I erase what I've given life?\nThe ground trembled as roots entwined her feet. The island's plea was a siren song, urging her to unmake the impossible.\nBack in her study, Elara unrolled the map. Her hands trembled as she dipped the quill, poised to unweave her spell. She hesitated, heart heavy with the weight of her choices.\nI must do what is right, not just what is possible.\nWith a deep breath, she drew a dark line through the island. The parchment shimmered, and the island’s shadow faded from the world, a gentle sigh echoed in the silence. Elara knew now the power of her craft, and the responsibility it bore.",
+      "plan": {
+        "art_style": "cinematic fantasy",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "figure",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "figure",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc5",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc5"
+          }
+        ],
+        "characters": [
+          {
+            "age": "20s",
+            "archetype": "heroine",
+            "asset": "",
+            "canonical_desc": "A young woman with long dark hair, dressed in a simple yet elegant attire, holding a quill and parchment, exuding an aura of creativity and determination.",
+            "gender": "female",
+            "id": "elara",
+            "name": "Cartographer Elara",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          },
+          {
+            "age": "",
+            "archetype": "ghost",
+            "asset": "",
+            "canonical_desc": "A shimmering figure with an ethereal presence, neither fully man nor spirit, appearing as a manifestation of Elara's imagination.",
+            "gender": "",
+            "id": "figure",
+            "name": "Mysterious Figure",
+            "visual_identity_id": "",
+            "voice_gender": "",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "fantasy",
+        "language": "en",
+        "reading_pace": "normal",
+        "region": "",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2"
+            ],
+            "continuity_key": "dusty_cartographers_study",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "elara"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "dusty_cartographers_study",
+            "shot_ids": [
+              "sh1",
+              "sh2"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b3",
+              "b4"
+            ],
+            "continuity_key": "stormy_sea",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "elara"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "stormy_sea",
+            "shot_ids": [
+              "sh3",
+              "sh4"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b5",
+              "b6"
+            ],
+            "continuity_key": "enchanted_forest",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "figure",
+              "elara"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq3",
+            "setting_id": "enchanted_forest",
+            "shot_ids": [
+              "sh5",
+              "sh6"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b7",
+              "b8"
+            ],
+            "continuity_key": "heart_of_the_island",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc4",
+            "participant_ids": [
+              "figure",
+              "elara"
+            ],
+            "purpose": "reversal",
+            "sequence_id": "seq3",
+            "setting_id": "heart_of_the_island",
+            "shot_ids": [
+              "sh7",
+              "sh8"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b9",
+              "b10"
+            ],
+            "continuity_key": "returning_study",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc5",
+            "participant_ids": [
+              "elara"
+            ],
+            "purpose": "climax",
+            "sequence_id": "seq4",
+            "setting_id": "returning_study",
+            "shot_ids": [
+              "sh9",
+              "sh10"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 564356166,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "inciting",
+            "role": "inciting",
+            "scene_ids": [
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc3",
+              "sc4"
+            ]
+          },
+          {
+            "id": "seq4",
+            "purpose": "climax",
+            "role": "climax",
+            "scene_ids": [
+              "sc5"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "A cluttered study filled with yellowing maps, scattered parchment, and quills, illuminated by soft, warm light.",
+            "id": "dusty_cartographers_study",
+            "name": "Dusty Cartographer's Study",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "A tumultuous ocean with slanting rain and roaring waves, creating a sense of chaos and adventure.",
+            "id": "stormy_sea",
+            "name": "Stormy Sea",
+            "scene_kind": "beach",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "A magical forest with a canopy of emerald leaves, thick with enchantment and mystery.",
+            "id": "enchanted_forest",
+            "name": "Enchanted Forest",
+            "scene_kind": "forest",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "A vibrant and pulsating land filled with energy, where the map lies alive and shifting.",
+            "id": "heart_of_the_island",
+            "name": "Heart of the Island",
+            "scene_kind": "garden",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "The same dusty study, now filled with tension and the weight of choices, as Elara prepares to make a decision.",
+            "id": "returning_study",
+            "name": "Returning Study",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh2",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh4",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc2",
+            "shot_size": "medium",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "high",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh6",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "extreme_close",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "low",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh8",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc4",
+            "shot_size": "medium",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "high",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh9",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc5",
+            "shot_size": "wide",
+            "visual_id": "v5"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh10",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc5",
+            "shot_size": "medium",
+            "visual_id": "v5"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "The thrill of creation",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "In a dusty study filled with yellowing maps, Cartographer Elara traced an island onto parchment. The ink shimmered like a woven spell, each stroke whispering secrets to the air. Elara leaned back, feeling the thrill of creation."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "Another island for the map, another gem in the crown of discovery."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "She didn't merely draw; she conjured. Each island she created was a lie, a mere figment, until it wasn't. They materialized, dotting the vast, unexplored seas. But today, as the ink dried, a chill spread through the room."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Slanting rain and roaring waves echoed Elara’s inner turmoil as she sailed towards her latest creation. The island rose from the ocean, cloaked in mist, its shape uncanny and unsettling."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "What mysteries do you hold? Why do you call to me so?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "As her boat scraped the shore, the island quivered, its trees whispering in a language only the wind knew. Elara felt drawn deeper, a tug she couldn't resist, as if the island itself had a voice."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Beneath a canopy of emerald leaves, Elara wandered through the forest. The air was thick with magic, each breath a taste of something ancient. Suddenly, a figure emerged from the shadows, eyes gleaming with knowing."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "figure",
+                "text": "You've given us life, Cartographer. But some creations are better left unwritten."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "Who are you? What are you?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The figure, neither fully man nor spirit, shimmered like the ink from her pen. It was a part of the island, a sentinel born of her imagination."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "A desperate choice",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "At the island's heart, the land pulsed with energy. The figure gestured to the ground, where a map lay, its lines alive and shifting."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "figure",
+                "text": "Erase us before it's too late. Not all lies can hold truth safely."
+              },
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "But how can I erase what I've given life?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The ground trembled as roots entwined her feet. The island's plea was a siren song, urging her to unmake the impossible."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Back in her study, Elara unrolled the map. Her hands trembled as she dipped the quill, poised to unweave her spell. She hesitated, heart heavy with the weight of her choices."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "I must do what is right, not just what is possible."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v5"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "With a deep breath, she drew a dark line through the island. The parchment shimmered, and the island’s shadow faded from the world, a gentle sigh echoed in the silence. Elara knew now the power of her craft, and the responsibility it bore."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v5"
+          }
+        ],
+        "tone": "mysterious",
+        "topic": "The Power of Creation",
+        "visuals": [
+          {
+            "character_ids": [
+              "elara"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "dusty_cartographers_study",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "elara"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "stormy_sea",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "elara",
+              "figure"
+            ],
+            "id": "v3",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "enchanted_forest",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "elara",
+              "figure"
+            ],
+            "id": "v4",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "heart_of_the_island",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "elara"
+            ],
+            "id": "v5",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "returning_study",
+            "tier": "medium"
+          }
+        ]
+      }
+    }
+  }
+}

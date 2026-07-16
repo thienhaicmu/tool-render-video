@@ -1,0 +1,1701 @@
+{
+  "review_id": "family_vi_r1",
+  "source": {
+    "id": "family_vi",
+    "source": "idea",
+    "idea": "Người cha ít nói học nấu món phở của vợ đã mất để giữ lời hứa với con gái trong ngày tốt nghiệp.",
+    "duration_sec": 100,
+    "language": "vi",
+    "genre": "family-drama"
+  },
+  "candidates": {
+    "A": {
+      "usable": true,
+      "narration": "Trong một căn bếp nhỏ, Anh Quang đứng nhìn vào nồi nước dùng đang sôi sùng sục.\nMẹ con sẽ rất tự hào nếu mình làm được món phở như bà ấy.\nBố ơi, con không thể chờ đến ngày tốt nghiệp để thưởng thức phở của bố!\nBố sẽ làm món phở ngon nhất cho con, hứa đấy!\nNhưng nỗi lo lắng trong lòng Anh Quang ngày càng lớn.\nLiệu mình có thể nấu phở ngon như mẹ không?\nKý ức về vợ anh, người đã nấu phở tuyệt vời, luôn hiện hữu trong tâm trí.\nMình phải làm điều này cho con gái, cho cả mẹ con.\nBố, con sẽ giúp bố nấu phở nhé!\nCảm ơn con, cùng nhau nhé!\nHọ bắt đầu chuẩn bị nguyên liệu, cùng nhau cười đùa trong bếp.\nNhưng công thức phở của vợ anh vẫn là một bí mật.\nMình phải nhớ lại từng bước, từng gia vị.\nÁp lực ngày càng lớn khi thời gian trôi qua.\nBố, chúng ta có thể làm được mà!\nCuối cùng, Anh Quang đã nhớ lại công thức và bắt tay vào nấu.\nNước dùng thật thơm, chắc chắn mẹ sẽ tự hào.\nBố ơi, con ngửi thấy mùi phở rồi!\nCuối cùng, món phở đã hoàn thành, đẹp mắt và thơm ngon.\nBây giờ, đến lúc thưởng thức phở rồi!\nCon rất mong chờ, bố!\nHọ cùng nhau ngồi xuống bàn, món phở bốc khói nghi ngút.\nChúc mừng con gái, món phở này là của chúng ta.\nCon yêu bố, cảm ơn vì món phở này!\nHọ cùng nhau thưởng thức món phở, tình cảm gia đình thêm gắn bó.",
+      "plan": {
+        "art_style": "hiendai",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "anh_quang",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "thuy",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc1"
+          }
+        ],
+        "characters": [
+          {
+            "age": "40",
+            "archetype": "father",
+            "asset": "",
+            "canonical_desc": "Người cha trung niên, tóc đen, mặc áo sơ mi giản dị, ánh mắt trầm tư.",
+            "gender": "male",
+            "id": "anh_quang",
+            "name": "Anh Quang",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "17",
+            "archetype": "child",
+            "asset": "",
+            "canonical_desc": "Cô con gái tuổi teen, tóc dài, mặc áo thun, luôn tươi cười và đầy năng lượng.",
+            "gender": "female",
+            "id": "thuy",
+            "name": "Thủy",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "ngontinh",
+        "language": "vi",
+        "reading_pace": "normal",
+        "region": "vi",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2",
+              "b3",
+              "b4",
+              "b5",
+              "b6",
+              "b7",
+              "b8",
+              "b9",
+              "b10",
+              "b11",
+              "b12",
+              "b13",
+              "b14",
+              "b15",
+              "b16",
+              "b17",
+              "b18"
+            ],
+            "continuity_key": "kitchen",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "anh_quang",
+              "thuy"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "kitchen",
+            "shot_ids": [
+              "sh1",
+              "sh2",
+              "sh3",
+              "sh4",
+              "sh5",
+              "sh6",
+              "sh7",
+              "sh8",
+              "sh9",
+              "sh10",
+              "sh11",
+              "sh12",
+              "sh13",
+              "sh14",
+              "sh15",
+              "sh16",
+              "sh17",
+              "sh18"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 1550030480,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "Một căn bếp nhỏ gọn gàng với bếp ga, nồi niêu và gia vị xung quanh.",
+            "id": "kitchen",
+            "name": "Nhà bếp",
+            "scene_kind": "kitchen",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh2",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh4",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh6",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh8",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh9",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh10",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b11"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh11",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b12"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh12",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b13"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh13",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b14"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh14",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b15"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh15",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b16"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh16",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b17"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh17",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b18"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh18",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Lời hứa với con gái",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trong một căn bếp nhỏ, Anh Quang đứng nhìn vào nồi nước dùng đang sôi sùng sục."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "anh_quang",
+                "text": "Mẹ con sẽ rất tự hào nếu mình làm được món phở như bà ấy."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "thuy",
+                "text": "Bố ơi, con không thể chờ đến ngày tốt nghiệp để thưởng thức phở của bố!"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "anh_quang",
+                "text": "Bố sẽ làm món phở ngon nhất cho con, hứa đấy!"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Nhưng nỗi lo lắng trong lòng Anh Quang ngày càng lớn."
+              },
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "anh_quang",
+                "text": "Liệu mình có thể nấu phở ngon như mẹ không?"
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Ký ức về vợ anh, người đã nấu phở tuyệt vời, luôn hiện hữu trong tâm trí."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "anh_quang",
+                "text": "Mình phải làm điều này cho con gái, cho cả mẹ con."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "thuy",
+                "text": "Bố, con sẽ giúp bố nấu phở nhé!"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "anh_quang",
+                "text": "Cảm ơn con, cùng nhau nhé!"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Họ bắt đầu chuẩn bị nguyên liệu, cùng nhau cười đùa trong bếp."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Nhưng công thức phở của vợ anh vẫn là một bí mật."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "anh_quang",
+                "text": "Mình phải nhớ lại từng bước, từng gia vị."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Áp lực ngày càng lớn khi thời gian trôi qua."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "thuy",
+                "text": "Bố, chúng ta có thể làm được mà!"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cuối cùng, Anh Quang đã nhớ lại công thức và bắt tay vào nấu."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "anh_quang",
+                "text": "Nước dùng thật thơm, chắc chắn mẹ sẽ tự hào."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b11",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "thuy",
+                "text": "Bố ơi, con ngửi thấy mùi phở rồi!"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh11",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b12",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cuối cùng, món phở đã hoàn thành, đẹp mắt và thơm ngon."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh12",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b13",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "anh_quang",
+                "text": "Bây giờ, đến lúc thưởng thức phở rồi!"
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh13",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "romantic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b14",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "thuy",
+                "text": "Con rất mong chờ, bố!"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh14",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b15",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Họ cùng nhau ngồi xuống bàn, món phở bốc khói nghi ngút."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh15",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b16",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "anh_quang",
+                "text": "Chúc mừng con gái, món phở này là của chúng ta."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh16",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b17",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "thuy",
+                "text": "Con yêu bố, cảm ơn vì món phở này!"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh17",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b18",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Họ cùng nhau thưởng thức món phở, tình cảm gia đình thêm gắn bó."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh18",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "cảm động",
+        "topic": "Người cha nấu phở cho con gái",
+        "visuals": [
+          {
+            "character_ids": [
+              "anh_quang",
+              "thuy"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "kitchen",
+            "tier": "medium"
+          }
+        ]
+      }
+    },
+    "B": {
+      "usable": true,
+      "narration": "Tiếng dao va vào thớt vang lên trong căn bếp yên tĩnh. Ông Minh, người cha ít nói, đứng bên bếp với cuốn sổ tay cũ kỹ đặt trước mặt. Món phở của bà Lan - vợ ông đã mất, là một tâm điểm trong gia đình. Hôm nay, ông đang cố gắng thực hiện điều bà đã làm hàng trăm lần.\nNước dùng phải trong... và thịt bò phải mềm.\nÔng mở nắp nồi, hơi nước bốc lên nghi ngút, mang theo hương thơm của hồi và quế. Nhưng đó không chỉ là mùi, mà là ký ức của từng bữa cơm gia đình.\nLinh bước vào phòng khách, đôi mắt sáng lên khi thấy cha mình đang bận rộn trong bếp. Cô nhớ như in lời hứa của cha trong ngày giỗ của mẹ, rằng ông sẽ nấu món phở cho buổi lễ tốt nghiệp của cô.\nBa, hôm nay ba nấu phở hả?\nỪ, ba đang cố gắng làm theo công thức của mẹ.\nLinh nhìn cha, sự kiên trì của ông làm cô cảm thấy ấm áp. Nhưng trong lòng cô, có chút lo lắng không biết kết quả ra sao.\nNgày lễ tốt nghiệp, Linh trong chiếc áo choàng xanh, ngồi quanh bàn ăn cùng với bạn bè và người thân. Mọi người xôn xao, nhưng Linh chỉ chăm chú nhìn vào bát phở trước mặt. Bàn tay cô run nhẹ, nắm chặt đôi đũa.\nBa, để con thử trước nhé.\nCô múc một thìa nước dùng, đưa lên miệng. Vị ngọt ngào đậm đà cùng hương thơm quen thuộc khiến cô ngưng lại một khoảnh khắc.\nGiống phở của mẹ quá!\nÔng Minh mỉm cười, ánh mắt dịu dàng nhìn con gái. Người cha ít nói đã thực hiện lời hứa, mang lại món ăn đầy kỷ niệm cho con vào ngày đặc biệt này.\nTrời bắt đầu tối, ánh đèn từ trong nhà hắt ra sân trước. Linh và ông Minh cùng đứng bên nhau, gió nhẹ nhàng thổi qua.\nCảm ơn ba, vì đã nấu món phở này.\nBa chỉ muốn mẹ con ở đây cùng chúng ta.\nLinh cầm tay cha, cả hai đứng lặng im, nhưng không cần nói thêm gì nữa. Món phở không chỉ là hương vị, mà là sự kết nối vô hình giữa quá khứ và hiện tại, là tình yêu gia đình mãi mãi đọng lại.",
+      "plan": {
+        "art_style": "cinematic family-drama",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "ong_minh",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "linh",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "ong_minh",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "linh",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "linh",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "left",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "ong_minh",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc4"
+          }
+        ],
+        "characters": [
+          {
+            "age": "50s",
+            "archetype": "father",
+            "asset": "",
+            "canonical_desc": "Người cha ít nói, trung niên, tóc bạc, mặc áo sơ mi đơn giản.",
+            "gender": "male",
+            "id": "ong_minh",
+            "name": "Ông Minh",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "20s",
+            "archetype": "child",
+            "asset": "",
+            "canonical_desc": "Cô gái trẻ, tóc dài, mặc áo choàng xanh, ánh mắt sáng.",
+            "gender": "female",
+            "id": "linh",
+            "name": "Linh",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "ngontinh",
+        "language": "vi",
+        "reading_pace": "normal",
+        "region": "vi",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1"
+            ],
+            "continuity_key": "nha_bep",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "ong_minh"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "nha_bep",
+            "shot_ids": [
+              "sh1"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b2"
+            ],
+            "continuity_key": "phong_khach",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "linh",
+              "ong_minh"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "phong_khach",
+            "shot_ids": [
+              "sh2"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b3"
+            ],
+            "continuity_key": "phong_an",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "linh"
+            ],
+            "purpose": "reversal",
+            "sequence_id": "seq3",
+            "setting_id": "phong_an",
+            "shot_ids": [
+              "sh3"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b4"
+            ],
+            "continuity_key": "ngoai_san",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc4",
+            "participant_ids": [
+              "linh",
+              "ong_minh"
+            ],
+            "purpose": "payoff",
+            "sequence_id": "seq4",
+            "setting_id": "ngoai_san",
+            "shot_ids": [
+              "sh4"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 1550030480,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "inciting",
+            "role": "inciting",
+            "scene_ids": [
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc3"
+            ]
+          },
+          {
+            "id": "seq4",
+            "purpose": "resolution",
+            "role": "resolution",
+            "scene_ids": [
+              "sc4"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "Căn bếp nhỏ, yên tĩnh với dao và thớt.",
+            "id": "nha_bep",
+            "name": "Nhà bếp",
+            "scene_kind": "kitchen",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Phòng khách ấm cúng, có ghế sofa và bàn trà.",
+            "id": "phong_khach",
+            "name": "Phòng khách",
+            "scene_kind": "living_room",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Bàn ăn lớn với nhiều món ăn và bát phở.",
+            "id": "phong_an",
+            "name": "Phòng ăn",
+            "scene_kind": "dining_room",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Sân trước nhà với ánh đèn vàng ấm áp.",
+            "id": "ngoai_san",
+            "name": "Ngoài sân",
+            "scene_kind": "garden",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh2",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "close",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "low",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh4",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Tiếng dao va vào thớt vang lên trong căn bếp yên tĩnh. Ông Minh, người cha ít nói, đứng bên bếp với cuốn sổ tay cũ kỹ đặt trước mặt. Món phở của bà Lan - vợ ông đã mất, là một tâm điểm trong gia đình. Hôm nay, ông đang cố gắng thực hiện điều bà đã làm hàng trăm lần."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "ong_minh",
+                "text": "Nước dùng phải trong... và thịt bò phải mềm."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Ông mở nắp nồi, hơi nước bốc lên nghi ngút, mang theo hương thơm của hồi và quế. Nhưng đó không chỉ là mùi, mà là ký ức của từng bữa cơm gia đình."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Linh bước vào phòng khách, đôi mắt sáng lên khi thấy cha mình đang bận rộn trong bếp. Cô nhớ như in lời hứa của cha trong ngày giỗ của mẹ, rằng ông sẽ nấu món phở cho buổi lễ tốt nghiệp của cô."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "linh",
+                "text": "Ba, hôm nay ba nấu phở hả?"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "ong_minh",
+                "text": "Ừ, ba đang cố gắng làm theo công thức của mẹ."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Linh nhìn cha, sự kiên trì của ông làm cô cảm thấy ấm áp. Nhưng trong lòng cô, có chút lo lắng không biết kết quả ra sao."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Thử món phở!",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Ngày lễ tốt nghiệp, Linh trong chiếc áo choàng xanh, ngồi quanh bàn ăn cùng với bạn bè và người thân. Mọi người xôn xao, nhưng Linh chỉ chăm chú nhìn vào bát phở trước mặt. Bàn tay cô run nhẹ, nắm chặt đôi đũa."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "linh",
+                "text": "Ba, để con thử trước nhé."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cô múc một thìa nước dùng, đưa lên miệng. Vị ngọt ngào đậm đà cùng hương thơm quen thuộc khiến cô ngưng lại một khoảnh khắc."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "linh",
+                "text": "Giống phở của mẹ quá!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "romantic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Ông Minh mỉm cười, ánh mắt dịu dàng nhìn con gái. Người cha ít nói đã thực hiện lời hứa, mang lại món ăn đầy kỷ niệm cho con vào ngày đặc biệt này."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trời bắt đầu tối, ánh đèn từ trong nhà hắt ra sân trước. Linh và ông Minh cùng đứng bên nhau, gió nhẹ nhàng thổi qua."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "linh",
+                "text": "Cảm ơn ba, vì đã nấu món phở này."
+              },
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "ong_minh",
+                "text": "Ba chỉ muốn mẹ con ở đây cùng chúng ta."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Linh cầm tay cha, cả hai đứng lặng im, nhưng không cần nói thêm gì nữa. Món phở không chỉ là hương vị, mà là sự kết nối vô hình giữa quá khứ và hiện tại, là tình yêu gia đình mãi mãi đọng lại."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 1.6,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          }
+        ],
+        "tone": "nostalgic",
+        "topic": "Ký ức gia đình qua món phở",
+        "visuals": [
+          {
+            "character_ids": [
+              "ong_minh"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "nha_bep",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "linh",
+              "ong_minh"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "phong_khach",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "linh"
+            ],
+            "id": "v3",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "phong_an",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "linh",
+              "ong_minh"
+            ],
+            "id": "v4",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "ngoai_san",
+            "tier": "medium"
+          }
+        ]
+      }
+    }
+  }
+}

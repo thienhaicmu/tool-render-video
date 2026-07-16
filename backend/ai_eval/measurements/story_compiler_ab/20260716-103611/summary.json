@@ -1,0 +1,16 @@
+{
+  "pairs": 30,
+  "qualified_pairs": 26,
+  "usable_pairs": 26,
+  "unusable_pairs": 0,
+  "invalid_arm_pairs": 4,
+  "unknown_provenance_pairs": 0,
+  "failed_arms": 0,
+  "compiler_wins": 12,
+  "ties": 3,
+  "compiler_losses": 11,
+  "mean_score_delta": -2.3,
+  "median_score_delta": 0.1,
+  "ship_signal": false,
+  "note": "n<10 is directional; ship_signal also requires blind human review agreement"
+}

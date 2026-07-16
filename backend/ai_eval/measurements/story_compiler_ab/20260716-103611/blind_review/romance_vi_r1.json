@@ -1,0 +1,1615 @@
+{
+  "review_id": "romance_vi_r1",
+  "source": {
+    "id": "romance_vi",
+    "source": "idea",
+    "idea": "Hai bác sĩ từng yêu nhau buộc phải trực chung trong đêm bão và cứu một đứa trẻ, từ đó đối diện hiểu lầm cũ.",
+    "duration_sec": 120,
+    "language": "vi",
+    "genre": "romance"
+  },
+  "candidates": {
+    "B": {
+      "usable": true,
+      "narration": "Trong một đêm bão tố, bệnh viện trở nên nhộn nhịp hơn bao giờ hết. Những tiếng còi xe cứu thương vang lên liên tục.\nMinh, em cần anh giúp đỡ! Có một ca cấp cứu đang đến!\nĐược rồi, Lan! Chúng ta sẽ cùng nhau xử lý!\nCơn bão ngoài trời gió mạnh, mưa rơi như trút nước. Bên trong bệnh viện, mọi người đều bận rộn với công việc.\nHãy nhanh lên! Chúng ta không có nhiều thời gian!\nTôi sẽ chuẩn bị dụng cụ! Em hãy theo dõi tình trạng bệnh nhân!\nHai bác sĩ làm việc không ngừng nghỉ, nhưng trong lòng họ vẫn còn những kỷ niệm đau thương.\nMinh, em vẫn còn nhớ ngày đó không? Ngày mà chúng ta đã quyết định chia tay?\nĐừng nhắc đến chuyện đó nữa, Lan. Chúng ta cần tập trung vào công việc!\nMột cơn gió mạnh thổi qua, làm cho cửa sổ rung lên. Tình hình trở nên căng thẳng hơn khi bệnh nhân được đưa vào.\nChúng ta phải làm ngay! Bệnh nhân này cần phẫu thuật gấp!\nTôi sẽ gọi đội phẫu thuật ngay bây giờ!\nTrong lúc phẫu thuật, cả hai bác sĩ đều tập trung cao độ, nhưng những cảm xúc vẫn trào dâng trong lòng họ.\nMinh, em xin lỗi vì đã không tin anh lúc đó. Em đã hiểu lầm.\nEm không cần phải xin lỗi. Chúng ta đều đã mắc sai lầm.\nPhẫu thuật diễn ra suôn sẻ, nhưng ngoài trời, bão vẫn đang hoành hành. Tình yêu của họ cũng vậy, vẫn còn nhiều điều chưa nói.\nChúng ta có thể bắt đầu lại không, Minh? Em không muốn mất anh lần nữa.\nNếu em thật sự muốn, anh sẽ không bao giờ để em đi nữa.\nSau ca phẫu thuật, bệnh nhân đã ổn định. Hai bác sĩ nhìn nhau, ánh mắt họ đầy hy vọng.\nChúng ta đã làm được, Minh! Cảm ơn anh vì đã ở đây.\nCảm ơn em, Lan. Anh cũng rất vui khi được làm việc cùng em.\nCơn bão đã qua đi, ánh sáng mặt trời bắt đầu chiếu rọi vào bệnh viện. Tình yêu của họ cũng bắt đầu nở rộ.\nChúng ta hãy cùng nhau xây dựng lại từ đầu, được không?\nĐúng vậy, Lan. Anh sẽ không bao giờ để em đi nữa.\nHai bác sĩ cùng nhau bước ra khỏi bệnh viện, nắm tay nhau. Họ đã vượt qua bão tố và tìm lại được tình yêu.\nEm yêu anh, Minh!\nAnh cũng yêu em, Lan!",
+      "plan": {
+        "art_style": "",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "lan",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "minh",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc1"
+          }
+        ],
+        "characters": [
+          {
+            "age": "25",
+            "archetype": "doctor",
+            "asset": "",
+            "canonical_desc": "Cô gái trẻ, tóc dài, mặc áo blouse trắng, có ánh mắt dịu dàng.",
+            "gender": "female",
+            "id": "lan",
+            "name": "Lan",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          },
+          {
+            "age": "27",
+            "archetype": "doctor",
+            "asset": "",
+            "canonical_desc": "Chàng trai cao, tóc ngắn, mặc áo blouse trắng, có nụ cười ấm áp.",
+            "gender": "male",
+            "id": "minh",
+            "name": "Minh",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "ngontinh",
+        "language": "vi",
+        "reading_pace": "normal",
+        "region": "vi",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2",
+              "b3",
+              "b4",
+              "b5",
+              "b6",
+              "b7",
+              "b8",
+              "b9"
+            ],
+            "continuity_key": "hospital",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "lan",
+              "minh"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "hospital",
+            "shot_ids": [
+              "sh1",
+              "sh2",
+              "sh3",
+              "sh4",
+              "sh5",
+              "sh6",
+              "sh7",
+              "sh8",
+              "sh9"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 3407352092,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "Một bệnh viện hiện đại với ánh đèn sáng và không khí căng thẳng.",
+            "id": "hospital",
+            "name": "Bệnh viện",
+            "scene_kind": "hospital",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh2",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh4",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh6",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh8",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh9",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Tình yêu trong bão tố",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trong một đêm bão tố, bệnh viện trở nên nhộn nhịp hơn bao giờ hết. Những tiếng còi xe cứu thương vang lên liên tục."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Minh, em cần anh giúp đỡ! Có một ca cấp cứu đang đến!"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Được rồi, Lan! Chúng ta sẽ cùng nhau xử lý!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cơn bão ngoài trời gió mạnh, mưa rơi như trút nước. Bên trong bệnh viện, mọi người đều bận rộn với công việc."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Hãy nhanh lên! Chúng ta không có nhiều thời gian!"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Tôi sẽ chuẩn bị dụng cụ! Em hãy theo dõi tình trạng bệnh nhân!"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hai bác sĩ làm việc không ngừng nghỉ, nhưng trong lòng họ vẫn còn những kỷ niệm đau thương."
+              },
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Minh, em vẫn còn nhớ ngày đó không? Ngày mà chúng ta đã quyết định chia tay?"
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Đừng nhắc đến chuyện đó nữa, Lan. Chúng ta cần tập trung vào công việc!"
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Một cơn gió mạnh thổi qua, làm cho cửa sổ rung lên. Tình hình trở nên căng thẳng hơn khi bệnh nhân được đưa vào."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Chúng ta phải làm ngay! Bệnh nhân này cần phẫu thuật gấp!"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Tôi sẽ gọi đội phẫu thuật ngay bây giờ!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trong lúc phẫu thuật, cả hai bác sĩ đều tập trung cao độ, nhưng những cảm xúc vẫn trào dâng trong lòng họ."
+              },
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Minh, em xin lỗi vì đã không tin anh lúc đó. Em đã hiểu lầm."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Em không cần phải xin lỗi. Chúng ta đều đã mắc sai lầm."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Phẫu thuật diễn ra suôn sẻ, nhưng ngoài trời, bão vẫn đang hoành hành. Tình yêu của họ cũng vậy, vẫn còn nhiều điều chưa nói."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Chúng ta có thể bắt đầu lại không, Minh? Em không muốn mất anh lần nữa."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Nếu em thật sự muốn, anh sẽ không bao giờ để em đi nữa."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Sau ca phẫu thuật, bệnh nhân đã ổn định. Hai bác sĩ nhìn nhau, ánh mắt họ đầy hy vọng."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Chúng ta đã làm được, Minh! Cảm ơn anh vì đã ở đây."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Cảm ơn em, Lan. Anh cũng rất vui khi được làm việc cùng em."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cơn bão đã qua đi, ánh sáng mặt trời bắt đầu chiếu rọi vào bệnh viện. Tình yêu của họ cũng bắt đầu nở rộ."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Chúng ta hãy cùng nhau xây dựng lại từ đầu, được không?"
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Đúng vậy, Lan. Anh sẽ không bao giờ để em đi nữa."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hai bác sĩ cùng nhau bước ra khỏi bệnh viện, nắm tay nhau. Họ đã vượt qua bão tố và tìm lại được tình yêu."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Em yêu anh, Minh!"
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Anh cũng yêu em, Lan!"
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "tình cảm",
+        "topic": "Tình yêu trong bão tố",
+        "visuals": [
+          {
+            "character_ids": [
+              "lan",
+              "minh"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "hospital",
+            "tier": "medium"
+          }
+        ]
+      }
+    },
+    "A": {
+      "usable": true,
+      "narration": "Hương và Minh đứng đối diện nhau trong căn phòng trực, ánh đèn lạnh lẽo phản chiếu lên những tấm kính cửa sổ. Cơn bão ngoài kia như muốn xé toạc mọi thứ, nhưng bên trong, không khí căng thẳng còn lớn hơn cả thiên nhiên.\nĐêm nay có vẻ sẽ dài lắm.\nChúng ta đã quen rồi.\nMột bé gái bị tai nạn xe đạp được đưa vào trong tình trạng nguy kịch. Đôi mắt của Hương lóe lên quyết tâm khi cô bắt tay vào cứu chữa. Minh, với sự điềm tĩnh chín chắn, đứng bên cạnh hỗ trợ.\nMinh, cần máu nhóm B ngay!\nĐã gọi phòng máu, họ đang mang lên.\nHai con người, từng thân thuộc như hơi thở, giờ lại phối hợp nhịp nhàng như không hề có sự chia cắt nào. Phía ngoài, tiếng sấm rền vang như nhịp trống giục giã.\nGiờ đây, trong khoảnh khắc ngắn ngủi của sự yên lặng, Hương và Minh đứng cạnh nhau, mệt mỏi nhưng không thể phủ nhận sự hòa hợp khi cùng cứu sống bé gái ấy.\nEm không nghĩ mình có thể làm được nếu không có anh.\nAnh cũng vậy. Chúng ta từng là đội tốt nhất.\nLời nói của Minh như mở ra một cánh cửa cũ, nơi kỷ niệm ùa về như dòng nước lũ. Nhưng liệu có nên bước qua không?\nCơn bão đã giảm bớt, nhưng cả hai vẫn còn thức. Họ ngồi cùng nhau, nhìn ra màn mưa ngoài cửa sổ. Một cuộc đối thoại đã lâu không diễn ra, mà giờ đây, cảm giác như một điều tất yếu phải xảy ra.\nAnh còn giận em vì chuyện đó không?\nKhông, chỉ là anh chưa bao giờ hiểu tại sao em lại rời đi.\nNhững lời nói ấy như chìa khóa mở ra tất cả. Họ bắt đầu chia sẻ, từng lời từng câu, để hiểu và hàn gắn những gì đã mất. Cơn bão ngoài kia dần tan, để lại bầu trời sáng hơn.\nBầu trời sau bão trong trẻo lạ thường. Minh và Hương bước ra khỏi bệnh viện, ánh nắng ấm áp chiếu sáng lên khuôn mặt họ.\nChúng ta có thể làm lại từ đầu không?\nChúng ta sẽ là đội tốt nhất, lần này anh hứa.\nHọ nắm tay nhau, bước đi dưới ánh mặt trời, để lại đằng sau cơn bão và những hiểu lầm. Một khởi đầu mới đang chờ đợi phía trước.",
+      "plan": {
+        "art_style": "cinematic",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "huong",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "minh",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "huong",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "minh",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "huong",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "minh",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "huong",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "minh",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "huong",
+            "continuity_notes": "Keep appearance and screen side stable within sc5",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc5"
+          },
+          {
+            "character_id": "minh",
+            "continuity_notes": "Keep appearance and screen side stable within sc5",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "left",
+            "scene_id": "sc5"
+          }
+        ],
+        "characters": [
+          {
+            "age": "25",
+            "archetype": "nurse",
+            "asset": "",
+            "canonical_desc": "Cô gái trẻ tuổi, tóc dài, mặc áo blouse trắng, có ánh mắt quyết tâm.",
+            "gender": "female",
+            "id": "huong",
+            "name": "Hương",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          },
+          {
+            "age": "27",
+            "archetype": "doctor",
+            "asset": "",
+            "canonical_desc": "Chàng trai trẻ tuổi, tóc ngắn, mặc áo blouse trắng, có vẻ điềm tĩnh.",
+            "gender": "male",
+            "id": "minh",
+            "name": "Minh",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "ngontinh",
+        "language": "vi",
+        "reading_pace": "normal",
+        "region": "vi",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1"
+            ],
+            "continuity_key": "benh_vien_phong_cho",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "huong",
+              "minh"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "benh_vien_phong_cho",
+            "shot_ids": [
+              "sh1"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b2",
+              "b3"
+            ],
+            "continuity_key": "phong_cap_cuu",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "huong",
+              "minh"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "phong_cap_cuu",
+            "shot_ids": [
+              "sh2",
+              "sh3"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b4"
+            ],
+            "continuity_key": "hanh_lang_benh_vien",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "huong",
+              "minh"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "hanh_lang_benh_vien",
+            "shot_ids": [
+              "sh4"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b5",
+              "b6",
+              "b7"
+            ],
+            "continuity_key": "phong_truc_dem",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc4",
+            "participant_ids": [
+              "huong",
+              "minh"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "phong_truc_dem",
+            "shot_ids": [
+              "sh5",
+              "sh6",
+              "sh7"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b8",
+              "b9"
+            ],
+            "continuity_key": "cua_benh_vien_sang_som",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc5",
+            "participant_ids": [
+              "huong",
+              "minh"
+            ],
+            "purpose": "climax",
+            "sequence_id": "seq3",
+            "setting_id": "cua_benh_vien_sang_som",
+            "shot_ids": [
+              "sh8",
+              "sh9"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 3407352092,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1",
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc3",
+              "sc4"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "climax",
+            "role": "climax",
+            "scene_ids": [
+              "sc5"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "Căn phòng chờ bệnh viện với ánh đèn lạnh lẽo và cửa sổ kính.",
+            "id": "benh_vien_phong_cho",
+            "name": "bệnh viện phòng chờ",
+            "scene_kind": "hospital",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Phòng cấp cứu với thiết bị y tế và ánh sáng mạnh.",
+            "id": "phong_cap_cuu",
+            "name": "phòng cấp cứu",
+            "scene_kind": "hospital",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Hành lang bệnh viện yên tĩnh với những bức tường trắng.",
+            "id": "hanh_lang_benh_vien",
+            "name": "hành lang bệnh viện",
+            "scene_kind": "hospital",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Phòng trực với ánh đèn vàng và cửa sổ nhìn ra mưa.",
+            "id": "phong_truc_dem",
+            "name": "phòng trực đêm",
+            "scene_kind": "hospital",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Cửa bệnh viện với ánh sáng mặt trời rực rỡ sau cơn bão.",
+            "id": "cua_benh_vien_sang_som",
+            "name": "cửa bệnh viện sáng sớm",
+            "scene_kind": "hospital",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh2",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh3",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "profile",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh4",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh5",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "wide",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh6",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc4",
+            "shot_size": "medium",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "low",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh7",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "high",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "profile",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh8",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc5",
+            "shot_size": "wide",
+            "visual_id": "v5"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh9",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc5",
+            "shot_size": "wide",
+            "visual_id": "v5"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Đêm dài chờ đợi",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hương và Minh đứng đối diện nhau trong căn phòng trực, ánh đèn lạnh lẽo phản chiếu lên những tấm kính cửa sổ. Cơn bão ngoài kia như muốn xé toạc mọi thứ, nhưng bên trong, không khí căng thẳng còn lớn hơn cả thiên nhiên."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "huong",
+                "text": "Đêm nay có vẻ sẽ dài lắm."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Chúng ta đã quen rồi."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Một bé gái bị tai nạn xe đạp được đưa vào trong tình trạng nguy kịch. Đôi mắt của Hương lóe lên quyết tâm khi cô bắt tay vào cứu chữa. Minh, với sự điềm tĩnh chín chắn, đứng bên cạnh hỗ trợ."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "huong",
+                "text": "Minh, cần máu nhóm B ngay!"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Đã gọi phòng máu, họ đang mang lên."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hai con người, từng thân thuộc như hơi thở, giờ lại phối hợp nhịp nhàng như không hề có sự chia cắt nào. Phía ngoài, tiếng sấm rền vang như nhịp trống giục giã."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Giờ đây, trong khoảnh khắc ngắn ngủi của sự yên lặng, Hương và Minh đứng cạnh nhau, mệt mỏi nhưng không thể phủ nhận sự hòa hợp khi cùng cứu sống bé gái ấy."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "huong",
+                "text": "Em không nghĩ mình có thể làm được nếu không có anh."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Anh cũng vậy. Chúng ta từng là đội tốt nhất."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Lời nói của Minh như mở ra một cánh cửa cũ, nơi kỷ niệm ùa về như dòng nước lũ. Nhưng liệu có nên bước qua không?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cơn bão đã giảm bớt, nhưng cả hai vẫn còn thức. Họ ngồi cùng nhau, nhìn ra màn mưa ngoài cửa sổ. Một cuộc đối thoại đã lâu không diễn ra, mà giờ đây, cảm giác như một điều tất yếu phải xảy ra."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "huong",
+                "text": "Anh còn giận em vì chuyện đó không?"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Không, chỉ là anh chưa bao giờ hiểu tại sao em lại rời đi."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Những lời nói ấy như chìa khóa mở ra tất cả. Họ bắt đầu chia sẻ, từng lời từng câu, để hiểu và hàn gắn những gì đã mất. Cơn bão ngoài kia dần tan, để lại bầu trời sáng hơn."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Bầu trời sau bão trong trẻo lạ thường. Minh và Hương bước ra khỏi bệnh viện, ánh nắng ấm áp chiếu sáng lên khuôn mặt họ."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "huong",
+                "text": "Chúng ta có thể làm lại từ đầu không?"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "minh",
+                "text": "Chúng ta sẽ là đội tốt nhất, lần này anh hứa."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v5"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Họ nắm tay nhau, bước đi dưới ánh mặt trời, để lại đằng sau cơn bão và những hiểu lầm. Một khởi đầu mới đang chờ đợi phía trước."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v5"
+          }
+        ],
+        "tone": "tình cảm",
+        "topic": "Câu chuyện tình yêu giữa Hương và Minh",
+        "visuals": [
+          {
+            "character_ids": [
+              "huong",
+              "minh"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "benh_vien_phong_cho",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "huong",
+              "minh"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "phong_cap_cuu",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "huong",
+              "minh"
+            ],
+            "id": "v3",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "hanh_lang_benh_vien",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "huong",
+              "minh"
+            ],
+            "id": "v4",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "phong_truc_dem",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "huong",
+              "minh"
+            ],
+            "id": "v5",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "cua_benh_vien_sang_som",
+            "tier": "medium"
+          }
+        ]
+      }
+    }
+  }
+}
