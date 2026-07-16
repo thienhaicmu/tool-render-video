@@ -197,6 +197,33 @@ def validate_understanding(u: StoryUnderstanding, chapter: str) -> dict:
     return rep
 
 
+def apply_quote_fixes(u: StoryUnderstanding, raw: "str | None") -> int:
+    """Merge a Call-1-repair response (``{"events":[{"id","quote"}]}``) into ``u``:
+    replace ONLY the quote of each named event and reset its verification state
+    (the caller re-runs validate_understanding). Returns the number of events
+    updated; 0 on malformed input. Never raises (Phase 2, 2026-07-16)."""
+    try:
+        data = _extract_json_object(raw or "")
+        if data is None:
+            return 0
+        fixes: dict[str, str] = {}
+        for item in (data.get("events") or []):
+            if isinstance(item, dict) and _s(item.get("id")) and _s(item.get("quote")):
+                fixes[_s(item.get("id"))] = _s(item.get("quote"))
+        n = 0
+        for ev in u.events:
+            q = fixes.get(ev.id)
+            if q and q != ev.quote:
+                ev.quote = q
+                ev.verified = False
+                ev.src_pos = -1
+                n += 1
+        return n
+    except Exception as exc:
+        logger.info("story_understanding: quote-fix merge error %s", exc)
+        return 0
+
+
 def understanding_block(u: StoryUnderstanding) -> str:
     """Render the compact FACTS block the Writer prompt embeds: characters, then the
     ordered event checklist (verified events only keep their order guarantee, but ALL
@@ -454,4 +481,5 @@ def _slug(name: str) -> str:
 
 __all__ = ["StoryUnderstanding", "UEvent", "parse_understanding", "validate_understanding",
            "understanding_block", "validate_script", "script_spoken_chars",
-           "understanding_gate", "script_gate", "validate_plan_coverage"]
+           "understanding_gate", "script_gate", "validate_plan_coverage",
+           "apply_quote_fixes"]

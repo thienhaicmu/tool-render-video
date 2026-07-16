@@ -335,13 +335,29 @@ def generate_story_plan_v2(
     model: Optional[str] = None,
     resolve_key: Optional[Callable[[str], str]] = None,
     observer: "Optional[Callable[[dict], None]]" = None,
+    cancel_event: "Optional[object]" = None,
+    quality_mode: str = "",
 ) -> Optional["StoryPlan"]:
     """Story v2 — ONE super call → StoryPlan v2. Three specialised prompts by use-case:
     idea → P3 (write to length); paste + base video → P2 (narrate over video); paste →
     P1 (adapt → SVG). GPT-centric
     default; super model from ``STORY_SUPER_MODEL`` (gpt-4o, big context). Returns a
-    StoryPlan or None (Sacred Contract #3 — never raises)."""
-    from app.features.render.ai.llm.story_director_v2 import run_super_plan
+    StoryPlan or None (Sacred Contract #3 — never raises).
+
+    ``cancel_event`` (Phase 2, 2026-07-16): a ``threading.Event``; once set, no
+    further LLM request is dispatched for this job (checked before every physical
+    call). The job also runs under the STORY_MAX_LLM_CALLS_PER_PLAN budget.
+
+    ``quality_mode`` (Phase 4): ``economy`` (everything on the mini tier +
+    structure by CODE — 2 calls paste / 1 call idea) | ``balanced`` (default —
+    mini Understanding/Structure, super Writer) | ``premium`` (super model for
+    all three calls). Falls back to STORY_QUALITY_MODE env when empty."""
+    from app.features.render.ai.llm.story_director_v2 import (
+        run_super_plan, begin_plan_run, end_plan_run,
+    )
+    # Armed here, disarmed at EVERY return below — worker threads are pooled and
+    # a leaked budget/cancel would throttle unrelated later calls on the thread.
+    begin_plan_run(cancel_event)
     if ceiling is None:
         try:
             ceiling = int(os.getenv("STORY_MAX_IMAGES", "15") or 15)
@@ -384,6 +400,27 @@ def generate_story_plan_v2(
                 return api_key if _p == primary else ""
         return api_key
 
+    # Phase 3 (2026-07-16 cost review): Understanding is an extraction task and
+    # Structure is a keep-it-verbatim transform — both run fine on the mini tier
+    # (~16× cheaper) while the WRITER keeps the strong model (the prose IS the
+    # product). Their bounded repairs ride the same routes automatically
+    # (quote-repair → understanding route, JSON-repair → structure route,
+    # writer-repair/continuation → writer route). An EXPLICIT user model pins
+    # all three roles as before; per-role STORY_*_MODEL env still wins; only
+    # OpenAI gets the mini name (other providers keep their own defaults).
+    # Kill-switch: STORY_MINI_ROUTING=0 restores the single-model default.
+    # Phase 4: quality mode widens/narrows the mini set — economy rides mini for
+    # ALL roles (structure is by-code anyway), premium disables the mini tier.
+    _qmode = (quality_mode or os.getenv("STORY_QUALITY_MODE", "balanced") or "balanced").strip().lower()
+    if _qmode not in ("economy", "balanced", "premium"):
+        _qmode = "balanced"
+    _mini_model: "Optional[str]" = None
+    if (_explicit_model is None and _qmode != "premium"
+            and os.getenv("STORY_MINI_ROUTING", "1") == "1"):
+        _mini_model = (os.getenv("STORY_MINI_MODEL", "gpt-4o-mini") or "").strip() or "gpt-4o-mini"
+    _mini_roles = (("understanding", "structure", "writer") if _qmode == "economy"
+                   else ("understanding", "structure"))
+
     def _role_route(role: str, fallback_provider: str,
                     fallback_model: "Optional[str]") -> "tuple[str, Optional[str]]":
         if os.getenv("STORY_ROLE_ROUTING", "1") == "0":
@@ -393,12 +430,33 @@ def generate_story_plan_v2(
         if routed_provider not in SUPPORTED_PROVIDERS:
             routed_provider = fallback_provider
         routed_model = (os.getenv(f"{prefix}_MODEL", "") or "").strip() or None
+        if (routed_model is None and _mini_model
+                and role in _mini_roles
+                and routed_provider == "openai"):
+            routed_model = _mini_model
         if routed_model is None:
             routed_model = fallback_model if routed_provider == fallback_provider else _model_for(routed_provider)
         return routed_provider, routed_model
 
+    # Phase 1 (2026-07-16 cost review): Story PINS its provider by default. The
+    # global cross-provider chain re-ran the WHOLE compiler on providers whose
+    # models were never tuned for it (observed: a 448s Gemini fallback that
+    # produced the legacy plan anyway) — burning full-pipeline cost for a worse
+    # result. STORY_PROVIDER_FALLBACK=1 restores the old chain behaviour; a
+    # primary disabled via LLM_DISABLED_PROVIDERS still falls through the chain
+    # so the render keeps a usable provider.
+    if os.getenv("STORY_PROVIDER_FALLBACK", "0") == "1":
+        _story_chain = _provider_chain(primary)
+    elif primary in _disabled_providers():
+        _story_chain = _provider_chain(primary)
+    else:
+        _story_chain = [primary]
     attempted_routes: set[tuple[str, str]] = set()
-    for _p in _provider_chain(primary):
+    for _p in _story_chain:
+        if cancel_event is not None and getattr(cancel_event, "is_set", lambda: False)():
+            logger.info("llm: generate_story_plan_v2 cancelled — stopping provider chain")
+            end_plan_run()
+            return None
         structure_p, structure_model = _role_route("structure", _p, _model_for(_p))
         route_key = (structure_p, structure_model or "provider_default")
         if route_key in attempted_routes:
@@ -407,7 +465,10 @@ def generate_story_plan_v2(
         structure_key = _key_for(structure_p)
         if not structure_key:
             continue
-        writer_p, writer_model = _role_route("writer", structure_p, structure_model)
+        # Writer falls back to the SUPER model (not structure's routed model —
+        # since Phase 3 that may be the mini tier, and the Writer must never
+        # silently ride it; STORY_WRITER_MODEL is the explicit override).
+        writer_p, writer_model = _role_route("writer", structure_p, _model_for(structure_p))
         understand_p, understand_model = _role_route("understanding", structure_p, structure_model)
         routes = {
             "understanding": {"provider": understand_p, "model": understand_model or "provider_default"},
@@ -449,7 +510,7 @@ def generate_story_plan_v2(
                 writer_provider_label=writer_p, writer_model_label=(writer_model or "provider_default"),
                 json_provider_label=understand_p, json_model_label=(understand_model or "provider_default"),
                 writer_call_fn=writer_call_fn, json_call_fn=json_call_fn,
-                observer=observer,
+                quality_mode=_qmode, observer=observer,
             )
         except Exception as exc:
             logger.warning("llm: generate_story_plan_v2 provider=%s raised %s", structure_p, exc)
@@ -470,8 +531,10 @@ def generate_story_plan_v2(
             if structure_p != primary:
                 logger.info("llm: story-plan-v2 fallback succeeded provider=%s (primary=%s None)",
                             structure_p, primary)
+            end_plan_run()
             return plan
     logger.warning("llm: generate_story_plan_v2 produced no plan")
+    end_plan_run()
     return None
 
 

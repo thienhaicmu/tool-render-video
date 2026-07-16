@@ -191,6 +191,25 @@ def _is_transient(exc: BaseException) -> bool:
             or "timed out" in s or "timeout" in s or "500 " in s)
 
 
+def is_billing_safe_retry(exc: BaseException) -> bool:
+    """True when re-sending the request cannot double-bill (Story cost review
+    2026-07-16): the provider REJECTED it before generation (429 rate limit,
+    5xx rejection) or the connection failed. A read-TIMEOUT is NOT safe — the
+    server keeps generating and bills the aborted request, so a blind retry
+    pays twice for the same output. Callers of long, expensive generations pass
+    this as ``should_retry`` so timeouts salvage/fail instead of re-buying."""
+    try:
+        if _is_rate_limit(exc):
+            return True
+        s = str(exc).lower()
+        if "timed out" in s or "timeout" in s:
+            return False
+        return ("connection" in s or "503" in s or "502" in s or "500 " in s
+                or "unavailable" in s or "overloaded" in s or "dns" in s)
+    except Exception:
+        return False
+
+
 def call_with_retry(
     fn: Callable[[], T],
     *,
@@ -200,6 +219,7 @@ def call_with_retry(
     retry_after_cap_sec: float = DEFAULT_RETRY_AFTER_CAP_SEC,
     on_rate_limit: "Optional[Callable[[BaseException], None]]" = None,
     on_error: "Optional[Callable[[BaseException], None]]" = None,
+    should_retry: "Optional[Callable[[BaseException], bool]]" = None,
 ) -> Optional[T]:
     """Run ``fn`` up to ``max_attempts`` times, honouring Retry-After.
 
@@ -208,6 +228,12 @@ def call_with_retry(
     propagates the exception.
 
     ``label`` is the provider name used in log lines, e.g. ``"claude"``.
+
+    ``should_retry`` (optional): predicate deciding whether a raised exception
+    is worth another attempt. When it returns False the loop stops immediately
+    (billing-safe policy for expensive generations — see
+    :func:`is_billing_safe_retry`). Default None = legacy behaviour (retry any
+    exception up to ``max_attempts``).
     """
     assert max_attempts >= 1
     last_exc: Optional[BaseException] = None
@@ -231,6 +257,17 @@ def call_with_retry(
                     on_rate_limit(exc)
                 except Exception:
                     pass
+            if should_retry is not None:
+                try:
+                    _worth_retry = bool(should_retry(exc))
+                except Exception:
+                    _worth_retry = True
+                if not _worth_retry:
+                    logger.warning(
+                        "%s_client: non-retryable failure after attempt %d (billing-safe "
+                        "policy) — %s", label, attempt, exc,
+                    )
+                    return None
             if attempt >= max_attempts:
                 # Match the pre-existing pattern: swallow and return None.
                 logger.warning(

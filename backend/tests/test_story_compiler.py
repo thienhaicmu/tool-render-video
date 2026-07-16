@@ -329,6 +329,10 @@ def test_compiler_trace_reports_physical_calls_and_selected_mode(monkeypatch):
 def test_compiler_rejects_structure_that_drops_script(monkeypatch):
     monkeypatch.delenv("STORY_COMPILER", raising=False)
     monkeypatch.setenv("STORY_IDEA_EXPAND_TRIES", "0")
+    # Phase 4: the default structure failure path is now the CODE structurer —
+    # pin the PRE-Phase-4 legacy fallback explicitly (this test asserts the
+    # rejection + legacy path, covered by test_story_phase4 for the new default).
+    monkeypatch.setenv("STORY_STRUCTURE_BY_CODE", "0")
     calls = []
 
     def structure(sysm, user):
@@ -342,7 +346,10 @@ def test_compiler_rejects_structure_that_drops_script(monkeypatch):
         observer=events.append,
     )
     assert plan is not None
-    assert calls == ["structure", "structure"]
+    # Phase 2 (2026-07-16): a coverage rejection now retries the STRUCTURE call
+    # once (the approved script is reused) before falling back to legacy — the
+    # same failing fake is hit three times: attempt, bounded retry, legacy pass.
+    assert calls == ["structure", "structure", "structure"]
     assert any(e["event"] == "validation" and e.get("stage") == "structure"
                and not e.get("passed") for e in events)
     assert any(e["event"] == "compiler_fallback" for e in events)

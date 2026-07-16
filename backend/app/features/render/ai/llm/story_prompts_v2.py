@@ -735,6 +735,41 @@ def build_understanding_prompt(chapter: str, language: str = "vi") -> "tuple[str
     return _SYS_UNDERSTAND, user
 
 
+_SYS_UNDERSTAND_REPAIR = (
+    "You are a meticulous literary analyst CORRECTING quote citations. For each event you "
+    "receive, its quote was NOT found verbatim in the source (it was paraphrased or edited). "
+    "Locate each event's passage in the source and copy an EXACT substring for it — "
+    "character-for-character, same language, same punctuation. " + _JSON_TAIL
+)
+
+
+def build_understanding_repair_prompt(chapter: str, bad_events: "list[dict]",
+                                      language: str = "vi") -> "tuple[str, str]":
+    """Call 1-repair (Phase 2, 2026-07-16) — targeted: ONLY the unverified events are
+    named; the model returns corrected verbatim quotes for exactly those ids. Bounded
+    to ONE round by the director; merged via story_understanding.apply_quote_fixes."""
+    rows = []
+    for ev in (bad_events or []):
+        eid = str(ev.get("id") or "").strip()
+        if not eid:
+            continue
+        rows.append(f'- id "{eid}": {str(ev.get("summary") or "")[:160]}\n'
+                    f'  rejected quote: {str(ev.get("quote") or "")[:180]}')
+    user = (
+        "═══ OUTPUT SCHEMA (return ONLY this one JSON object) ═══\n"
+        '{ "events": [ { "id": "<same id>", '
+        '"quote": "<EXACT substring copied from the source, 30-160 chars, from THIS event\'s passage>" } ] }\n'
+        "\n═══ EVENTS WITH REJECTED QUOTES ═══\n" + ("\n".join(rows) or "-")
+        + "\n\n═══ HARD RULES ═══\n"
+        "1. ONE JSON object, one entry per event id above — no extra events, no prose.\n"
+        "2. Each quote is copied VERBATIM from the source below. Never paraphrase, never "
+        "'fix' punctuation or quotation marks.\n"
+        "3. Pick the passage that MATCHES the event's summary.\n"
+        "\n═══ SOURCE STORY ═══\n" + _fit(chapter) + "\n\n═══ OUTPUT JSON ═══"
+    )
+    return _SYS_UNDERSTAND_REPAIR, user
+
+
 # ── Call 2: Writer (prose script) ─────────────────────────────────────────────
 # Genre style packs — voice guidance merged into the writer prompt. Keys cover the
 # FE GENRE_PRESETS + domain genre_key tokens; unknown/empty → the neutral pack.
@@ -938,10 +973,15 @@ def build_structure_prompt(script: str, language: str = "vi", art_style: str = "
                            ceiling: int = 15, genre: str = "",
                            characters: "list[dict] | None" = None,
                            prior_context: str = "", library_catalog: str = "",
-                           fact_context: str = "") -> "tuple[str, str]":
+                           fact_context: str = "",
+                           retry_reasons: str = "") -> "tuple[str, str]":
     """Call 3 — (system, user) to structure the SCRIPT into a StoryPlan v2. Reuses the
     battle-tested schema/rules machinery (multiline schema when active, pacing labels,
-    library-pick, vocab, self-check); only the METHOD + SOURCE differ from P1."""
+    library-pick, vocab, self-check); only the METHOD + SOURCE differ from P1.
+
+    ``retry_reasons`` (Phase 2, 2026-07-16): the coverage-gate reasons of a REJECTED
+    previous attempt. The director re-runs THIS call once with them instead of
+    discarding the whole (already paid) compiler run. "" → byte-identical prompt."""
     lang_name = _lang_name(language)
     if _multiline():
         mapping = (
@@ -965,8 +1005,17 @@ def build_structure_prompt(script: str, language: str = "vi", art_style: str = "
     )
     style_line = f"ART STYLE HINT: {art_style.strip()}\n" if (art_style or "").strip() else ""
     genre_line = f"GENRE: {genre.strip()}\n" if (genre or "").strip() else ""
+    retry_block = ""
+    if (retry_reasons or "").strip():
+        retry_block = (
+            "═══ PREVIOUS ATTEMPT REJECTED — your last plan failed these checks; fix ALL of them ═══\n"
+            + retry_reasons.strip()
+            + "\nKeep the approved script's wording VERBATIM and in its original ORDER; do not "
+            "drop scenes or lines; mark the opening hook beat.\n\n"
+        )
     user = (
         f"NARRATION LANGUAGE: {lang_name}\n{genre_line}{style_line}"
+        + retry_block
         + method
         + _character_table(list(characters or []))
         + _facts_block(fact_context)
@@ -986,4 +1035,4 @@ __all__ = ["build_super_story_prompt", "build_super_video_prompt", "build_super_
            # GĐ1 Story Compiler
            "compiler_enabled", "build_understanding_prompt",
            "build_writer_adapt_prompt", "build_writer_idea_prompt", "build_writer_repair_prompt",
-           "build_structure_prompt"]
+           "build_structure_prompt", "build_understanding_repair_prompt"]

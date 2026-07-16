@@ -55,8 +55,9 @@ def test_story_plan_retry_on_empty(monkeypatch):
 def test_story_plan_no_retry_when_disabled(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEYS", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "solo")
-    # Reload flag via monkeypatch on the resolved module constant.
-    monkeypatch.setattr(oai, "_STORY_PLAN_RETRY_EMPTY", False)
+    # Phase 1 (2026-07-16): the flag is a call-time env read and defaults OFF —
+    # unset env pins the new no-retry default.
+    monkeypatch.delenv("OPENAI_STORY_PLAN_RETRY_EMPTY", raising=False)
     monkeypatch.setattr(oai, "llm_cache_get", lambda *a, **k: None)
     monkeypatch.setattr(oai, "llm_cache_put", lambda *a, **k: True)
 

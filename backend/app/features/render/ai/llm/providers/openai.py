@@ -11,13 +11,15 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Optional
 
 from app.features.render.ai.llm.key_pool import call_with_key_rotation, pool_for
 from app.features.render.ai.llm.cache import llm_cache_get, llm_cache_put
 from app.features.render.ai.llm.parser import parse_render_plan_response
 from app.features.render.ai.llm.prompts import build_render_plan_prompt
-from app.features.render.ai.llm.retry import call_with_retry
+from app.features.render.ai.llm.retry import call_with_retry, is_billing_safe_retry
+from app.features.render.ai.llm.usage import record_usage, record_usage_obj
 from app.features.render.ai.llm.rewrite_prompts import build_rewrite_prompt, _compute_word_budget
 from app.features.render.ai.llm.rewrite_parser import parse_rewrite_response
 from app.features.render.ai.llm.recap_prompts import build_recap_prompt, build_story_model_prompt
@@ -565,6 +567,7 @@ def _call_openai_content_once(api_key: str, model: str, system_prompt: str, user
         kwargs["max_tokens"] = _CONTENT_MAX_TOKENS
         kwargs["temperature"] = _CONTENT_TEMPERATURE
     resp = client.chat.completions.create(**kwargs)
+    record_usage_obj("openai", model, getattr(resp, "usage", None))
     return resp.choices[0].message.content
 
 
@@ -607,7 +610,91 @@ def _call_openai_content(api_key: str, model: str, system_prompt: str, user_prom
 # call (they have no story-specific tuning yet) — see llm._get_story_call_fn.
 _STORY_PLAN_MAX_TOKENS = int(os.getenv("OPENAI_STORY_PLAN_MAX_TOKENS", "16384"))
 _STORY_PLAN_TEMPERATURE = float(os.getenv("OPENAI_STORY_PLAN_TEMPERATURE", "0.4"))
-_STORY_PLAN_RETRY_EMPTY = os.getenv("OPENAI_STORY_PLAN_RETRY_EMPTY", "1") == "1"
+
+
+def _retry_empty_enabled() -> bool:
+    """Call-time env read; default OFF since streaming landed (2026-07-16 cost
+    review). Pre-streaming, an empty response was often a transport hiccup and
+    one blind re-buy was cheap insurance (F-09). With streaming + salvage, an
+    empty stream is a genuine safety trim / hard failure — re-sending the same
+    prompt usually re-buys the same nothing. OPENAI_STORY_PLAN_RETRY_EMPTY=1
+    restores the old behaviour."""
+    return os.getenv("OPENAI_STORY_PLAN_RETRY_EMPTY", "0") == "1"
+
+
+# ── "Wait for the output, never timeout-then-rebuy" (Phase 1, 2026-07-16) ─────
+# The Story planner's Writer/Structure responses run to 16K tokens — several
+# MINUTES of generation. The old whole-response deadlines (120s/180s) tripped
+# mid-generation; OpenAI still finished AND BILLED the aborted request, then the
+# SDK's silent default (max_retries=2) re-sent it — paying up to 3× for one
+# output, invisibly to the observer. Story calls now stream (the timeout that
+# remains is per-chunk IDLE, not whole-response), disable SDK auto-retry, and
+# treat a mid-generation break as SALVAGE, never as a retry trigger.
+_STORY_STREAM = os.getenv("OPENAI_STORY_STREAM", "1") == "1"
+_STORY_IDLE_TIMEOUT_SEC = float(os.getenv("OPENAI_STORY_IDLE_TIMEOUT_SEC", "60"))
+_STORY_TOTAL_TIMEOUT_SEC = float(os.getenv("OPENAI_STORY_TOTAL_TIMEOUT_SEC", "600"))
+
+
+def _story_client(api_key: str, streaming: bool):
+    """OpenAI client for the LONG story calls. ``max_retries=0`` always — every
+    retry must go through our billing-aware policy and be visible to the
+    observer. Streaming: timeout = per-chunk idle window; non-streaming
+    (env kill-switch / stream-open failure): one generous whole-response
+    deadline instead of the old 120/180s."""
+    if streaming:
+        try:
+            import httpx
+            t = httpx.Timeout(connect=10.0, read=_STORY_IDLE_TIMEOUT_SEC,
+                              write=30.0, pool=10.0)
+            return _openai.OpenAI(api_key=api_key, timeout=t, max_retries=0)
+        except Exception:
+            pass
+    return _openai.OpenAI(api_key=api_key, timeout=_STORY_TOTAL_TIMEOUT_SEC, max_retries=0)
+
+
+def _stream_chat_text(client, kwargs: dict, *, label: str):
+    """Stream one chat.completions request → ``(text, finish_reason, usage)``.
+
+    Raises ONLY when nothing was received (pre-stream failure — safe for the
+    caller's retry policy to classify). A break AFTER real content returns the
+    partial text instead: the request is already billed server-side, so the
+    salvage path (parser + repair) is strictly cheaper than re-buying."""
+    stream = client.chat.completions.create(
+        stream=True, stream_options={"include_usage": True}, **kwargs)
+    parts: "list[str]" = []
+    finish = None
+    usage = None
+    deadline = time.monotonic() + _STORY_TOTAL_TIMEOUT_SEC
+    try:
+        for chunk in stream:
+            if getattr(chunk, "usage", None):
+                usage = chunk.usage
+            choices = getattr(chunk, "choices", None) or []
+            if choices:
+                delta = getattr(choices[0], "delta", None)
+                piece = getattr(delta, "content", None) if delta is not None else None
+                if piece:
+                    parts.append(piece)
+                fr = getattr(choices[0], "finish_reason", None)
+                if fr:
+                    finish = fr
+            if time.monotonic() > deadline:
+                logger.warning(
+                    "openai_client: %s stream exceeded total budget %.0fs — salvaging %d chars",
+                    label, _STORY_TOTAL_TIMEOUT_SEC, sum(len(p) for p in parts))
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+                break
+    except Exception as exc:
+        if not parts:
+            raise
+        logger.warning(
+            "openai_client: %s stream broke mid-generation (%s) — salvaging %d chars "
+            "(NO retry: the request is already billed)",
+            label, exc, sum(len(p) for p in parts))
+    return "".join(parts), finish, usage
 # F-05: native structured output (strict JSON Schema) for the super-plan. Default
 # ON; set OPENAI_STORY_JSON_SCHEMA=0 to revert to plain JSON-mode. On any schema
 # error (unsupported model / API rejection) the call auto-degrades to json_object
@@ -626,8 +713,9 @@ def _story_response_format(use_schema: bool) -> dict:
 def _story_plan_create(api_key: str, model: str, system_prompt: str, user_prompt: str,
                        use_schema: bool) -> Optional[str]:
     """One super-plan create() with the chosen response_format. Returns raw content
-    EVEN IF truncated (repair can salvage) but WARNs on finish_reason=length (F-04)."""
-    client = _openai.OpenAI(api_key=api_key, timeout=120)
+    EVEN IF truncated (repair can salvage) but WARNs on finish_reason=length (F-04).
+    Streams by default (OPENAI_STORY_STREAM) — the whole-response 120s deadline
+    used to trip mid-generation on big plans and re-buy the request."""
     kwargs = dict(
         model=model,
         messages=[
@@ -643,15 +731,24 @@ def _story_plan_create(api_key: str, model: str, system_prompt: str, user_prompt
     else:
         kwargs["max_tokens"] = _STORY_PLAN_MAX_TOKENS
         kwargs["temperature"] = _STORY_PLAN_TEMPERATURE
-    resp = client.chat.completions.create(**kwargs)
-    choice = resp.choices[0]
-    if getattr(choice, "finish_reason", None) == "length":
+    if _STORY_STREAM:
+        client = _story_client(api_key, streaming=True)
+        text, finish, usage = _stream_chat_text(client, kwargs, label="story-plan")
+        record_usage_obj("openai", model, usage)
+    else:
+        client = _story_client(api_key, streaming=False)
+        resp = client.chat.completions.create(**kwargs)
+        record_usage_obj("openai", model, getattr(resp, "usage", None))
+        choice = resp.choices[0]
+        text = choice.message.content
+        finish = getattr(choice, "finish_reason", None)
+    if finish == "length":
         logger.warning(
             "openai_client: story-plan TRUNCATED (finish_reason=length, max_tokens=%d) — "
             "plan may be incomplete; raise OPENAI_STORY_PLAN_MAX_TOKENS or split the chapter",
             _STORY_PLAN_MAX_TOKENS,
         )
-    return choice.message.content
+    return text
 
 
 def _call_openai_story_plan_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
@@ -691,16 +788,14 @@ def _call_openai_story_plan(api_key: str, model: str, system_prompt: str, user_p
             )
         return call_with_retry(
             lambda: _call_openai_story_plan_once(api_key, model, system_prompt, user_prompt),
-            label="openai-story-plan",
+            label="openai-story-plan", should_retry=is_billing_safe_retry,
         )
 
     result = _run()
-    # F-09: call_with_retry deliberately does NOT re-attempt a None (non-raising)
-    # result to avoid doubling cost — but a fully EMPTY super-plan response is a
-    # total failure (safety trim / hiccup) where ONE extra attempt is cheap
-    # insurance vs. failing the whole render. Opt out with
-    # OPENAI_STORY_PLAN_RETRY_EMPTY=0.
-    if not result and _STORY_PLAN_RETRY_EMPTY:
+    # F-09 (default flipped OFF 2026-07-16): with streaming + salvage an empty
+    # result is a genuine hard failure — a blind re-buy usually re-buys the same
+    # nothing. OPENAI_STORY_PLAN_RETRY_EMPTY=1 restores the old one-retry.
+    if not result and _retry_empty_enabled():
         logger.info("openai_client: story-plan empty — one retry-on-empty")
         result = _run()
     if result is not None:
@@ -728,6 +823,11 @@ def _story_cache_namespace() -> str:
 # namespace is versioned like the story-plan one so a prompt bump invalidates it.
 _STORY_WRITER_MAX_TOKENS = int(os.getenv("OPENAI_STORY_WRITER_MAX_TOKENS", "16384"))
 _STORY_WRITER_TEMPERATURE = float(os.getenv("OPENAI_STORY_WRITER_TEMPERATURE", "0.8"))
+# Phase 1 (2026-07-16): a Writer cut at max_tokens used to WARN and ship a
+# tail-less script — which then FAILED the script gate and re-bought the whole
+# compiler via the legacy fallback. One bounded continuation round ("keep
+# writing from where you stopped") finishes the script for a fraction of that.
+_STORY_WRITER_CONTINUE = os.getenv("OPENAI_STORY_WRITER_CONTINUE", "1") == "1"
 
 
 def _writer_cache_namespace() -> str:
@@ -738,9 +838,29 @@ def _writer_cache_namespace() -> str:
         return "openai-story-writer"
 
 
+def _writer_request(client, kwargs: dict):
+    """One Writer request (streamed when enabled) → (text, finish_reason, usage)."""
+    if _STORY_STREAM:
+        return _stream_chat_text(client, kwargs, label="story-writer")
+    resp = client.chat.completions.create(**kwargs)
+    choice = resp.choices[0]
+    return choice.message.content or "", getattr(choice, "finish_reason", None), \
+        getattr(resp, "usage", None)
+
+
+def _usage_tokens(usage) -> "tuple[int, int]":
+    try:
+        return int(getattr(usage, "prompt_tokens", 0) or 0), \
+            int(getattr(usage, "completion_tokens", 0) or 0)
+    except Exception:
+        return 0, 0
+
+
 def _call_openai_writer_once(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
-    """One prose Writer call — raises on SDK error (retry/rotation wraps it)."""
-    client = _openai.OpenAI(api_key=api_key, timeout=180)
+    """One prose Writer call — raises on SDK error (retry/rotation wraps it).
+    Streams by default; a finish_reason=length cut gets ONE continuation round
+    instead of shipping a tail-less script into the gate."""
+    client = _story_client(api_key, streaming=_STORY_STREAM)
     kwargs = dict(
         model=model,
         messages=[
@@ -755,15 +875,39 @@ def _call_openai_writer_once(api_key: str, model: str, system_prompt: str, user_
     else:
         kwargs["max_tokens"] = _STORY_WRITER_MAX_TOKENS
         kwargs["temperature"] = _STORY_WRITER_TEMPERATURE
-    resp = client.chat.completions.create(**kwargs)
-    choice = resp.choices[0]
-    if getattr(choice, "finish_reason", None) == "length":
+    text, finish, usage = _writer_request(client, kwargs)
+    in_tok, out_tok = _usage_tokens(usage)
+    if finish == "length" and _STORY_WRITER_CONTINUE and (text or "").strip():
+        logger.info(
+            "openai_client: story-writer hit max_tokens=%d — one continuation round",
+            _STORY_WRITER_MAX_TOKENS)
+        try:
+            cont_kwargs = dict(kwargs)
+            cont_kwargs["messages"] = list(kwargs["messages"]) + [
+                {"role": "assistant", "content": text},
+                {"role": "user", "content":
+                    "Continue the script EXACTLY from where it stopped. Same format, "
+                    "same language. Do not repeat any earlier text, do not summarise — "
+                    "just keep writing until the story's ending."},
+            ]
+            more, cont_finish, cont_usage = _writer_request(client, cont_kwargs)
+            if (more or "").strip():
+                text = text + ("" if text.endswith("\n") else "\n") + more
+                finish = cont_finish
+            c_in, c_out = _usage_tokens(cont_usage)
+            in_tok, out_tok = in_tok + c_in, out_tok + c_out
+        except Exception as exc:
+            logger.warning("openai_client: story-writer continuation failed (%s) — "
+                           "keeping the truncated script", exc)
+    if finish == "length":
         logger.warning(
             "openai_client: story-writer TRUNCATED (finish_reason=length, max_tokens=%d) — "
             "script tail may be missing; raise OPENAI_STORY_WRITER_MAX_TOKENS",
             _STORY_WRITER_MAX_TOKENS,
         )
-    return choice.message.content
+    if in_tok or out_tok:
+        record_usage("openai", model, in_tok, out_tok)
+    return text
 
 
 def _call_openai_writer(api_key: str, model: str, system_prompt: str, user_prompt: str) -> Optional[str]:
@@ -782,7 +926,7 @@ def _call_openai_writer(api_key: str, model: str, system_prompt: str, user_promp
     else:
         result = call_with_retry(
             lambda: _call_openai_writer_once(api_key, model, system_prompt, user_prompt),
-            label="openai-story-writer",
+            label="openai-story-writer", should_retry=is_billing_safe_retry,
         )
     if result is not None:
         llm_cache_put(_ns, model, system_prompt, user_prompt, result)

@@ -44,6 +44,43 @@ _MASTER_DIR = CACHE_DIR / "story_master"          # transparent character-master
 _TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
 _PLAN_RUN_DIR = APP_DATA_DIR / "story_plan_runs"
 _PLAN_RUN_CONTEXT = threading.local()
+# Phase 0 (2026-07-16): story_plan_runs/ lives OUTSIDE the cache root, so the
+# periodic cache pruner never touches it — every plan run leaked its artifacts
+# forever. Bounded here on each new run: TTL first, then oldest-first to a cap.
+_PLAN_RUNS_TTL_DAYS = float(os.getenv("STORY_PLAN_RUNS_TTL_DAYS", "14") or 14)
+_PLAN_RUNS_MAX = int(os.getenv("STORY_PLAN_RUNS_MAX", "200") or 200)
+
+
+def _prune_plan_run_dirs() -> None:
+    """Drop plan-run artifact dirs past the TTL, then oldest-first above the cap.
+    Best-effort — never raises, never touches the run being created."""
+    import shutil
+    try:
+        runs = [d for d in _PLAN_RUN_DIR.iterdir() if d.is_dir()]
+    except Exception:
+        return
+
+    def _mtime(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except Exception:
+            return 0.0
+
+    try:
+        now = time.time()
+        ttl_sec = _PLAN_RUNS_TTL_DAYS * 86400
+        runs.sort(key=_mtime)
+        kept: list[Path] = []
+        for d in runs:
+            if ttl_sec > 0 and now - _mtime(d) > ttl_sec:
+                shutil.rmtree(d, ignore_errors=True)
+            else:
+                kept.append(d)
+        excess = len(kept) - max(1, _PLAN_RUNS_MAX)
+        for d in kept[:max(0, excess)]:
+            shutil.rmtree(d, ignore_errors=True)
+    except Exception as exc:
+        logger.info("story: plan-run prune skipped: %s", exc)
 
 
 class _PlanRunObserver:
@@ -51,15 +88,18 @@ class _PlanRunObserver:
 
     _PHASE_LABELS = {
         "understanding": "Reading and verifying source facts",
+        "understanding_repair": "Re-verifying source quotes",
         "writer": "Writing the narration script",
         "writer_expand": "Expanding the narration script",
         "writer_repair": "Repairing missing story events",
         "structure": "Structuring the production plan",
+        "structure_retry": "Re-structuring the production plan",
         "structure_repair": "Repairing the production plan JSON",
         "legacy_plan": "Building the legacy production plan",
     }
 
     def __init__(self, run_id: str, job_id: str = "") -> None:
+        _prune_plan_run_dirs()
         self.run_id = run_id
         self.job_id = job_id
         self.run_dir = _PLAN_RUN_DIR / run_id
@@ -191,6 +231,9 @@ class StoryPlanRequest(BaseModel):
     ai_provider: Optional[str] = None
     llm_model: Optional[str] = None
     use_video: bool = False            # paste + base video → P2 (narrate over video) prompt
+    # Phase 4 (2026-07-16): economy (mini + structure-by-code, 2 calls paste/1 idea)
+    # | balanced (default) | premium (super model for all 3 calls). "" → env default.
+    quality_mode: str = ""
 
 
 @router.post("/plan")
@@ -217,6 +260,10 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     observer = getattr(_PLAN_RUN_CONTEXT, "observer", None)
     if observer is None:
         observer = _PlanRunObserver(uuid.uuid4().hex)
+    # Phase 2 (2026-07-16): the async runner parks the job's cancel Event on the
+    # same thread-local context as the observer; once set, no further LLM request
+    # is dispatched (checked in the director before every physical call).
+    cancel_event = getattr(_PLAN_RUN_CONTEXT, "cancel_event", None)
     observer({"event": "request_started", "ts": time.time(), "source": source,
               "source_chars": len(idea if source == "idea" else chapter)})
 
@@ -268,7 +315,13 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         # cross-provider fallback resolves only from its own per-provider/env key.
         resolve_key=lambda _p: _resolve_api_key(req, _p, allow_generic=(_p == provider))[0],
         observer=observer,
+        cancel_event=cancel_event,
+        quality_mode=(req.quality_mode or ""),
     )
+    if cancel_event is not None and cancel_event.is_set():
+        observer({"event": "run_failed", "ts": time.time(),
+                  "error": "Story planning cancelled"})
+        raise HTTPException(status_code=409, detail="Story planning cancelled")
     if plan is None or plan.is_empty() or plan.image_count() == 0:
         observer({"event": "run_failed", "ts": time.time(),
                   "error": "Story planning returned no usable plan"})
@@ -288,7 +341,8 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
     )
     _llm_cost = estimate_super_plan_cost(
         source_chars=_src_len, ceiling=_visual_count, model=(req.llm_model or "gpt-4o"),
-        source=source, has_base_video=bool(req.use_video and source == "paste"))
+        source=source, has_base_video=bool(req.use_video and source == "paste"),
+        quality_mode=(req.quality_mode or ""))
     # P3: soft semantic lint (non-mutating) so the FE Review can flag weak-plan
     # signals (orphan visuals, generic-look speakers, looping narration).
     _lint = lint_story_plan(plan)
@@ -342,6 +396,8 @@ def plan_storyboard(req: StoryPlanRequest) -> dict:
         "planning_trace": _trace,
         # Story imagery is V3-library based; the super-plan LLM is not free.
         "cost_preflight": {
+            "quality_mode": ((req.quality_mode or "").strip().lower()
+                             or (os.getenv("STORY_QUALITY_MODE", "balanced") or "balanced").strip().lower()),
             "visual_count": _visual_count,
             "character_count": len(plan.characters),
             "premium_image_count": 0,
@@ -470,6 +526,13 @@ def _prune_plan_jobs_locked() -> None:
 def _run_plan_job(job_id: str, req: "StoryPlanRequest") -> None:
     observer = _PlanRunObserver(job_id, job_id=job_id)
     _PLAN_RUN_CONTEXT.observer = observer
+    with _PLAN_JOBS_LOCK:
+        cancel_event = (_PLAN_JOBS.get(job_id) or {}).get("cancel")
+    _PLAN_RUN_CONTEXT.cancel_event = cancel_event
+
+    def _was_cancelled() -> bool:
+        return cancel_event is not None and cancel_event.is_set()
+
     try:
         result = plan_storyboard(req)          # reuse the sync logic verbatim
         with _PLAN_JOBS_LOCK:
@@ -479,20 +542,29 @@ def _run_plan_job(job_id: str, req: "StoryPlanRequest") -> None:
         observer({"event": "run_failed", "ts": time.time(), "error": str(he.detail)})
         with _PLAN_JOBS_LOCK:
             if job_id in _PLAN_JOBS:
-                _PLAN_JOBS[job_id].update(status="error", error=str(he.detail),
-                                          status_code=int(he.status_code))
+                if _was_cancelled():
+                    _PLAN_JOBS[job_id].update(status="cancelled",
+                                              error="cancelled by user", status_code=409)
+                else:
+                    _PLAN_JOBS[job_id].update(status="error", error=str(he.detail),
+                                              status_code=int(he.status_code))
     except Exception as exc:                   # defensive — never let the thread die silently
         observer({"event": "run_failed", "ts": time.time(), "error": "planning failed"})
         logger.warning("story plan job %s failed: %s", job_id, exc)
         with _PLAN_JOBS_LOCK:
             if job_id in _PLAN_JOBS:
-                _PLAN_JOBS[job_id].update(status="error", error="planning failed",
-                                          status_code=502)
+                if _was_cancelled():
+                    _PLAN_JOBS[job_id].update(status="cancelled",
+                                              error="cancelled by user", status_code=409)
+                else:
+                    _PLAN_JOBS[job_id].update(status="error", error="planning failed",
+                                              status_code=502)
     finally:
-        try:
-            delattr(_PLAN_RUN_CONTEXT, "observer")
-        except AttributeError:
-            pass
+        for attr in ("observer", "cancel_event"):
+            try:
+                delattr(_PLAN_RUN_CONTEXT, attr)
+            except AttributeError:
+                pass
 
 
 @router.post("/plan/async")
@@ -505,12 +577,33 @@ def plan_storyboard_async(req: StoryPlanRequest) -> dict:
         _prune_plan_jobs_locked()
         _PLAN_JOBS[job_id] = {
             "status": "running", "created": time.time(),
+            "cancel": threading.Event(),
             "progress": {"run_id": job_id, "status": "running", "phase": "queued",
                          "message": "Planning queued", "actual_llm_calls": 0, "events": []},
         }
     threading.Thread(target=_run_plan_job, args=(job_id, req),
                      name=f"story-plan-{job_id[:8]}", daemon=True).start()
     return {"plan_job_id": job_id, "status": "running"}
+
+
+@router.post("/plan/async/{job_id}/cancel")
+def plan_storyboard_async_cancel(job_id: str) -> dict:
+    """Cancel a running plan job (Phase 2, 2026-07-16). Sets the job's cancel
+    Event — the director stops dispatching NEW LLM requests before the next call
+    (an in-flight request finishes; it is already billed either way). Idempotent;
+    404 on unknown/expired id."""
+    if not _TOKEN_RE.match(job_id or ""):
+        raise HTTPException(status_code=404, detail="not found")
+    with _PLAN_JOBS_LOCK:
+        job = _PLAN_JOBS.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="not found")
+        ev = job.get("cancel")
+        if ev is not None:
+            ev.set()
+        if job.get("status") == "running":
+            job["status"] = "cancelling"
+        return {"status": job.get("status", "cancelling")}
 
 
 @router.get("/plan/async/{job_id}")
@@ -527,7 +620,7 @@ def plan_storyboard_async_status(job_id: str) -> dict:
                "progress": job.get("progress", {})}
         if job.get("status") == "done":
             out["result"] = job.get("result")
-        elif job.get("status") == "error":
+        elif job.get("status") in ("error", "cancelled"):
             out["error"] = job.get("error", "")
             out["status_code"] = job.get("status_code", 502)
     return out

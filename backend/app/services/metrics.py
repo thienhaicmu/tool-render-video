@@ -181,6 +181,17 @@ if _AVAILABLE:
         buckets=(0.5, 1, 2, 5, 10, 30, 60, 120, 240),
         registry=REGISTRY,
     )
+    # Phase 0 (Story cost review, 2026-07-16): BILLED tokens per planning stage
+    # (understanding | writer | writer_repair | structure | structure_repair | …)
+    # so "P90 cost per plan" is answerable from /metrics instead of estimates.
+    # kind ∈ {input, output}. Fed by story_director_v2._observed_call via the
+    # thread-local usage ledger (ai/llm/usage.py).
+    LLM_STORY_TOKENS = Counter(
+        "llm_story_tokens_total",
+        "Billed LLM tokens for Story planning by provider, stage and direction",
+        ["provider", "stage", "kind"],
+        registry=REGISTRY,
+    )
 
     # CM-1 (2026-07-07): Content Studio preview cost/abuse guard. The
     # /visual/preview + /narration/preview endpoints are unauthenticated
@@ -359,6 +370,7 @@ else:
     LLM_SEGMENTS_SELECTED = _NoOpMetric()     # type: ignore[assignment]
     LLM_STORY_PLAN_CALLS = _NoOpMetric()      # type: ignore[assignment]
     LLM_STORY_PLAN_LATENCY = _NoOpMetric()    # type: ignore[assignment]
+    LLM_STORY_TOKENS = _NoOpMetric()          # type: ignore[assignment]
     LLM_RECAP_PASS_CALLS = _NoOpMetric()      # type: ignore[assignment]
     LLM_RECAP_TWO_PASS_TOTAL = _NoOpMetric()  # type: ignore[assignment]
     LLM_CALL_PROMPT_CHARS_TOTAL = _NoOpMetric()  # type: ignore[assignment]

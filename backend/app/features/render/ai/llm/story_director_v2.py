@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import threading
 import time
 from typing import Any, Callable, Optional
 
@@ -32,6 +33,57 @@ logger = logging.getLogger("app.render.story_director_v2")
 SuperCall = Callable[[str, str], Optional[str]]
 StoryObserver = Callable[[dict[str, Any]], None]
 
+# ── Per-job run state: cancel token + logical-call budget (Phase 2, 2026-07-16) ──
+# Thread-local because one plan job owns its worker thread end-to-end; the
+# dispatcher RESETS it per job (worker threads are pooled — without the reset a
+# previous job's counter would leak in). _observed_call wraps every physical LLM
+# request, so one check-point covers compiler, repairs, expand loops AND the
+# legacy fallback. Uninitialised threads (other entrypoints/tests) get budget 0
+# = disabled, cancel None — behaviour unchanged.
+_RUN_STATE = threading.local()
+
+
+def begin_plan_run(cancel_event: "Optional[object]" = None) -> None:
+    """Reset this thread's run state for ONE plan job: attach the caller's cancel
+    token and re-arm the call budget (STORY_MAX_LLM_CALLS_PER_PLAN, default 12,
+    0 = unlimited). Never raises."""
+    try:
+        _RUN_STATE.cancel = cancel_event
+        _RUN_STATE.calls = 0
+        try:
+            _RUN_STATE.budget = max(0, int(os.getenv("STORY_MAX_LLM_CALLS_PER_PLAN", "12") or 12))
+        except (TypeError, ValueError):
+            _RUN_STATE.budget = 12
+    except Exception:
+        pass
+
+
+def end_plan_run() -> None:
+    """Disarm this thread's run state (budget off, cancel detached). The
+    dispatcher calls it at every exit so a finished job's counters never leak
+    into unrelated later calls on the same pooled worker thread. Never raises."""
+    try:
+        _RUN_STATE.cancel = None
+        _RUN_STATE.calls = 0
+        _RUN_STATE.budget = 0
+    except Exception:
+        pass
+
+
+def _run_blocked() -> "Optional[str]":
+    """Reason this thread's job must stop spending ('cancelled' |
+    'budget_exhausted'), or None to proceed. Never raises."""
+    try:
+        cancel = getattr(_RUN_STATE, "cancel", None)
+        if cancel is not None and cancel.is_set():
+            return "cancelled"
+        budget = int(getattr(_RUN_STATE, "budget", 0) or 0)
+        if budget and int(getattr(_RUN_STATE, "calls", 0) or 0) >= budget:
+            return "budget_exhausted"
+    except Exception:
+        return None
+    return None
+
 
 def _emit(observer: "Optional[StoryObserver]", event: str, **data) -> None:
     if observer is None:
@@ -45,13 +97,35 @@ def _emit(observer: "Optional[StoryObserver]", event: str, **data) -> None:
 def _observed_call(call_fn: SuperCall, system: str, user: str, *, stage: str,
                    provider_label: str = "", model_label: str = "",
                    observer: "Optional[StoryObserver]" = None) -> Optional[str]:
-    """Invoke one physical LLM request and publish an auditable start/end pair."""
+    """Invoke one physical LLM request and publish an auditable start/end pair.
+    Phase 0 (2026-07-16): the providers record their BILLED token usage in the
+    thread-local ledger (usage.py); this is the layer that knows the STAGE, so
+    it attaches the usage to the trace event and to /metrics. Defensive — a
+    usage/metrics failure never touches the call result.
+    Phase 2: also the single enforcement point for the per-job cancel token and
+    call budget — a blocked call spends nothing and returns None (the existing
+    None-handling downstream degrades exactly like an empty response)."""
+    blocked = _run_blocked()
+    if blocked is not None:
+        logger.warning("story_director_v2: %s call skipped — %s", stage, blocked)
+        _emit(observer, "call_blocked", stage=stage, reason=blocked,
+              provider=provider_label, model=model_label)
+        return None
+    try:
+        _RUN_STATE.calls = int(getattr(_RUN_STATE, "calls", 0) or 0) + 1
+    except Exception:
+        pass
     started = time.perf_counter()
     _emit(observer, "call_started", stage=stage, provider=provider_label, model=model_label,
           input_chars=len(system or "") + len(user or ""), system=system, user=user)
     status = "empty"
     raw: Optional[str] = None
     error = ""
+    try:
+        from app.features.render.ai.llm.usage import pop_usage as _pop_usage
+        _pop_usage()  # clear any stale entry: what we pop below is THIS call's
+    except Exception:
+        _pop_usage = None  # type: ignore[assignment]
     try:
         raw = call_fn(system, user)
         status = "success" if raw else "empty"
@@ -61,13 +135,33 @@ def _observed_call(call_fn: SuperCall, system: str, user: str, *, stage: str,
         error = str(exc)[:500]
         raise
     finally:
+        usage = None
+        if _pop_usage is not None:
+            try:
+                usage = _pop_usage()
+            except Exception:
+                usage = None
         _emit(observer, "call_completed", stage=stage, provider=provider_label, model=model_label,
               status=status, latency_ms=round((time.perf_counter() - started) * 1000, 1),
-              output_chars=len(raw or ""), output=raw or "", error=error)
+              output_chars=len(raw or ""), output=raw or "", error=error,
+              input_tokens=int((usage or {}).get("input_tokens") or 0),
+              output_tokens=int((usage or {}).get("output_tokens") or 0),
+              usage_model=str((usage or {}).get("model") or ""))
+        if usage:
+            try:
+                from app.services.metrics import LLM_STORY_TOKENS
+                _prov = provider_label or "?"
+                LLM_STORY_TOKENS.labels(provider=_prov, stage=stage, kind="input").inc(
+                    int(usage.get("input_tokens") or 0))
+                LLM_STORY_TOKENS.labels(provider=_prov, stage=stage, kind="output").inc(
+                    int(usage.get("output_tokens") or 0))
+            except Exception:
+                pass
 
 
 def estimate_super_plan_cost(*, source_chars: int, ceiling: int, model: str = "gpt-4o",
-                             source: str = "paste", has_base_video: bool = False) -> dict:
+                             source: str = "paste", has_base_video: bool = False,
+                             quality_mode: str = "") -> dict:
     """Rough $ estimate for the Story planning LLM cost (F-08 — Story audit).
 
     Story imagery is procedural SVG ($0), but the planning LLM is NOT free — the
@@ -77,29 +171,61 @@ def estimate_super_plan_cost(*, source_chars: int, ceiling: int, model: str = "g
     Writer → Structure): the source is read ~2×, and the output includes the prose
     script besides the JSON plan. Per-1M rates env-tunable
     (``OPENAI_STORY_PRICE_IN_PER_M`` / ``OPENAI_STORY_PRICE_OUT_PER_M``, default
-    gpt-4o). Never raises."""
+    gpt-4o; Phase 3 mini tier via ``OPENAI_STORY_MINI_PRICE_IN_PER_M`` /
+    ``..._OUT_PER_M``, default gpt-4o-mini). With STORY_MINI_ROUTING on (default),
+    Understanding + Structure are priced at the mini rates — the Writer keeps the
+    full rate. Never raises."""
     try:
         src = max(0, int(source_chars))
         plan_out = int(max(1, int(ceiling)) * 300)      # ~1 visual + its beats per slot
         use_compiler = compiler_enabled() and not has_base_video and source in ("paste", "idea")
+        price_in = float(os.getenv("OPENAI_STORY_PRICE_IN_PER_M", "2.5"))
+        price_out = float(os.getenv("OPENAI_STORY_PRICE_OUT_PER_M", "10.0"))
+        qmode = (quality_mode or os.getenv("STORY_QUALITY_MODE", "balanced") or "balanced").strip().lower()
+        if qmode not in ("economy", "balanced", "premium"):
+            qmode = "balanced"
+        mini_routing = os.getenv("STORY_MINI_ROUTING", "1") == "1" and qmode != "premium"
+        mini_in = float(os.getenv("OPENAI_STORY_MINI_PRICE_IN_PER_M", "0.15"))
+        mini_out = float(os.getenv("OPENAI_STORY_MINI_PRICE_OUT_PER_M", "0.60"))
         if use_compiler:
-            calls = 2 if source == "idea" else 3
-            # understanding(src) + writer(src+facts) + structure(script≈plan-size prose)
-            source_factor = 1.2 if source == "idea" else 2.2
-            fixed_prompt_chars = 6500 if source == "idea" else 9000
-            in_tok = int((src * source_factor + fixed_prompt_chars) / 4)
-            out_tok = plan_out * 2 + 800                 # script ≈ plan text + facts JSON
+            economy = qmode == "economy"
+            # Per-call split so each tier prices only its own calls:
+            #   understanding(src) — paste only; writer(src+facts) → script;
+            #   structure(script + schema/rules) → plan JSON ($0 in economy —
+            #   the CODE structurer replaces the call, Phase 4).
+            u_in, u_out = ((int(src / 4) + 600, 800) if source == "paste" else (0, 0))
+            w_in = int(src * 1.2 / 4) + 1600
+            w_out = plan_out + 400                       # prose script ≈ plan text
+            s_in, s_out = (0, 0) if economy else (plan_out + 1900, plan_out)
+            calls = ((1 if source == "idea" else 2) if economy
+                     else (2 if source == "idea" else 3))
+            in_tok = u_in + w_in + s_in
+            out_tok = u_out + w_out + s_out
+            if economy and mini_routing:
+                cost = in_tok / 1e6 * mini_in + out_tok / 1e6 * mini_out
+            elif mini_routing:
+                cost = ((u_in + s_in) / 1e6 * mini_in + (u_out + s_out) / 1e6 * mini_out
+                        + w_in / 1e6 * price_in + w_out / 1e6 * price_out)
+            else:
+                cost = in_tok / 1e6 * price_in + out_tok / 1e6 * price_out
         else:
             calls = 1
             in_tok = int((src + 3500) / 4)
             out_tok = plan_out
-        price_in = float(os.getenv("OPENAI_STORY_PRICE_IN_PER_M", "2.5"))
-        price_out = float(os.getenv("OPENAI_STORY_PRICE_OUT_PER_M", "10.0"))
-        cost = in_tok / 1_000_000 * price_in + out_tok / 1_000_000 * price_out
+            cost = in_tok / 1e6 * price_in + out_tok / 1e6 * price_out
+        # Phase 0 (2026-07-16): `llm_calls` is the HAPPY PATH only — the bounded
+        # extra rounds (writer repair/continuation + structure JSON repair, or the
+        # legacy parse-repair) were invisible to the pre-flight, so the FE quoted
+        # the floor as if it were the ceiling. Surface the bounded worst case too.
+        extra = 2 if use_compiler else 1
+        calls_max = calls + extra
+        cost_max = cost * (calls_max / calls) if calls else cost
         return {"input_tokens": in_tok, "output_tokens": out_tok,
-                "cost_usd": round(cost, 4), "llm_calls": calls}
+                "cost_usd": round(cost, 4), "llm_calls": calls,
+                "llm_calls_max": calls_max, "cost_usd_max": round(cost_max, 4)}
     except Exception:
-        return {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "llm_calls": 0}
+        return {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "llm_calls": 0,
+                "llm_calls_max": 0, "cost_usd_max": 0.0}
 
 
 def shot_grammar_report(plan) -> dict:
@@ -254,6 +380,25 @@ def lint_story_plan(plan) -> list:
     except Exception:
         return warnings
     return warnings[:20]
+
+
+def _rederive_shot_grammar(plan: StoryPlan) -> StoryPlan:
+    """Phase 2 (2026-07-16): the shot-grammar hard gate only ever fails on
+    AI-AUTHORED scene/shot data (derive_scene_shot_grammar keeps authored
+    entities when present). Discarding the whole paid plan for that was the
+    single most expensive fallback in the pipeline — instead, drop the broken
+    authored grammar and let the deterministic deriver rebuild it (wide-first
+    establishing, cycled sizes/angles, guaranteed beat coverage). Never raises."""
+    try:
+        plan.sequences = []
+        plan.scenes = []
+        plan.shots = []
+        plan.character_states = []
+        plan.derive_scene_shot_grammar()
+        plan.validate_refs()
+    except Exception as exc:
+        logger.info("story_director_v2: shot-grammar rederive failed %s", exc)
+    return plan
 
 
 def _stable_seed(text: str) -> int:
@@ -499,6 +644,7 @@ def _run_compiler(*, call_fn: SuperCall, writer_call_fn: SuperCall,
                   provider_label: str, model_label: str = "",
                   writer_provider_label: str = "", writer_model_label: str = "",
                   json_provider_label: str = "", json_model_label: str = "",
+                  quality_mode: str = "",
                   observer: "Optional[StoryObserver]" = None) -> Optional[StoryPlan]:
     """GĐ1 Story Compiler — 3 calls, deterministic validators between them:
 
@@ -513,7 +659,9 @@ def _run_compiler(*, call_fn: SuperCall, writer_call_fn: SuperCall,
     from app.features.render.ai.llm.story_understanding import (
         parse_understanding, validate_understanding, understanding_block, validate_script,
         script_spoken_chars, understanding_gate, script_gate, validate_plan_coverage,
+        apply_quote_fixes,
     )
+    from app.features.render.ai.llm.story_prompts_v2 import build_understanding_repair_prompt
     _p = provider_label or "?"
     src = (source or "paste").strip().lower()
 
@@ -540,6 +688,30 @@ def _run_compiler(*, call_fn: SuperCall, writer_call_fn: SuperCall,
             except (TypeError, ValueError):
                 min_verified = 0.70
             gate_reasons = understanding_gate(urep, min_verified_ratio=min_verified)
+            # Phase 2 (2026-07-16): quote-repair (ONE round). The dominant gate
+            # failure is a model "improving" a quote so the verbatim match misses —
+            # previously that single miss threw away the whole compiler run. Only
+            # the unverified events are re-asked; fixed quotes re-validate for free.
+            if gate_reasons and os.getenv("STORY_UNDERSTANDING_REPAIR", "1") == "1":
+                bad = [{"id": ev.id, "summary": ev.summary, "quote": ev.quote}
+                       for ev in u.events if not ev.verified]
+                if bad:
+                    try:
+                        rsys, rusr = build_understanding_repair_prompt(chapter, bad, language)
+                        fixed_raw = _observed_call(
+                            json_call_fn, rsys, rusr, stage="understanding_repair",
+                            provider_label=(json_provider_label or _p),
+                            model_label=json_model_label, observer=observer)
+                        if apply_quote_fixes(u, fixed_raw):
+                            urep = validate_understanding(u, chapter)
+                            gate_reasons = understanding_gate(
+                                urep, min_verified_ratio=min_verified)
+                            logger.info(
+                                "story_compiler[%s]: quote-repair → verified=%d/%d majors=%d/%d",
+                                _p, urep["verified"], urep["total"],
+                                urep["majors_verified"], urep["majors_total"])
+                    except Exception as exc:
+                        logger.info("story_compiler[%s]: quote-repair failed %s", _p, exc)
             _emit(observer, "validation", stage="understanding", report=urep,
                   passed=not gate_reasons, reasons=gate_reasons)
             if gate_reasons:
@@ -641,40 +813,105 @@ def _run_compiler(*, call_fn: SuperCall, writer_call_fn: SuperCall,
                        _p, "; ".join(script_reasons))
         return None
 
-    # ── Pass 3 — Structure (existing strict-schema plan call + repair pass) ──
-    ssys, susr = build_structure_prompt(
-        script, language, art_style, aspect_ratio, subtitle_mode, ceiling, genre,
-        characters=(u.characters if u is not None else []),
-        prior_context=prior_context, library_catalog=library_catalog,
-        fact_context=(understanding_block(u) if u is not None else ""))
-    plan = _call_and_parse(call_fn, ssys, susr, ceiling, stage="structure",
-                           provider_label=_p, model_label=model_label, observer=observer)
-    if plan is None:
-        logger.warning("story_compiler[%s]: structure pass produced no plan", _p)
-        return None
-    coverage = validate_plan_coverage(script, plan)
+    # ── Pass 3 — Structure (strict-schema plan call + repair pass) ───────────
+    # Phase 2 (2026-07-16): a coverage-gate rejection used to discard the whole
+    # compiler run (script included) and re-buy everything through the legacy
+    # single-pass. The script already PASSED its gate — so retry ONLY this call
+    # once, telling the model exactly what was rejected. STORY_STRUCTURE_RETRY=0
+    # restores the fail-fast behaviour.
     try:
         min_coverage = float(os.getenv("STORY_STRUCTURE_MIN_COVERAGE", "0.75") or 0.75)
     except (TypeError, ValueError):
         min_coverage = 0.75
-    coverage_reasons = ([] if coverage["coverage"] >= min_coverage else [
-        f"StoryPlan preserves {coverage['coverage'] * 100:.0f}% of approved script tokens; "
-        f"minimum is {min_coverage * 100:.0f}%"])
-    if coverage.get("order_coverage", 0.0) < 0.70:
-        coverage_reasons.append(
-            f"StoryPlan preserves only {coverage.get('order_coverage', 0.0) * 100:.0f}% "
-            "of ordered script anchors")
-    opening = list(getattr(plan, "timeline", None) or [])[:3]
-    if opening and not any(bool(getattr(beat, "hook", False)) or
-                           bool((getattr(beat, "hook_text", "") or "").strip())
-                           for beat in opening):
-        coverage_reasons.append("none of the first three beats is marked as the story hook")
-    _emit(observer, "validation", stage="structure", report=coverage,
-          passed=not coverage_reasons, reasons=coverage_reasons)
-    if coverage_reasons:
-        logger.warning("story_compiler[%s]: structure gate failed: %s",
-                       _p, "; ".join(coverage_reasons))
-        return None
+
+    # Phase 4 (2026-07-16): the script format is machine-readable and the gate
+    # demands verbatim wording — so a CODE structurer can build the plan without
+    # an LLM. STORY_STRUCTURE_BY_CODE: "fallback" (default) = use it when the
+    # LLM structure attempt (and bounded retry) fails, replacing the legacy full
+    # re-buy; "1" = never call the structure LLM (Economy mode forces this);
+    # "0" = LLM only (pre-Phase-4 behaviour).
+    structure_by_code = (os.getenv("STORY_STRUCTURE_BY_CODE", "fallback") or "fallback").strip().lower()
+    if (quality_mode or "").strip().lower() == "economy":
+        structure_by_code = "1"
+
+    def _structure_by_code() -> Optional[StoryPlan]:
+        try:
+            from app.features.render.ai.llm.story_script_structurer import structure_script_by_code
+            try:
+                from app.features.render.ai.llm.story_prompts_v2 import _multiline
+                _ml = bool(_multiline())
+            except Exception:
+                _ml = True
+            code_plan = structure_script_by_code(script, u, language=language,
+                                                 ceiling=ceiling, genre=genre, multiline=_ml)
+        except Exception as exc:
+            logger.info("story_compiler[%s]: code structurer failed %s", _p, exc)
+            code_plan = None
+        if code_plan is None:
+            _emit(observer, "validation", stage="structure_code", passed=False,
+                  reasons=["script did not yield a usable plan"])
+            return None
+        _emit(observer, "validation", stage="structure_code",
+              report=validate_plan_coverage(script, code_plan), passed=True, reasons=[])
+        return code_plan
+
+    if structure_by_code in ("1", "on", "always", "code"):
+        plan = _structure_by_code()
+        if plan is None:
+            logger.warning("story_compiler[%s]: code structurer produced no plan", _p)
+            return None
+        if u is not None:
+            plan.relationships = [RelationshipDef(
+                source_id=str(item.get("a") or ""), target_id=str(item.get("b") or ""),
+                kind=str(item.get("type") or ""), status=str(item.get("status") or ""),
+            ) for item in (u.relationships or []) if isinstance(item, dict)]
+        return plan
+
+    structure_attempts = 2 if os.getenv("STORY_STRUCTURE_RETRY", "1") == "1" else 1
+    plan = None
+    coverage_reasons: "list[str]" = []
+    retry_reasons = ""
+    for attempt in range(1, structure_attempts + 1):
+        ssys, susr = build_structure_prompt(
+            script, language, art_style, aspect_ratio, subtitle_mode, ceiling, genre,
+            characters=(u.characters if u is not None else []),
+            prior_context=prior_context, library_catalog=library_catalog,
+            fact_context=(understanding_block(u) if u is not None else ""),
+            retry_reasons=retry_reasons)
+        plan = _call_and_parse(call_fn, ssys, susr, ceiling,
+                               stage=("structure" if attempt == 1 else "structure_retry"),
+                               provider_label=_p, model_label=model_label, observer=observer)
+        if plan is None:
+            logger.warning("story_compiler[%s]: structure pass produced no plan", _p)
+            break                          # LLM/parse dead — retrying the same way won't help
+        coverage = validate_plan_coverage(script, plan)
+        coverage_reasons = ([] if coverage["coverage"] >= min_coverage else [
+            f"StoryPlan preserves {coverage['coverage'] * 100:.0f}% of approved script tokens; "
+            f"minimum is {min_coverage * 100:.0f}%"])
+        if coverage.get("order_coverage", 0.0) < 0.70:
+            coverage_reasons.append(
+                f"StoryPlan preserves only {coverage.get('order_coverage', 0.0) * 100:.0f}% "
+                "of ordered script anchors")
+        opening = list(getattr(plan, "timeline", None) or [])[:3]
+        if opening and not any(bool(getattr(beat, "hook", False)) or
+                               bool((getattr(beat, "hook_text", "") or "").strip())
+                               for beat in opening):
+            coverage_reasons.append("none of the first three beats is marked as the story hook")
+        _emit(observer, "validation", stage="structure", report=coverage,
+              passed=not coverage_reasons, reasons=coverage_reasons)
+        if not coverage_reasons:
+            break
+        logger.warning("story_compiler[%s]: structure gate failed (attempt %d/%d): %s",
+                       _p, attempt, structure_attempts, "; ".join(coverage_reasons))
+        retry_reasons = "; ".join(coverage_reasons)
+    if plan is None or coverage_reasons:
+        if structure_by_code == "fallback":
+            logger.info("story_compiler[%s]: structure LLM failed — CODE structurer fallback", _p)
+            plan = _structure_by_code()
+        else:
+            plan = None
+        if plan is None:
+            return None
     if u is not None:
         plan.relationships = [RelationshipDef(
             source_id=str(item.get("a") or ""), target_id=str(item.get("b") or ""),
@@ -711,6 +948,7 @@ def run_super_plan(
     json_model_label: str = "",
     writer_call_fn: Optional[SuperCall] = None,
     json_call_fn: Optional[SuperCall] = None,
+    quality_mode: str = "",
     observer: "Optional[StoryObserver]" = None,
 ) -> Optional[StoryPlan]:
     """Turn a source (chapter text OR idea) into a StoryPlan v2. ``prior_context`` (G1)
@@ -756,7 +994,25 @@ def run_super_plan(
                             writer_provider_label=writer_provider_label,
                             writer_model_label=writer_model_label,
                             json_provider_label=json_provider_label,
-                            json_model_label=json_model_label, observer=observer)
+                            json_model_label=json_model_label,
+                            quality_mode=quality_mode, observer=observer)
+                        if chunk_plan is None and os.getenv("STORY_CHUNK_LOCAL_FALLBACK", "1") == "1":
+                            # Phase 2 (2026-07-16): one failed chunk used to void
+                            # EVERY already-planned chunk and re-chunk the whole
+                            # chapter through legacy. Fall back for THIS chunk
+                            # only (single-pass prompt at the chunk's ceiling)
+                            # and keep the paid siblings.
+                            logger.info("story_compiler[%s]: chunk %d/%d failed — "
+                                        "single-pass fallback for this chunk only",
+                                        _p, chunk_no, len(chunks))
+                            fsys, fusr = _build_paste_prompt(
+                                chunk, language, art_style, aspect_ratio, subtitle_mode,
+                                per_chunk, prior_context, library_catalog, False, 0.0)
+                            chunk_plan = _call_and_parse(
+                                call_fn, fsys, fusr, per_chunk,
+                                stage=f"chunk_{chunk_no}_single_pass",
+                                provider_label=_p, model_label=model_label,
+                                observer=observer)
                         if chunk_plan is None:
                             plans = []
                             break
@@ -777,7 +1033,7 @@ def run_super_plan(
                         writer_model_label=writer_model_label,
                         json_provider_label=json_provider_label,
                         json_model_label=json_model_label,
-                        observer=observer)
+                        quality_mode=quality_mode, observer=observer)
             except Exception as exc:
                 logger.warning("story_compiler[%s]: unexpected %s — falling back to legacy",
                                _p, exc, exc_info=True)
@@ -801,6 +1057,18 @@ def run_super_plan(
                 plan.derive_scene_shot_grammar()
                 plan.validate_refs()
                 shot_reasons = shot_grammar_gate(plan)
+                # Phase 2 (2026-07-16): the gate only ever fails on AI-AUTHORED
+                # grammar (the code deriver's output passes by construction).
+                # Deterministic fix — drop the broken authored grammar, let the
+                # deriver rebuild — instead of discarding the paid plan.
+                if shot_reasons and os.getenv("STORY_SHOT_GRAMMAR_CODE_FIX", "1") == "1":
+                    _emit(observer, "validation", stage="shot_grammar",
+                          report=shot_grammar_report(plan), passed=False,
+                          reasons=shot_reasons)
+                    logger.info("story_compiler[%s]: shot grammar failed (%s) — "
+                                "re-deriving by code", _p, "; ".join(shot_reasons))
+                    plan = _rederive_shot_grammar(plan)
+                    shot_reasons = shot_grammar_gate(plan)
                 _emit(observer, "validation", stage="shot_grammar",
                       report=shot_grammar_report(plan), passed=not shot_reasons,
                       reasons=shot_reasons)
@@ -812,7 +1080,8 @@ def run_super_plan(
                     logger.info("story_compiler[%s]: OK chars=%d visuals=%d beats=%d topic=%r",
                                 _p, len(plan.characters), plan.image_count(),
                                 plan.beat_count(), plan.topic)
-                    _emit(observer, "authoring_selected", mode="compiler", provider=_p)
+                    _emit(observer, "authoring_selected", mode="compiler", provider=_p,
+                          quality_mode=(quality_mode or "balanced"))
                     return plan
             logger.info("story_compiler[%s]: falling back to legacy single-pass", _p)
             _emit(observer, "compiler_fallback", provider=_p,
@@ -889,4 +1158,4 @@ def run_super_plan(
 
 __all__ = ["run_super_plan", "inject_character_canon", "estimate_super_plan_cost",
            "lint_story_plan", "shot_grammar_report", "shot_grammar_gate",
-           "SuperCall", "StoryObserver"]
+           "begin_plan_run", "end_plan_run", "SuperCall", "StoryObserver"]

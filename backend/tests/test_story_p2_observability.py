@@ -20,12 +20,17 @@ from app.features.render.engine.pipeline.llm_stage import _resolve_api_key
 def test_cost_estimate_nonzero(monkeypatch):
     monkeypatch.delenv("OPENAI_STORY_PRICE_IN_PER_M", raising=False)
     monkeypatch.delenv("OPENAI_STORY_PRICE_OUT_PER_M", raising=False)
+    monkeypatch.delenv("OPENAI_STORY_MINI_PRICE_IN_PER_M", raising=False)
+    monkeypatch.delenv("OPENAI_STORY_MINI_PRICE_OUT_PER_M", raising=False)
     est = estimate_super_plan_cost(source_chars=20000, ceiling=15)
     assert est["input_tokens"] > 0 and est["output_tokens"] > 0
     assert est["cost_usd"] > 0.0
-    # Rates are env-tunable.
+    # Rates are env-tunable — Phase 3 added a mini tier (Understanding +
+    # Structure), so zeroing the estimate means zeroing BOTH tiers' rates.
     monkeypatch.setenv("OPENAI_STORY_PRICE_IN_PER_M", "0")
     monkeypatch.setenv("OPENAI_STORY_PRICE_OUT_PER_M", "0")
+    monkeypatch.setenv("OPENAI_STORY_MINI_PRICE_IN_PER_M", "0")
+    monkeypatch.setenv("OPENAI_STORY_MINI_PRICE_OUT_PER_M", "0")
     assert estimate_super_plan_cost(source_chars=20000, ceiling=15)["cost_usd"] == 0.0
 
 

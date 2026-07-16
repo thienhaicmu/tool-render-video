@@ -211,7 +211,30 @@ Content Director (`render_format="content"`) giờ chạy trên orchestrator dù
 | `STORY_TTS_REUSE` / `STORY_CUE_REUSE` | `1` / `1` | **GĐ4c targeted reuse** — resume KHÔNG TTS lại beat đã có audio hợp lệ trên đĩa và KHÔNG encode lại cue clip đã xong (gián đoạn giữa chừng chỉ làm phần thiếu). `0` = làm lại toàn bộ như trước |
 | `STORY_CHAR_RESOLVER` | `1` (on) | **GĐ3** — engine gán asset nhân vật DETERMINISTIC từ kho thật (hard-filter giới tính + chấm điểm mô tả VI→EN + UNIQUE — 2 nhân vật không trùng mặt) thay vì AI tự chọn slug; prompt chỉ còn mục BACKGROUNDS; identity lock xuyên chương qua `characters.asset_slug` (migration 0026); trạng thái per-character (`matched_exact/matched/needs_approval/missing`) trả về `/plan`+`/validate` (`asset_resolution`) và hiện chip ở Review. `0` = về AI-pick cũ |
 | `STORY_AI_PROVIDER` | `openai` | Provider chạy super-plan (ghi đè bằng `ai_provider` trong payload) |
+| `STORY_PROVIDER_FALLBACK` | `0` (pin) | **Phase 1 (2026-07-16)** — Story GHIM provider (mặc định GPT). `1` = khôi phục chuỗi fallback chéo provider cũ (chạy lại toàn bộ compiler trên Gemini/Claude khi primary fail — đắt và model chưa tune). Primary bị disable qua `LLM_DISABLED_PROVIDERS` vẫn rơi về chain để render không kẹt |
 | `STORY_SUPER_MODEL` | `gpt-4o` | Model super-plan |
+| `OPENAI_STORY_STREAM` | `1` (on) | **Phase 1** — Writer + Structure STREAM thay vì chờ nguyên response (deadline 120/180s cũ hay đứt giữa chừng với output 16K tokens → OpenAI vẫn tính tiền request bị hủy). Timeout còn lại là idle giữa các chunk, không phải cả response. `0` = về non-stream (deadline tổng `OPENAI_STORY_TOTAL_TIMEOUT_SEC`) |
+| `OPENAI_STORY_IDLE_TIMEOUT_SEC` | `60` | Cửa sổ chờ TOKEN KẾ TIẾP khi stream (không phải cả response) |
+| `OPENAI_STORY_TOTAL_TIMEOUT_SEC` | `600` | Trần tổng một call story (stream: cắt + salvage phần đã nhận; non-stream: deadline request) |
+| `OPENAI_STORY_WRITER_CONTINUE` | `1` (on) | Writer bị cắt vì `finish_reason=length` → MỘT vòng "viết tiếp từ chỗ dừng" thay vì đưa script cụt đuôi vào gate (trước đây fail gate → mua lại cả pipeline qua legacy) |
+| `OPENAI_STORY_PLAN_RETRY_EMPTY` | **`0` (đổi từ `1`, Phase 1)** | Retry-mù khi response rỗng. Với streaming + salvage, rỗng = safety trim/lỗi thật — mua lại thường nhận lại đúng cái rỗng đó. `1` = khôi phục hành vi cũ |
+| `STORY_PLAN_RUNS_TTL_DAYS` / `STORY_PLAN_RUNS_MAX` | `14` / `200` | **Phase 0** — prune artifact `story_plan_runs/` (nằm ngoài cache root nên pruner định kỳ không đụng — trước đây rò rỉ vô hạn) |
+| `STORY_UNDERSTANDING_REPAIR` | `1` (on) | **Phase 2** — 1 vòng quote-repair có chủ đích khi Understanding gate trượt (chỉ gửi các event có quote không khớp verbatim; model copy lại nguyên văn). Trước đây 1 quote lệch = vứt cả 3 call compiler |
+| `STORY_STRUCTURE_RETRY` | `1` (on) | **Phase 2** — coverage-gate từ chối → retry RIÊNG call Structure 1 lần kèm lý do bị từ chối (script đã duyệt được tái dùng), thay vì vứt cả compiler chạy legacy từ đầu |
+| `STORY_CHUNK_LOCAL_FALLBACK` | `1` (on) | **Phase 2** — chương dài chia chunk: 1 chunk fail chỉ fallback single-pass CHO CHUNK ĐÓ, giữ các chunk anh em đã trả tiền (trước: 1 chunk chết = vứt tất cả) |
+| `STORY_SHOT_GRAMMAR_CODE_FIX` | `1` (on) | **Phase 2** — shot-grammar gate trượt (chỉ xảy ra trên grammar do AI tự author) → xóa grammar hỏng, để code deriver dựng lại (wide-first, cycle size/angle) thay vì vứt plan. `STORY_SHOT_GRAMMAR_HARD_GATE` vẫn là chốt cuối |
+| `STORY_MAX_LLM_CALLS_PER_PLAN` | `12` | **Phase 2** — trần số logical LLM call cho MỘT plan job (compiler + repair + expand + legacy fallback). Vượt trần → call bị chặn (event `call_blocked`, reason `budget_exhausted`). `0` = tắt |
+| `STORY_MINI_ROUTING` | `1` (on) | **Phase 3** — route theo task: Understanding (extraction) + Structure (transform giữ-verbatim) chạy tier mini (~16× rẻ hơn); WRITER giữ `STORY_SUPER_MODEL` (văn là sản phẩm). Repair đi theo route của call gốc (quote-repair + JSON-repair → mini; writer-repair/continuation → super). User chọn `llm_model` tường minh → ghim cả 3 role, không ép mini. Chỉ áp cho OpenAI. `0` = một model như cũ |
+| `STORY_MINI_MODEL` | `gpt-4o-mini` | Model tier mini cho Understanding + Structure |
+| `STORY_UNDERSTANDING_MODEL` / `STORY_STRUCTURE_MODEL` / `STORY_WRITER_MODEL` | `""` | Override per-role — thắng mini default. Lưu ý Phase 3: Writer KHÔNG còn kế thừa `STORY_STRUCTURE_MODEL` qua fallback (dùng `STORY_WRITER_MODEL` nếu muốn đổi Writer) |
+| `OPENAI_STORY_MINI_PRICE_IN_PER_M` / `_OUT_PER_M` | `0.15` / `0.60` | Giá tier mini cho estimator preflight (USD/1M token) |
+| `STORY_STRUCTURE_BY_CODE` | `fallback` | **Phase 4** — structurer THUẦN CODE (parse script format bắt buộc → StoryPlan, wording verbatim by construction, $0). `fallback` = dùng khi call Structure LLM + retry đều fail (thay hẳn đường legacy re-buy); `1` = không bao giờ gọi Structure LLM; `0` = chỉ LLM (pre-Phase-4) |
+| `STORY_QUALITY_MODE` | `balanced` | **Phase 4** — `economy` (mini mọi role + structure-by-code: 2 call paste / 1 call idea), `balanced` (mini U+S, super Writer, structure LLM + code fallback), `premium` (super cả 3 call). Request field `quality_mode` của `POST /api/story/plan` thắng env; `cost_preflight.quality_mode` trả mode đã resolve |
+
+> **Phase 2 (2026-07-16):** thêm `POST /api/story/plan/async/{id}/cancel` — set cancel
+> token của job; director dừng phát request LLM MỚI trước call kế tiếp (request đang
+> bay vẫn chạy nốt — dù gì cũng đã bị tính tiền). Status job: `running → cancelling →
+> cancelled` (409). Sync `POST /plan` không có cancel (client disconnect không detect được).
 | `STORY_PLAN_REPAIR` | `1` | Chạy 1 vòng LLM-repair khi parse plan hỏng (Sacred #3 vẫn None nếu repair fail). `0` = tắt |
 | `STORY_MAX_IMAGES` | `15` | **Ceiling** số key-visual/truyện — trần chi phí ảnh (parser cap + gen enforce) |
 | `STORY_MAX_SOURCE_CHARS` | `60000` | Cap độ dài truyện nguồn đọc vào prompt |
