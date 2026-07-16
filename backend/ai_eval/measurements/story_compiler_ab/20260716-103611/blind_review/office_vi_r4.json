@@ -1,0 +1,2469 @@
+{
+  "review_id": "office_vi_r4",
+  "source": {
+    "id": "office_vi",
+    "source": "idea",
+    "idea": "Một nhân viên sắp nghỉ việc phát hiện đồng nghiệp âm thầm sửa lại những sai lầm của cô suốt nhiều năm, nhưng người đó đang bị đổ tội.",
+    "duration_sec": 120,
+    "language": "vi",
+    "genre": "modern-drama"
+  },
+  "candidates": {
+    "A": {
+      "usable": true,
+      "narration": "Trong một văn phòng hiện đại, Lan đang ngồi trước máy tính, ánh mắt đầy lo lắng. Cô chuẩn bị cho ngày làm việc cuối cùng của mình.\nTôi không thể tin rằng mình sẽ phải rời khỏi công ty này. Mọi thứ thật khó khăn.\nĐừng lo, Lan. Mọi người sẽ nhớ đến những đóng góp của bạn.\nNhưng có một điều mà Lan không biết. Anh, đồng nghiệp của cô, đã âm thầm giúp đỡ cô trong suốt thời gian qua.\nLan, tôi cần nói chuyện với bạn về những sai sót trong công việc gần đây.\nTôi đã cố gắng hết sức! Tại sao lại đổ lỗi cho tôi?\nThực ra, tôi đã sửa chữa những sai lầm đó mà không ai biết. Bạn không phải là người duy nhất chịu trách nhiệm.\nThật sao? Tại sao bạn không nói cho tôi biết?\nTôi không muốn bạn cảm thấy tồi tệ. Tôi chỉ muốn giúp bạn.\nNếu bạn không nói ra sự thật, tôi sẽ phải báo cáo với cấp trên.\nĐừng làm vậy! Tôi không muốn mất việc!\nChúng ta cần phải nói rõ mọi chuyện. Tôi sẽ đứng về phía bạn.\nCảm ơn bạn, Anh. Tôi không biết mình sẽ làm gì nếu không có bạn.\nCuối cùng, Lan và Anh quyết định cùng nhau đối mặt với Bà Mai và nói lên sự thật.\nTôi không thể tin rằng mọi chuyện lại như vậy. Tại sao không ai nói với tôi?\nChúng tôi chỉ muốn mọi người hiểu rằng không chỉ có một mình tôi có lỗi.\nTôi sẽ xem xét lại tình hình và không để điều này ảnh hưởng đến bạn.\nCuối cùng, Lan đã được cứu khỏi việc mất việc và hiểu được giá trị của tình bạn.\nTôi luôn ở đây để giúp bạn, Lan. Đừng lo lắng quá nhiều.\nCảm ơn bạn, Anh. Tôi sẽ không quên điều này.\nMọi người đều có thể mắc sai lầm, nhưng quan trọng là biết đứng lên và sửa chữa.\nLan đã quyết định tiếp tục làm việc với tinh thần mới và quyết tâm hơn.\nCâu chuyện của Lan và Anh đã trở thành một bài học quý giá trong văn phòng.",
+      "plan": {
+        "art_style": "modern drama",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "lan",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "anh",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "ba",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "right",
+            "scene_id": "sc1"
+          }
+        ],
+        "characters": [
+          {
+            "age": "25",
+            "archetype": "office_worker",
+            "asset": "",
+            "canonical_desc": "Cô gái trẻ, tóc dài, mặc áo sơ mi trắng, quần jeans, có vẻ tự tin nhưng cũng rất nhạy cảm.",
+            "gender": "female",
+            "id": "lan",
+            "name": "Lan",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          },
+          {
+            "age": "28",
+            "archetype": "office_worker",
+            "asset": "",
+            "canonical_desc": "Nam đồng nghiệp, tóc ngắn, mặc áo sơ mi xanh, có vẻ điềm tĩnh và chu đáo.",
+            "gender": "male",
+            "id": "anh",
+            "name": "Anh",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "45",
+            "archetype": "boss",
+            "asset": "",
+            "canonical_desc": "Cô trưởng phòng, tóc ngắn, mặc vest, nghiêm khắc nhưng cũng rất công bằng.",
+            "gender": "female",
+            "id": "ba",
+            "name": "Bà Mai",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "hiendai",
+        "language": "vi",
+        "reading_pace": "normal",
+        "region": "vi",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2",
+              "b3",
+              "b4",
+              "b5",
+              "b6",
+              "b7",
+              "b8",
+              "b9",
+              "b10",
+              "b11",
+              "b12",
+              "b13",
+              "b14",
+              "b15",
+              "b16",
+              "b17",
+              "b18",
+              "b19",
+              "b20",
+              "b21",
+              "b22"
+            ],
+            "continuity_key": "office",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "lan",
+              "anh",
+              "ba"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "office",
+            "shot_ids": [
+              "sh1",
+              "sh2",
+              "sh3",
+              "sh4",
+              "sh5",
+              "sh6",
+              "sh7",
+              "sh8",
+              "sh9",
+              "sh10",
+              "sh11",
+              "sh12",
+              "sh13",
+              "sh14",
+              "sh15",
+              "sh16",
+              "sh17",
+              "sh18",
+              "sh19",
+              "sh20",
+              "sh21",
+              "sh22"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 1861759901,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "Một văn phòng hiện đại, với bàn làm việc, máy tính và không gian mở.",
+            "id": "office",
+            "name": "Văn phòng",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh1",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh2",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh3",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh4",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh6",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh8",
+            "lens": "portrait",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh9",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh10",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b11"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh11",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b12"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh12",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b13"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh13",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b14"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh14",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b15"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh15",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b16"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh16",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b17"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh17",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b18"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh18",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b19"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh19",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b20"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh20",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b21"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh21",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b22"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh22",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trong một văn phòng hiện đại, Lan đang ngồi trước máy tính, ánh mắt đầy lo lắng. Cô chuẩn bị cho ngày làm việc cuối cùng của mình."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Tôi không thể tin rằng mình sẽ phải rời khỏi công ty này. Mọi thứ thật khó khăn."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "anh",
+                "text": "Đừng lo, Lan. Mọi người sẽ nhớ đến những đóng góp của bạn."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Nhưng có một điều mà Lan không biết. Anh, đồng nghiệp của cô, đã âm thầm giúp đỡ cô trong suốt thời gian qua."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "ba",
+                "text": "Lan, tôi cần nói chuyện với bạn về những sai sót trong công việc gần đây."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Tôi đã cố gắng hết sức! Tại sao lại đổ lỗi cho tôi?"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "sad",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "anh",
+                "text": "Thực ra, tôi đã sửa chữa những sai lầm đó mà không ai biết. Bạn không phải là người duy nhất chịu trách nhiệm."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Thật sao? Tại sao bạn không nói cho tôi biết?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Sự thật được phơi bày!",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "anh",
+                "text": "Tôi không muốn bạn cảm thấy tồi tệ. Tôi chỉ muốn giúp bạn."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "ba",
+                "text": "Nếu bạn không nói ra sự thật, tôi sẽ phải báo cáo với cấp trên."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "sad",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Đừng làm vậy! Tôi không muốn mất việc!"
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b11",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "anh",
+                "text": "Chúng ta cần phải nói rõ mọi chuyện. Tôi sẽ đứng về phía bạn."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh11",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b12",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Cảm ơn bạn, Anh. Tôi không biết mình sẽ làm gì nếu không có bạn."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh12",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b13",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cuối cùng, Lan và Anh quyết định cùng nhau đối mặt với Bà Mai và nói lên sự thật."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh13",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b14",
+            "lines": [
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "ba",
+                "text": "Tôi không thể tin rằng mọi chuyện lại như vậy. Tại sao không ai nói với tôi?"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh14",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b15",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Chúng tôi chỉ muốn mọi người hiểu rằng không chỉ có một mình tôi có lỗi."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh15",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b16",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "ba",
+                "text": "Tôi sẽ xem xét lại tình hình và không để điều này ảnh hưởng đến bạn."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh16",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b17",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cuối cùng, Lan đã được cứu khỏi việc mất việc và hiểu được giá trị của tình bạn."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh17",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b18",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "anh",
+                "text": "Tôi luôn ở đây để giúp bạn, Lan. Đừng lo lắng quá nhiều."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh18",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b19",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Cảm ơn bạn, Anh. Tôi sẽ không quên điều này."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh19",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b20",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Mọi người đều có thể mắc sai lầm, nhưng quan trọng là biết đứng lên và sửa chữa."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh20",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b21",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Lan đã quyết định tiếp tục làm việc với tinh thần mới và quyết tâm hơn."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh21",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b22",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Câu chuyện của Lan và Anh đã trở thành một bài học quý giá trong văn phòng."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh22",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "dramatic",
+        "topic": "Sự thật đằng sau những sai lầm",
+        "visuals": [
+          {
+            "character_ids": [
+              "lan",
+              "anh",
+              "ba"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "office",
+            "tier": "medium"
+          }
+        ]
+      }
+    },
+    "B": {
+      "usable": true,
+      "narration": "Trên bàn làm việc ngổn ngang giấy tờ, Hương nhìn chăm chú vào màn hình máy tính. Mặc dù đã nộp đơn nghỉ việc từ tuần trước, cô vẫn cảm thấy nặng lòng. Mọi thứ sẽ ổn thôi, cô tự nhủ.\nSao báo cáo này lại đúng hết?\nCô nhăn mặt, nhớ lại từng lần sai sót đã làm mình mất mặt trước sếp. Nhưng bây giờ, mọi thứ được sửa sang hoàn hảo.\nTrên đường về, Hương tình cờ nghe được cuộc trò chuyện giữa hai đồng nghiệp.\nCậu biết không, ai cũng nghĩ Hương giỏi lắm. Thực ra, toàn Thái sửa giúp cô ấy đấy.\nThái à? Sao lại là anh ta?\nHương khựng lại, trái tim đập mạnh. Thái, người mà cô luôn nghĩ là lạnh lùng, hóa ra đã âm thầm giúp đỡ mình. Nhưng tại sao?\nNgày hôm sau, Hương quyết định tìm Thái để hỏi cho rõ. Cô bước vào phòng họp nơi Thái đang ngồi một mình, mắt dán vào màn hình laptop.\nThái, tại sao anh sửa lỗi cho tôi mà không nói?\nVì tôi thấy cô có tiềm năng. Chỉ cần chút trợ giúp, cô sẽ làm được.\nCảm ơn anh... Nhưng giờ tôi nghe nói anh đang bị đổ lỗi cho việc gì đó không hay.\nCả hai tiếp tục câu chuyện ở quầy cà phê khi Thái giải thích về những lời buộc tội sai trái từ đồng nghiệp.\nHọ đổ cho tôi lấy cắp dữ liệu. Tôi không làm thế!\nTôi sẽ giúp anh chứng minh sự trong sạch.\nTrong ánh mắt Thái, sự bất ngờ xen lẫn chút hy vọng. Hương nhận ra đây là cơ hội để đền đáp lại Thái.\nHương và Thái làm việc muộn để tìm bằng chứng. Ánh đèn từ màn hình chiếu sáng khuôn mặt căng thẳng của họ.\nTôi tìm thấy rồi! Đây là chứng cứ để minh oan cho anh.\nCảm ơn cô, Hương.\nCả hai bước ra ngoài, ánh trăng lấp lánh trên bầu trời. Họ biết rằng sau ngày mai, mọi thứ sẽ khác. Nhưng điều quan trọng là họ đã tìm thấy sự tin tưởng ở nhau.\nTừ góc khuất của hành lang, một đồng nghiệp khác đang nhìn theo cặp đôi, vẻ mặt đầy sự ghen tị và tiếc nuối.",
+      "plan": {
+        "art_style": "",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "huong",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "dong_nghiep_1",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "right",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "dong_nghiep_2",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "huong",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "thai",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "thai",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "huong",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "huong",
+            "continuity_notes": "Keep appearance and screen side stable within sc5",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc5"
+          },
+          {
+            "character_id": "thai",
+            "continuity_notes": "Keep appearance and screen side stable within sc5",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "left",
+            "scene_id": "sc5"
+          }
+        ],
+        "characters": [
+          {
+            "age": "28",
+            "archetype": "office_worker",
+            "asset": "",
+            "canonical_desc": "Nữ, khoảng 28 tuổi, tóc dài, mặc áo sơ mi công sở, có vẻ lo lắng nhưng quyết tâm.",
+            "gender": "female",
+            "id": "huong",
+            "name": "Hương",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          },
+          {
+            "age": "30",
+            "archetype": "office_worker",
+            "asset": "",
+            "canonical_desc": "Nam, khoảng 30 tuổi, tóc ngắn, mặc áo sơ mi công sở, có vẻ bình tĩnh và tự tin.",
+            "gender": "male",
+            "id": "thai",
+            "name": "Thái",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "25",
+            "archetype": "",
+            "asset": "",
+            "canonical_desc": "Nam, khoảng 25 tuổi, mặc áo sơ mi, có vẻ thì thầm.",
+            "gender": "male",
+            "id": "dong_nghiep_1",
+            "name": "Đồng nghiệp 1",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "26",
+            "archetype": "",
+            "asset": "",
+            "canonical_desc": "Nam, khoảng 26 tuổi, mặc áo sơ mi, có vẻ ngạc nhiên.",
+            "gender": "male",
+            "id": "dong_nghiep_2",
+            "name": "Đồng nghiệp 2",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "hiendai",
+        "language": "vi",
+        "reading_pace": "normal",
+        "region": "vi",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2"
+            ],
+            "continuity_key": "van_phong",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "huong"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "van_phong",
+            "shot_ids": [
+              "sh1",
+              "sh2"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b3",
+              "b4"
+            ],
+            "continuity_key": "hanh_lang",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "dong_nghiep_1",
+              "dong_nghiep_2"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "hanh_lang",
+            "shot_ids": [
+              "sh3",
+              "sh4"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b5",
+              "b6",
+              "b7"
+            ],
+            "continuity_key": "phong_hop",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "huong",
+              "thai"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "phong_hop",
+            "shot_ids": [
+              "sh5",
+              "sh6",
+              "sh7"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b8",
+              "b9",
+              "b10"
+            ],
+            "continuity_key": "quay_ca_phe",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc4",
+            "participant_ids": [
+              "thai",
+              "huong"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq3",
+            "setting_id": "quay_ca_phe",
+            "shot_ids": [
+              "sh8",
+              "sh9",
+              "sh10"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b11",
+              "b12",
+              "b13",
+              "b14"
+            ],
+            "continuity_key": "van_phong_toi",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc5",
+            "participant_ids": [
+              "huong",
+              "thai"
+            ],
+            "purpose": "climax",
+            "sequence_id": "seq4",
+            "setting_id": "van_phong_toi",
+            "shot_ids": [
+              "sh11",
+              "sh12",
+              "sh13",
+              "sh14"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 1861759901,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1",
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "inciting",
+            "role": "inciting",
+            "scene_ids": [
+              "sc3"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc4"
+            ]
+          },
+          {
+            "id": "seq4",
+            "purpose": "climax",
+            "role": "climax",
+            "scene_ids": [
+              "sc5"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "Một văn phòng hiện đại với bàn làm việc ngổn ngang giấy tờ và máy tính.",
+            "id": "van_phong",
+            "name": "Văn phòng",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Hành lang văn phòng với các phòng họp và bàn làm việc.",
+            "id": "hanh_lang",
+            "name": "Hành lang văn phòng",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Một phòng họp nhỏ với một chiếc bàn và một chiếc laptop.",
+            "id": "phong_hop",
+            "name": "Phòng họp nhỏ",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Quầy cà phê trong văn phòng với máy pha cà phê và ghế ngồi.",
+            "id": "quay_ca_phe",
+            "name": "Quầy cà phê văn phòng",
+            "scene_kind": "cafe",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Văn phòng vào buổi tối với ánh đèn từ màn hình máy tính.",
+            "id": "van_phong_toi",
+            "name": "Văn phòng buổi tối",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh2",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh4",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc2",
+            "shot_size": "close",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "high",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh6",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "extreme_close",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "low",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh8",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "wide",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh9",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc4",
+            "shot_size": "medium",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "high",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh10",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b11"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh11",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc5",
+            "shot_size": "wide",
+            "visual_id": "v5"
+          },
+          {
+            "angle": "low",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b12"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh12",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc5",
+            "shot_size": "wide",
+            "visual_id": "v5"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b13"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh13",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc5",
+            "shot_size": "extreme_close",
+            "visual_id": "v5"
+          },
+          {
+            "angle": "high",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b14"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh14",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc5",
+            "shot_size": "wide",
+            "visual_id": "v5"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Khởi đầu mối quan hệ",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trên bàn làm việc ngổn ngang giấy tờ, Hương nhìn chăm chú vào màn hình máy tính. Mặc dù đã nộp đơn nghỉ việc từ tuần trước, cô vẫn cảm thấy nặng lòng. Mọi thứ sẽ ổn thôi, cô tự nhủ."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "huong",
+                "text": "Sao báo cáo này lại đúng hết?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cô nhăn mặt, nhớ lại từng lần sai sót đã làm mình mất mặt trước sếp. Nhưng bây giờ, mọi thứ được sửa sang hoàn hảo."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trên đường về, Hương tình cờ nghe được cuộc trò chuyện giữa hai đồng nghiệp."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "dong_nghiep_1",
+                "text": "Cậu biết không, ai cũng nghĩ Hương giỏi lắm. Thực ra, toàn Thái sửa giúp cô ấy đấy."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "dong_nghiep_2",
+                "text": "Thái à? Sao lại là anh ta?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hương khựng lại, trái tim đập mạnh. Thái, người mà cô luôn nghĩ là lạnh lùng, hóa ra đã âm thầm giúp đỡ mình. Nhưng tại sao?"
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Ngày hôm sau, Hương quyết định tìm Thái để hỏi cho rõ. Cô bước vào phòng họp nơi Thái đang ngồi một mình, mắt dán vào màn hình laptop."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "huong",
+                "text": "Thái, tại sao anh sửa lỗi cho tôi mà không nói?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "thai",
+                "text": "Vì tôi thấy cô có tiềm năng. Chỉ cần chút trợ giúp, cô sẽ làm được."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "huong",
+                "text": "Cảm ơn anh... Nhưng giờ tôi nghe nói anh đang bị đổ lỗi cho việc gì đó không hay."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cả hai tiếp tục câu chuyện ở quầy cà phê khi Thái giải thích về những lời buộc tội sai trái từ đồng nghiệp."
+              },
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "thai",
+                "text": "Họ đổ cho tôi lấy cắp dữ liệu. Tôi không làm thế!"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "huong",
+                "text": "Tôi sẽ giúp anh chứng minh sự trong sạch."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trong ánh mắt Thái, sự bất ngờ xen lẫn chút hy vọng. Hương nhận ra đây là cơ hội để đền đáp lại Thái."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b11",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hương và Thái làm việc muộn để tìm bằng chứng. Ánh đèn từ màn hình chiếu sáng khuôn mặt căng thẳng của họ."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "huong",
+                "text": "Tôi tìm thấy rồi! Đây là chứng cứ để minh oan cho anh."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh11",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v5"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b12",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "thai",
+                "text": "Cảm ơn cô, Hương."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh12",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v5"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b13",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cả hai bước ra ngoài, ánh trăng lấp lánh trên bầu trời. Họ biết rằng sau ngày mai, mọi thứ sẽ khác. Nhưng điều quan trọng là họ đã tìm thấy sự tin tưởng ở nhau."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh13",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v5"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b14",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Từ góc khuất của hành lang, một đồng nghiệp khác đang nhìn theo cặp đôi, vẻ mặt đầy sự ghen tị và tiếc nuối."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh14",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v5"
+          }
+        ],
+        "tone": "tâm trạng",
+        "topic": "Mối quan hệ đồng nghiệp",
+        "visuals": [
+          {
+            "character_ids": [
+              "huong"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "van_phong",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "huong",
+              "dong_nghiep_1",
+              "dong_nghiep_2"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "hanh_lang",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "huong",
+              "thai"
+            ],
+            "id": "v3",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "phong_hop",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "huong",
+              "thai"
+            ],
+            "id": "v4",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "quay_ca_phe",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "huong",
+              "thai"
+            ],
+            "id": "v5",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "van_phong_toi",
+            "tier": "medium"
+          }
+        ]
+      }
+    }
+  }
+}

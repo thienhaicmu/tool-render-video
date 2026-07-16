@@ -1,0 +1,2212 @@
+{
+  "review_id": "mystery_vi_r1",
+  "source": {
+    "id": "mystery_vi",
+    "source": "idea",
+    "idea": "Một thợ sửa đồng hồ tìm thấy trong mỗi chiếc đồng hồ hỏng một phút ký ức của chủ nhân và ghép được manh mối về em trai mất tích.",
+    "duration_sec": 120,
+    "language": "vi",
+    "genre": "mystery"
+  },
+  "candidates": {
+    "B": {
+      "usable": true,
+      "narration": "Trong một xưởng sửa đồng hồ nhỏ, Thanh đang làm việc. Ánh sáng mờ ảo chiếu sáng những chiếc đồng hồ cũ kỹ.\nMỗi chiếc đồng hồ đều mang trong mình một câu chuyện, nhưng không phải ai cũng biết điều đó. Thanh cảm nhận được điều kỳ lạ này.\nMỗi chiếc đồng hồ hỏng đều có một ký ức. Tôi cảm thấy như chúng đang thì thầm với tôi.\nMột ngày nọ, Thanh phát hiện ra một chiếc đồng hồ đặc biệt. Nó có một ký hiệu lạ mà anh chưa từng thấy trước đây.\nKhi mở chiếc đồng hồ ra, Thanh thấy bên trong có một mảnh giấy nhỏ. Nó ghi lại một địa chỉ và một cái tên quen thuộc.\nĐịa chỉ này... Đây chính là nơi mà em trai tôi đã biến mất! Tôi phải đi tìm hiểu.\nThanh quyết định rời xưởng và đến địa chỉ đó. Trong lòng anh tràn đầy lo lắng và hy vọng.\nKhi đến nơi, Thanh cảm thấy không khí xung quanh thật nặng nề. Anh không thể shake off cảm giác rằng có điều gì đó không ổn.\nTại đó, anh gặp một người phụ nữ lạ. Cô ta có vẻ biết nhiều về em trai của anh.\nBạn có biết em trai tôi không? Anh ấy đã biến mất cách đây nhiều năm.\nNgười phụ nữ nhìn Thanh với ánh mắt đầy bí ẩn. Cô ta gật đầu và nói: \"Tôi biết anh ấy, nhưng điều đó không dễ dàng đâu.\"\nTôi sẵn sàng làm bất cứ điều gì để tìm ra sự thật!\nNgười phụ nữ bắt đầu kể cho Thanh nghe về những bí mật xung quanh chiếc đồng hồ mà anh đã tìm thấy.\nCô ta nói rằng mỗi chiếc đồng hồ đều chứa đựng một ký ức, và em trai của Thanh đã để lại một dấu vết trong đó.\nThanh cảm thấy như mình đang ở giữa một giấc mơ. Mọi thứ bắt đầu trở nên rõ ràng hơn.\nTôi sẽ tìm ra sự thật, dù phải đối mặt với bất kỳ điều gì!\nVà vậy, Thanh bắt đầu hành trình tìm kiếm sự thật về em trai mình, với những chiếc đồng hồ làm bạn đồng hành.\nMỗi chiếc đồng hồ sẽ tiết lộ một phần ký ức, và anh biết rằng anh phải kiên nhẫn.\nCuối cùng, Thanh đã tìm ra manh mối cuối cùng. Một chiếc đồng hồ cũ kỹ với ký hiệu mà anh đã thấy trước đây.\nKhi mở chiếc đồng hồ ra, một ký ức hiện lên. Hình ảnh em trai anh xuất hiện, và mọi thứ trở nên rõ ràng.\nThanh nhận ra rằng em trai mình không hề mất tích. Anh ấy đã bị mắc kẹt trong một thế giới khác.\nVới quyết tâm, Thanh biết rằng anh sẽ không dừng lại cho đến khi tìm ra cách đưa em trai trở về.",
+      "plan": {
+        "art_style": "cinematic ink-wash",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "thanh",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          }
+        ],
+        "characters": [
+          {
+            "age": "40s",
+            "archetype": "detective",
+            "asset": "",
+            "canonical_desc": "Một thợ sửa đồng hồ tuổi trung niên, tóc bạc, mặc áo khoác cũ, luôn mang theo bộ dụng cụ sửa chữa.",
+            "gender": "male",
+            "id": "thanh",
+            "name": "Thanh",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "horror",
+        "language": "vi",
+        "reading_pace": "normal",
+        "region": "vi",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2",
+              "b3",
+              "b4",
+              "b5",
+              "b6",
+              "b7",
+              "b8",
+              "b9",
+              "b10",
+              "b11",
+              "b12",
+              "b13",
+              "b14",
+              "b15",
+              "b16",
+              "b17",
+              "b18",
+              "b19",
+              "b20",
+              "b21",
+              "b22"
+            ],
+            "continuity_key": "xưởng_sửa_dồng_hồ",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "thanh"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "xưởng_sửa_dồng_hồ",
+            "shot_ids": [
+              "sh1",
+              "sh2",
+              "sh3",
+              "sh4",
+              "sh5",
+              "sh6",
+              "sh7",
+              "sh8",
+              "sh9",
+              "sh10",
+              "sh11",
+              "sh12",
+              "sh13",
+              "sh14",
+              "sh15",
+              "sh16",
+              "sh17",
+              "sh18",
+              "sh19",
+              "sh20",
+              "sh21",
+              "sh22"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 4134381925,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "Một xưởng nhỏ, đầy những chiếc đồng hồ cũ, ánh sáng mờ ảo, không khí nặng nề.",
+            "id": "xưởng_sửa_dồng_hồ",
+            "name": "Xưởng sửa đồng hồ",
+            "scene_kind": "office",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh2",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh4",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh5",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh6",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh7",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh8",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh9",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh10",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b11"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh11",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b12"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh12",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b13"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh13",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b14"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh14",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b15"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh15",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b16"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh16",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b17"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh17",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b18"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh18",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b19"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh19",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b20"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh20",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b21"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh21",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b22"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh22",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Ký ức bị lãng quên",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trong một xưởng sửa đồng hồ nhỏ, Thanh đang làm việc. Ánh sáng mờ ảo chiếu sáng những chiếc đồng hồ cũ kỹ."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Mỗi chiếc đồng hồ đều mang trong mình một câu chuyện, nhưng không phải ai cũng biết điều đó. Thanh cảm nhận được điều kỳ lạ này."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "thanh",
+                "text": "Mỗi chiếc đồng hồ hỏng đều có một ký ức. Tôi cảm thấy như chúng đang thì thầm với tôi."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Một ngày nọ, Thanh phát hiện ra một chiếc đồng hồ đặc biệt. Nó có một ký hiệu lạ mà anh chưa từng thấy trước đây."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Khi mở chiếc đồng hồ ra, Thanh thấy bên trong có một mảnh giấy nhỏ. Nó ghi lại một địa chỉ và một cái tên quen thuộc."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "thanh",
+                "text": "Địa chỉ này... Đây chính là nơi mà em trai tôi đã biến mất! Tôi phải đi tìm hiểu."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Thanh quyết định rời xưởng và đến địa chỉ đó. Trong lòng anh tràn đầy lo lắng và hy vọng."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Khi đến nơi, Thanh cảm thấy không khí xung quanh thật nặng nề. Anh không thể shake off cảm giác rằng có điều gì đó không ổn."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Tại đó, anh gặp một người phụ nữ lạ. Cô ta có vẻ biết nhiều về em trai của anh."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "thanh",
+                "text": "Bạn có biết em trai tôi không? Anh ấy đã biến mất cách đây nhiều năm."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b11",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Người phụ nữ nhìn Thanh với ánh mắt đầy bí ẩn. Cô ta gật đầu và nói: \"Tôi biết anh ấy, nhưng điều đó không dễ dàng đâu.\""
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh11",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b12",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "thanh",
+                "text": "Tôi sẵn sàng làm bất cứ điều gì để tìm ra sự thật!"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh12",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b13",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Người phụ nữ bắt đầu kể cho Thanh nghe về những bí mật xung quanh chiếc đồng hồ mà anh đã tìm thấy."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh13",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b14",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cô ta nói rằng mỗi chiếc đồng hồ đều chứa đựng một ký ức, và em trai của Thanh đã để lại một dấu vết trong đó."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh14",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b15",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Thanh cảm thấy như mình đang ở giữa một giấc mơ. Mọi thứ bắt đầu trở nên rõ ràng hơn."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh15",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b16",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "thanh",
+                "text": "Tôi sẽ tìm ra sự thật, dù phải đối mặt với bất kỳ điều gì!"
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh16",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b17",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Và vậy, Thanh bắt đầu hành trình tìm kiếm sự thật về em trai mình, với những chiếc đồng hồ làm bạn đồng hành."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh17",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b18",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Mỗi chiếc đồng hồ sẽ tiết lộ một phần ký ức, và anh biết rằng anh phải kiên nhẫn."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh18",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b19",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Cuối cùng, Thanh đã tìm ra manh mối cuối cùng. Một chiếc đồng hồ cũ kỹ với ký hiệu mà anh đã thấy trước đây."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh19",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b20",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Khi mở chiếc đồng hồ ra, một ký ức hiện lên. Hình ảnh em trai anh xuất hiện, và mọi thứ trở nên rõ ràng."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh20",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b21",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Thanh nhận ra rằng em trai mình không hề mất tích. Anh ấy đã bị mắc kẹt trong một thế giới khác."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh21",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b22",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Với quyết tâm, Thanh biết rằng anh sẽ không dừng lại cho đến khi tìm ra cách đưa em trai trở về."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh22",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "mysterious",
+        "topic": "Một thợ sửa đồng hồ và ký ức",
+        "visuals": [
+          {
+            "character_ids": [
+              "thanh"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "xưởng_sửa_dồng_hồ",
+            "tier": "medium"
+          }
+        ]
+      }
+    },
+    "A": {
+      "usable": true,
+      "narration": "Tiếng tích tắc của những chiếc đồng hồ cũ vang vọng khắp cửa hàng nhỏ. Hùng, một thợ sửa đồng hồ điêu luyện, đang chăm chú tháo rời từng chi tiết của một chiếc đồng hồ bỏ túi cũ kỹ. Hùng vẫn nhớ rõ cái ngày em trai mình, Minh, biến mất không dấu vết.\nTại sao mỗi chiếc đồng hồ này đều có một câu chuyện?\nKhi kim đồng hồ chạy ngược, một hình ảnh thoáng qua hiện lên trong tâm trí Hùng: Minh đang cười, đứng dưới bóng cây trước sân nhà. Hùng giật mình, đặt chiếc đồng hồ xuống.\nTrở về căn hộ tối, Hùng nhìn chằm chằm vào bức tường trắng, phủ đầy hình ảnh và ghi chú về những chiếc đồng hồ anh đã sửa. Ở giữa bức tường là hình của Minh, nụ cười tươi tắn nhưng xa vời.\nMinh, anh sẽ tìm thấy em.\nBất ngờ, một vệt sáng lóe lên từ hình ảnh của Minh, khiến Hùng chú ý đến một ký hiệu anh chưa từng thấy trước đó.\nSáng hôm sau, Hùng gặp Lan, bạn thân của anh và Minh, tại một quán cà phê ấm cúng. Tiếng nhạc nhẹ nhàng lấp đầy không gian.\nHùng, trông anh mệt mỏi quá. Có chuyện gì sao?\nLan, mỗi đồng hồ anh sửa đều có một phút ký ức của chủ nhân. Minh đã để lại một dấu vết.\nAnh nghĩ đó có thể là manh mối gì không?\nHùng và Lan đi theo ký hiệu bí ẩn dẫn họ tới một con hẻm tối. Những chiếc đèn đường chập chờn, bóng tối dày đặc bao trùm lấy hai người. Tim Hùng đập mạnh khi họ bắt gặp một cánh cửa cũ kỹ, kêu cọt kẹt khi mở ra.\nĐây phải là nơi đó.\nBên trong căn phòng nhỏ tối tăm, họ tìm thấy một chiếc hộp sắt đã gỉ sét. Khi mở ra, một cuốn sổ tay và một chiếc đồng hồ cũ xuất hiện, bên cạnh là tấm ảnh Minh.\nMinh từng ở đây sao?\nQuay trở lại cửa hàng, Hùng nhìn vào chiếc đồng hồ cuối cùng mà Minh để lại. Anh mở nó ra, cảm nhận từng phút giây kỷ niệm chảy qua. Cuốn sổ tay tiết lộ lý do Minh rời xa, một cuộc sống mới, một hy vọng.\nEm đã tìm thấy con đường của mình.\nHùng mỉm cười nhẹ nhõm, biết rằng hành trình tìm kiếm Minh không kết thúc ở đây mà chỉ mới bắt đầu một chương mới trong cuộc đời anh.",
+      "plan": {
+        "art_style": "",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "hung",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "hung",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "lan",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "right",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "hung",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "hung",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "lan",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "right",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "hung",
+            "continuity_notes": "Keep appearance and screen side stable within sc5",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc5"
+          }
+        ],
+        "characters": [
+          {
+            "age": "",
+            "archetype": "detective",
+            "asset": "",
+            "canonical_desc": "Nam, khoảng 30 tuổi, tóc ngắn, mặc áo sơ mi đơn giản, có vẻ nghiêm túc và tập trung.",
+            "gender": "male",
+            "id": "hung",
+            "name": "Hùng",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "",
+            "archetype": "",
+            "asset": "",
+            "canonical_desc": "Nam, khoảng 20 tuổi, tóc dài, nụ cười tươi tắn.",
+            "gender": "male",
+            "id": "minh",
+            "name": "Minh",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "",
+            "archetype": "",
+            "asset": "",
+            "canonical_desc": "Nữ, khoảng 30 tuổi, tóc dài, mặc áo khoác, có vẻ quan tâm và lo lắng.",
+            "gender": "female",
+            "id": "lan",
+            "name": "Lan",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "horror",
+        "language": "vi",
+        "reading_pace": "normal",
+        "region": "vi",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2"
+            ],
+            "continuity_key": "cua_hang_dong_ho",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "hung"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "cua_hang_dong_ho",
+            "shot_ids": [
+              "sh1",
+              "sh2"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b3",
+              "b4"
+            ],
+            "continuity_key": "can_ho_hung",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "hung"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "can_ho_hung",
+            "shot_ids": [
+              "sh3",
+              "sh4"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b5",
+              "b6"
+            ],
+            "continuity_key": "quan_ca_phe",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "lan",
+              "hung"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq3",
+            "setting_id": "quan_ca_phe",
+            "shot_ids": [
+              "sh5",
+              "sh6"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b7",
+              "b8",
+              "b9"
+            ],
+            "continuity_key": "con_hemm_toi",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc4",
+            "participant_ids": [
+              "hung",
+              "lan"
+            ],
+            "purpose": "reversal",
+            "sequence_id": "seq3",
+            "setting_id": "con_hemm_toi",
+            "shot_ids": [
+              "sh7",
+              "sh8",
+              "sh9"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b10",
+              "b11"
+            ],
+            "continuity_key": "cua_hang_dong_ho",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc5",
+            "participant_ids": [
+              "hung"
+            ],
+            "purpose": "payoff",
+            "sequence_id": "seq4",
+            "setting_id": "cua_hang_dong_ho",
+            "shot_ids": [
+              "sh10",
+              "sh11"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 4134381925,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "inciting",
+            "role": "inciting",
+            "scene_ids": [
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "rising",
+            "role": "rising",
+            "scene_ids": [
+              "sc3",
+              "sc4"
+            ]
+          },
+          {
+            "id": "seq4",
+            "purpose": "resolution",
+            "role": "resolution",
+            "scene_ids": [
+              "sc5"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "Một cửa hàng nhỏ với nhiều đồng hồ cũ, ánh sáng mờ.",
+            "id": "cua_hang_dong_ho",
+            "name": "Cửa hàng đồng hồ",
+            "scene_kind": "cafe",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Căn hộ tối với bức tường trắng phủ đầy hình ảnh và ghi chú.",
+            "id": "can_ho_hung",
+            "name": "Căn hộ của Hùng",
+            "scene_kind": "bedroom",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Quán cà phê ấm cúng với ánh đèn vàng và tiếng nhạc nhẹ.",
+            "id": "quan_ca_phe",
+            "name": "Quán cà phê",
+            "scene_kind": "cafe",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "Một con hẻm tối với những chiếc đèn đường chập chờn.",
+            "id": "con_hemm_toi",
+            "name": "Con hẻm tối",
+            "scene_kind": "street",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh2",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh4",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "low",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh6",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v3"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "wide",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh8",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc4",
+            "shot_size": "close",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "low",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh9",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc4",
+            "shot_size": "medium",
+            "visual_id": "v4"
+          },
+          {
+            "angle": "high",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh10",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc5",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b11"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh11",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc5",
+            "shot_size": "close",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Câu chuyện bắt đầu!",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Tiếng tích tắc của những chiếc đồng hồ cũ vang vọng khắp cửa hàng nhỏ. Hùng, một thợ sửa đồng hồ điêu luyện, đang chăm chú tháo rời từng chi tiết của một chiếc đồng hồ bỏ túi cũ kỹ. Hùng vẫn nhớ rõ cái ngày em trai mình, Minh, biến mất không dấu vết."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "hung",
+                "text": "Tại sao mỗi chiếc đồng hồ này đều có một câu chuyện?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Khi kim đồng hồ chạy ngược, một hình ảnh thoáng qua hiện lên trong tâm trí Hùng: Minh đang cười, đứng dưới bóng cây trước sân nhà. Hùng giật mình, đặt chiếc đồng hồ xuống."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Trở về căn hộ tối, Hùng nhìn chằm chằm vào bức tường trắng, phủ đầy hình ảnh và ghi chú về những chiếc đồng hồ anh đã sửa. Ở giữa bức tường là hình của Minh, nụ cười tươi tắn nhưng xa vời."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "hung",
+                "text": "Minh, anh sẽ tìm thấy em."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Bất ngờ, một vệt sáng lóe lên từ hình ảnh của Minh, khiến Hùng chú ý đến một ký hiệu anh chưa từng thấy trước đó."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Sáng hôm sau, Hùng gặp Lan, bạn thân của anh và Minh, tại một quán cà phê ấm cúng. Tiếng nhạc nhẹ nhàng lấp đầy không gian."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Hùng, trông anh mệt mỏi quá. Có chuyện gì sao?"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "hung",
+                "text": "Lan, mỗi đồng hồ anh sửa đều có một phút ký ức của chủ nhân. Minh đã để lại một dấu vết."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Anh nghĩ đó có thể là manh mối gì không?"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v3"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hùng và Lan đi theo ký hiệu bí ẩn dẫn họ tới một con hẻm tối. Những chiếc đèn đường chập chờn, bóng tối dày đặc bao trùm lấy hai người. Tim Hùng đập mạnh khi họ bắt gặp một cánh cửa cũ kỹ, kêu cọt kẹt khi mở ra."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "hung",
+                "text": "Đây phải là nơi đó."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Bên trong căn phòng nhỏ tối tăm, họ tìm thấy một chiếc hộp sắt đã gỉ sét. Khi mở ra, một cuốn sổ tay và một chiếc đồng hồ cũ xuất hiện, bên cạnh là tấm ảnh Minh."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "lan",
+                "text": "Minh từng ở đây sao?"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v4"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Quay trở lại cửa hàng, Hùng nhìn vào chiếc đồng hồ cuối cùng mà Minh để lại. Anh mở nó ra, cảm nhận từng phút giây kỷ niệm chảy qua. Cuốn sổ tay tiết lộ lý do Minh rời xa, một cuộc sống mới, một hy vọng."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "hung",
+                "text": "Em đã tìm thấy con đường của mình."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Chương mới bắt đầu!",
+            "id": "b11",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Hùng mỉm cười nhẹ nhõm, biết rằng hành trình tìm kiếm Minh không kết thúc ở đây mà chỉ mới bắt đầu một chương mới trong cuộc đời anh."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh11",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "mysterious",
+        "topic": "Cuộc tìm kiếm Minh",
+        "visuals": [
+          {
+            "character_ids": [
+              "hung"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "cua_hang_dong_ho",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "hung",
+              "minh"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "can_ho_hung",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "hung",
+              "lan"
+            ],
+            "id": "v3",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "quan_ca_phe",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "hung",
+              "lan"
+            ],
+            "id": "v4",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "con_hemm_toi",
+            "tier": "medium"
+          }
+        ]
+      }
+    }
+  }
+}

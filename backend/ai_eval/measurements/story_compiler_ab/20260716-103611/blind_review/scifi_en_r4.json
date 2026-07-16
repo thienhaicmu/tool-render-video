@@ -1,0 +1,1902 @@
+{
+  "review_id": "scifi_en_r4",
+  "source": {
+    "id": "scifi_en",
+    "source": "idea",
+    "idea": "The last human gardener on Mars receives seeds labelled with the names of people who have not been born yet.",
+    "duration_sec": 110,
+    "language": "en",
+    "genre": "science-fiction"
+  },
+  "candidates": {
+    "B": {
+      "usable": true,
+      "narration": "On the desolate surface of Mars, Elara, the last human gardener, tended to her precious plants, the only life on the barren planet.\nEvery day is a struggle, but these plants keep me going. They are my hope, my connection to Earth.\nOne day, a package arrived, its origins unknown. Elara's heart raced as she opened it to find strange seeds labeled with names she recognized.\nWhat is this? Seeds with names... but these people haven't even been born yet!\nElara felt a strange pull towards the seeds. Could they represent a future she could nurture?\nAs she planted the seeds, visions of children playing in a green field filled her mind. Was this her destiny?\nIf I can bring them to life, perhaps I can save humanity from extinction. This is my mission now!\nBut as the days passed, strange occurrences began. The plants grew rapidly, but they also whispered secrets in the Martian winds.\nWhat are you trying to tell me? Are you warning me?\nOne night, a storm raged outside, and Elara felt the ground tremble beneath her. The seeds had awakened something powerful.\nThe greenhouse shook violently as the plants surged with energy, revealing their true nature as guardians of the future.\nI see now! You are not just plants; you are the future! I must protect you!\nBut the storm brought more than just chaos. Shadows emerged, drawn to the energy of the awakened seeds.\nElara realized she was not alone. Forces wanted to claim the power of the seeds for themselves.\nI won’t let you take them! They are humanity’s last hope!\nIn a fierce battle, Elara fought against the shadows, using her knowledge of the plants to defend her garden and its future.\nWith a final surge of energy, the plants enveloped the shadows, banishing them into the Martian night.\nElara stood amidst the calm after the storm, her heart filled with hope. The seeds were safe, and so was the future.\nI will nurture you all, and together we will bring forth a new beginning for humanity!\nAs the sun rose over Mars, Elara knew her journey was just beginning. The seeds held the promise of life, and she would protect them.\nIn the heart of the Martian garden, a new chapter for humanity was about to unfold, all thanks to the last gardener.",
+      "plan": {
+        "art_style": "cinematic sci-fi",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "elara",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          }
+        ],
+        "characters": [
+          {
+            "age": "30s",
+            "archetype": "gardener",
+            "asset": "",
+            "canonical_desc": "A determined woman in her thirties, with short black hair and a weathered spacesuit, carrying a small toolset.",
+            "gender": "female",
+            "id": "elara",
+            "name": "Elara",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "hiendai",
+        "language": "en",
+        "reading_pace": "normal",
+        "region": "us",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1",
+              "b2",
+              "b3",
+              "b4",
+              "b5",
+              "b6",
+              "b7",
+              "b8",
+              "b9",
+              "b10",
+              "b11",
+              "b12",
+              "b13",
+              "b14",
+              "b15",
+              "b16",
+              "b17",
+              "b18",
+              "b19",
+              "b20"
+            ],
+            "continuity_key": "mars_garden",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "elara"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "mars_garden",
+            "shot_ids": [
+              "sh1",
+              "sh2",
+              "sh3",
+              "sh4",
+              "sh5",
+              "sh6",
+              "sh7",
+              "sh8",
+              "sh9",
+              "sh10",
+              "sh11",
+              "sh12",
+              "sh13",
+              "sh14",
+              "sh15",
+              "sh16",
+              "sh17",
+              "sh18",
+              "sh19",
+              "sh20"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 1875185303,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "A small, enclosed greenhouse filled with red soil, alien plants, and a domed ceiling showing the Martian sky.",
+            "id": "mars_garden",
+            "name": "Mars Garden",
+            "scene_kind": "garden",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh2",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh4",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh5",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh6",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh7",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh8",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b9"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh9",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b10"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh10",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b11"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh11",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b12"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh12",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b13"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh13",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b14"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "toward the opposing third",
+            "id": "sh14",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b15"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh15",
+            "lens": "normal",
+            "motion_intent": "track_left",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b16"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh16",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b17"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "environmental",
+            "id": "sh17",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc1",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b18"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh18",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "low",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b19"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh19",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "extreme_close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b20"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "centered",
+            "eyeline": "environmental",
+            "id": "sh20",
+            "lens": "wide",
+            "motion_intent": "push_in",
+            "scene_id": "sc1",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Seeds of the Future",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "On the desolate surface of Mars, Elara, the last human gardener, tended to her precious plants, the only life on the barren planet."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "Every day is a struggle, but these plants keep me going. They are my hope, my connection to Earth."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "One day, a package arrived, its origins unknown. Elara's heart raced as she opened it to find strange seeds labeled with names she recognized."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "What is this? Seeds with names... but these people haven't even been born yet!"
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elara felt a strange pull towards the seeds. Could they represent a future she could nurture?"
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "As she planted the seeds, visions of children playing in a green field filled her mind. Was this her destiny?"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "If I can bring them to life, perhaps I can save humanity from extinction. This is my mission now!"
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "But as the days passed, strange occurrences began. The plants grew rapidly, but they also whispered secrets in the Martian winds."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "What are you trying to tell me? Are you warning me?"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b9",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "One night, a storm raged outside, and Elara felt the ground tremble beneath her. The seeds had awakened something powerful."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh9",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "action",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b10",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The greenhouse shook violently as the plants surged with energy, revealing their true nature as guardians of the future."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh10",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b11",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "I see now! You are not just plants; you are the future! I must protect you!"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh11",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "dark",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b12",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "But the storm brought more than just chaos. Shadows emerged, drawn to the energy of the awakened seeds."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh12",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b13",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elara realized she was not alone. Forces wanted to claim the power of the seeds for themselves."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh13",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "action",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b14",
+            "lines": [
+              {
+                "emotion": "angry",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "I won’t let you take them! They are humanity’s last hope!"
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh14",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b15",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "In a fierce battle, Elara fought against the shadows, using her knowledge of the plants to defend her garden and its future."
+              }
+            ],
+            "motion": "pan_left",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh15",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b16",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "With a final surge of energy, the plants enveloped the shadows, banishing them into the Martian night."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh16",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b17",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Elara stood amidst the calm after the storm, her heart filled with hope. The seeds were safe, and so was the future."
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh17",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b18",
+            "lines": [
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "elara",
+                "text": "I will nurture you all, and together we will bring forth a new beginning for humanity!"
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh18",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b19",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "As the sun rose over Mars, Elara knew her journey was just beginning. The seeds held the promise of life, and she would protect them."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh19",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b20",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "In the heart of the Martian garden, a new chapter for humanity was about to unfold, all thanks to the last gardener."
+              }
+            ],
+            "motion": "zoom_in",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh20",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "mysterious",
+        "topic": "The Last Gardener on Mars",
+        "visuals": [
+          {
+            "character_ids": [
+              "elara"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "mars_garden",
+            "tier": "medium"
+          }
+        ]
+      }
+    },
+    "A": {
+      "usable": true,
+      "narration": "Beneath the translucent dome, crimson sands stretch towards a horizon lit by the dim glow of two moons. Aaron, the last human gardener on Mars, kneels beside rows of stunted greenery, his hands caked in the rust-red soil. He wipes sweat from his brow, eyes fixated on a new package delivered that morning.\nWho sends seeds to a barren planet?\nHe slices open the package, revealing a collection of small, fragile seeds. Each is meticulously labeled with names like 'Elara' and 'Juno'. More intriguingly, names paired with numbers, birth dates yet to come.\nControl, I received seeds labeled with future names. Any idea what this is?\nNothing on our records, Aaron. Investigate further. Stay cautious.\nDays pass as Aaron plants the seeds, each sprouting in record time, vibrant stems breaking through the soil. They pulse with an inner light, casting an ethereal glow in the dusk.\nThese plants... they're growing faster than anything I've seen.\nAs the garden flourishes, Aaron begins to notice a pattern. The plants emit faint sounds, whispers like soft-spoken secrets. He leans closer, straining to hear.\nOne night, as Martian winds howl against the dome, Aaron hears a distinct word from the plants—his own name, clear and resonant.\nWhat are you trying to tell me?\nThe plants respond with a gentle hum, each leaf vibrating in harmony. Suddenly, a vision consumes him—a future where Mars thrives with life, a buzzing metropolis. The seeds, a gift from a time yet to be.\nBack in the lab, Aaron logs his findings, heart racing with the enormity of his discovery. The seeds, messages from descendants unknown, a promise of a thriving world.\nControl, the seeds... they're a blueprint for Mars' future.\nUnbelievable. Your work is just beginning, Aaron.\nAaron looks out at the garden, a living testament to human tenacity and hope. The seeds are more than just plants—they are the whispers of tomorrow, already taking root today.",
+      "plan": {
+        "art_style": "",
+        "aspect_ratio": "16:9",
+        "chapter_no": 0,
+        "character_states": [
+          {
+            "character_id": "aaron",
+            "continuity_notes": "Keep appearance and screen side stable within sc1",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc1"
+          },
+          {
+            "character_id": "aaron",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "control",
+            "continuity_notes": "Keep appearance and screen side stable within sc2",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "left",
+            "scene_id": "sc2"
+          },
+          {
+            "character_id": "aaron",
+            "continuity_notes": "Keep appearance and screen side stable within sc3",
+            "emotion": "normal",
+            "objective": "advance the scene objective",
+            "position": "center",
+            "scene_id": "sc3"
+          },
+          {
+            "character_id": "aaron",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "center",
+            "scene_id": "sc4"
+          },
+          {
+            "character_id": "control",
+            "continuity_notes": "Keep appearance and screen side stable within sc4",
+            "emotion": "normal",
+            "objective": "resolve the central conflict",
+            "position": "left",
+            "scene_id": "sc4"
+          }
+        ],
+        "characters": [
+          {
+            "age": "30s",
+            "archetype": "gardener",
+            "asset": "",
+            "canonical_desc": "a rugged man in his 30s, with short brown hair and work clothes, often covered in dirt",
+            "gender": "male",
+            "id": "aaron",
+            "name": "Aaron",
+            "visual_identity_id": "",
+            "voice_gender": "male",
+            "voice_style": ""
+          },
+          {
+            "age": "",
+            "archetype": "",
+            "asset": "",
+            "canonical_desc": "an unseen voice from a communication device, authoritative and calm",
+            "gender": "",
+            "id": "control",
+            "name": "Control",
+            "visual_identity_id": "",
+            "voice_gender": "female",
+            "voice_style": ""
+          }
+        ],
+        "genre_key": "codai",
+        "language": "en",
+        "reading_pace": "normal",
+        "region": "us",
+        "relationships": [],
+        "render": {
+          "asset_status": {},
+          "beat_audio": {},
+          "cues": [],
+          "masters": {},
+          "refs": {},
+          "scene_asset_status": {},
+          "total_sec": 0.0,
+          "visual_assets": {},
+          "voices": {}
+        },
+        "scenes": [
+          {
+            "beat_ids": [
+              "b1"
+            ],
+            "continuity_key": "mars_garden_dome",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc1",
+            "participant_ids": [
+              "aaron"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "mars_garden_dome",
+            "shot_ids": [
+              "sh1"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b2"
+            ],
+            "continuity_key": "mars_garden_lab",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc2",
+            "participant_ids": [
+              "aaron",
+              "control"
+            ],
+            "purpose": "setup",
+            "sequence_id": "seq1",
+            "setting_id": "mars_garden_lab",
+            "shot_ids": [
+              "sh2"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b3",
+              "b4",
+              "b5",
+              "b6"
+            ],
+            "continuity_key": "mars_garden_dome",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc3",
+            "participant_ids": [
+              "aaron"
+            ],
+            "purpose": "conflict",
+            "sequence_id": "seq2",
+            "setting_id": "mars_garden_dome",
+            "shot_ids": [
+              "sh3",
+              "sh4",
+              "sh5",
+              "sh6"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b7"
+            ],
+            "continuity_key": "mars_garden_lab",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc4",
+            "participant_ids": [
+              "aaron",
+              "control"
+            ],
+            "purpose": "climax",
+            "sequence_id": "seq3",
+            "setting_id": "mars_garden_lab",
+            "shot_ids": [
+              "sh7"
+            ],
+            "time_of_day": ""
+          },
+          {
+            "beat_ids": [
+              "b8"
+            ],
+            "continuity_key": "mars_garden_dome",
+            "entry_state": "",
+            "exit_state": "",
+            "id": "sc5",
+            "participant_ids": [],
+            "purpose": "payoff",
+            "sequence_id": "seq4",
+            "setting_id": "mars_garden_dome",
+            "shot_ids": [
+              "sh8"
+            ],
+            "time_of_day": ""
+          }
+        ],
+        "schema_version": 2,
+        "seed": 1875185303,
+        "sequences": [
+          {
+            "id": "seq1",
+            "purpose": "setup",
+            "role": "setup",
+            "scene_ids": [
+              "sc1",
+              "sc2"
+            ]
+          },
+          {
+            "id": "seq2",
+            "purpose": "inciting",
+            "role": "inciting",
+            "scene_ids": [
+              "sc3"
+            ]
+          },
+          {
+            "id": "seq3",
+            "purpose": "climax",
+            "role": "climax",
+            "scene_ids": [
+              "sc4"
+            ]
+          },
+          {
+            "id": "seq4",
+            "purpose": "resolution",
+            "role": "resolution",
+            "scene_ids": [
+              "sc5"
+            ]
+          }
+        ],
+        "series_id": "",
+        "settings": [
+          {
+            "asset": "",
+            "canonical_desc": "a translucent dome filled with stunted greenery and crimson sands",
+            "id": "mars_garden_dome",
+            "name": "Mars Garden Dome",
+            "scene_kind": "garden",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          },
+          {
+            "asset": "",
+            "canonical_desc": "a high-tech lab with humming machines and microscopes",
+            "id": "mars_garden_lab",
+            "name": "Mars Garden Lab",
+            "scene_kind": "lab",
+            "scene_spec": {},
+            "visual_scene_identity_id": ""
+          }
+        ],
+        "shots": [
+          {
+            "angle": "high",
+            "axis": "sc1:primary",
+            "beat_ids": [
+              "b1"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "negative_space",
+            "eyeline": "toward the opposing third",
+            "id": "sh1",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc1",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc2:primary",
+            "beat_ids": [
+              "b2"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "three_quarter",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh2",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc2",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b3"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "rule_of_thirds",
+            "eyeline": "toward the opposing third",
+            "id": "sh3",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "high",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b4"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "profile",
+            "composition": "leading_lines",
+            "eyeline": "environmental",
+            "id": "sh4",
+            "lens": "portrait",
+            "motion_intent": "static",
+            "scene_id": "sc3",
+            "shot_size": "close",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b5"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "front",
+            "composition": "centered",
+            "eyeline": "toward the opposing third",
+            "id": "sh5",
+            "lens": "normal",
+            "motion_intent": "track_right",
+            "scene_id": "sc3",
+            "shot_size": "medium",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc3:primary",
+            "beat_ids": [
+              "b6"
+            ],
+            "blocking": "hold the active speaker on the dominant third",
+            "camera_position": "three_quarter",
+            "composition": "negative_space",
+            "eyeline": "environmental",
+            "id": "sh6",
+            "lens": "wide",
+            "motion_intent": "pull_out",
+            "scene_id": "sc3",
+            "shot_size": "wide",
+            "visual_id": "v1"
+          },
+          {
+            "angle": "over_shoulder",
+            "axis": "sc4:primary",
+            "beat_ids": [
+              "b7"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "front",
+            "composition": "symmetrical",
+            "eyeline": "toward the opposing third",
+            "id": "sh7",
+            "lens": "wide",
+            "motion_intent": "reveal",
+            "scene_id": "sc4",
+            "shot_size": "wide",
+            "visual_id": "v2"
+          },
+          {
+            "angle": "eye_level",
+            "axis": "sc5:primary",
+            "beat_ids": [
+              "b8"
+            ],
+            "blocking": "establish participants and geography",
+            "camera_position": "profile",
+            "composition": "rule_of_thirds",
+            "eyeline": "environmental",
+            "id": "sh8",
+            "lens": "portrait",
+            "motion_intent": "reveal",
+            "scene_id": "sc5",
+            "shot_size": "close",
+            "visual_id": "v1"
+          }
+        ],
+        "timeline": [
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": true,
+            "hook_text": "Seeds from the future!",
+            "id": "b1",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Beneath the translucent dome, crimson sands stretch towards a horizon lit by the dim glow of two moons. Aaron, the last human gardener on Mars, kneels beside rows of stunted greenery, his hands caked in the rust-red soil. He wipes sweat from his brow, eyes fixated on a new package delivered that morning."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "aaron",
+                "text": "Who sends seeds to a barren planet?"
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh1",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b2",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "He slices open the package, revealing a collection of small, fragile seeds. Each is meticulously labeled with names like 'Elara' and 'Juno'. More intriguingly, names paired with numbers, birth dates yet to come."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "aaron",
+                "text": "Control, I received seeds labeled with future names. Any idea what this is?"
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "control",
+                "text": "Nothing on our records, Aaron. Investigate further. Stay cautious."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh2",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "calm",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b3",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Days pass as Aaron plants the seeds, each sprouting in record time, vibrant stems breaking through the soil. They pulse with an inner light, casting an ethereal glow in the dusk."
+              },
+              {
+                "emotion": "happy",
+                "pose": "stand",
+                "speaker_id": "aaron",
+                "text": "These plants... they're growing faster than anything I've seen."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh3",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b4",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "As the garden flourishes, Aaron begins to notice a pattern. The plants emit faint sounds, whispers like soft-spoken secrets. He leans closer, straining to hear."
+              }
+            ],
+            "motion": "static",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh4",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "tense",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "center",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b5",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "One night, as Martian winds howl against the dome, Aaron hears a distinct word from the plants—his own name, clear and resonant."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "aaron",
+                "text": "What are you trying to tell me?"
+              }
+            ],
+            "motion": "pan_right",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh5",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "mysterious",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b6",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "The plants respond with a gentle hum, each leaf vibrating in harmony. Suddenly, a vision consumes him—a future where Mars thrives with life, a buzzing metropolis. The seeds, a gift from a time yet to be."
+              }
+            ],
+            "motion": "zoom_out",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh6",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "epic",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "wide",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b7",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Back in the lab, Aaron logs his findings, heart racing with the enormity of his discovery. The seeds, messages from descendants unknown, a promise of a thriving world."
+              },
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "aaron",
+                "text": "Control, the seeds... they're a blueprint for Mars' future."
+              },
+              {
+                "emotion": "surprised",
+                "pose": "stand",
+                "speaker_id": "control",
+                "text": "Unbelievable. Your work is just beginning, Aaron."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 0.0,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh7",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v2"
+          },
+          {
+            "bgm_cue": "under",
+            "bgm_intensity": "med",
+            "bgm_mood": "hopeful",
+            "char_anchor": "none",
+            "char_motion": "fade",
+            "char_scale": "medium",
+            "emotion": "normal",
+            "focus": "close",
+            "hold_sec": 0.0,
+            "hook": false,
+            "hook_text": "",
+            "id": "b8",
+            "lines": [
+              {
+                "emotion": "normal",
+                "pose": "stand",
+                "speaker_id": "",
+                "text": "Aaron looks out at the garden, a living testament to human tenacity and hope. The seeds are more than just plants—they are the whispers of tomorrow, already taking root today."
+              }
+            ],
+            "motion": "pan_up",
+            "narration": "",
+            "pause_after": 1.6,
+            "pose": "stand",
+            "reading_speed": 1.0,
+            "shot_id": "sh8",
+            "source_audio": "mute",
+            "speaker_id": "",
+            "text_anchor": "auto",
+            "transition_in": "cut",
+            "visual_id": "v1"
+          }
+        ],
+        "tone": "mysterious",
+        "topic": "The Last Gardener on Mars",
+        "visuals": [
+          {
+            "character_ids": [
+              "aaron"
+            ],
+            "id": "v1",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "mars_garden_dome",
+            "tier": "medium"
+          },
+          {
+            "character_ids": [
+              "aaron",
+              "control"
+            ],
+            "id": "v2",
+            "negative_prompt": "",
+            "prompt": "",
+            "setting_id": "mars_garden_lab",
+            "tier": "medium"
+          }
+        ]
+      }
+    }
+  }
+}
