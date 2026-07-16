@@ -76,6 +76,7 @@ def test_fallback_skips_persist(monkeypatch, tmp_path):
 def test_generate_character_masters_only_overlaid_speakers(monkeypatch):
     from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
     import app.features.render.engine.visual.story_reference_sheet as rs
+    monkeypatch.setenv('STORY_V3_ONLY', '0')   # pins the legacy reference-sheet gen path
     monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
     monkeypatch.setattr(rs, 'generate_character_master', lambda c, art_style='', **k: f'/m/{c.id}.png')
@@ -135,6 +136,7 @@ def test_library_first_auto_matches_character_master(monkeypatch):
     from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
     import app.features.render.engine.visual.story_reference_sheet as rs
     import app.db.story_asset_repo as ar
+    monkeypatch.setenv('STORY_V3_ONLY', '0')   # pins the legacy library-first path
     monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
     gen = {'n': 0}
@@ -157,6 +159,7 @@ def test_library_first_off_generates_master(monkeypatch):
     from app.domain.story_plan_v2 import StoryPlan, CharacterDef, Visual, Beat
     import app.features.render.engine.visual.story_reference_sheet as rs
     import app.db.story_asset_repo as ar
+    monkeypatch.setenv('STORY_V3_ONLY', '0')   # pins the legacy reference-sheet gen path
     monkeypatch.setattr(sp2, 'update_story_plan', lambda *a: None)
     monkeypatch.setattr(sp2, '_emit_render_event', lambda **k: None)
     monkeypatch.setattr(rs, 'generate_character_master', lambda c, art_style='', **k: '/ai/gen.png')

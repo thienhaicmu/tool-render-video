@@ -45,7 +45,27 @@ def _embed(path: str, *, x: float = 0, y: float = 0, w: int = 0, h: int = 0, cov
         return ""
 
 
-def _bg_layer(plan, setting, w: int, h: int) -> str:
+def _infer_tod(setting, visual) -> str:
+    """Infer time-of-day for the procedural fallback from the text signals the plan
+    already carries (identity id / setting name / visual prompt). Never raises."""
+    try:
+        hay = " ".join([
+            (getattr(setting, "visual_scene_identity_id", "") or "") if setting else "",
+            (getattr(setting, "scene_kind", "") or "") if setting else "",
+            (getattr(setting, "name", "") or "") if setting else "",
+            (getattr(visual, "prompt", "") or "") if visual is not None else "",
+        ]).lower()
+        if any(t in hay for t in ("night", "midnight", "moonlit", "đêm", "深夜", "夜")):
+            return "night"
+        if any(t in hay for t in ("sunset", "dusk", "twilight", "golden hour", "dawn",
+                                  "hoàng hôn", "夕方", "夕暮れ")):
+            return "sunset"
+    except Exception:
+        pass
+    return "day"
+
+
+def _bg_layer(plan, setting, w: int, h: int, tod: str = "") -> str:
     """Background covering the w×h canvas. Precedence (library-pick): the AI-chosen
     ``setting.asset`` slug → a fuzzy scene_kind match → a procedural scene. Never raises."""
     scene_kind = (getattr(setting, "scene_kind", "") or (getattr(setting, "name", "") if setting else "") or "")
@@ -76,13 +96,26 @@ def _bg_layer(plan, setting, w: int, h: int) -> str:
             return img
     except Exception:
         pass
-    if os.getenv("STORY_V3_ONLY", "1") == "1":
-        # Do not silently replace an unresolved V3 identity with procedural art.
-        return ""
-    # procedural scene (authored at 1536×1024) scaled to COVER w×h
+    # scale factors shared by both procedural paths (authored at 1536×1024, COVER w×h)
     sc = max(w / _SCENE_W, h / _SCENE_H)
     tx = (w - _SCENE_W * sc) / 2.0
     ty = (h - _SCENE_H * sc) / 2.0
+    if os.getenv("STORY_V3_ONLY", "1") == "1":
+        # An unresolved V3 identity AUTO-generates a v2 anime scene (layered,
+        # time-of-day lit) instead of leaving the key-visual blank — user ruling
+        # 2026-07-16 superseding the earlier "block blank V3 visuals" behaviour.
+        try:
+            from app.features.render.engine.visual.v2.anime_scene import anime_scene_inner
+            from app.features.render.engine.visual.library_v3.style_aliases import normalize_v3_style
+            inner = anime_scene_inner(
+                scene_kind, tod or "day",
+                normalize_v3_style(getattr(plan, "art_style", "") or ""))
+            if inner:
+                return f'<g transform="translate({tx:.1f},{ty:.1f}) scale({sc:.4f})">{inner}</g>'
+        except Exception as exc:
+            logger.warning("svg_compose: v2 anime scene fallback failed: %s", exc)
+        return ""
+    # procedural scene (authored at 1536×1024) scaled to COVER w×h
     return f'<g transform="translate({tx:.1f},{ty:.1f}) scale({sc:.4f})">{scene_inner(scene_kind, region, genre, "")}</g>'
 
 
@@ -152,7 +185,7 @@ def compose_visual(plan, visual, w: int = W, h: int = H, chars: bool = True) -> 
         w = int(w) or W
         h = int(h) or H
         setting = plan.setting(getattr(visual, "setting_id", "") or "")
-        bg = _bg_layer(plan, setting, w, h)
+        bg = _bg_layer(plan, setting, w, h, tod=_infer_tod(setting, visual))
         cids = [c for c in (getattr(visual, "character_ids", None) or [])][:3] if chars else []
         chars = ""
         from app.features.render.engine.visual.composition import layout_slots

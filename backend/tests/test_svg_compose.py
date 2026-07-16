@@ -53,9 +53,11 @@ def test_v3_only_uses_v3_procedural_character_without_identity(monkeypatch):
     assert "<g transform=" in svg
 
 
-def test_compose_uses_ai_chosen_library_asset(tmp_path):
+def test_compose_uses_ai_chosen_library_asset(tmp_path, monkeypatch):
     # Library-pick (B4): EXPLICIT character.asset / setting.asset slugs → embed the EXACT
-    # library file (base64 <image>), not procedural art.
+    # library file (base64 <image>), not procedural art. Legacy path — pinned with the
+    # V3-only gate OFF (STORY_V3_ONLY=1 routes to the V3 identity/procedural path).
+    monkeypatch.setenv("STORY_V3_ONLY", "0")
     from app.db import story_asset_repo as R
     from app.domain.story_plan_v2 import StoryPlan, CharacterDef, SettingDef
     for slug, kind, tr in (("lib_char_zzz", "character", True), ("lib_bg_zzz", "background", False)):
@@ -68,9 +70,11 @@ def test_compose_uses_ai_chosen_library_asset(tmp_path):
     assert svg.count("data:image/png;base64") >= 2       # bg + char both from the library
 
 
-def test_compose_char_fuzzy_fallback(tmp_path):
+def test_compose_char_fuzzy_fallback(tmp_path, monkeypatch):
     # F1: NO explicit asset, but a clear archetype → fuzzy-match a library CHARACTER
     # (symmetry with the background fuzzy match) instead of a procedural chibi.
+    # Legacy path — pinned with the V3-only gate OFF.
+    monkeypatch.setenv("STORY_V3_ONLY", "0")
     from app.db import story_asset_repo as R
     from app.domain.story_plan_v2 import StoryPlan, CharacterDef, SettingDef
     f = tmp_path / "cn_wuxia_swordsman_male.png"; f.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 512)

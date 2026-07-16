@@ -113,19 +113,25 @@ def test_scene_aliases_route():
     assert anime_scene_inner("coffee_shop", "night")
 
 
-# ── GĐ2 gate: not wired into the pipeline yet ────────────────────────────────
+# ── GĐ2 gate: v2 wired only through the sanctioned entry points ──────────────
 
-def test_v2_not_imported_by_render_paths():
+def test_v2_imported_only_from_sanctioned_render_paths():
+    # 2026-07-16 user ruling: an unresolved V3 identity AUTO-generates a v2 anime
+    # background (svg_compose._bg_layer) instead of leaving the key-visual blank —
+    # svg_compose is now a sanctioned v2 importer. Any OTHER render-engine module
+    # importing v2 still needs an explicit decision (add it here with a reason).
+    sanctioned = {"svg_compose.py"}
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "app" / "features" / "render" / "engine"
     hits = []
     for p in root.rglob("*.py"):
         if "visual" + "\\" + "v2" in str(p) or "visual/v2" in str(p).replace("\\", "/"):
             continue
-        # V3 is the staged, data-first facade over the approved v2 geometry;
-        # it is not imported by the production Story render path yet.
+        # V3 is the staged, data-first facade over the approved v2 geometry.
         if "visual" + "\\" + "library_v3" in str(p) or "visual/library_v3" in str(p).replace("\\", "/"):
+            continue
+        if p.name in sanctioned:
             continue
         if "visual.v2" in p.read_text(encoding="utf-8", errors="ignore"):
             hits.append(str(p))
-    assert not hits, f"v2 must stay unwired until the sheets are approved: {hits}"
+    assert not hits, f"unsanctioned v2 import in a render path (add deliberately or remove): {hits}"

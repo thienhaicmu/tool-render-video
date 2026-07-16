@@ -137,8 +137,12 @@ def test_render_request_field_count_unchanged():
     # default "" = image-based story (no base video), stored payloads replay identically.
     # 2026-07-13 Story P2: +1 story_voice_mode → 177. Sacred #2 verified: default
     # "dialogue" = the legacy per-beat per-speaker voice, stored payloads replay identically.
-    assert field_count == 177, (
-        f"RenderRequest now has {field_count} fields (expected 177). "
+    # 2026-07-15 Story compiler rollout: +3 plan-provenance fields → 180
+    # (story_plan_provider="", story_plan_model="", story_plan_authoring_mode="").
+    # Sacred #2 verified: all default "" = passive result-metadata only; a stored
+    # payload with them absent replays bit-identically.
+    assert field_count == 180, (
+        f"RenderRequest now has {field_count} fields (expected 180). "
         "If a legitimate new field landed, update this test AND verify "
         "Sacred Contract #2 (new field defaults to disabled state)."
     )

@@ -31,6 +31,9 @@ def test_defaults_are_near_lossless():
 
 
 def test_render_one_cue_uses_configurable_intermediate(monkeypatch, tmp_path):
+    # No visual asset on purpose (tests the encode wiring on the legacy solid-bg
+    # path) — V3-only mode would refuse to render a blank cue.
+    monkeypatch.setenv("STORY_V3_ONLY", "0")
     captured = {}
 
     def fake_run(cmd, **kw):
@@ -137,6 +140,7 @@ def test_char_overlay_switches_per_line(monkeypatch, tmp_path):
     # the on-screen character switches with the speaker (image path, no base video).
     from app.domain.story_plan_v2 import LineSpan
     captured = _capture(monkeypatch)
+    monkeypatch.setenv("STORY_V3_ONLY", "0")   # legacy solid-bg path (no visual asset)
     monkeypatch.setattr(br, "_ok_file", lambda p: p in ("/mA.png", "/mB.png") or (bool(p) and Path(p).exists()))
     plan = SimpleNamespace(render=SimpleNamespace(
         visual_assets={}, masters={"a:angry:point": "/mA.png", "b:sad:stand": "/mB.png"}))

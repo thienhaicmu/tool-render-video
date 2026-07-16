@@ -109,8 +109,11 @@ def _v3_only_missing(plan, character_report: dict | None, scene_report: dict | N
     """Return required Story scene layers that have no usable V3 assignment.
 
     A character without an identity ID is intentionally reported as a procedural V3
-    fallback, not as a render blocker. Scenes remain strict because this codebase has
-    no equivalent procedural V3 scene renderer.
+    fallback, not as a render blocker. Since 2026-07-16 settings are the same: an
+    unresolved scene AUTO-generates a v2 anime background in svg_compose._bg_layer
+    (user ruling — "no ID → generate"), so nothing here blocks the render anymore.
+    The strict ``characters``/``settings`` keys stay in the report shape for the
+    blocked-branch guard in run_story_v2 (defensive, currently always empty).
     """
     required_chars = sorted({
         str(cid).strip()
@@ -133,14 +136,15 @@ def _v3_only_missing(plan, character_report: dict | None, scene_report: dict | N
         sid for sid, status in ((scene_report or {}).get("statuses", {}) or {}).items()
         if status in {"matched", "matched_exact"}
     }
-    missing_settings = (
+    procedural_settings = (
         [] if skip_scenes
         else [sid for sid in required_settings if sid not in assigned_settings]
     )
     return {
         "characters": [],
         "procedural_characters": procedural_chars,
-        "settings": missing_settings,
+        "settings": [],
+        "procedural_settings": procedural_settings,
     }
 
 
@@ -481,6 +485,15 @@ def run_story_v2(
                              + ", ".join(_v3_missing["procedural_characters"][:8])),
                     step="render.story",
                     context={"characters": _v3_missing["procedural_characters"]},
+                )
+            if _v3_missing.get("procedural_settings"):
+                _emit_render_event(
+                    channel_code=effective_channel, job_id=job_id,
+                    event="story.v3_scene.procedural", level="INFO",
+                    message=("V3 procedural scene fallback (v2 anime background): "
+                             + ", ".join(_v3_missing["procedural_settings"][:8])),
+                    step="render.story",
+                    context={"settings": _v3_missing["procedural_settings"]},
                 )
             if _v3_missing["characters"] or _v3_missing["settings"]:
                 _missing_bits = []

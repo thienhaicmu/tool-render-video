@@ -146,10 +146,14 @@ def test_v3_only_missing_reports_required_visual_layers():
         {"assigned": {"a": "v3_a"}, "statuses": {"a": "matched"}},
         {"assigned": {"s1": "v3_s1"}, "statuses": {"s1": "matched_exact"}},
     )
+    # 2026-07-16 ruling: unresolved settings fall back to the v2 anime scene
+    # generator (svg_compose) instead of blocking the render — reported as
+    # procedural_settings, never in the strict (blocking) "settings" list.
     assert missing == {
-        "characters": [], "procedural_characters": ["b"], "settings": ["s2"],
+        "characters": [], "procedural_characters": ["b"],
+        "settings": [], "procedural_settings": ["s2"],
     }
-    assert _v3_only_missing(p, None, None, skip_scenes=True)["settings"] == []
+    assert _v3_only_missing(p, None, None, skip_scenes=True)["procedural_settings"] == []
 
 
 def test_readiness_gate_env(monkeypatch):

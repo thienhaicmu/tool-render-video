@@ -196,7 +196,11 @@ def test_planner_matcher_uses_active_identity_and_apply_is_explicit(tmp_path):
     assert plan.render.asset_status["planner_hero"] == applied["statuses"]["planner_hero"]
 
 
-def test_planner_matcher_rejects_review_identity_and_mismatched_gender(tmp_path):
+def test_planner_matcher_rejects_review_identity_and_mismatched_gender(tmp_path, monkeypatch):
+    # Pins the REJECT path (missing, no assignment). With STORY_V3_ONLY=1 an unresolved
+    # character becomes PROCEDURAL instead — that path is pinned by
+    # test_v3_matcher_marks_unresolved_character_as_procedural below.
+    monkeypatch.setenv("STORY_V3_ONLY", "0")
     manifest = _manifest(tmp_path, state="active")
     review = replace(manifest.characters[0], id="review_hero", quality_state="review")
     manifest = replace(manifest, characters=(manifest.characters[0], review))

@@ -96,8 +96,14 @@ def test_no_1_07_literal_fallbacks_remain_in_engine():
         re.compile(r"\bor\s+1\.07\b"),
         re.compile(r"=\s*1\.07\b(?!\s*[)#])"),  # `= 1.07` not followed by `)` or `#`
     ]
+    # Documented false positives: 1.07 literals that are NOT playback-speed
+    # fallbacks. anime_char.py uses 1.07 as an elder-body GEOMETRY scale
+    # (`g[key] *= 1.07`) — unrelated to V8-A7's silent-acceleration fix.
+    allowed = {("visual", "v2", "anime_char.py")}
     bad_hits: list[tuple[str, int, str]] = []
     for py in backend_app.rglob("*.py"):
+        if py.parts[-3:] in allowed:
+            continue
         try:
             text = py.read_text(encoding="utf-8", errors="ignore")
         except Exception:

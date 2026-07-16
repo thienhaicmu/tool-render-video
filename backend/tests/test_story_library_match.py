@@ -29,6 +29,7 @@ def test_match_skips_visual_with_characters(monkeypatch):
 
 
 def test_match_uses_scene_kind_and_scope(monkeypatch):
+    monkeypatch.setenv("STORY_V3_ONLY", "0")   # legacy helper is a no-op in V3-only mode
     seen = {}
     def fake(kind, name="", region="", genre="", **k):
         seen.update(kind=kind, name=name, region=region, genre=genre); return "/lib/bg.png"
@@ -40,6 +41,7 @@ def test_match_uses_scene_kind_and_scope(monkeypatch):
 
 
 def test_match_falls_back_to_setting_name(monkeypatch):
+    monkeypatch.setenv("STORY_V3_ONLY", "0")   # legacy helper is a no-op in V3-only mode
     got = {}
     monkeypatch.setattr("app.db.story_asset_repo.match_asset",
                         lambda kind, name="", **k: got.update(name=name) or None)
@@ -52,6 +54,7 @@ def test_match_honors_ai_chosen_setting_asset(monkeypatch):
     # T2 debt — Phase A now honors the AI's library-pick (setting.asset) BEFORE fuzzy match,
     # same precedence as svg_compose (single policy).
     # style-aware: get_by_slug now also receives the active library ``style`` kwarg.
+    monkeypatch.setenv("STORY_V3_ONLY", "0")   # legacy helper is a no-op in V3-only mode
     monkeypatch.setattr("app.db.story_asset_repo.get_by_slug",
                         lambda slug, kind="", **k: "/lib/pick.png" if slug == "cn_bg_x" else None)
     fuzzy = []
@@ -79,6 +82,8 @@ def _patch_io(monkeypatch):
 def test_gate_on_matches_and_skips_compose(monkeypatch, tmp_path):
     _patch_io(monkeypatch)
     monkeypatch.setenv("STORY_LIBRARY_FIRST", "1")
+    # Legacy library-first gate is additionally blocked by V3-only mode — pin it OFF.
+    monkeypatch.setenv("STORY_V3_ONLY", "0")
     # v1 matches library, v2 does not.
     monkeypatch.setattr(vs, "_match_library_background",
                         lambda plan, v: "/lib/v1.png" if v.id == "v1" else None)

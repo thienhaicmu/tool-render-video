@@ -6,7 +6,6 @@ requested framing. Keeping this separate makes runtime rollout reversible.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from .active_catalog import ActiveCatalog, load_active_catalog
@@ -19,10 +18,13 @@ def resolve_character_preview(
     framing: str = "full_body",
 ) -> str:
     """Return an existing active character preview path, or ``""`` safely."""
-    source = manifest_path or os.getenv("STORY_V3_CHARACTER_MANIFEST", "")
-    if not source:
+    # configured_manifest_path() reads STORY_V3_CHARACTER_MANIFEST itself and
+    # anchors a relative value to the repo root — reading the env var raw here
+    # broke when the server cwd was backend/.
+    if manifest_path is None:
         from .planner_matcher import configured_manifest_path
-        source = configured_manifest_path()
+        manifest_path = configured_manifest_path()
+    source = manifest_path
     if not source:
         return ""
     try:

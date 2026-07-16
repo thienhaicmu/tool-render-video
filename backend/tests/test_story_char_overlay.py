@@ -44,6 +44,7 @@ def test_overlay_masters_procedural_per_emotion(monkeypatch, tmp_path):
 
 def test_overlay_masters_library_variant(monkeypatch, tmp_path):
     monkeypatch.setenv("STORY_CHAR_OVERLAY", "1")
+    monkeypatch.setenv("STORY_V3_ONLY", "0")   # pins the legacy library-variant branch
     monkeypatch.setattr(vs, "update_story_plan", lambda *a, **k: None)
     from app.db import story_asset_repo as R
     for slug in ("cn_hero_zzz", "cn_hero_zzz_angry"):
@@ -59,6 +60,7 @@ def test_overlay_masters_library_variant(monkeypatch, tmp_path):
 def test_overlay_masters_pose(monkeypatch, tmp_path):
     # N4+ per-beat POSE — key includes pose; library uses _{pose} variant when present.
     monkeypatch.setenv("STORY_CHAR_OVERLAY", "1")
+    monkeypatch.setenv("STORY_V3_ONLY", "0")   # pins the legacy library-variant branch
     monkeypatch.setattr(vs, "update_story_plan", lambda *a, **k: None)
     from app.db import story_asset_repo as R
     for slug in ("cn_p_zzz", "cn_p_zzz_wave"):

@@ -1,7 +1,6 @@
 """Exact bridge from an active V3 scene identity to a raster preview."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from .active_catalog import load_active_catalog
@@ -13,10 +12,13 @@ def resolve_scene_preview(
     manifest_path: str | Path | None = None,
     style: str = "",
 ) -> str:
-    source = manifest_path or os.getenv("STORY_V3_SCENE_MANIFEST", "")
-    if not source:
+    # scene_manifest_path() reads STORY_V3_SCENE_MANIFEST itself and anchors a
+    # relative value to the repo root — reading the env var raw here broke when
+    # the server cwd was backend/ (manifest "found" by the matcher, not by us).
+    if manifest_path is None:
         from .scene_matcher import scene_manifest_path
-        source = scene_manifest_path()
+        manifest_path = scene_manifest_path()
+    source = manifest_path
     if not source:
         return ""
     try:
